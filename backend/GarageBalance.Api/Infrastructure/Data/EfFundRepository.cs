@@ -54,6 +54,15 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Fund>> GetFundsForUpdateAsync(CancellationToken cancellationToken)
+    {
+        return await dbContext.Funds
+            .Where(fund => !fund.IsArchived)
+            .OrderBy(fund => fund.SortOrder)
+            .ThenBy(fund => fund.Name)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> FundNameExistsAsync(
         Guid? excludedFundId,
         string normalizedName,
@@ -264,6 +273,15 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                     FROM fund_operations AS operation
                     WHERE NOT operation."IsCanceled"
                       AND operation."SourceFinancialOperationId" IS NULL
+
+                    UNION ALL
+
+                    SELECT operation."CreatedAtUtc", operation."Id",
+                        CASE
+                            WHEN operation."Direction" = 'increase' THEN operation."Amount"
+                            ELSE -operation."Amount"
+                        END AS delta
+                    FROM cash_bank_balance_operations AS operation
                 ),
                 running_pool AS (
                     SELECT delta,
@@ -310,10 +328,20 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                     ? operation.Amount
                     : -operation.Amount))
             .ToListAsync(cancellationToken);
+        var cashBankEvents = await dbContext.CashBankBalanceOperations
+            .AsNoTracking()
+            .Select(operation => new PoolEvent(
+                operation.CreatedAtUtc,
+                operation.Id,
+                operation.Direction == CashBankBalanceDirections.Increase
+                    ? operation.Amount
+                    : -operation.Amount))
+            .ToListAsync(cancellationToken);
 
         var balance = 0m;
         foreach (var poolEvent in financialEvents
                      .Concat(manualFundEvents)
+                     .Concat(cashBankEvents)
                      .OrderBy(poolEvent => poolEvent.CreatedAtUtc)
                      .ThenBy(poolEvent => poolEvent.Id))
         {

@@ -4503,6 +4503,14 @@ h1 {
   justify-self: end;
 }
 
+.payments-prototype-row-reason {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
 .field-help__tooltip.payments-prototype-calculation-tooltip {
   width: max-content;
   max-width: min(420px, calc(100vw - 48px));
@@ -4741,7 +4749,8 @@ h1 {
 }
 
 .payments-prototype-total-row td {
-  background: #f8fafc !important;
+  border-top: 3px solid #98a2b3;
+  background: #eef2f6 !important;
   color: #101828;
   font-weight: 800;
 }

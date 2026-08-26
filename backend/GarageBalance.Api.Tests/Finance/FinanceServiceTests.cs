@@ -4118,7 +4118,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CreateAccrualAsync_RequiresCommentForManualAccrual()
+    public async Task CreateAccrualAsync_AllowsManualAccrualWithoutComment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -4129,12 +4129,14 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("accrual_comment_required", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Null(result.Value!.Comment);
+        Assert.Single(database.Context.Accruals);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
     }
 
     [Fact]
-    public async Task UpdateAccrualAsync_RequiresCommentForRegularAccrualCorrection()
+    public async Task UpdateAccrualAsync_AllowsRegularAccrualCorrectionWithoutComment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -4150,8 +4152,10 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("accrual_regular_edit_comment_required", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(750m, result.Value!.Amount);
+        Assert.Null(result.Value.Comment);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated");
     }
 
     [Fact]
@@ -4544,7 +4548,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task UpdateSupplierAccrualAsync_RequiresCommentForRegularAccrualCorrection()
+    public async Task UpdateSupplierAccrualAsync_AllowsRegularAccrualCorrectionWithoutComment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -4560,8 +4564,10 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("supplier_accrual_regular_edit_comment_required", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(1250m, result.Value!.Amount);
+        Assert.Null(result.Value.Comment);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_updated");
     }
 
     [Fact]
@@ -5907,6 +5913,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.IncomeType.Code = "membership";
+        fixtures.Garage.CreatedAtUtc = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
         var tariff = new Tariff
         {
             Name = "Годовой членский тариф",
@@ -5945,6 +5952,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.IncomeType.Code = "membership";
+        fixtures.Garage.CreatedAtUtc = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
         var tariff = new Tariff
         {
             Name = "Годовой членский тариф",
@@ -5987,6 +5995,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.IncomeType.Code = "membership";
+        fixtures.Garage.CreatedAtUtc = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
         var outdoorLighting = new IncomeType
         {
             Name = "Наружное освещение",
@@ -8291,7 +8300,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CorrectHistoricalMeterReadingAsync_RequiresReasonAndWritesAuditedCorrection()
+    public async Task CorrectHistoricalMeterReadingAsync_AllowsBlankReasonAndWritesAuditedCorrection()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -8306,19 +8315,12 @@ public sealed class FinanceServiceTests
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
         await database.Context.SaveChangesAsync();
 
-        var blankReason = await service.CorrectHistoricalMeterReadingAsync(
+        var corrected = await service.CorrectHistoricalMeterReadingAsync(
             created.Value!.Id,
             new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 6, 21), 18m, "После сверки", "   ", created.Value.Version),
             actorUserId,
             CancellationToken.None);
-        var corrected = await service.CorrectHistoricalMeterReadingAsync(
-            created.Value.Id,
-            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 6, 21), 18m, "После сверки", "Сверка с бумажным журналом", created.Value.Version),
-            actorUserId,
-            CancellationToken.None);
 
-        Assert.False(blankReason.Succeeded);
-        Assert.Equal("meter_reading_correction_reason_required", blankReason.ErrorCode);
         Assert.True(corrected.Succeeded, corrected.ErrorMessage);
         Assert.Equal(18m, corrected.Value!.CurrentValue);
         Assert.NotEqual(created.Value.Version, corrected.Value.Version);
@@ -8326,9 +8328,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Equal("update", audit.ActionKind);
         Assert.Contains("Скорректировано показание другого периода", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("Сверка с бумажным журналом", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Корректировка показания за другой месяц", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
-        Assert.Equal("Сверка с бумажным журналом", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("Корректировка показания за другой месяц.", metadata.RootElement.GetProperty("reason").GetString());
         Assert.Contains("Текущее показание", metadata.RootElement.GetProperty("changedFields").GetString(), StringComparison.Ordinal);
     }
 
@@ -9291,7 +9293,7 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
 
         Assert.True((await service.CreateAccrualAsync(
-            new CreateAccrualRequest(fixtures.Garage.Id, electricityType.Id, new DateOnly(2026, 6, 1), 5674m, "regular", null),
+            new CreateAccrualRequest(fixtures.Garage.Id, electricityType.Id, new DateOnly(2026, 6, 1), 5674m, "regular", "Сверка начисления"),
             null,
             CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateIncomeAsync(
@@ -9332,6 +9334,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(5674m, electricity.AccrualAmount);
         Assert.Equal(1000m, electricity.IncomeAmount);
         Assert.Equal(4674m, electricity.Debt);
+        Assert.Equal("Сверка начисления", electricity.Reason);
 
         var membership = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id);
         Assert.Equal(0m, membership.AccrualAmount);
@@ -9551,7 +9554,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetGarageIncomeWorksheetAsync_UsesTwoBoundedSelectsForCampaignsAndCombinedWorksheetData()
+    public async Task GetGarageIncomeWorksheetAsync_UsesTwoBoundedSelectsForCampaignsReasonsAndCombinedWorksheetData()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);

@@ -55,6 +55,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -85,6 +86,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -119,6 +121,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -135,6 +138,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 accrual.IncomeType.Name,
                 accrual.IncomeType.Code,
                 accrual.Basis,
+                accrual.Comment,
                 accrual.CalculationDetailsJson,
                 accrual.IrregularPaymentId,
                 IrregularPaymentIsAvailable = accrual.IrregularPayment == null ||
@@ -164,6 +168,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                group.Key.Comment,
                 group.Key.CalculationDetailsJson,
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -207,6 +212,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -240,6 +246,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)reading.ReadingDate,
                 CurrentValue = (decimal?)reading.CurrentValue,
                 Consumption = (decimal?)reading.Consumption,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)reading.UpdatedAtUtc
             });
@@ -274,6 +281,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -305,6 +313,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -342,6 +351,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -385,6 +395,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -437,6 +448,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                Comment = (string?)null,
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -535,6 +547,15 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.IncomeTypeId!.Value,
                     row.IncomeTypeName!,
                     row.CalculationDetailsJson!))
+                .ToList(),
+            rows.Where(row => row.Category == AccrualBucketCategory && row.Comment != null)
+                .GroupBy(row => new { row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName })
+                .Select(group => new GarageIncomeWorksheetReasonData(
+                    group.Key.AccountingMonth!.Value,
+                    group.Key.IncomeTypeId!.Value,
+                    group.Key.IncomeTypeName!,
+                    string.Join("; ", group.Select(row => row.Comment!.Trim()).Where(reason => reason.Length > 0).Distinct())))
+                .Where(row => row.Reason.Length > 0)
                 .ToList());
     }
 }

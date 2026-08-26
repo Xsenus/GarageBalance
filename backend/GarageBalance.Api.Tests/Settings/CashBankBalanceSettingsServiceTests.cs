@@ -92,6 +92,55 @@ public sealed class CashBankBalanceSettingsServiceTests
         var audit = await database.Context.AuditEvents.SingleAsync();
         Assert.Equal("cash_bank_opening_balances.updated", audit.Action);
         Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(9450.13m, await new EfFundRepository(database.Context).GetAvailableToDistributeAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateOpeningBalances_DecreaseConsumesUnallocatedBalanceThenFundsInConfiguredOrder()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var firstFund = new Fund { Name = "Первый", NormalizedName = "ПЕРВЫЙ", SortOrder = 1, Balance = 50m };
+        var secondFund = new Fund { Name = "Второй", NormalizedName = "ВТОРОЙ", SortOrder = 2, Balance = 30m };
+        database.Context.Funds.AddRange(firstFund, secondFund);
+        var initialService = CreateService(database);
+        await initialService.UpdateOpeningBalancesAsync(
+            new UpdateCashBankOpeningBalancesRequest(100m, 0m, "Первичная настройка"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = firstFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 50m,
+                BalanceBefore = 0m,
+                BalanceAfter = 50m,
+                Reason = "Распределение",
+                CreatedAtUtc = Now.AddMinutes(1)
+            },
+            new FundOperation
+            {
+                Fund = secondFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 30m,
+                BalanceBefore = 0m,
+                BalanceAfter = 30m,
+                Reason = "Распределение",
+                CreatedAtUtc = Now.AddMinutes(2)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database, Now.AddHours(1)).UpdateOpeningBalancesAsync(
+            new UpdateCashBankOpeningBalancesRequest(40m, 0m, "Исправление остатка"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(10m, firstFund.Balance);
+        Assert.Equal(30m, secondFund.Balance);
+        Assert.Equal(0m, await new EfFundRepository(database.Context).GetAvailableToDistributeAsync(CancellationToken.None));
+        Assert.Equal(40m, database.Context.Funds.Sum(fund => fund.Balance));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.balance_used_for_cash_bank_decrease");
     }
 
     [Fact]
@@ -158,6 +207,35 @@ public sealed class CashBankBalanceSettingsServiceTests
         Assert.Equal(175m, decreased.Value.BankCurrentBalance);
         Assert.Equal(4, await database.Context.CashBankBalanceOperations.CountAsync());
         Assert.Equal(3, await database.Context.AuditEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateAdjustment_DecreaseUsesFundsAndKeepsFundTotalEqualToCashAndBank()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var firstFund = new Fund { Name = "А фонд", NormalizedName = "А ФОНД", SortOrder = 1, Balance = 60m };
+        var secondFund = new Fund { Name = "Б фонд", NormalizedName = "Б ФОНД", SortOrder = 2, Balance = 40m };
+        database.Context.Funds.AddRange(firstFund, secondFund);
+        await CreateService(database).UpdateOpeningBalancesAsync(
+            new UpdateCashBankOpeningBalancesRequest(100m, 0m, "Первичная настройка"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        database.Context.FundOperations.AddRange(
+            new FundOperation { Fund = firstFund, OperationKind = FundOperationKinds.Deposit, Amount = 60m, BalanceBefore = 0m, BalanceAfter = 60m, Reason = "Распределение", CreatedAtUtc = Now.AddMinutes(1) },
+            new FundOperation { Fund = secondFund, OperationKind = FundOperationKinds.Deposit, Amount = 40m, BalanceBefore = 0m, BalanceAfter = 40m, Reason = "Распределение", CreatedAtUtc = Now.AddMinutes(2) });
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database, Now.AddHours(1)).CreateAdjustmentAsync(
+            new CreateCashBankBalanceAdjustmentRequest(CashBankAccounts.Cash, CashBankBalanceDirections.Decrease, new DateOnly(2026, 7, 27), 70m, "Исправление кассы"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(0m, firstFund.Balance);
+        Assert.Equal(30m, secondFund.Balance);
+        var pool = await new EfFundRepository(database.Context).GetAvailableToDistributeAsync(CancellationToken.None);
+        Assert.Equal(0m, pool);
+        Assert.Equal(result.Value!.CashCurrentBalance + result.Value.BankCurrentBalance, pool + database.Context.Funds.Sum(fund => fund.Balance));
     }
 
     [Theory]
@@ -302,11 +380,12 @@ public sealed class CashBankBalanceSettingsServiceTests
             () => service.GetAsync(cancellation.Token));
     }
 
-    private static CashBankBalanceSettingsService CreateService(SqliteTestDatabase database)
+    private static CashBankBalanceSettingsService CreateService(SqliteTestDatabase database, DateTimeOffset? now = null)
     {
-        var timeProvider = new FixedTimeProvider(Now);
+        var timeProvider = new FixedTimeProvider(now ?? Now);
         return new CashBankBalanceSettingsService(
             new EfCashBankBalanceOperationRepository(database.Context),
+            new EfFundRepository(database.Context),
             new EfFinanceAvailableBalanceQuery(database.Context),
             new EfApplicationUnitOfWork(database.Context),
             new GarageBalance.Api.Application.Audit.AuditEventWriter(database.Context),

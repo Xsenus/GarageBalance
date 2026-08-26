@@ -2429,8 +2429,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               const periodicityRow = row.serviceSettingKind === 'main'
                 ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'periodicity')
                 : null
-              const incomeFundName = backendIncomeTypes.find((incomeType) => incomeType.id === serviceSetting?.incomeTypeId)?.destinationFundName
-
               return (
                 <Fragment key={row.id}>
                 <div
@@ -2478,8 +2476,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         <span className="tariffs-threshold-range__unit">{row.unit}</span>
                         {thresholdRangeErrors[row.id] ? <small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small> : null}
                       </div>
-                    ) : incomeFundName ? (
-                      <span>{incomeFundName}</span>
                     ) : row.serviceSettingKind !== 'main' && row.title !== (row.group ?? row.category) && (
                       <span>{row.title}</span>
                     )}
@@ -3490,7 +3486,13 @@ export function AddServicePrototypeDialog({
     setScheduleMessage(null)
     try {
       const saved = await onUpdateTariffSchedule({
-        periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText }) => ({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rate: parsePrototypeAmount(rateText)! })),
+        periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText }) => ({
+          tariffId: tariffId || null,
+          tariffVersion: tariffVersion || null,
+          effectiveFrom,
+          effectiveTo,
+          rate: parsePrototypeAmount(rateText)!,
+        })),
         allowGaps: true,
         changeReason: 'Изменение тарифной сетки в карточке услуги.',
         serviceVersion: initialSetting.version,

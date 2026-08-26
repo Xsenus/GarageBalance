@@ -27,6 +27,7 @@ export type GarageIncomePrototypeRow = {
   debt: number
   meterRequired?: boolean
   calculationDetails?: AccrualCalculationDetailsDto | null
+  reason?: string | null
 }
 
 export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
@@ -59,6 +60,7 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       debt: row.debt,
       meterRequired: row.meterKind !== null && row.meterValue === null,
       calculationDetails: row.calculationDetails ?? null,
+      reason: row.reason ?? null,
     }
   })
 }

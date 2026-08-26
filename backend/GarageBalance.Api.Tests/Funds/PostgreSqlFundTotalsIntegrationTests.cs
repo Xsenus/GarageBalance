@@ -99,6 +99,16 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
                     Reason = "Возврат в общий пул",
                     CreatedAtUtc = sequenceStart.AddMinutes(3)
                 });
+            setupContext.CashBankBalanceOperations.Add(new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Bank,
+                OperationKind = CashBankBalanceOperationKinds.Adjustment,
+                Direction = CashBankBalanceDirections.Increase,
+                OperationDate = new DateOnly(2026, 7, 20),
+                Amount = 5000m,
+                Reason = "Уточнение остатка счёта",
+                CreatedAtUtc = sequenceStart.AddMinutes(4)
+            });
             await setupContext.SaveChangesAsync();
         }
 
@@ -111,10 +121,11 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
 
         var available = await new EfFundRepository(queryContext).GetAvailableToDistributeAsync(CancellationToken.None);
 
-        Assert.Equal(1231m, available);
+        Assert.Equal(6231m, available);
         var command = Assert.Single(capture.Commands);
         Assert.Contains("SUM(delta) OVER", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("NOT EXISTS", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cash_bank_balance_operations", command, StringComparison.OrdinalIgnoreCase);
     }
 
     private static FinancialOperation CreateOperation(

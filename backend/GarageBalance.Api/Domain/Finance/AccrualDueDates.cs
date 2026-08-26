@@ -30,6 +30,31 @@ public readonly record struct AccrualDueDates(DateOnly DueDate, DateOnly Overdue
         };
     }
 
+    public static AccrualDueDates ForGarage(
+        DateOnly accountingMonth,
+        string? incomeTypeCode,
+        ChargeServiceSetting? setting,
+        DateOnly registeredOn)
+    {
+        var dueDates = ForIncomeType(accountingMonth, incomeTypeCode, setting);
+        var normalizedCode = incomeTypeCode?.Trim().ToLowerInvariant();
+        var registrationMonth = new DateOnly(registeredOn.Year, registeredOn.Month, 1);
+        if (normalizedCode is not ("membership" or "target") ||
+            accountingMonth < registrationMonth ||
+            dueDates.DueDate >= registeredOn)
+        {
+            return dueDates;
+        }
+
+        do
+        {
+            dueDates = FromDueDate(dueDates.DueDate.AddYears(1), dueDates.OverdueFromDate.DayNumber - dueDates.DueDate.DayNumber - 1);
+        }
+        while (dueDates.DueDate < registeredOn);
+
+        return dueDates;
+    }
+
     public static AccrualDueDates ForChargeService(DateOnly accountingMonth, ChargeServiceSetting? setting)
     {
         var month = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);

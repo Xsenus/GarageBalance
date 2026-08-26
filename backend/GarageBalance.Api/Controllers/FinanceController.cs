@@ -616,12 +616,6 @@ public sealed class FinanceController(
         {
             return Forbid();
         }
-        var periodError = ValidateMeterReadingPeriodReason<MeterReadingDto>(request.AccountingMonth, request.PeriodOverrideReason);
-        if (periodError is not null)
-        {
-            return periodError;
-        }
-
         var result = await financeService.CreateMeterReadingAsync(request, GetActorUserId(), cancellationToken);
         return result.Succeeded
             ? CreatedAtAction(nameof(GetMeterReadings), new { meterKind = result.Value!.MeterKind, search = result.Value.GarageNumber }, result.Value)
@@ -727,12 +721,6 @@ public sealed class FinanceController(
         {
             return Forbid();
         }
-        var periodError = ValidateMeterReadingPeriodReason<MeterReadingDto>(request.AccountingMonth, request.PeriodOverrideReason);
-        if (periodError is not null)
-        {
-            return periodError;
-        }
-
         var result = await financeService.SavePaymentFormMeterReadingAsync(request, GetActorUserId(), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
@@ -749,12 +737,6 @@ public sealed class FinanceController(
         {
             return Forbid();
         }
-        var periodError = ValidateMeterReadingPeriodReason<MeterReadingDto>(request.AccountingMonth, request.PeriodOverrideReason);
-        if (periodError is not null)
-        {
-            return periodError;
-        }
-
         var result = await financeService.UpdateMeterReadingAsync(meterReadingId, request, GetActorUserId(), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
@@ -784,21 +766,6 @@ public sealed class FinanceController(
         var currentMonth = new DateOnly(businessDateProvider.Today.Year, businessDateProvider.Today.Month, 1);
         return new DateOnly(accountingMonth.Year, accountingMonth.Month, 1) == currentMonth ||
             User.HasClaim("permission", SystemPermissions.HistoricalMeterReadingsCorrect);
-    }
-
-    private ActionResult<T>? ValidateMeterReadingPeriodReason<T>(DateOnly accountingMonth, string? reason)
-    {
-        var currentMonth = new DateOnly(businessDateProvider.Today.Year, businessDateProvider.Today.Month, 1);
-        var requestedMonth = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);
-        if (requestedMonth != currentMonth && string.IsNullOrWhiteSpace(reason))
-        {
-            return BadRequest(ApiProblemDetails.Create(
-                "meter_reading_period_override_reason_required",
-                "Для ввода или изменения показания вне текущего месяца нужна причина.",
-                StatusCodes.Status400BadRequest));
-        }
-
-        return null;
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]

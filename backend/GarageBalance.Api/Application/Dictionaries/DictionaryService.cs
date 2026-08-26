@@ -3000,13 +3000,6 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
         }
 
-        if (await supplierRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken))
-        {
-            return DictionaryResult<ChargeServiceSettingDto>.Failure(
-                "charge_service_has_active_suppliers",
-                "Сначала назначьте активным поставщикам другую услугу или архивируйте этих поставщиков.");
-        }
-
         setting.IsArchived = true;
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
 

@@ -464,7 +464,7 @@ public sealed record CorrectHistoricalMeterReadingRequest(
     DateOnly ReadingDate,
     [Required, Range(0, 999999999)] decimal? CurrentValue,
     [MaxLength(1000)] string? Comment,
-    [Required, MaxLength(500)] string Reason,
+    [MaxLength(500)] string? Reason,
     Guid ExpectedVersion);
 
 public sealed record MeterReadingListRequest(
@@ -547,7 +547,8 @@ public sealed record GarageIncomeWorksheetRowDto(
     decimal? FeeCampaignRemainingAmount = null,
     Guid? IrregularPaymentId = null,
     decimal? IrregularPaymentRemainingAmount = null,
-    AccrualCalculationDetailsDto? CalculationDetails = null);
+    AccrualCalculationDetailsDto? CalculationDetails = null,
+    string? Reason = null);
 
 public sealed record GarageIncomeWorksheetDto(
     Guid GarageId,

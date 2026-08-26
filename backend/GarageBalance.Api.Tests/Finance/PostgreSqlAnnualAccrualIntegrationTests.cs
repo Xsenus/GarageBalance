@@ -53,10 +53,10 @@ public sealed class PostgreSqlAnnualAccrualIntegrationTests
             .Where(accrual => accrual.GarageId == garage.Id && accrual.AccountingYear == 2026)
             .Include(accrual => accrual.IncomeType)
             .ToDictionaryAsync(accrual => accrual.IncomeType.Code!);
-        Assert.Equal(new DateOnly(2026, 6, 30), garageAccruals["membership"].DueDate);
-        Assert.Equal(new DateOnly(2026, 7, 31), garageAccruals["membership"].OverdueFromDate);
-        Assert.Equal(new DateOnly(2026, 6, 30), garageAccruals["target"].DueDate);
-        Assert.Equal(new DateOnly(2026, 7, 31), garageAccruals["target"].OverdueFromDate);
+        Assert.Equal(new DateOnly(2027, 6, 30), garageAccruals["membership"].DueDate);
+        Assert.Equal(new DateOnly(2027, 7, 31), garageAccruals["membership"].OverdueFromDate);
+        Assert.Equal(new DateOnly(2027, 6, 30), garageAccruals["target"].DueDate);
+        Assert.Equal(new DateOnly(2027, 7, 31), garageAccruals["target"].OverdueFromDate);
         Assert.Equal(new DateOnly(2026, 12, 31), garageAccruals["outdoor_lighting"].DueDate);
         Assert.Equal(new DateOnly(2027, 1, 1), garageAccruals["outdoor_lighting"].OverdueFromDate);
 
@@ -93,25 +93,32 @@ public sealed class PostgreSqlAnnualAccrualIntegrationTests
         Assert.True(beforeOverdue.Succeeded, beforeOverdue.ErrorMessage);
         Assert.Empty(beforeOverdue.Value!.Rows);
 
-        var membershipOverdue = await FinanceServiceTestFactory.Create(
+        var registrationYearBoundary = await FinanceServiceTestFactory.Create(
             context,
             new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)))
             .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
-        Assert.True(membershipOverdue.Succeeded, membershipOverdue.ErrorMessage);
-        var membershipRow = Assert.Single(membershipOverdue.Value!.Rows);
-        Assert.Equal(annualServices["membership"].IncomeTypeId, membershipRow.IncomeTypeId);
-        Assert.Equal(membershipOutstanding, membershipRow.OutstandingAmount);
-        Assert.Equal(membershipOutstanding, membershipOverdue.Value.Total);
+        Assert.True(registrationYearBoundary.Succeeded, registrationYearBoundary.ErrorMessage);
+        Assert.Empty(registrationYearBoundary.Value!.Rows);
 
         var nextYearOverdue = await FinanceServiceTestFactory.Create(
             context,
             new FixedTimeProvider(new DateTimeOffset(2027, 1, 1, 12, 0, 0, TimeSpan.Zero)))
             .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
         Assert.True(nextYearOverdue.Succeeded, nextYearOverdue.ErrorMessage);
-        Assert.Equal(2, nextYearOverdue.Value!.Rows.Count);
-        Assert.Contains(nextYearOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["membership"].IncomeTypeId && row.OutstandingAmount == membershipOutstanding);
-        Assert.Contains(nextYearOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["outdoor_lighting"].IncomeTypeId && row.OutstandingAmount == garageAccruals["outdoor_lighting"].Amount);
+        var outdoorLightingRow = Assert.Single(nextYearOverdue.Value!.Rows);
+        Assert.Equal(annualServices["outdoor_lighting"].IncomeTypeId, outdoorLightingRow.IncomeTypeId);
+        Assert.Equal(garageAccruals["outdoor_lighting"].Amount, outdoorLightingRow.OutstandingAmount);
         Assert.DoesNotContain(nextYearOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["target"].IncomeTypeId);
+
+        var nextPaymentPeriodOverdue = await FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2027, 7, 31, 12, 0, 0, TimeSpan.Zero)))
+            .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
+        Assert.True(nextPaymentPeriodOverdue.Succeeded, nextPaymentPeriodOverdue.ErrorMessage);
+        Assert.Contains(nextPaymentPeriodOverdue.Value!.Rows, row =>
+            row.IncomeTypeId == annualServices["membership"].IncomeTypeId &&
+            row.OutstandingAmount == membershipOutstanding);
+        Assert.DoesNotContain(nextPaymentPeriodOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["target"].IncomeTypeId);
     }
 
     [PostgreSqlFact]

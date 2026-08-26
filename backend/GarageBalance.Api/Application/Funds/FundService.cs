@@ -247,7 +247,7 @@ public sealed class FundService(
 
         }
 
-        if (balanceAfter < 0)
+        if (operationKind == FundOperationKinds.Withdraw && balanceAfter < 0)
         {
             return FundResult<FundOperationDto>.Failure("fund_balance_insufficient", "Нельзя изъять из фонда больше собранной суммы.");
         }

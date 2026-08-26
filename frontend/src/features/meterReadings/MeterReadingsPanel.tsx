@@ -197,8 +197,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
   const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
   const [readingChangeError, setReadingChangeError] = useState<string | null>(null)
-  const [historicalCorrectionReason, setHistoricalCorrectionReason] = useState('')
-  const [historicalCorrectionReasonError, setHistoricalCorrectionReasonError] = useState<string | null>(null)
   const [availableMeterTypes, setAvailableMeterTypes] = useState<MeterReadingTypeOption[] | null>(null)
   const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
   const [reloadRevision, setReloadRevision] = useState(0)
@@ -224,8 +222,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
     setPendingReadingChange(null)
     setReadingChangeError(null)
-    setHistoricalCorrectionReason('')
-    setHistoricalCorrectionReasonError(null)
     setReplacementForm(emptyMeterReplacementForm)
   }
 
@@ -274,18 +270,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       return
     }
 
-    const reason = historicalCorrectionReason.trim()
-    if (pendingReadingChange.isOutsideCurrentMonth && !reason) {
-      setHistoricalCorrectionReasonError('Укажите причину изменения периода.')
-      return
-    }
-
     void saveReadingValue(
       pendingReadingChange.cellKey,
       pendingReadingChange.readingId,
       pendingReadingChange.readingVersion,
       pendingReadingChange.nextValue,
-      pendingReadingChange.isOutsideCurrentMonth ? reason : undefined,
       true,
     )
   }
@@ -429,7 +418,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     readingId: string | undefined,
     readingVersion: string | undefined,
     nextValue: string,
-    historicalCorrectionReason?: string,
     showErrorInDialog = false,
   ) => {
     const [, , garageId, monthKey] = cellKey.split(':')
@@ -452,19 +440,20 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       currentValue: parsedValue,
       comment: 'Ввод из годовой таблицы показаний',
       expectedVersion: readingVersion,
-      periodOverrideReason: historicalCorrectionReason,
+      periodOverrideReason: undefined,
     }
 
     setSavingReadingKey(cellKey)
     setError(null)
     setReadingChangeError(null)
     try {
-      const savedReading = readingId && historicalCorrectionReason
-        ? await financeClient.correctHistoricalMeterReading!(auth.accessToken, readingId, {
+      const isHistoricalCorrection = Boolean(readingId && request.accountingMonth.slice(0, 7) !== currentMonth)
+      const savedReading = isHistoricalCorrection
+        ? await financeClient.correctHistoricalMeterReading!(auth.accessToken, readingId!, {
             readingDate: request.readingDate,
             currentValue: request.currentValue,
             comment: request.comment,
-            reason: historicalCorrectionReason,
+            reason: undefined,
             expectedVersion: readingVersion!,
           })
         : readingId
@@ -477,8 +466,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
       setPendingReadingChange(null)
       setReadingChangeError(null)
-      setHistoricalCorrectionReason('')
-      setHistoricalCorrectionReasonError(null)
       setReloadRevision((revision) => revision + 1)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить показание.'
@@ -558,8 +545,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     })
     setError(null)
     setReadingChangeError(null)
-    setHistoricalCorrectionReason('')
-    setHistoricalCorrectionReasonError(null)
     setReplacementForm({
       serial: '',
       initialValue: '0',
@@ -613,7 +598,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
       {error && !pendingReadingChange ? <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading} /> : null}
-      <p className="form-hint">Другой месяц требует отдельного права и причины.</p>
+      <p className="form-hint">Другой месяц требует отдельного права; действие автоматически фиксируется в истории.</p>
 
       {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
       {availableMeterTypes?.length === 0 && !error ? (
@@ -696,23 +681,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
               </>
             ) : null}
             {pendingReadingChange.isOutsideCurrentMonth && !pendingReadingChange.suggestsReplacement ? (
-              <>
-                <FormField label="Причина изменения периода">
-                  <textarea
-                    aria-label="Причина изменения периода"
-                    aria-invalid={Boolean(historicalCorrectionReasonError)}
-                    maxLength={500}
-                    value={historicalCorrectionReason}
-                    disabled={pendingReadingSaving}
-                    onChange={(event) => {
-                      setHistoricalCorrectionReason(event.target.value)
-                      setHistoricalCorrectionReasonError(null)
-                      setReadingChangeError(null)
-                    }}
-                  />
-                </FormField>
-                {historicalCorrectionReasonError ? <div className="form-error" role="alert">{historicalCorrectionReasonError}</div> : null}
-              </>
+              <p className="form-hint">Для другого месяца комментарий не требуется: действие будет автоматически записано в историю изменений.</p>
             ) : null}
             {readingChangeError ? <div className="form-error" role="alert">{readingChangeError}</div> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">

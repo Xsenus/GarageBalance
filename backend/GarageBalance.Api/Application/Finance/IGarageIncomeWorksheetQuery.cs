@@ -23,7 +23,8 @@ public sealed record GarageIncomeWorksheetData(
     IReadOnlyList<GarageIncomeWorksheetAnnualAccrualData> AnnualAccruals,
     IReadOnlyList<GarageIncomeWorksheetAllocationData> Allocations,
     IReadOnlyList<GarageIncomeWorksheetAdvanceData> Advances,
-    IReadOnlyList<GarageIncomeWorksheetCalculationData> Calculations = null!);
+    IReadOnlyList<GarageIncomeWorksheetCalculationData> Calculations = null!,
+    IReadOnlyList<GarageIncomeWorksheetReasonData> Reasons = null!);
 
 public sealed record GarageIncomeWorksheetBucketData(
     DateOnly AccountingMonth,
@@ -77,3 +78,9 @@ public sealed record GarageIncomeWorksheetCalculationData(
     Guid IncomeTypeId,
     string IncomeTypeName,
     string CalculationDetailsJson);
+
+public sealed record GarageIncomeWorksheetReasonData(
+    DateOnly AccountingMonth,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    string Reason);

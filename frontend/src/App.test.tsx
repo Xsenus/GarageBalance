@@ -2497,13 +2497,14 @@ describe('App', () => {
 
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 1' }))
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
-    expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveAttribute('readonly')
-    expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveValue('5 300.00')
-    expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveAttribute('readonly')
-    expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveValue('1 300.00 руб.')
+    expect(within(garageDialog).getByLabelText('Общая задолженность гаража')).toHaveAttribute('readonly')
+    expect(within(garageDialog).getByLabelText('Общая задолженность гаража')).toHaveValue('5 300.00 руб.')
+    expect(within(garageDialog).getByLabelText('Просроченная часть задолженности гаража')).toHaveAttribute('readonly')
+    expect(within(garageDialog).getByLabelText('Просроченная часть задолженности гаража')).toHaveValue('1 300.00 руб.')
+    expect(within(garageDialog).getByLabelText('Непросроченная часть задолженности гаража')).toHaveValue('4 000.00 руб.')
     const garageFinancialFields = within(garageDialog).getByRole('group', { name: 'Финансовые показатели гаража' })
-    expect(within(garageFinancialFields).getByLabelText('Баланс гаража')).toBeInTheDocument()
-    expect(within(garageFinancialFields).getByLabelText('Просроченная задолженность гаража')).toBeInTheDocument()
+    expect(within(garageFinancialFields).getByLabelText('Общая задолженность гаража')).toBeInTheDocument()
+    expect(within(garageFinancialFields).getByLabelText('Просроченная часть задолженности гаража')).toBeInTheDocument()
     expect(within(garageFinancialFields).getByLabelText('Стартовое значение счетчика воды')).toBeInTheDocument()
     expect(within(garageFinancialFields).getByLabelText('Стартовое значение счетчика электричества')).toBeInTheDocument()
     expect(garageDialog).toHaveClass('contractors-dialog--garage')
@@ -2809,6 +2810,8 @@ describe('App', () => {
     expect(getContractorSupplierContacts).not.toHaveBeenCalled()
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
     expect(within(editSupplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })).toHaveTextContent('Водоснабжение')
+    expect(within(editSupplierDialog).getByLabelText('Начальная задолженность')).toBeInTheDocument()
+    expect(within(editSupplierDialog).queryByLabelText('Задолженность поставщика')).not.toBeInTheDocument()
     expect(within(editSupplierDialog).getByLabelText('Наименование поставщика').closest('.contractors-supplier-primary-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Юридический адрес поставщика').closest('.contractors-supplier-lookup-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Комментарий поставщика').closest('.contractors-supplier-footer-grid')).not.toBeNull()
@@ -5147,7 +5150,7 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Наружное освещение' })).not.toBeInTheDocument()
   })
 
-  it('shows the configured income fund below a service name instead of the tariff technical name', async () => {
+  it('shows only the service name in the main tariff table', async () => {
     const user = userEvent.setup()
     const waterIncomeType = createAccountingType({
       id: 'income-water-table-label',
@@ -5198,8 +5201,10 @@ describe('App', () => {
     const waterNameCell = within(waterInput.closest('[role="row"]') as HTMLElement).getAllByRole('cell')[0]
     const wasteNameCell = within(wasteInput.closest('[role="row"]') as HTMLElement).getAllByRole('cell')[0]
 
-    expect(waterNameCell).toHaveTextContent('ВодаВодоснабжение')
-    expect(wasteNameCell).toHaveTextContent('МусорВывоз мусора')
+    expect(waterNameCell).toHaveTextContent(/^Вода$/)
+    expect(wasteNameCell).toHaveTextContent(/^Мусор$/)
+    expect(waterNameCell).not.toHaveTextContent('Водоснабжение')
+    expect(wasteNameCell).not.toHaveTextContent('Вывоз мусора')
     expect(wasteNameCell).not.toHaveTextContent('Ставка за вывоз мусора')
   })
 
@@ -5759,7 +5764,7 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
     expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByText('Другой месяц требует отдельного права и причины.')).toBeInTheDocument()
+    expect(within(readingsPanel).getByText('Другой месяц требует отдельного права; действие автоматически фиксируется в истории.')).toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     await act(async () => resolveMeterReadingYearPage({
       garages: [
@@ -5815,14 +5820,14 @@ describe('App', () => {
     let januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
     await user.type(januaryInput, '4654{Enter}')
     const createOutsidePeriodDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
-    await user.type(within(createOutsidePeriodDialog).getByLabelText('Причина изменения периода'), 'Ввод по бумажному журналу')
+    expect(within(createOutsidePeriodDialog).getByText(/комментарий не требуется/i)).toBeInTheDocument()
     await user.click(within(createOutsidePeriodDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(createdMeterReadingRequest?.currentValue).toBe(4654))
     expect(createdMeterReadingRequest).toMatchObject({
       garageId: 'garage-12',
       meterKind: 'electricity',
       accountingMonth: '2026-01-01',
-      periodOverrideReason: 'Ввод по бумажному журналу',
+      periodOverrideReason: undefined,
     })
     await waitFor(() => {
       januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
@@ -5840,19 +5845,15 @@ describe('App', () => {
     const readingCancelButton = within(readingConfirmDialog).getByRole('button', { name: 'Отмена' })
     const readingSaveButton = within(readingConfirmDialog).getByRole('button', { name: 'Сохранить' })
     const readingCloseButton = within(readingConfirmDialog).getByRole('button', { name: 'Закрыть подтверждение показания' })
-    const readingReasonInput = within(readingConfirmDialog).getByLabelText('Причина изменения периода')
+    expect(within(readingConfirmDialog).queryByLabelText('Причина изменения периода')).not.toBeInTheDocument()
     expect(Boolean(readingCancelButton.compareDocumentPosition(readingSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     await waitFor(() => expect(readingCancelButton).toHaveFocus())
-    await user.keyboard('{Shift>}{Tab}{/Shift}')
-    expect(readingReasonInput).toHaveFocus()
     await user.keyboard('{Shift>}{Tab}{/Shift}')
     expect(readingCloseButton).toHaveFocus()
     await user.keyboard('{Shift>}{Tab}{/Shift}')
     expect(readingSaveButton).toHaveFocus()
     await user.keyboard('{Tab}')
     expect(readingCloseButton).toHaveFocus()
-    await user.keyboard('{Tab}')
-    expect(readingReasonInput).toHaveFocus()
     await user.keyboard('{Tab}')
     expect(readingCancelButton).toHaveFocus()
     await user.keyboard('{Escape}')
@@ -5864,12 +5865,9 @@ describe('App', () => {
     await user.type(januaryInput, '4660{Enter}')
     const reopenedReadingConfirmDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
     await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(within(reopenedReadingConfirmDialog).getByRole('alert')).toHaveTextContent('Укажите причину изменения периода.')
-    await user.type(within(reopenedReadingConfirmDialog).getByLabelText('Причина изменения периода'), 'Сверка с бумажным журналом')
-    await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(correctedMeterReadingRequest?.currentValue).toBe(4660))
     expect(correctedMeterReadingId).toBe('meter-reading-jan')
-    expect(correctedMeterReadingRequest).toMatchObject({ reason: 'Сверка с бумажным журналом', expectedVersion: expect.any(String) })
+    expect(correctedMeterReadingRequest).toMatchObject({ reason: undefined, expectedVersion: expect.any(String) })
     await waitFor(() => expect(januaryInput).toHaveValue('4660'))
 
     const refreshedFutureDecemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
@@ -7117,6 +7115,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить штраф' })).not.toBeInTheDocument())
     await waitFor(() => expect(penaltyAccrualButton).toHaveFocus())
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('Штраф')
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('Причина: Нарушение правил проезда')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('1 250.50')
     const updatedIncomeSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(updatedIncomeSummary).toHaveTextContent('Начислено13 089.75')
@@ -7861,7 +7860,7 @@ describe('App', () => {
     }))
   })
 
-  it('calculates a selected garage worksheet and saves a missing historical meter reading with an audit reason', async () => {
+  it('calculates a selected garage worksheet and saves a missing historical meter reading without requesting a comment', async () => {
     const user = userEvent.setup()
     const historicalMonth = '2024-02'
     const garage = createGarage({ id: 'garage-historical-meter', number: '74', ownerName: 'Иванов Иван' })
@@ -7941,9 +7940,7 @@ describe('App', () => {
     await user.click(within(prototype).getByRole('button', { name: 'Сохранить показание Вода историческая фев.24' }))
 
     const reasonDialog = screen.getByRole('dialog', { name: 'Сохранить показание Вода историческая за фев.24' })
-    await user.click(within(reasonDialog).getByRole('button', { name: 'Сохранить показание' }))
-    expect(within(reasonDialog).getByRole('alert')).toHaveTextContent('Укажите причину')
-    await user.type(within(reasonDialog).getByLabelText('Причина ввода показания вне текущего месяца'), 'Сверка архивной ведомости')
+    expect(within(reasonDialog).getByText(/автоматически сохранит это действие/i)).toBeInTheDocument()
     await user.click(within(reasonDialog).getByRole('button', { name: 'Сохранить показание' }))
 
     await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenCalledWith('token', expect.objectContaining({
@@ -7951,7 +7948,7 @@ describe('App', () => {
       meterKind: 'water',
       accountingMonth: `${historicalMonth}-01`,
       currentValue: 115,
-      periodOverrideReason: 'Сверка архивной ведомости',
+      periodOverrideReason: undefined,
     })))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сохранить показание Вода историческая за фев.24' })).not.toBeInTheDocument())
     expect(await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })).toHaveValue('115')
@@ -10249,7 +10246,8 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText(
       'Фонд «Резервный фонд» удален. Остаток 2 500.00 руб. возвращен в нераспределенную сумму.',
     )).toHaveAttribute('role', 'status')
-    expect(within(fundsPanel).getByText('102 500.00 руб.')).toBeInTheDocument()
+    expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('102 500.00 руб.')
+    expect(within(fundsPanel).getByLabelText('Итого средств в фондах, кассе и на счёте')).toHaveTextContent('102 500.00 руб.')
     expect(within(fundsPanel).queryByText('Резервный фонд')).not.toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
@@ -10385,6 +10383,7 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getAllByText(/1 500\.00 руб\./).length).toBeGreaterThanOrEqual(1)
     expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('98 500.00 руб.')
+    expect(within(fundsPanel).getByLabelText('Итого средств в фондах, кассе и на счёте')).toHaveTextContent('100 000.00 руб.')
 
     const fundOperationsTable = within(fundsPanel).getByRole('table', { name: 'Операции фондов' })
     const fundOperationsPagination = within(fundsPanel).getByRole('navigation', { name: 'Пагинация операций фондов' })
@@ -10588,6 +10587,7 @@ describe('App', () => {
     const pool = await within(fundsPanel).findByLabelText('Общий нераспределенный пул')
     expect(pool).toHaveTextContent('Здесь остаются только суммы без действующего назначения фонда')
     expect(pool).toHaveTextContent('25 000.00 руб.')
+    expect(within(fundsPanel).getByLabelText('Итого средств в фондах, кассе и на счёте')).toHaveTextContent('25 000.00 руб.')
     expect(within(fundsPanel).getByRole('columnheader', { name: 'Текущее значение' })).toBeInTheDocument()
     expect(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Членские взносы' })).toBeInTheDocument()
     expect(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Прочее' })).toBeInTheDocument()
@@ -10609,6 +10609,7 @@ describe('App', () => {
     ))
     expect(await within(fundsPanel).findByText('Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений.')).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('0.00 руб.')
+    expect(within(fundsPanel).getByLabelText('Итого средств в фондах, кассе и на счёте')).toHaveTextContent('25 000.00 руб.')
   })
 
   it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
@@ -10630,6 +10631,7 @@ describe('App', () => {
     expect(within(fundsPanel).queryByText('Электроэнергия')).not.toBeInTheDocument()
     expect(within(fundsPanel).queryByRole('button', { name: 'Пополнить фонд Электроэнергия' })).not.toBeInTheDocument()
     expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('—')
+    expect(within(fundsPanel).getByLabelText('Итого средств в фондах, кассе и на счёте')).toHaveTextContent('—')
   })
 
   it('labels the working history as manual redistributions and shows its manual operations', async () => {
@@ -14721,7 +14723,7 @@ describe('App', () => {
     fireEvent.submit(within(financePanel).getByLabelText('Сумма начисления').closest('form')!)
     expect(await within(financePanel).findByText('Проверьте начисление')).toBeInTheDocument()
     expect(within(financePanel).getByText('Сумма начисления должна быть больше 0.')).toBeInTheDocument()
-    expect(within(financePanel).getByText('Укажите комментарий начисления.')).toBeInTheDocument()
+    expect(within(financePanel).queryByText('Укажите комментарий начисления.')).not.toBeInTheDocument()
     expect(financeCalls.accrual).toBe(false)
 
     fireEvent.submit(within(financePanel).getByLabelText('Сумма начисления поставщику').closest('form')!)

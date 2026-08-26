@@ -2388,7 +2388,7 @@ export function FinancePanel({
           <LocalizedDatePicker ariaLabel="Месяц начисления" mode="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setAccrualForm({ ...accrualForm, accountingMonth: `${accountingMonth}-01` })} required />
             <MoneyInput aria-label="Сумма начисления" min="0.01" value={accrualForm.amount} onValueChange={(amount) => setAccrualForm({ ...accrualForm, amount })} required />
           </div>
-          <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
+          <input aria-label="Комментарий начисления" placeholder="Комментарий (необязательно)" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} />
           <FormValidationSummary title={getFinanceEditorValidationTitle('accruals')} items={accrualValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'accrual' || !accrualForm.garageId || !accrualForm.incomeTypeId}>
             <span>Начислить</span>
@@ -2940,7 +2940,6 @@ function PaymentsPrototypePanel({
   const historicalMeterReadingDialogRef = useFocusTrap<HTMLElement>(Boolean(historicalMeterReadingSave))
   useEscapeKey(Boolean(historicalMeterReadingSave), () => setHistoricalMeterReadingSave(null))
   useRestoreFocusOnClose(Boolean(historicalMeterReadingSave))
-  const historicalMeterReadingInitialFocusRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(historicalMeterReadingSave))
   const [overdueDebtDetailsExpanded, setOverdueDebtDetailsExpanded] = useState(() => overdueDebtDetailsPreference(auth.user.id))
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
@@ -3640,7 +3639,7 @@ function PaymentsPrototypePanel({
         : currentRow))
       return
     }
-    if (!isCurrentMonth && !periodOverrideReason?.trim()) {
+    if (!isCurrentMonth && periodOverrideReason === undefined) {
       setHistoricalMeterReadingSave({ row, reason: '', error: null })
       return
     }
@@ -3679,7 +3678,7 @@ function PaymentsPrototypePanel({
             readingDate: row.meterReadingDate ?? getLocalDateInputValue(),
             currentValue,
             comment,
-            reason: periodOverrideReason!.trim(),
+            reason: periodOverrideReason?.trim() || undefined,
             expectedVersion: row.meterReadingVersion,
           })
         : await financeClient.savePaymentFormMeterReading(auth.accessToken, {
@@ -3691,7 +3690,7 @@ function PaymentsPrototypePanel({
             comment,
             meterReadingId: row.meterReadingId ?? undefined,
             expectedVersion: row.meterReadingVersion ?? undefined,
-            periodOverrideReason: isCurrentMonth ? undefined : periodOverrideReason!.trim(),
+            periodOverrideReason: isCurrentMonth ? undefined : periodOverrideReason?.trim() || undefined,
           })
       if (selectedGarageIdRef.current !== selectedGarage.id) {
         return
@@ -3739,15 +3738,7 @@ function PaymentsPrototypePanel({
       return
     }
 
-    const reason = historicalMeterReadingSave.reason.trim()
-    if (!reason) {
-      setHistoricalMeterReadingSave((current) => current
-        ? { ...current, error: 'Укажите причину ввода или изменения показания вне текущего месяца.' }
-        : current)
-      return
-    }
-
-    await commitGarageMeterReading(historicalMeterReadingSave.row, reason)
+    await commitGarageMeterReading(historicalMeterReadingSave.row, '')
   }
 
   function selectFirstGarageResult() {
@@ -4240,6 +4231,7 @@ function PaymentsPrototypePanel({
           paid: 0,
           advance: 0,
           debt: savedAccrual.amount,
+          reason: request.reason.trim(),
         },
       ]
     })
@@ -4827,7 +4819,10 @@ function PaymentsPrototypePanel({
                           <Fragment key={row.id}>
                           <tr>
                             <td />
-                            <td>{row.service}</td>
+                            <td>
+                              <span>{row.service}</span>
+                              {row.reason ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
+                            </td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>
                               {row.meterKind && canWritePayments && financeClient.savePaymentFormMeterReading && (
                                 row.month === getCurrentMonthInputValue()
@@ -5209,20 +5204,8 @@ function PaymentsPrototypePanel({
             </div>
             <div className="dialog-body">
               <p className="form-hint">
-                Показание за {historicalMeterReadingSave.row.monthLabel} изменит неоплаченный расчёт. Причина сохранится в истории изменений.
+                Показание за {historicalMeterReadingSave.row.monthLabel} изменит неоплаченный расчёт. Система автоматически сохранит это действие в истории изменений.
               </p>
-              <FormField label="Причина">
-                <textarea
-                  ref={historicalMeterReadingInitialFocusRef}
-                  aria-label="Причина ввода показания вне текущего месяца"
-                  rows={4}
-                  value={historicalMeterReadingSave.reason}
-                  disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
-                  onChange={(event) => setHistoricalMeterReadingSave((current) => current
-                    ? { ...current, reason: event.target.value, error: null }
-                    : current)}
-                />
-              </FormField>
               {historicalMeterReadingSave.error ? <FormError>{historicalMeterReadingSave.error}</FormError> : null}
             </div>
             <div className="dialog-actions">

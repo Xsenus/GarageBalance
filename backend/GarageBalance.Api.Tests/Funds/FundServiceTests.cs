@@ -640,6 +640,27 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task CreateOperationAsync_DepositCanReplenishNegativeFundFromUnallocatedPool()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = await database.Context.Funds.SingleAsync(item => item.Name == "Электроэнергия");
+        fund.Balance = -500m;
+        await SeedIncomeAsync(database.Context, 1000m);
+
+        var result = await service.CreateOperationAsync(
+            fund.Id,
+            new CreateFundOperationRequest(FundOperationKinds.Deposit, 300m, "Погашение отрицательного остатка"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(-200m, result.Value!.BalanceAfter);
+        Assert.Equal(-200m, fund.Balance);
+        Assert.All(await service.GetFundsAsync(CancellationToken.None), item => Assert.Equal(700m, item.AvailableToDistribute));
+    }
+
+    [Fact]
     public async Task CreateOperationAsync_DoesNotWithdrawMoreThanBalance()
     {
         await using var database = await TestDatabase.CreateAsync();

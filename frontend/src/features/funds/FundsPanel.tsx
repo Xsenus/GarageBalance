@@ -584,6 +584,10 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const operationReverseKind = operationReverse ? getReverseFundOperationKind(operationReverse.operation.operationKind) : null
   const operationReverseLabel = operationReverseKind === 'deposit' ? 'Пополнение' : 'Изъятие'
 
+  const accountedFundsTotal = availableToDistribute === null
+    ? null
+    : rows.reduce((sum, row) => sum + (row.amount ?? 0), availableToDistribute)
+
   return (
     <section className="funds-page" aria-label="Управление фондами">
       <div className="funds-heading">
@@ -665,6 +669,20 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <strong>{availableToDistribute === null ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
           </>
         )}
+          </div>
+
+          <div className="funds-distribution" aria-label="Итого средств в фондах, кассе и на счёте">
+            {fundsLoading ? (
+              <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Считаем общий остаток" rows={1} columns={2} />
+            ) : (
+              <>
+                <div className="funds-distribution-copy">
+                  <span>Итого учтено средств</span>
+                  <small>Сумма всех фондов и нераспределённого остатка. Она должна совпадать с общим остатком кассы и банковского счёта.</small>
+                </div>
+                <strong>{accountedFundsTotal === null ? '—' : `${formatMoney(accountedFundsTotal)} руб.`}</strong>
+              </>
+            )}
           </div>
 
           {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}

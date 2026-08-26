@@ -1,12 +1,14 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Settings;
 
 public sealed class CashBankBalanceSettingsService(
     ICashBankBalanceOperationRepository repository,
+    IFundRepository fundRepository,
     IFinanceAvailableBalanceQuery availableBalanceQuery,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
@@ -49,6 +51,7 @@ public sealed class CashBankBalanceSettingsService(
                 "Укажите причину изменения от 3 до 1000 символов.");
         }
 
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         await using var balanceLock = await availableBalanceQuery.AcquireUpdateLockAsync(
             FinanceBalanceAccounts.Cash | FinanceBalanceAccounts.Bank,
             cancellationToken);
@@ -76,22 +79,40 @@ public sealed class CashBankBalanceSettingsService(
 
         var now = timeProvider.GetUtcNow();
         var operationDate = businessDateProvider.Today;
-        AddDifference(
+        var poolBalance = await fundRepository.GetAvailableToDistributeAsync(cancellationToken);
+        var funds = await fundRepository.GetFundsForUpdateAsync(cancellationToken);
+        if (Math.Max(-cashDifference, 0m) + Math.Max(-bankDifference, 0m) >
+            poolBalance + funds.Sum(fund => Math.Max(fund.Balance, 0m)) +
+            Math.Max(cashDifference, 0m) + Math.Max(bankDifference, 0m))
+        {
+            return FinanceResult<CashBankBalanceSettingsDto>.Failure(
+                "insufficient_accounted_funds",
+                "Недостаточно средств в нераспределённом остатке и фондах для уменьшения кассы или счёта.");
+        }
+
+        var sequence = 0;
+        ApplyDifference(
             CashBankAccounts.Cash,
             CashBankBalanceOperationKinds.OpeningBalance,
             cashDifference,
             operationDate,
             reason,
             actorUserId,
-            now);
-        AddDifference(
+            now,
+            funds,
+            ref poolBalance,
+            ref sequence);
+        ApplyDifference(
             CashBankAccounts.Bank,
             CashBankBalanceOperationKinds.OpeningBalance,
             bankDifference,
             operationDate,
             reason,
             actorUserId,
-            now);
+            now,
+            funds,
+            ref poolBalance,
+            ref sequence);
 
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -159,6 +180,7 @@ public sealed class CashBankBalanceSettingsService(
         }
 
         var cashAccount = account == CashBankAccounts.Cash;
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         await using var balanceLock = await availableBalanceQuery.AcquireUpdateLockAsync(
             cashAccount ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank,
             cancellationToken);
@@ -176,18 +198,29 @@ public sealed class CashBankBalanceSettingsService(
                     : "На банковском счёте недостаточно средств для списания.");
         }
 
-        var operation = new CashBankBalanceOperation
+        var poolBalance = await fundRepository.GetAvailableToDistributeAsync(cancellationToken);
+        var funds = await fundRepository.GetFundsForUpdateAsync(cancellationToken);
+        if (direction == CashBankBalanceDirections.Decrease &&
+            amount > poolBalance + funds.Sum(fund => Math.Max(fund.Balance, 0m)))
         {
-            Account = account,
-            OperationKind = CashBankBalanceOperationKinds.Adjustment,
-            Direction = direction,
-            OperationDate = request.OperationDate,
-            Amount = amount,
-            Reason = reason,
-            ActorUserId = actorUserId,
-            CreatedAtUtc = timeProvider.GetUtcNow()
-        };
-        repository.Add(operation);
+            return Invalid(
+                "insufficient_accounted_funds",
+                "Недостаточно средств в нераспределённом остатке и фондах для списания.");
+        }
+
+        var sequence = 0;
+        var now = timeProvider.GetUtcNow();
+        var operation = ApplyDifference(
+            account,
+            CashBankBalanceOperationKinds.Adjustment,
+            direction == CashBankBalanceDirections.Increase ? amount : -amount,
+            request.OperationDate,
+            reason,
+            actorUserId,
+            now,
+            funds,
+            ref poolBalance,
+            ref sequence)!;
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             direction == CashBankBalanceDirections.Increase
@@ -220,21 +253,71 @@ public sealed class CashBankBalanceSettingsService(
             await GetAsync(cancellationToken));
     }
 
-    private void AddDifference(
+    private CashBankBalanceOperation? ApplyDifference(
         string account,
         string operationKind,
         decimal difference,
         DateOnly operationDate,
         string reason,
         Guid? actorUserId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        IReadOnlyList<Fund> funds,
+        ref decimal poolBalance,
+        ref int sequence)
     {
         if (difference == 0m)
         {
-            return;
+            return null;
         }
 
-        repository.Add(new CashBankBalanceOperation
+        if (difference < 0m)
+        {
+            var remaining = MoneyMath.RoundMoney(Math.Max(Math.Abs(difference) - poolBalance, 0m));
+            foreach (var fund in funds.Where(fund => fund.Balance > 0m))
+            {
+                if (remaining <= 0m)
+                {
+                    break;
+                }
+
+                var withdrawn = MoneyMath.RoundMoney(Math.Min(fund.Balance, remaining));
+                var balanceBefore = fund.Balance;
+                fund.Balance = MoneyMath.RoundMoney(fund.Balance - withdrawn);
+                fund.UpdatedAtUtc = now.AddMilliseconds(++sequence);
+                fund.Version = Guid.NewGuid();
+                var fundOperation = new FundOperation
+                {
+                    FundId = fund.Id,
+                    OperationKind = FundOperationKinds.Withdraw,
+                    Amount = withdrawn,
+                    BalanceBefore = balanceBefore,
+                    BalanceAfter = fund.Balance,
+                    Reason = $"Уменьшение остатка «{AccountName(account)}»: {reason}",
+                    ActorUserId = actorUserId,
+                    CreatedAtUtc = fund.UpdatedAtUtc
+                };
+                fundRepository.AddOperation(fundOperation);
+                auditEventWriter.Add(new AuditEventWriteRequest(
+                    actorUserId,
+                    "fund.balance_used_for_cash_bank_decrease",
+                    "fund",
+                    fund.Id.ToString(),
+                    Summary: $"Из фонда «{fund.Name}» списано {withdrawn:N2} ₽ при уменьшении остатка «{AccountName(account)}».",
+                    Section: "funds",
+                    ActionKind: "update",
+                    EntityDisplayName: fund.Name,
+                    Reason: reason));
+                poolBalance = MoneyMath.RoundMoney(poolBalance + withdrawn);
+                remaining = MoneyMath.RoundMoney(remaining - withdrawn);
+            }
+            poolBalance = MoneyMath.RoundMoney(poolBalance - Math.Abs(difference));
+        }
+        else
+        {
+            poolBalance = MoneyMath.RoundMoney(poolBalance + difference);
+        }
+
+        var operation = new CashBankBalanceOperation
         {
             Account = account,
             OperationKind = operationKind,
@@ -245,8 +328,10 @@ public sealed class CashBankBalanceSettingsService(
             Amount = Math.Abs(difference),
             Reason = reason,
             ActorUserId = actorUserId,
-            CreatedAtUtc = now
-        });
+            CreatedAtUtc = now.AddMilliseconds(++sequence)
+        };
+        repository.Add(operation);
+        return operation;
     }
 
     private static CashBankBalanceSettingsDto CreateDto(

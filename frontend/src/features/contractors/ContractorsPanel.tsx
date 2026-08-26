@@ -3404,6 +3404,9 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
   useEscapeKey(saveChanges.length === 0 && !saving, onClose)
+  const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
+  const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
+  const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)
 
   async function saveAndClose() {
     setSaving(true)
@@ -3468,8 +3471,9 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
                   </>
                 ) : (
                   <>
-                    <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance ? formatStaffRate(form.balance) : '0.00'} readOnly /></FormField>
-                    <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
+                    <FormField label="Общая задолженность"><input aria-label="Общая задолженность гаража" value={`${formatMoney(totalDebt)} руб.`} readOnly /></FormField>
+                    <FormField label="Из неё просрочено"><input aria-label="Просроченная часть задолженности гаража" value={`${formatMoney(overdueDebt)} руб.`} readOnly /></FormField>
+                    <FormField label="Срок оплаты не наступил"><input aria-label="Непросроченная часть задолженности гаража" value={`${formatMoney(notYetOverdueDebt)} руб.`} readOnly /></FormField>
                   </>
                 )}
                 <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
@@ -3761,14 +3765,13 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                 </div>
                 <SuggestionStatus id="supplier-party-suggestions-status" message={partySuggestionStatus} />
               </FormField>
-              <FormField label={item ? 'Стартовый баланс' : 'Начальная задолженность'}>
+              <FormField label="Начальная задолженность" help={item ? 'Исходная сумма на момент начала учёта. Текущая задолженность с учётом начислений и выплат показана в основной таблице поставщиков.' : undefined}>
                 <MoneyTextInput
                   aria-label="Начальная задолженность"
                   value={form.startingBalance}
                   onValueChange={(startingBalance) => setForm({ ...form, startingBalance })}
                 />
               </FormField>
-              {item ? <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt && form.debt !== 'Нет' ? formatStaffRate(form.debt) : 'Нет'} readOnly /></FormField> : null}
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />
             </div>
             <div className="contractors-supplier-contact-summary-grid" aria-describedby="supplier-primary-contact-hint">

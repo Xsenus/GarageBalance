@@ -393,7 +393,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task ArchiveChargeServiceSettingAsync_RejectsServiceAssignedToActiveSupplier()
+    public async Task ArchiveChargeServiceSettingAsync_AllowsServiceAssignedToActiveSupplier()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -405,10 +405,10 @@ public sealed class DictionaryServiceTests
 
         var result = await service.ArchiveChargeServiceSettingAsync(setting.Id, "Услуга больше не используется", null, CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("charge_service_has_active_suppliers", result.ErrorCode);
-        Assert.False(database.Context.ChargeServiceSettings.Single().IsArchived);
-        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_archived");
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(database.Context.ChargeServiceSettings.Single().IsArchived);
+        Assert.Equal(setting.Id, database.Context.Suppliers.Single().ChargeServiceSettingId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_archived");
     }
 
     [Fact]
@@ -1521,11 +1521,9 @@ public sealed class DictionaryServiceTests
             new UpsertSupplierRequest("Существующий поставщик", group.Value!.Id, null, null, null, null, null, 0, null, archived.Value!.Id, ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
-        var blockedArchive = await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
-        Assert.False(blockedArchive.Succeeded);
-        Assert.Equal("charge_service_has_active_suppliers", blockedArchive.ErrorCode);
-        await service.ArchiveSupplierAsync(existingSupplier.Value!.Id, "Поставщик больше не используется", null, CancellationToken.None);
-        Assert.True((await service.ArchiveChargeServiceSettingAsync(archived.Value.Id, "Услуга больше не используется", null, CancellationToken.None)).Succeeded);
+        var archivedWithActiveSupplier = await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
+        Assert.True(archivedWithActiveSupplier.Succeeded, archivedWithActiveSupplier.ErrorMessage);
+        Assert.False(existingSupplier.Value!.IsArchived);
 
         var missingResult = await service.CreateSupplierAsync(
             new UpsertSupplierRequest("Первый поставщик", group.Value!.Id, null, null, null, null, null, 0, null, Guid.NewGuid()),

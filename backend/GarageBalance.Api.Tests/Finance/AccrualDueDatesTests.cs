@@ -37,6 +37,62 @@ public sealed class AccrualDueDatesTests
         Assert.Equal(new DateOnly(2026, 5, 26), result.OverdueFromDate);
     }
 
+    [Theory]
+    [InlineData("membership")]
+    [InlineData("target")]
+    public void ForGarage_MovesPassedAnnualDeadlineToNextPaymentPeriod(string incomeTypeCode)
+    {
+        var result = AccrualDueDates.ForGarage(
+            new DateOnly(2026, 8, 1),
+            incomeTypeCode,
+            setting: null,
+            registeredOn: new DateOnly(2026, 8, 26));
+
+        Assert.Equal(new DateOnly(2027, 6, 30), result.DueDate);
+        Assert.Equal(new DateOnly(2027, 7, 31), result.OverdueFromDate);
+    }
+
+    [Theory]
+    [InlineData("membership")]
+    [InlineData("target")]
+    public void ForGarage_KeepsUpcomingAnnualDeadlineInRegistrationYear(string incomeTypeCode)
+    {
+        var result = AccrualDueDates.ForGarage(
+            new DateOnly(2026, 1, 1),
+            incomeTypeCode,
+            setting: null,
+            registeredOn: new DateOnly(2026, 2, 1));
+
+        Assert.Equal(new DateOnly(2026, 6, 30), result.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), result.OverdueFromDate);
+    }
+
+    [Fact]
+    public void ForGarage_DoesNotMoveMonthlyServiceDeadline()
+    {
+        var result = AccrualDueDates.ForGarage(
+            new DateOnly(2026, 5, 1),
+            "water",
+            setting: null,
+            registeredOn: new DateOnly(2026, 8, 26));
+
+        Assert.Equal(new DateOnly(2026, 6, 30), result.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), result.OverdueFromDate);
+    }
+
+    [Fact]
+    public void ForGarage_DoesNotMoveHistoricalAnnualAccrualBeforeRegistrationMonth()
+    {
+        var result = AccrualDueDates.ForGarage(
+            new DateOnly(2026, 6, 1),
+            "membership",
+            setting: null,
+            registeredOn: new DateOnly(2026, 8, 26));
+
+        Assert.Equal(new DateOnly(2026, 6, 30), result.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), result.OverdueFromDate);
+    }
+
     [Fact]
     public void ForChargeService_MonthlyChargeBecomesOverdueAfterFollowingPaymentMonthAndGracePeriod()
     {

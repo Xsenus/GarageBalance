@@ -323,6 +323,7 @@ export type GarageIncomeWorksheetRowDto = {
   irregularPaymentId?: string | null
   irregularPaymentRemainingAmount?: number | null
   calculationDetails?: AccrualCalculationDetailsDto | null
+  reason?: string | null
 }
 
 export type AccrualCalculationTierDto = {
@@ -668,7 +669,7 @@ export type CorrectHistoricalMeterReadingRequest = {
   readingDate: string
   currentValue: number
   comment?: string
-  reason: string
+  reason?: string
   expectedVersion: string
 }
 

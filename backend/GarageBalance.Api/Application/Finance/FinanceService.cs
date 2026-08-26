@@ -449,13 +449,19 @@ public sealed class FinanceService(
             .GroupBy(item => item.IncomeTypeId)
             .ToDictionary(group => group.Key, group => group.First().MeterKind);
 
-        var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(
-            bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName));
+        var accrualLookup = worksheetData.AccrualBuckets
+            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName))
+            .ToDictionary(
+                group => group.Key,
+                group => group.First() with { Amount = MoneyMath.RoundMoney(group.Sum(bucket => bucket.Amount)) });
         var calculationLookup = (worksheetData.Calculations ?? [])
             .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName))
             .ToDictionary(
                 group => group.Key,
                 group => RegularAccrualCalculator.Deserialize(group.First().CalculationDetailsJson));
+        var reasonLookup = (worksheetData.Reasons ?? [])
+            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName))
+            .ToDictionary(group => group.Key, group => string.Join("; ", group.Select(item => item.Reason).Distinct()));
         var appliedIncomeLookup = worksheetData.Allocations
             .Where(allocation =>
                 !annualAccrualIds.Contains(allocation.AccrualId) &&
@@ -540,7 +546,8 @@ public sealed class FinanceService(
                 debt,
                 IrregularPaymentId: key.IrregularPaymentId,
                 IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
-                CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName)));
+                CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName)),
+                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName)));
         }).ToList();
 
         foreach (var annualAccrual in worksheetData.AnnualAccruals)
@@ -879,7 +886,7 @@ public sealed class FinanceService(
                     continue;
                 }
 
-                var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, setting);
+                var dueDates = AccrualDueDates.ForGarage(month, incomeType.Code, setting, GetGarageRegistrationDate(garage));
                 var detailsJson = RegularAccrualCalculator.Serialize(calculation.Details!);
                 var useTieredTariff = segments.Any(segment => segment.Tiers.Count > 0);
                 if (existing is null)
@@ -3312,11 +3319,6 @@ public sealed class FinanceService(
     public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
-        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
-        {
-            return FinanceResult<AccrualDto>.Failure("accrual_comment_required", "Для ручного начисления нужен комментарий.");
-        }
-
         if (source is not AccrualSources.Manual and not AccrualSources.Regular)
         {
             return FinanceResult<AccrualDto>.Failure("accrual_source_invalid", "Источник начисления должен быть manual или regular.");
@@ -3352,7 +3354,7 @@ public sealed class FinanceService(
                     cancellationToken),
                 month)
             : null;
-        var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, dueDateSetting);
+        var dueDates = AccrualDueDates.ForGarage(month, incomeType.Code, dueDateSetting, GetGarageRegistrationDate(garage));
         var accrual = new Accrual
         {
             GarageId = garage.Id,
@@ -3486,16 +3488,6 @@ public sealed class FinanceService(
     public async Task<FinanceResult<AccrualDto>> UpdateAccrualAsync(Guid accrualId, CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
-        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
-        {
-            return FinanceResult<AccrualDto>.Failure("accrual_comment_required", "Для ручного начисления нужен комментарий.");
-        }
-
-        if (source == AccrualSources.Regular && string.IsNullOrWhiteSpace(request.Comment))
-        {
-            return FinanceResult<AccrualDto>.Failure("accrual_regular_edit_comment_required", "Для изменения автоматического начисления нужен комментарий.");
-        }
-
         if (source is not AccrualSources.Manual and not AccrualSources.Regular)
         {
             return FinanceResult<AccrualDto>.Failure("accrual_source_invalid", "Источник начисления должен быть manual или regular.");
@@ -3601,7 +3593,7 @@ public sealed class FinanceService(
                     cancellationToken),
                 month)
             : null;
-        var updatedDueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, dueDateSetting);
+        var updatedDueDates = AccrualDueDates.ForGarage(month, incomeType.Code, dueDateSetting, GetGarageRegistrationDate(garage));
         accrual.DueDate = updatedDueDates.DueDate;
         accrual.OverdueFromDate = updatedDueDates.OverdueFromDate;
         accrual.DueDateNeedsReview = false;
@@ -3681,11 +3673,6 @@ public sealed class FinanceService(
     public async Task<FinanceResult<SupplierAccrualDto>> UpdateSupplierAccrualAsync(Guid supplierAccrualId, CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
-        if (source == AccrualSources.Regular && string.IsNullOrWhiteSpace(request.Comment))
-        {
-            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_regular_edit_comment_required", "Для изменения автоматического начисления поставщику нужен комментарий.");
-        }
-
         if (source is not AccrualSources.Manual and not AccrualSources.Regular)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_source_invalid", "Источник начисления поставщику должен быть manual или regular.");
@@ -3868,7 +3855,6 @@ public sealed class FinanceService(
 
         var calculationSegments = BuildRegularAccrualSegments(month, matchingSetting, tariff);
         var useTieredElectricity = calculationSegments.Any(segment => segment.Tiers.Count > 0);
-        var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, matchingSetting);
         var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [new AccrualPaymentAllocationKey(Guid.Empty, incomeType.Id)],
@@ -3953,6 +3939,8 @@ public sealed class FinanceService(
                 skipped.Add($"Гараж {garage.Number}: сумма начисления равна нулю.");
                 continue;
             }
+
+            var dueDates = AccrualDueDates.ForGarage(month, incomeType.Code, matchingSetting, GetGarageRegistrationDate(garage));
 
             var accrual = new Accrual
             {
@@ -4831,6 +4819,10 @@ public sealed class FinanceService(
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var periodOverrideReason = NormalizeOptional(request.PeriodOverrideReason);
+        if (periodOverrideReason is null && month != GetCurrentAccountingMonth())
+        {
+            periodOverrideReason = "Ввод показания за другой месяц.";
+        }
 
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
@@ -5071,13 +5063,7 @@ public sealed class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
-        {
-            return FinanceResult<MeterReadingDto>.Failure(
-                "meter_reading_correction_reason_required",
-                "Для исторической корректировки показания нужна причина.");
-        }
+        var reason = NormalizeOptional(request.Reason) ?? "Корректировка показания за другой месяц.";
 
         var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);
         if (reading is null)
@@ -6352,7 +6338,7 @@ public sealed class FinanceService(
                 continue;
             }
 
-            var dueDates = AccrualDueDates.ForIncomeType(reading.AccountingMonth, incomeType.Code, setting);
+            var dueDates = AccrualDueDates.ForGarage(reading.AccountingMonth, incomeType.Code, setting, GetGarageRegistrationDate(garage));
             var accrual = new Accrual
             {
                 GarageId = garage.Id,
@@ -7258,6 +7244,9 @@ public sealed class FinanceService(
         var normalized = value?.Trim().ToLowerInvariant();
         return ExpensePaymentTypes.IsSupported(normalized) ? normalized : null;
     }
+
+    private static DateOnly GetGarageRegistrationDate(Garage garage) =>
+        DateOnly.FromDateTime(garage.CreatedAtUtc.UtcDateTime);
 
     private static string? NormalizeExpensePaymentSource(string? value, string? expensePaymentType)
     {

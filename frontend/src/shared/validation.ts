@@ -443,10 +443,6 @@ export function getAccrualValidationErrors(form: CreateAccrualRequest) {
 
   addPositiveAmountValidation(errors, form.amount, 'Сумма начисления')
 
-  if (!form.comment?.trim()) {
-    errors.push('Укажите комментарий начисления.')
-  }
-
   return errors
 }
 
