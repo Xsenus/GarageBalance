@@ -114,11 +114,15 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("duplicate_active_garage_numbers", script, StringComparison.Ordinal);
         Assert.Contains("overlapping_tariff_periods", script, StringComparison.Ordinal);
         Assert.Contains("duplicate_regular_accruals", script, StringComparison.Ordinal);
+        Assert.Contains("income_operations_without_type_or_allocation_evidence", script, StringComparison.Ordinal);
+        Assert.Contains("legacy_income_types_inferred_from_allocations", script, StringComparison.Ordinal);
         Assert.Contains("allocations_to_invalid_operations", script, StringComparison.Ordinal);
+        Assert.Contains("allocation_income_type_mismatches", script, StringComparison.Ordinal);
         Assert.Contains("exact_duplicate_financial_operations", script, StringComparison.Ordinal);
         Assert.Contains("duplicate_meter_readings", script, StringComparison.Ordinal);
         Assert.Contains("invalid_fund_operation_math", script, StringComparison.Ordinal);
         Assert.Contains("fund_operation_chain_breaks", script, StringComparison.Ordinal);
+        Assert.Contains("fund_operation_same_timestamp_order", script, StringComparison.Ordinal);
         Assert.Contains("fund_balance_mismatch", script, StringComparison.Ordinal);
         Assert.Contains("codex_marked_business_records", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--dbname=\"$database_name\"", script, StringComparison.Ordinal);

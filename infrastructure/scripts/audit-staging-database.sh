@@ -138,16 +138,26 @@ run_check "backdated_accrual_due_dates" "warning" \
 
 run_check "nonpositive_active_financial_operations" "critical" \
   "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"Amount\" <= 0;"
-run_check "financial_operation_counterparty_conflicts" "critical" \
-  "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND ((\"OperationKind\" = 'income' AND (\"GarageId\" IS NULL OR \"IncomeTypeId\" IS NULL OR \"SupplierId\" IS NOT NULL OR \"StaffMemberId\" IS NOT NULL OR \"ExpenseTypeId\" IS NOT NULL)) OR (\"OperationKind\" = 'expense' AND (\"GarageId\" IS NOT NULL OR \"IncomeTypeId\" IS NOT NULL OR \"ExpenseTypeId\" IS NULL)));"
+run_check "income_operations_without_garage" "critical" \
+  "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"OperationKind\" = 'income' AND \"GarageId\" IS NULL;"
+run_check "income_operations_without_type_or_allocation_evidence" "critical" \
+  "SELECT count(*) FROM financial_operations f WHERE NOT f.\"IsCanceled\" AND f.\"OperationKind\" = 'income' AND f.\"IncomeTypeId\" IS NULL AND NOT EXISTS (SELECT 1 FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"FinancialOperationId\" = f.\"Id\" AND p.\"IsActive\" AND NOT a.\"IsCanceled\" AND a.\"IncomeTypeId\" IS NOT NULL);"
+run_check "legacy_income_types_inferred_from_allocations" "warning" \
+  "SELECT count(*) FROM financial_operations f WHERE NOT f.\"IsCanceled\" AND f.\"OperationKind\" = 'income' AND f.\"IncomeTypeId\" IS NULL AND EXISTS (SELECT 1 FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"FinancialOperationId\" = f.\"Id\" AND p.\"IsActive\" AND NOT a.\"IsCanceled\" AND a.\"IncomeTypeId\" IS NOT NULL);"
+run_check "income_operations_with_expense_fields" "critical" \
+  "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"OperationKind\" = 'income' AND (\"SupplierId\" IS NOT NULL OR \"StaffMemberId\" IS NOT NULL OR \"ExpenseTypeId\" IS NOT NULL);"
+run_check "expense_operation_field_conflicts" "critical" \
+  "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"OperationKind\" = 'expense' AND (\"GarageId\" IS NOT NULL OR \"IncomeTypeId\" IS NOT NULL OR \"ExpenseTypeId\" IS NULL);"
 run_check "exact_duplicate_financial_operations" "warning" \
-  "SELECT count(*) FROM (SELECT \"OperationKind\", \"OperationDate\", \"AccountingMonth\", \"Amount\", \"GarageId\", \"IncomeTypeId\", \"SupplierId\", \"StaffMemberId\", \"ExpenseTypeId\", coalesce(\"DocumentNumber\", ''), coalesce(\"Comment\", '') FROM financial_operations WHERE NOT \"IsCanceled\" GROUP BY \"OperationKind\", \"OperationDate\", \"AccountingMonth\", \"Amount\", \"GarageId\", \"IncomeTypeId\", \"SupplierId\", \"StaffMemberId\", \"ExpenseTypeId\", coalesce(\"DocumentNumber\", ''), coalesce(\"Comment\", '') HAVING count(*) > 1) q;"
+  "SELECT count(*) FROM (SELECT \"OperationKind\", \"OperationDate\", \"AccountingMonth\", \"Amount\", \"ReceiptBatchId\", \"GarageId\", \"IncomeTypeId\", \"FeeCampaignId\", \"IrregularPaymentId\", \"SupplierId\", \"StaffMemberId\", \"ExpenseTypeId\", \"ExpenseFundId\", coalesce(\"ExpensePaymentType\", ''), coalesce(\"ExpensePaymentSource\", ''), coalesce(\"CounterpartyName\", ''), coalesce(\"DocumentNumber\", ''), coalesce(\"Comment\", '') FROM financial_operations WHERE NOT \"IsCanceled\" GROUP BY \"OperationKind\", \"OperationDate\", \"AccountingMonth\", \"Amount\", \"ReceiptBatchId\", \"GarageId\", \"IncomeTypeId\", \"FeeCampaignId\", \"IrregularPaymentId\", \"SupplierId\", \"StaffMemberId\", \"ExpenseTypeId\", \"ExpenseFundId\", coalesce(\"ExpensePaymentType\", ''), coalesce(\"ExpensePaymentSource\", ''), coalesce(\"CounterpartyName\", ''), coalesce(\"DocumentNumber\", ''), coalesce(\"Comment\", '') HAVING count(*) > 1) q;"
 run_check "allocations_to_invalid_operations" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND (f.\"IsCanceled\" OR a.\"IsCanceled\" OR f.\"OperationKind\" <> 'income' OR f.\"GarageId\" IS DISTINCT FROM a.\"GarageId\");"
 run_check "allocation_totals_above_operation" "critical" \
   "SELECT count(*) FROM (SELECT p.\"FinancialOperationId\" FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" WHERE p.\"IsActive\" GROUP BY p.\"FinancialOperationId\", f.\"Amount\" HAVING sum(p.\"Amount\") > f.\"Amount\") q;"
 run_check "nonpositive_active_allocations" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations WHERE \"IsActive\" AND \"Amount\" <= 0;"
+run_check "allocation_income_type_mismatches" "critical" \
+  "SELECT count(*) FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND NOT f.\"IsCanceled\" AND NOT a.\"IsCanceled\" AND f.\"IncomeTypeId\" IS NOT NULL AND f.\"IncomeTypeId\" <> a.\"IncomeTypeId\";"
 
 run_check "duplicate_meter_readings" "critical" \
   "SELECT count(*) FROM (SELECT \"GarageId\", \"MeterKind\", \"AccountingMonth\" FROM meter_readings WHERE NOT \"IsCanceled\" GROUP BY \"GarageId\", \"MeterKind\", \"AccountingMonth\" HAVING count(*) > 1) q;"
@@ -159,7 +169,9 @@ run_check "multiple_active_meter_devices" "critical" \
 run_check "invalid_fund_operation_math" "critical" \
   "SELECT count(*) FROM fund_operations WHERE NOT \"IsCanceled\" AND (\"Amount\" <= 0 OR (\"OperationKind\" = 'deposit' AND \"BalanceAfter\" <> \"BalanceBefore\" + \"Amount\") OR (\"OperationKind\" = 'withdraw' AND \"BalanceAfter\" <> \"BalanceBefore\" - \"Amount\") OR \"OperationKind\" NOT IN ('deposit', 'withdraw'));"
 run_check "fund_operation_chain_breaks" "critical" \
-  "SELECT count(*) FROM (SELECT \"FundId\", \"BalanceBefore\", lag(\"BalanceAfter\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_balance_after FROM fund_operations) q WHERE previous_balance_after IS NOT NULL AND \"BalanceBefore\" <> previous_balance_after;"
+  "SELECT count(*) FROM (SELECT \"FundId\", \"CreatedAtUtc\", \"BalanceBefore\", lag(\"CreatedAtUtc\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_created_at, lag(\"BalanceAfter\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_balance_after FROM fund_operations) q WHERE previous_created_at < \"CreatedAtUtc\" AND \"BalanceBefore\" <> previous_balance_after;"
+run_check "fund_operation_same_timestamp_order" "warning" \
+  "SELECT count(*) FROM (SELECT \"FundId\", \"CreatedAtUtc\", \"BalanceBefore\", lag(\"CreatedAtUtc\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_created_at, lag(\"BalanceAfter\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_balance_after FROM fund_operations) q WHERE previous_created_at = \"CreatedAtUtc\" AND \"BalanceBefore\" <> previous_balance_after;"
 run_check "fund_balance_mismatch" "critical" \
   "SELECT count(*) FROM funds f JOIN LATERAL (SELECT o.\"BalanceAfter\" FROM fund_operations o WHERE o.\"FundId\" = f.\"Id\" ORDER BY o.\"CreatedAtUtc\" DESC, o.\"Id\" DESC LIMIT 1) latest ON true WHERE f.\"Balance\" <> latest.\"BalanceAfter\";"
 run_check "invalid_fee_campaign_dates" "critical" \
