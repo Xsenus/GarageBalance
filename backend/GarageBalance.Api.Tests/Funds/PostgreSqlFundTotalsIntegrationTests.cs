@@ -61,14 +61,75 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
         Assert.Equal(300m, totals.AllocatedFundTotal);
     }
 
-    private static FinancialOperation CreateOperation(string kind, decimal amount, bool isCanceled = false) =>
+    [PostgreSqlFact]
+    public async Task GetAvailableToDistributeAsync_ReplaysPoolEventsWithoutLoadingHistory()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var sequenceStart = DateTimeOffset.UtcNow.AddHours(-1);
+        await using (var setupContext = database.CreateContext())
+        {
+            var fund = new Fund
+            {
+                Name = "Приемочный фонд пересчета",
+                NormalizedName = "ПРИЕМОЧНЫЙ ФОНД ПЕРЕСЧЕТА",
+                Balance = 25769m
+            };
+            setupContext.Funds.Add(fund);
+            setupContext.FinancialOperations.AddRange(
+                CreateOperation(FinancialOperationKinds.Income, 27000m, createdAtUtc: sequenceStart),
+                CreateOperation(FinancialOperationKinds.Expense, 48000m, createdAtUtc: sequenceStart.AddMinutes(2)));
+            setupContext.FundOperations.AddRange(
+                new FundOperation
+                {
+                    Fund = fund,
+                    OperationKind = FundOperationKinds.Deposit,
+                    Amount = 27000m,
+                    BalanceBefore = 0m,
+                    BalanceAfter = 27000m,
+                    Reason = "Распределение",
+                    CreatedAtUtc = sequenceStart.AddMinutes(1)
+                },
+                new FundOperation
+                {
+                    Fund = fund,
+                    OperationKind = FundOperationKinds.Withdraw,
+                    Amount = 1231m,
+                    BalanceBefore = 27000m,
+                    BalanceAfter = 25769m,
+                    Reason = "Возврат в общий пул",
+                    CreatedAtUtc = sequenceStart.AddMinutes(3)
+                });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var queryContext = new GarageBalanceDbContext(options);
+
+        var available = await new EfFundRepository(queryContext).GetAvailableToDistributeAsync(CancellationToken.None);
+
+        Assert.Equal(1231m, available);
+        var command = Assert.Single(capture.Commands);
+        Assert.Contains("SUM(delta) OVER", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NOT EXISTS", command, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FinancialOperation CreateOperation(
+        string kind,
+        decimal amount,
+        bool isCanceled = false,
+        DateTimeOffset? createdAtUtc = null) =>
         new()
         {
             OperationKind = kind,
             OperationDate = new DateOnly(2026, 7, 20),
             AccountingMonth = new DateOnly(2026, 7, 1),
             Amount = amount,
-            IsCanceled = isCanceled
+            IsCanceled = isCanceled,
+            CreatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow
         };
 
     private sealed class SelectCommandCapture : DbCommandInterceptor

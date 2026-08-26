@@ -2095,7 +2095,7 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "cash_amount_insufficient",
-                    $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
+                    $"В кассе недостаточно средств. Доступно {MoneyFormatting.Format(availableCashAmount)}.");
             }
         }
         else
@@ -2105,7 +2105,7 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "bank_amount_insufficient",
-                    $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
+                    $"На банковском счёте недостаточно средств. Доступно {MoneyFormatting.Format(availableBankAmount)}.");
             }
         }
 

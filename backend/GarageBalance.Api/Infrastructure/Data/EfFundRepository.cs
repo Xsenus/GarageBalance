@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -233,6 +234,95 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             allocatedFundTotals?.AllocatedFundTotal ?? 0m);
     }
 
+    public async Task<decimal> GetAvailableToDistributeAsync(CancellationToken cancellationToken)
+    {
+        if (dbContext.Database.IsNpgsql())
+        {
+            const string sql = """
+                WITH pool_events AS (
+                    SELECT operation."CreatedAtUtc", operation."Id",
+                        CASE
+                            WHEN operation."OperationKind" = 'income' THEN operation."Amount"
+                            ELSE -operation."Amount"
+                        END AS delta
+                    FROM financial_operations AS operation
+                    WHERE NOT operation."IsCanceled"
+                      AND operation."OperationKind" IN ('income', 'expense')
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM fund_operations AS fund_operation
+                          WHERE fund_operation."SourceFinancialOperationId" = operation."Id"
+                            AND NOT fund_operation."IsCanceled")
+
+                    UNION ALL
+
+                    SELECT operation."CreatedAtUtc", operation."Id",
+                        CASE
+                            WHEN operation."OperationKind" = 'withdraw' THEN operation."Amount"
+                            ELSE -operation."Amount"
+                        END AS delta
+                    FROM fund_operations AS operation
+                    WHERE NOT operation."IsCanceled"
+                      AND operation."SourceFinancialOperationId" IS NULL
+                ),
+                running_pool AS (
+                    SELECT delta,
+                        SUM(delta) OVER (ORDER BY "CreatedAtUtc", "Id") AS running_total
+                    FROM pool_events
+                )
+                SELECT ROUND(GREATEST(
+                    COALESCE(SUM(delta), 0) - LEAST(COALESCE(MIN(running_total), 0), 0),
+                    0), 2) AS "Value"
+                FROM running_pool
+                """;
+
+            return await dbContext.Database.SqlQueryRaw<decimal>(sql).SingleAsync(cancellationToken);
+        }
+
+        var linkedFinancialOperationIds = await dbContext.FundOperations
+            .AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.SourceFinancialOperationId.HasValue)
+            .Select(operation => operation.SourceFinancialOperationId!.Value)
+            .ToListAsync(cancellationToken);
+        var financialEvents = await dbContext.FinancialOperations
+            .AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                (operation.OperationKind == FinancialOperationKinds.Income ||
+                 operation.OperationKind == FinancialOperationKinds.Expense) &&
+                !linkedFinancialOperationIds.Contains(operation.Id))
+            .Select(operation => new PoolEvent(
+                operation.CreatedAtUtc,
+                operation.Id,
+                operation.OperationKind == FinancialOperationKinds.Income
+                    ? operation.Amount
+                    : -operation.Amount))
+            .ToListAsync(cancellationToken);
+        var manualFundEvents = await dbContext.FundOperations
+            .AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                !operation.SourceFinancialOperationId.HasValue)
+            .Select(operation => new PoolEvent(
+                operation.CreatedAtUtc,
+                operation.Id,
+                operation.OperationKind == FundOperationKinds.Withdraw
+                    ? operation.Amount
+                    : -operation.Amount))
+            .ToListAsync(cancellationToken);
+
+        var balance = 0m;
+        foreach (var poolEvent in financialEvents
+                     .Concat(manualFundEvents)
+                     .OrderBy(poolEvent => poolEvent.CreatedAtUtc)
+                     .ThenBy(poolEvent => poolEvent.Id))
+        {
+            balance = Math.Max(balance + poolEvent.Amount, 0m);
+        }
+
+        return MoneyMath.RoundMoney(balance);
+    }
+
     public async Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync(
         Guid fundId,
         Guid operationId,
@@ -286,6 +376,8 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed record PoolEvent(DateTimeOffset CreatedAtUtc, Guid Id, decimal Amount);
 
     private static async Task ExecuteAdvisoryLockCommandAsync(
         DbConnection connection,

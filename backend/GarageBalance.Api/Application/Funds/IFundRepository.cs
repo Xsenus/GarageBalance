@@ -21,6 +21,7 @@ public interface IFundRepository
     Task<FundOperation?> FindOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken);
     Task<FundOperation?> FindIncomeAssignmentForUpdateAsync(Guid sourceFinancialOperationId, CancellationToken cancellationToken);
     Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken);
+    Task<decimal> GetAvailableToDistributeAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync(
         Guid fundId,
         Guid operationId,

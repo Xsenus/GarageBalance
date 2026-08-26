@@ -70,6 +70,7 @@ type ContractorSection = 'garages' | 'suppliers' | 'staff'
 type ContractorSortDirection = 'asc' | 'desc'
 type ContractorSortableSection = ContractorSection
 type GarageColumnFilterForm = Record<keyof GarageColumnFilters, string>
+type FinancialReportFilters = ReturnType<typeof createDefaultGarageBalanceHistoryFilters>
 
 const emptyGarageColumnFilterForm: GarageColumnFilterForm = {
   number: '',
@@ -790,6 +791,28 @@ function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   return target.item.fullName || 'Сотрудник без имени'
 }
 
+function FinancialReportPeriodFilters({ filters, targetLabel, onChange }: { filters: FinancialReportFilters; targetLabel: string; onChange: (filters: FinancialReportFilters) => void }) {
+  return (
+    <div className="balance-history-filters">
+      <label>
+        Период с
+        <LocalizedDatePicker ariaLabel={`Начало периода финансового отчета ${targetLabel}`} mode="month" value={filters.monthFrom} onChange={(monthFrom) => onChange({ ...filters, monthFrom })} required />
+      </label>
+      <label>
+        Период по
+        <LocalizedDatePicker ariaLabel={`Конец периода финансового отчета ${targetLabel}`} mode="month" value={filters.monthTo} onChange={(monthTo) => onChange({ ...filters, monthTo })} required />
+      </label>
+      <ReportPeriodQuickSelect
+        mode="month"
+        valueFrom={filters.monthFrom}
+        valueTo={filters.monthTo}
+        className="balance-history-filters__quick-periods"
+        onSelect={({ monthFrom, monthTo }) => onChange({ monthFrom, monthTo })}
+      />
+    </div>
+  )
+}
+
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
   const [showGarageDebtorsOnly, setShowGarageDebtorsOnly] = useState(false)
@@ -833,6 +856,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [garageFinancialReportFilters, setGarageFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
   const [garageFinancialReportLoading, setGarageFinancialReportLoading] = useState(false)
   const [garageFinancialReportError, setGarageFinancialReportError] = useState<string | null>(null)
+  const financialReportRequestSequenceRef = useRef(0)
   const [contractorFinancialReportTarget, setContractorFinancialReportTarget] = useState<ContractorFinancialReportTarget | null>(null)
   const [contractorFinancialReport, setContractorFinancialReport] = useState<ContractorFinancialReport | null>(null)
   const [contractorFinancialReportFilters, setContractorFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
@@ -1420,18 +1444,28 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
+    const requestSequence = ++financialReportRequestSequenceRef.current
     setGarageFinancialReportLoading(true)
     setGarageFinancialReportError(null)
 
     try {
       const report = await financeClient.getGarageBalanceHistory(auth.accessToken, row.id, filters)
+      if (requestSequence !== financialReportRequestSequenceRef.current) return
       setGarageFinancialReport(report)
     } catch (error) {
+      if (requestSequence !== financialReportRequestSequenceRef.current) return
       setGarageFinancialReportError(error instanceof Error ? error.message : 'Не удалось загрузить финансовый отчет гаража.')
       setGarageFinancialReport(null)
     } finally {
-      setGarageFinancialReportLoading(false)
+      if (requestSequence === financialReportRequestSequenceRef.current) {
+        setGarageFinancialReportLoading(false)
+      }
     }
+  }
+
+  function applyGarageFinancialReportFilters(filters: FinancialReportFilters) {
+    setGarageFinancialReportFilters(filters)
+    void loadGarageFinancialReport(garageFinancialReportTarget, filters)
   }
 
   async function openGarageFinancialReport(row: ContractorGarageRow) {
@@ -1456,6 +1490,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   function closeGarageFinancialReport() {
+    financialReportRequestSequenceRef.current += 1
     setGarageFinancialReportTarget(null)
     setGarageFinancialReport(null)
     setGarageFinancialReportError(null)
@@ -1473,6 +1508,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
+    const requestSequence = ++financialReportRequestSequenceRef.current
     setContractorFinancialReportLoading(true)
     setContractorFinancialReportError(null)
 
@@ -1526,20 +1562,30 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           filters.monthFrom,
           openingBalance.priorAccrualTotal !== 0 || openingBalance.priorPaymentTotal !== 0,
         )
+        if (requestSequence !== financialReportRequestSequenceRef.current) return
         setContractorFinancialReport(buildContractorFinancialReport(
           [...openingBalanceEntries, ...accrualEntries, ...operationEntries],
           openingBalance.openingBalance,
         ))
       } else {
         const staffAccrualEntries = createStaffFinancialReportEntries(target.row, filters.monthFrom, filters.monthTo)
+        if (requestSequence !== financialReportRequestSequenceRef.current) return
         setContractorFinancialReport(buildContractorFinancialReport([...staffAccrualEntries, ...operationEntries]))
       }
     } catch (error) {
+      if (requestSequence !== financialReportRequestSequenceRef.current) return
       setContractorFinancialReportError(error instanceof Error ? error.message : 'Не удалось загрузить финансовый отчет контрагента.')
       setContractorFinancialReport(null)
     } finally {
-      setContractorFinancialReportLoading(false)
+      if (requestSequence === financialReportRequestSequenceRef.current) {
+        setContractorFinancialReportLoading(false)
+      }
     }
+  }
+
+  function applyContractorFinancialReportFilters(filters: FinancialReportFilters) {
+    setContractorFinancialReportFilters(filters)
+    void loadContractorFinancialReport(contractorFinancialReportTarget, filters)
   }
 
   async function openContractorFinancialReport(target: ContractorFinancialReportTarget) {
@@ -1567,6 +1613,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   function closeContractorFinancialReport() {
+    financialReportRequestSequenceRef.current += 1
     setContractorFinancialReportTarget(null)
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)
@@ -2622,30 +2669,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <X size={18} />
               </button>
             </div>
-            <form className="balance-history-filters" onSubmit={(event) => {
-              event.preventDefault()
-              void loadGarageFinancialReport()
-            }}>
-              <label>
-                Период с
-                <LocalizedDatePicker ariaLabel="Начало периода финансового отчета гаража" mode="month" value={garageFinancialReportFilters.monthFrom} onChange={(monthFrom) => setGarageFinancialReportFilters((value) => ({ ...value, monthFrom }))} required />
-              </label>
-              <label>
-                Период по
-                <LocalizedDatePicker ariaLabel="Конец периода финансового отчета гаража" mode="month" value={garageFinancialReportFilters.monthTo} onChange={(monthTo) => setGarageFinancialReportFilters((value) => ({ ...value, monthTo }))} required />
-              </label>
-              <button className="secondary-button" type="submit" disabled={garageFinancialReportLoading}>
-                {garageFinancialReportLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Search size={16} />}
-                <span>{garageFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
-              </button>
-              <ReportPeriodQuickSelect
-                mode="month"
-                valueFrom={garageFinancialReportFilters.monthFrom}
-                valueTo={garageFinancialReportFilters.monthTo}
-                className="balance-history-filters__quick-periods"
-                onSelect={(range) => setGarageFinancialReportFilters({ monthFrom: range.monthFrom, monthTo: range.monthTo })}
-              />
-            </form>
+            <FinancialReportPeriodFilters filters={garageFinancialReportFilters} targetLabel="гаража" onChange={applyGarageFinancialReportFilters} />
             {garageFinancialReportError ? <FormError>{garageFinancialReportError}</FormError> : null}
             {garageFinancialReportLoading && !garageFinancialReport ? (
               <LoadingSkeleton className="financial-report-loading-skeleton" label="Загружаем финансовый отчет гаража" rows={6} columns={5} />
@@ -2713,30 +2737,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <X size={18} />
               </button>
             </div>
-            <form className="balance-history-filters" onSubmit={(event) => {
-              event.preventDefault()
-              void loadContractorFinancialReport()
-            }}>
-              <label>
-                Период с
-                <LocalizedDatePicker ariaLabel="Начало периода финансового отчета контрагента" mode="month" value={contractorFinancialReportFilters.monthFrom} onChange={(monthFrom) => setContractorFinancialReportFilters((value) => ({ ...value, monthFrom }))} required />
-              </label>
-              <label>
-                Период по
-                <LocalizedDatePicker ariaLabel="Конец периода финансового отчета контрагента" mode="month" value={contractorFinancialReportFilters.monthTo} onChange={(monthTo) => setContractorFinancialReportFilters((value) => ({ ...value, monthTo }))} required />
-              </label>
-              <button className="secondary-button" type="submit" disabled={contractorFinancialReportLoading}>
-                {contractorFinancialReportLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Search size={16} />}
-                <span>{contractorFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
-              </button>
-              <ReportPeriodQuickSelect
-                mode="month"
-                valueFrom={contractorFinancialReportFilters.monthFrom}
-                valueTo={contractorFinancialReportFilters.monthTo}
-                className="balance-history-filters__quick-periods"
-                onSelect={(range) => setContractorFinancialReportFilters({ monthFrom: range.monthFrom, monthTo: range.monthTo })}
-              />
-            </form>
+            <FinancialReportPeriodFilters filters={contractorFinancialReportFilters} targetLabel="контрагента" onChange={applyContractorFinancialReportFilters} />
             {contractorFinancialReportError ? <FormError>{contractorFinancialReportError}</FormError> : null}
             {contractorFinancialReportLoading && !contractorFinancialReport ? (
               <LoadingSkeleton className="financial-report-loading-skeleton" label="Загружаем финансовый отчет контрагента" rows={6} columns={7} />
@@ -3448,7 +3449,10 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
             {saveError ? <FormError>{saveError}</FormError> : null}
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
-                <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
+                <label className="form-field">
+                  <span className="form-field-label">Номер *</span>
+                  <input aria-label="Номер гаража" required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+                </label>
                 <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
                 <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               </div>

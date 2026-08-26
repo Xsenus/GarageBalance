@@ -139,8 +139,9 @@ describe('responsive layout styles', () => {
   })
 
   it('reserves financial report geometry while its data is loading', () => {
-    expect(normalizedAppCss).toContain('.financial-report-dialog {\n  min-height: min(560px, calc(100dvh - 48px));')
-    expect(normalizedAppCss).toContain('.financial-report-loading-skeleton {\n  min-height: 314px;')
+    expect(normalizedAppCss).toContain('.financial-report-dialog {\n  height: min(720px, calc(100dvh - 48px));\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;')
+    expect(normalizedAppCss).toContain('.financial-report-loading-skeleton {\n  flex: 1 1 auto;\n  min-height: 314px;')
+    expect(normalizedAppCss).toContain('.financial-report-dialog > .garage-balance-table-scroll {\n  flex: 1 1 auto;\n  min-height: 0;\n  max-height: none;')
     expect(normalizedAppCss).toContain('.financial-report-loading-skeleton .loading-skeleton-row:first-child {\n  min-height: 72px;')
     expect(normalizedAppCss).toContain('.financial-report-button__spinner {\n  animation: report-export-spin 0.8s linear infinite;')
     expect(normalizedAppCss).toContain('.report-export-button__spinner,\n  .financial-report-button__spinner {\n    animation: none;')

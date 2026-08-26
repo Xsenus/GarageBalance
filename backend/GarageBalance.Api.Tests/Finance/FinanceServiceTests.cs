@@ -2413,6 +2413,7 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("bank_amount_insufficient", result.ErrorCode);
+        Assert.Equal("На банковском счёте недостаточно средств. Доступно 0.00.", result.ErrorMessage);
         Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.OperationKind == FinancialOperationKinds.Expense);
         Assert.Empty(database.Context.AuditEvents);
     }
@@ -2866,6 +2867,7 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("cash_amount_insufficient", result.ErrorCode);
+        Assert.Equal("В кассе недостаточно средств. Доступно 0.00.", result.ErrorMessage);
         Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.OperationKind == FinancialOperationKinds.Expense);
         Assert.Empty(database.Context.AuditEvents);
     }
@@ -3282,6 +3284,51 @@ public sealed class FinanceServiceTests
         Assert.DoesNotContain(database.Context.FundOperations, operation => operation.SourceFinancialOperationId == result.Value.Id);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
         Assert.Equal("Разовый исполнитель", audit.RelatedCounterpartyName);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_AllowsSupplierlessCashExpenseWithoutCounterpartyName()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.Add(OpeningCashBalance(SeededBankAmount + 500m));
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 10),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 500m,
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                null,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                "CASH-WITHOUT-RECIPIENT",
+                null,
+                ExpensePaymentTypes.WithoutReceipt,
+                ExpensePaymentSources.Cash,
+                null,
+                "   "),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Null(result.Value!.SupplierId);
+        Assert.Null(result.Value.CounterpartyName);
+        Assert.Equal(ExpensePaymentSources.Cash, result.Value.ExpensePaymentSource);
+        Assert.DoesNotContain(database.Context.SupplierAccruals, accrual => accrual.SourceFinancialOperationId == result.Value.Id);
+        Assert.DoesNotContain(database.Context.FundOperations, operation => operation.SourceFinancialOperationId == result.Value.Id);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
+        Assert.Null(audit.RelatedCounterpartyName);
+        Assert.Contains("получателю не указан", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

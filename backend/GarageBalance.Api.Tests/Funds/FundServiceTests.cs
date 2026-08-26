@@ -310,8 +310,12 @@ public sealed class FundServiceTests
         var fund = (await service.GetFundsAsync(CancellationToken.None))
             .Single(item => item.Name == "Водоснабжение");
         await SeedIncomeAsync(database.Context, 10m);
-        (await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).Balance = 10m;
-        await database.Context.SaveChangesAsync();
+        var allocated = await service.CreateOperationAsync(
+            fund.Id,
+            new CreateFundOperationRequest("deposit", 10m, "Первичное распределение"),
+            null,
+            CancellationToken.None);
+        Assert.True(allocated.Succeeded, allocated.ErrorMessage);
 
         var request = new DeleteFundRequest("Фонд больше не используется");
         var deleted = await service.DeleteFundAsync(fund.Id, request, null, CancellationToken.None);
@@ -324,7 +328,8 @@ public sealed class FundServiceTests
         var storedFund = await database.Context.Funds.SingleAsync(item => item.Id == fund.Id);
         Assert.True(storedFund.IsArchived);
         Assert.Equal(0m, storedFund.Balance);
-        var transfer = Assert.Single(database.Context.FundOperations, item => item.FundId == fund.Id);
+        var transfer = Assert.Single(database.Context.FundOperations, item =>
+            item.FundId == fund.Id && item.OperationKind == FundOperationKinds.Withdraw);
         Assert.Equal(FundOperationKinds.Withdraw, transfer.OperationKind);
         Assert.Equal(10m, transfer.Amount);
         Assert.Equal(10m, transfer.BalanceBefore);
@@ -554,6 +559,56 @@ public sealed class FundServiceTests
         var fundsAfterWithdraw = await service.GetFundsAsync(CancellationToken.None);
         Assert.All(fundsAfterWithdraw, fund => Assert.Equal(550m, fund.AvailableToDistribute));
         Assert.Equal(450m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
+    }
+
+    [Fact]
+    public async Task CreateOperationAsync_WithdrawReturnsMoneyWhenEarlierUnallocatedExpenseExhaustedPool()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        var sequenceStart = DateTimeOffset.UtcNow.AddHours(-1);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 8, 14),
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            Amount = 27000m,
+            CreatedAtUtc = sequenceStart
+        });
+        await database.Context.SaveChangesAsync();
+
+        Assert.True((await service.CreateOperationAsync(
+            targetFund.Id,
+            new CreateFundOperationRequest("deposit", 27000m, "Распределение"),
+            Guid.NewGuid(),
+            CancellationToken.None)).Succeeded);
+        var depositOperation = await database.Context.FundOperations.SingleAsync(operation =>
+            operation.FundId == targetFund.Id &&
+            operation.OperationKind == FundOperationKinds.Deposit &&
+            operation.Amount == 27000m);
+        depositOperation.CreatedAtUtc = sequenceStart.AddMinutes(1);
+
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 8, 25),
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            Amount = 48000m,
+            CreatedAtUtc = sequenceStart.AddMinutes(2)
+        });
+        await database.Context.SaveChangesAsync();
+
+        var withdraw = await service.CreateOperationAsync(
+            targetFund.Id,
+            new CreateFundOperationRequest("withdraw", 1231m, "Возврат в общий пул"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(withdraw.Succeeded, withdraw.ErrorMessage);
+        var fundsAfterWithdraw = await service.GetFundsAsync(CancellationToken.None);
+        Assert.All(fundsAfterWithdraw, fund => Assert.Equal(1231m, fund.AvailableToDistribute));
+        Assert.Equal(25769m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
     }
 
     [Fact]

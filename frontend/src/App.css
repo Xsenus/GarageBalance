@@ -5704,6 +5704,10 @@ h1 {
   align-items: end;
 }
 
+.form-field input:user-invalid {
+  border-color: #d92d20;
+}
+
 .audit-filter-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(140px, 1fr));
@@ -8426,14 +8430,25 @@ button.operation-row:focus-visible {
 }
 
 .financial-report-dialog {
-  min-height: min(560px, calc(100dvh - 48px));
+  height: min(720px, calc(100dvh - 48px));
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .financial-report-loading-skeleton {
+  flex: 1 1 auto;
   min-height: 314px;
   margin-bottom: 14px;
   border: 1px solid #eaecf0;
   border-radius: 8px;
+}
+
+.financial-report-dialog > .garage-balance-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .financial-report-loading-skeleton .loading-skeleton-row:first-child {
@@ -8446,7 +8461,7 @@ button.operation-row:focus-visible {
 
 .balance-history-filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;

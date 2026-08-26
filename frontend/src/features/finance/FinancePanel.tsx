@@ -3146,6 +3146,7 @@ function PaymentsPrototypePanel({
     setExpenseWorksheetLoading(true)
     setExpenseRows([])
     setExpenseBankAmount(0)
+    setExpenseCashAmount(0)
     setPaymentError(null)
     financeClient
       .getExpenseWorksheet(auth.accessToken, expenseWorksheetMonthFrom === expenseWorksheetMonthTo
@@ -5262,6 +5263,7 @@ function PaymentsPrototypePanel({
       ) : null}
       {expenseDialogPreset ? (
         <NewExpensePrototypeDialog
+          availableAmounts={[expenseBankAmount, expenseCashAmount]}
           expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
           preset={expenseDialogPreset}
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
@@ -5653,12 +5655,14 @@ function BankDepositPrototypeDialog({
 }
 
 function NewExpensePrototypeDialog({
+  availableAmounts,
   expenseTypes,
   preset,
   suppliers,
   onClose,
   onSubmit,
 }: {
+  availableAmounts: [number, number]
   expenseTypes: AccountingTypeDto[]
   preset: ExpensePrototypeDialogPreset
   suppliers: SupplierDto[]
@@ -5679,7 +5683,9 @@ function NewExpensePrototypeDialog({
   const isCashExpense = expensePaymentSource === 'cash'
   const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
   const [expenseTypeId, setExpenseTypeId] = useState(
-    getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
+    preset.expensePaymentSource === 'cash'
+      ? (presetExpenseType ?? expenseTypes.find((expenseType) => !expenseType.isArchived))?.id ?? ''
+      : getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
   )
   const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.expenseFundId ?? '')
   const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
@@ -5723,10 +5729,6 @@ function NewExpensePrototypeDialog({
       return
     }
     const availableFundBalance = selectedSupplier?.expenseFundBalance ?? 0
-    if (!isCashExpense && parsedAmount > availableFundBalance && !confirmNegativeFundBalance) {
-      setError('Подтвердите выплату с отрицательным остатком фонда.')
-      return
-    }
 
     setSaving(true)
     setError(null)
@@ -5795,6 +5797,9 @@ function NewExpensePrototypeDialog({
                 setError(null)
               }} />
           </FormField>
+          <p className="form-hint full-payment-field" role="status">
+            Доступно в {isCashExpense ? 'кассе' : 'банке'}: {formatMoney(availableAmounts[Number(isCashExpense)])}.
+          </p>
           {!isCashExpense ? <FormField label="Поставщик">
             <SelectControl
               aria-label="Поставщик выплаты"
@@ -5834,7 +5839,7 @@ function NewExpensePrototypeDialog({
           {!isCashExpense ? <p className="form-hint">
             Фонд расходования: {selectedSupplier?.expenseFundName ?? 'не настроен'}
             {selectedSupplier?.expenseFundId
-              ? ` · доступно ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
+              ? ` · доступно в фонде ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
               : ''}
           </p> : null}
           {isCashExpense ? (

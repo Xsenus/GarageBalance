@@ -80,7 +80,9 @@ public sealed class BackendPerformanceGuardTests
         var serviceSource = ReadApiSource("Application/Funds/FundService.cs");
         var repositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
         var totalsMethod = repositorySource[
-            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync", StringComparison.Ordinal)];
+            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<decimal> GetAvailableToDistributeAsync", StringComparison.Ordinal)];
+        var availableToDistributePostgreSqlBranch = repositorySource[
+            repositorySource.IndexOf("public async Task<decimal> GetAvailableToDistributeAsync", StringComparison.Ordinal)..repositorySource.IndexOf("var linkedFinancialOperationIds", StringComparison.Ordinal)];
 
         Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsureDefaultFundsAsync", serviceSource, StringComparison.Ordinal);
@@ -93,6 +95,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(totalsMethod, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("FirstOrDefaultAsync", totalsMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync", totalsMethod, StringComparison.Ordinal);
+        Assert.Contains("SUM(delta) OVER", availableToDistributePostgreSqlBranch, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<decimal>", availableToDistributePostgreSqlBranch, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(availableToDistributePostgreSqlBranch, ".SingleAsync(cancellationToken)"));
+        Assert.DoesNotContain("ToListAsync", availableToDistributePostgreSqlBranch, StringComparison.Ordinal);
     }
 
     [Fact]

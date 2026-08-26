@@ -27,4 +27,9 @@ describe('frontend bundle budget gate', () => {
     expect(viteConfig).toContain('releases[/\\\\]ReleasePanel')
     expect(viteConfig).toContain("return 'reporting'")
   })
+
+  it('keeps related accounting screens in shared lazy chunks to avoid gzip overhead', () => {
+    expect(viteConfig).toContain("return 'financial-operations'")
+    expect(viteConfig).toContain("return 'cooperative-setup'")
+  })
 })

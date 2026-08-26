@@ -240,14 +240,14 @@ function formatFeeCampaignParticipantCount(participantCount: number) {
   return `${participantCount} ${participantCount % 10 === 1 ? 'участник' : participantCount % 10 >= 2 && participantCount % 10 <= 4 ? 'участника' : 'участников'}`
 }
 
-function parseTariffAmount(value: string) {
+function parseTariffAmount(value: string, allowZero = false) {
   const normalized = value.replace(/[\s\u00a0]+/g, '').replace(',', '.').trim()
   if (!normalized) {
     return null
   }
 
   const parsed = Number(normalized)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  return Number.isFinite(parsed) && (allowZero ? parsed >= 0 : parsed > 0) ? parsed : null
 }
 
 function getElectricityTariffTiers(tariff: TariffDto | null) {
@@ -1444,8 +1444,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setTariffSavingRowId(targetRow.id)
     setTariffPersistenceError(null)
     try {
-      const linkedSetting = targetRow.backendServiceSettingId
-        ? backendChargeServices.find((setting) => setting.id === targetRow.backendServiceSettingId)
+      const linkedServiceSettingId = targetRow.backendServiceSettingId
+        ?? nextRows.find((candidate) => (
+          candidate.backendTariffId === backendTariff?.id
+          && Boolean(candidate.backendServiceSettingId)
+        ))?.backendServiceSettingId
+      const linkedSetting = linkedServiceSettingId
+        ? backendChargeServices.find((setting) => setting.id === linkedServiceSettingId)
         : null
       if (linkedSetting && backendTariff) {
         const tariffMode = linkedSetting.hasTieredTariff ? 'metered_tiered' : linkedSetting.isMetered ? 'metered' : 'regular'
@@ -2151,7 +2156,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const thresholdRows = getElectricityThresholdRows(tariffRows, row)
     const rowIndex = thresholdRows.findIndex((candidate) => candidate.id === row.id)
     const lowerBound = getElectricityTierLowerBound(tariffRows, row.id)
-    const nextUpperBound = parseTariffAmount(tariffDrafts[row.id]?.electricityUpperBoundText ?? '')
+    const nextUpperBound = parseTariffAmount(tariffDrafts[row.id]?.electricityUpperBoundText ?? '', true)
     const followingUpperBound = thresholdRows[rowIndex + 1]?.electricityUpperBound
     const error = nextUpperBound == null || nextUpperBound < lowerBound
       ? `Значение «До» должно быть не меньше ${formatTariffDecimal(lowerBound)} ${row.unit}.`
@@ -2227,7 +2232,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     if (!thresholdCreateTarget) return
     const electricityThresholdRows = getElectricityThresholdRows(tariffRows, thresholdCreateTarget)
     const lastRow = electricityThresholdRows.at(-1)
-    const upperBound = parseTariffAmount(thresholdCreateUpperBound)
+    const upperBound = parseTariffAmount(thresholdCreateUpperBound, true)
     const rate = parseTariffAmount(thresholdCreateRate)
     const previousUpperBound = electricityThresholdRows
       .map((row) => row.electricityUpperBound)
@@ -3964,7 +3969,12 @@ export function AddServicePrototypeDialog({
                             type="button"
                             aria-label={`Удалить порог ${index + 1}`}
                             disabled={tariffTiers.length <= 2}
-                            onClick={() => setTariffTiers((current) => current.filter((item) => item.id !== tier.id))}
+                            onClick={() => setTariffTiers((current) => {
+                              const remaining = current.filter((item) => item.id !== tier.id)
+                              return remaining.map((item, remainingIndex) => remainingIndex === remaining.length - 1
+                                ? { ...item, upperBound: null }
+                                : item)
+                            })}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -3982,7 +3992,7 @@ export function AddServicePrototypeDialog({
                             const previous = current.at(-2)
                             const nextUpperBound = (previous?.upperBound ?? 0) + 100
                             const nextTier = {
-                              id: `draft-tier-${Date.now()}`,
+                              id: `draft-tier-${globalThis.crypto.randomUUID()}`,
                               name: `Ступень ${current.length}`,
                               upperBound: nextUpperBound,
                               rate: last?.rate ?? baseRate,

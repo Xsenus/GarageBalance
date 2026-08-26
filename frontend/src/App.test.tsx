@@ -1470,6 +1470,7 @@ describe('App', () => {
       { id: '33333333-3333-3333-3333-333333333333', name: 'От 3 кВт·ч', upperBound: null, rate: 5, isCustom: false },
     ]
     const thresholdUpdateRequests: UpsertTariffRequest[] = []
+    const directTariffUpdateRequests: UpsertTariffRequest[] = []
     const electricityTariff = createTariff({
       id: 'tariff-electricity',
       name: 'Электроэнергия',
@@ -1595,6 +1596,7 @@ describe('App', () => {
         comment: request.comment ?? null,
       }),
       updateTariff: async (_token, id, request) => {
+        directTariffUpdateRequests.push(request)
         if (request.calculationBase === 'meter_electricity') {
           thresholdUpdateRequests.push(request)
           electricityTiers = (request.electricityTiers ?? []).map((tier, index) => ({
@@ -1770,6 +1772,19 @@ describe('App', () => {
     expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 2.00–3.00: до')).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByLabelText(/наименование$/i)).not.toBeInTheDocument()
+    const firstTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 0.00–1.00: до')
+    await user.clear(firstTierUpperBound)
+    await user.type(firstTierUpperBound, '0{Enter}')
+    await waitFor(() => expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '0.00–0.00', upperBound: 0, rate: 2 }),
+      expect.objectContaining({ name: '1.00–3.00', upperBound: 3, rate: 3 }),
+    ])))
+    const zeroFirstTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 0.00–0.00: до')
+    expect(within(tariffsPanel).getByLabelText('Электроэнергия: 1.00–3.00: от')).toHaveValue('1.00')
+    await user.clear(zeroFirstTierUpperBound)
+    await user.type(zeroFirstTierUpperBound, '1{Enter}')
+    await waitFor(() => expect(within(tariffsPanel).getByLabelText('Электроэнергия: 2.00–3.00: от')).toHaveValue('2.00'))
+
     const secondTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 2.00–3.00: до')
     await user.clear(secondTierUpperBound)
     await user.type(secondTierUpperBound, '0.5{Enter}')
@@ -1784,6 +1799,7 @@ describe('App', () => {
     }))
 
     const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
+    const directTariffUpdatesBeforeThresholdAdd = directTariffUpdateRequests.length
     expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
     await user.click(addThresholdButton)
     const createThresholdDialog = await screen.findByRole('dialog', { name: 'Добавить тарифный порог' })
@@ -1801,6 +1817,8 @@ describe('App', () => {
     expect(electricityThresholdInput).toHaveValue('7.50')
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(4)
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: '5.00–5.00', upperBound: 5, rate: 7.5 })
+    expect(directTariffUpdateRequests).toHaveLength(directTariffUpdatesBeforeThresholdAdd)
+    expect(electricitySettingRequests.at(-1)?.changeReason).toBe('Добавлен числовой диапазон пороговой тарификации.')
     const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог 5.00–5.00' })
     await user.click(deleteThresholdButton)
     const thresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
@@ -1964,6 +1982,12 @@ describe('App', () => {
     expect(within(garageDialog).getByLabelText('Начальный баланс гаража')).toBeEnabled()
     expect(within(garageDialog).getByLabelText('Начальная просрочка')).toBeEnabled()
     expect(within(garageDialog).queryByLabelText('Баланс гаража')).not.toBeInTheDocument()
+    const garageNumber = within(garageDialog).getByLabelText('Номер гаража')
+    expect(garageNumber).toBeRequired()
+    await user.click(within(garageDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(garageNumber).toBeInvalid()
+    await user.type(garageNumber, '312')
+    expect(garageNumber).toBeValid()
     await user.keyboard('{Escape}')
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
@@ -2574,7 +2598,6 @@ describe('App', () => {
     await user.click(within(garageFinancialReportDialog).getByRole('button', { name: 'Текущий год' }))
     expect(within(garageFinancialReportDialog).getByLabelText('Начало периода финансового отчета гаража')).toHaveValue(`01.${garageReportYear}`)
     expect(within(garageFinancialReportDialog).getByLabelText('Конец периода финансового отчета гаража')).toHaveValue(`12.${garageReportYear}`)
-    await user.click(within(garageFinancialReportDialog).getByRole('button', { name: 'Показать' }))
     await waitFor(() => expect(requestedGarageFinancialReportPeriod).toEqual({ monthFrom: `${garageReportYear}-01`, monthTo: `${garageReportYear}-12` }))
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Гараж 1' })).not.toBeInTheDocument()
@@ -4073,10 +4096,6 @@ describe('App', () => {
     expect(loadingState).toHaveClass('financial-report-loading-skeleton')
     expect(loadingState.querySelectorAll('.loading-skeleton-row')).toHaveLength(6)
     expect(within(dialog).queryByRole('table', { name: 'Финансовый отчет поставщика' })).not.toBeInTheDocument()
-    const showButton = within(dialog).getByRole('button', { name: 'Загружаем...' })
-    expect(showButton).toBeDisabled()
-    expect(showButton.querySelector('.financial-report-button__spinner')).not.toBeNull()
-
     await user.click(within(dialog).getByRole('button', { name: 'Открыть календарь: Начало периода финансового отчета контрагента' }))
     expect(within(dialog).getByRole('dialog', { name: 'Начало периода финансового отчета контрагента: календарь' })).toBeInTheDocument()
 
@@ -4084,6 +4103,86 @@ describe('App', () => {
     expect(await within(dialog).findByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
     expect(dialog).toHaveAttribute('aria-busy', 'false')
     expect(within(dialog).queryByRole('status', { name: 'Загружаем финансовый отчет контрагента' })).not.toBeInTheDocument()
+  })
+
+  it('applies financial report periods automatically and ignores a stale failed request', async () => {
+    const user = userEvent.setup()
+    const supplierId = '22222222-2222-4222-8222-222222222226'
+    const supplier = createSupplier({
+      id: supplierId,
+      name: 'Поставщик с быстрыми фильтрами',
+      groupId: '44444444-4444-4444-8444-444444444447',
+      groupName: 'Услуги',
+    })
+    const currentYear = new Date().getFullYear()
+    let rejectCurrentYearRequest!: (reason: Error) => void
+    const currentYearRequest = new Promise<{
+      items: FinancialOperationDto[]
+      totalCount: number
+      offset: number
+      limit: number
+    }>((_resolve, reject) => {
+      rejectCurrentYearRequest = reject
+    })
+    const getOperationsPage = vi.fn((_token: string, filters?: Parameters<FinanceClient['getOperationsPage']>[1]) => {
+      if (filters?.monthFrom === `${currentYear}-01`) return currentYearRequest
+      return Promise.resolve({ items: [], totalCount: 0, offset: 0, limit: 500 })
+    })
+    const getSupplierAccrualsPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 500 }))
+    const getSupplierOpeningBalance = vi.fn(async (_token: string, requestedSupplierId: string, monthFrom: string) => ({
+      supplierId: requestedSupplierId,
+      monthFrom: `${monthFrom}-01`,
+      startingBalance: 0,
+      priorAccrualTotal: 0,
+      priorPaymentTotal: 0,
+      openingBalance: 0,
+    }))
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
+        getSuppliers: async () => [supplier],
+        getSupplierContacts: async () => [],
+      })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({ monthFrom: '2024-01-01', monthTo: '2024-12-01' }),
+        getOperationsPage,
+        getSupplierAccrualsPage,
+        getSupplierOpeningBalance,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Поставщик с быстрыми фильтрами' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Поставщик с быстрыми фильтрами' })
+    expect(await within(dialog).findByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Текущий год' }))
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
+      monthFrom: `${currentYear}-01`,
+      monthTo: `${currentYear}-12`,
+    })))
+    await user.click(within(dialog).getByRole('button', { name: 'Предыдущий год' }))
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
+      monthFrom: `${currentYear - 1}-01`,
+      monthTo: `${currentYear - 1}-12`,
+    })))
+    await waitFor(() => expect(dialog).toHaveAttribute('aria-busy', 'false'))
+    expect(within(dialog).getByLabelText('Начало периода финансового отчета контрагента')).toHaveValue(`01.${currentYear - 1}`)
+    expect(within(dialog).getByLabelText('Конец периода финансового отчета контрагента')).toHaveValue(`12.${currentYear - 1}`)
+
+    await act(async () => rejectCurrentYearRequest(new Error('Устаревшая ошибка отчета')))
+    expect(within(dialog).queryByText('Устаревшая ошибка отчета')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
   })
 
   it('keeps the full supplier debt after editing the starting balance', async () => {
@@ -5288,10 +5387,19 @@ describe('App', () => {
     expect(within(thresholds).getByLabelText('Ступень 3: нижняя граница')).toHaveValue('251')
     expect(within(thresholds).getByLabelText('Ступень 3: верхняя граница')).toHaveValue('350')
     expect(within(thresholds).getByLabelText('Сверх порога: нижняя граница')).toHaveValue('351')
+    await user.click(within(thresholds).getByRole('button', { name: 'Удалить порог 1' }))
+    expect(within(thresholds).getByLabelText('Основной порог: нижняя граница')).toHaveValue('0')
+    await user.click(within(thresholds).getByRole('button', { name: 'Удалить порог 3' }))
+    expect(within(thresholds).getByLabelText('Ступень 3: верхняя граница')).toHaveValue('')
+    expect(within(thresholds).getByLabelText('Ступень 3: верхняя граница')).toBeDisabled()
+    await user.click(within(thresholds).getByRole('button', { name: 'Добавить порог' }))
+    expect(within(thresholds).getByLabelText('Ступень 2: нижняя граница')).toHaveValue('251')
+    expect(within(thresholds).getByLabelText('Ступень 2: верхняя граница')).toHaveValue('350')
+    expect(within(thresholds).getByLabelText('Ступень 3: нижняя граница')).toHaveValue('351')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
     await waitFor(() => expect(savedTieredRequest).not.toBeNull())
     expect(savedTieredRequest!.tariffMode).toBe('metered_tiered')
-    expect(savedTieredRequest!.electricityTiers).toHaveLength(4)
+    expect(savedTieredRequest!.electricityTiers).toHaveLength(3)
     expect(savedTieredRequest!.electricityTiers!.every((tier) => tier.id === undefined)).toBe(true)
   })
 
@@ -6382,6 +6490,15 @@ describe('App', () => {
       },
       generateRegularCatalogAccruals,
       createExpense: async (_token, request) => {
+        if (request.expensePaymentSource === 'bank' && request.amount > 234000) {
+          throw new FinanceApiError('bank_amount_insufficient', 'На банковском счёте недостаточно средств. Доступно 234 000.00.', 409)
+        }
+        if (request.expensePaymentSource === 'cash' && request.amount > 201600) {
+          throw new FinanceApiError('cash_amount_insufficient', 'В кассе недостаточно средств. Доступно 201 600.00.', 409)
+        }
+        if (request.expensePaymentSource === 'bank' && request.amount > 100000 && !request.confirmNegativeFundBalance) {
+          throw new FinanceApiError('fund_amount_insufficient', 'Подтвердите выплату с отрицательным остатком фонда.', 409)
+        }
         savedExpenseRequests.push(request)
         const requestExpenseType = expenseTypes.find((item) => item.id === request.expenseTypeId) ?? electricityExpenseType
         return createFinancialOperation({
@@ -7079,6 +7196,7 @@ describe('App', () => {
     const expenseSource = within(expenseDialog).getByRole('combobox', { name: 'Источник выплаты' })
     expect(expenseSource).toHaveTextContent('Банк · поставщику')
     expect(expenseSource.closest('.form-field')).toHaveClass('full-payment-field')
+    expect(within(expenseDialog).getByRole('status')).toHaveTextContent('Доступно в банке: 234 000.00.')
     const expenseSupplier = within(expenseDialog).getByRole('combobox', { name: 'Поставщик выплаты' })
     expect(expenseSupplier).toHaveClass('select-control__trigger')
     expect(expenseSupplier).toHaveTextContent('Водоканал')
@@ -7090,7 +7208,7 @@ describe('App', () => {
     expect(expenseType).toHaveClass('select-control__trigger')
     expect(expenseType).toHaveTextContent('Электроэнергия')
     expect(expenseType).toBeDisabled()
-    expect(within(expenseDialog).getByText(/Фонд расходования:/).closest('p')).toHaveTextContent('Фонд расходования: Водоснабжение · доступно 100 000.00')
+    expect(within(expenseDialog).getByText(/Фонд расходования:/).closest('p')).toHaveTextContent('Фонд расходования: Водоснабжение · доступно в фонде 100 000.00')
     expect(within(expenseDialog).queryByRole('combobox', { name: 'Тип выплаты' })).not.toBeInTheDocument()
     const expenseDate = within(expenseDialog).getByLabelText('Дата выплаты')
     expect(expenseDate).toHaveValue('30.06.2026')
@@ -7107,6 +7225,10 @@ describe('App', () => {
     expect(selectedExpenseMonth).toHaveClass('is-selected')
     await user.click(selectedExpenseMonth)
     const expenseAmount = within(expenseDialog).getByLabelText('Сумма выплаты')
+    await user.type(expenseAmount, '250000')
+    await user.click(within(expenseDialog).getByRole('button', { name: 'Провести' }))
+    expect(within(expenseDialog).getByRole('alert')).toHaveTextContent('На банковском счёте недостаточно средств. Доступно 234 000.00.')
+    await user.clear(expenseAmount)
     await user.type(expenseAmount, '100001')
     expect(within(expenseDialog).getByText('После выплаты фонд станет отрицательным.')).toBeInTheDocument()
     await user.click(within(expenseDialog).getByRole('button', { name: 'Провести' }))
@@ -7142,6 +7264,7 @@ describe('App', () => {
     await user.click(sourceControl)
     await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Касса · эпизодическая' }))
     expect(sourceControl).toHaveTextContent('Касса · эпизодическая')
+    expect(within(atomicExpenseDialog).getByRole('status')).toHaveTextContent('Доступно в кассе: 201 600.00.')
     expect(within(atomicExpenseDialog).getByLabelText('Получатель эпизодической выплаты')).toBeInTheDocument()
     expect(within(atomicExpenseDialog).queryByText(/Фонд расходования:/)).not.toBeInTheDocument()
     const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга выплаты поставщику' })
@@ -7167,6 +7290,27 @@ describe('App', () => {
       expenseFundId: undefined,
       amount: 500,
       documentNumber: 'ADVANCE-ATOMIC',
+    })
+
+    await user.click(expenseButton)
+    const supplierlessExpenseDialog = await screen.findByRole('dialog', { name: 'Добавить выплату' })
+    await user.click(within(supplierlessExpenseDialog).getByRole('combobox', { name: 'Источник выплаты' }))
+    await user.click(within(supplierlessExpenseDialog).getByRole('option', { name: 'Касса · эпизодическая' }))
+    expect(within(supplierlessExpenseDialog).getByLabelText('Получатель эпизодической выплаты')).toHaveValue('')
+    const supplierlessAmount = within(supplierlessExpenseDialog).getByLabelText('Сумма выплаты')
+    await user.type(supplierlessAmount, '201601')
+    await user.click(within(supplierlessExpenseDialog).getByRole('button', { name: 'Провести' }))
+    expect(within(supplierlessExpenseDialog).getByRole('alert')).toHaveTextContent('В кассе недостаточно средств. Доступно 201 600.00.')
+    await user.clear(supplierlessAmount)
+    await user.type(supplierlessAmount, '100')
+    await user.click(within(supplierlessExpenseDialog).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(savedExpenseRequests).toHaveLength(3))
+    expect(savedExpenseRequests[2]).toMatchObject({
+      supplierId: undefined,
+      counterpartyName: undefined,
+      expensePaymentSource: 'cash',
+      expenseFundId: undefined,
+      amount: 100,
     })
 
     const staffPaymentButton = within(prototype).getByRole('button', { name: 'Оплатить сотрудника Петрова' })
@@ -9713,9 +9857,9 @@ describe('App', () => {
     await user.click(within(supplierExpenseRow!).getByRole('button', { name: 'Оплатить Водоснабжение' }))
     const expenseDialog = await screen.findByRole('dialog', { name: 'Добавить выплату' })
     expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('29 500.00')
-    expect(within(prototype).getAllByText('12 000.00').length).toBeGreaterThan(0)
-    expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
     const cashAndBankSummary = within(prototype).getByLabelText('Итоги кассы и банка')
+    expect(within(prototype).getAllByText('12 000.00').length).toBeGreaterThan(0)
+    expect(within(cashAndBankSummary).getByText('4 000.00')).toBeInTheDocument()
     expect(within(cashAndBankSummary).getByText('Касса + банк').closest('div')).toHaveTextContent('16 000.00')
   })
 

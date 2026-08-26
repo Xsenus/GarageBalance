@@ -447,9 +447,7 @@ public sealed class FundService(
 
     private async Task<decimal> CalculateAvailableToDistributeAsync(CancellationToken cancellationToken)
     {
-        var totals = await repository.GetTotalsAsync(cancellationToken);
-
-        return MoneyMath.RoundMoney(Math.Max(totals.IncomeTotal - totals.ExpenseTotal - totals.AllocatedFundTotal, 0m));
+        return MoneyMath.RoundMoney(await repository.GetAvailableToDistributeAsync(cancellationToken));
     }
 
     private static void RecalculateFundBalances(Fund fund, IReadOnlyList<FundOperation> operations)
