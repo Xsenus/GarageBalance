@@ -12,6 +12,69 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlPaymentAllocationIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task FullPaymentQuote_AppliesExcessAllocationAfterAccrualReductionOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var garage = new Garage
+        {
+            Number = "PG-FULL-PAYMENT-EXCESS",
+            PeopleCount = 1,
+            FloorCount = 1
+        };
+        var incomeType = new IncomeType { Name = "PG-FULL-PAYMENT-EXCESS" };
+        var overpaidAccrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = new DateOnly(2026, 8, 20),
+            OverdueFromDate = new DateOnly(2026, 9, 20),
+            Amount = 93.22m,
+            Source = AccrualSources.Manual
+        };
+        var outstandingAccrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            DueDate = new DateOnly(2026, 9, 20),
+            OverdueFromDate = new DateOnly(2026, 10, 21),
+            Amount = 100m,
+            Source = AccrualSources.Manual
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            Garage = garage,
+            IncomeType = incomeType,
+            OperationDate = new DateOnly(2026, 7, 15),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 100m
+        };
+        context.AddRange(
+            overpaidAccrual,
+            outstandingAccrual,
+            payment,
+            new AccrualPaymentAllocation
+            {
+                Accrual = overpaidAccrual,
+                FinancialOperation = payment,
+                Amount = 100m
+            });
+        await context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(context)
+            .GetGarageFullPaymentQuoteAsync(garage.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(93.22m, result.Value!.TotalAmount);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal(93.22m, line.OutstandingAmount);
+        Assert.Equal(outstandingAccrual.AccountingMonth, line.AccountingMonth);
+    }
+
+    [PostgreSqlFact]
     public async Task OperationsPage_PreservesOpeningBalanceAndSameDayPaymentSequence()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

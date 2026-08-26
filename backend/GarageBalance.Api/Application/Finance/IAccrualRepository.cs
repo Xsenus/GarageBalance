@@ -81,6 +81,7 @@ public sealed record OutstandingAccrualDebtData(
     decimal Amount,
     decimal PaidAmount,
     decimal OutstandingAmount,
+    decimal ExcessPaidAmount,
     Guid? FeeCampaignId,
     Guid? IrregularPaymentId);
 public sealed record IrregularAccrualPaymentState(

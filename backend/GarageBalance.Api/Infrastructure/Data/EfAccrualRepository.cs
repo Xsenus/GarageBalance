@@ -334,9 +334,10 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 row.Amount,
                 row.PaidAmount,
                 Math.Max(row.Amount - row.PaidAmount, 0m),
+                Math.Max(row.PaidAmount - row.Amount, 0m),
                 row.FeeCampaignId,
                 row.IrregularPaymentId))
-            .Where(row => row.OutstandingAmount > 0m)
+            .Where(row => row.OutstandingAmount > 0m || row.ExcessPaidAmount > 0m)
             .OrderBy(row => row.AccountingMonth)
             .ThenBy(row => row.DueDate)
             .ThenBy(row => row.IncomeTypeName, StringComparer.OrdinalIgnoreCase)

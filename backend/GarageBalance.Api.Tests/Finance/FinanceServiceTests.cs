@@ -3206,6 +3206,62 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetGarageFullPaymentQuoteAsync_AppliesExcessAllocationAfterAccrualReduction()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var overpaidAccrual = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = new DateOnly(2026, 8, 20),
+            OverdueFromDate = new DateOnly(2026, 9, 20),
+            Amount = 93.22m,
+            Source = "recalculated-after-payment"
+        };
+        var outstandingAccrual = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            DueDate = new DateOnly(2026, 9, 20),
+            OverdueFromDate = new DateOnly(2026, 10, 21),
+            Amount = 100m,
+            Source = "full-payment-after-recalculation"
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            OperationDate = new DateOnly(2026, 7, 15),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 100m
+        };
+        database.Context.AddRange(
+            overpaidAccrual,
+            outstandingAccrual,
+            payment,
+            new AccrualPaymentAllocation
+            {
+                Accrual = overpaidAccrual,
+                FinancialOperation = payment,
+                Amount = 100m
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetGarageFullPaymentQuoteAsync(fixtures.Garage.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(93.22m, result.Value!.TotalAmount);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal(93.22m, line.OutstandingAmount);
+        Assert.Equal(outstandingAccrual.AccountingMonth, line.AccountingMonth);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsConfirmedBankPaymentToMakeExpenseFundNegative()
     {
         await using var database = await TestDatabase.CreateAsync();

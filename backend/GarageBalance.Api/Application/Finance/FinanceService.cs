@@ -667,7 +667,9 @@ public sealed class FinanceService(
         var openingOriginal = Math.Max(garage.StartingBalance, 0m);
         var openingOutstanding = MoneyMath.RoundMoney(Math.Max(openingOriginal - unallocatedIncome, 0m));
         var remainingCredit = MoneyMath.RoundMoney(
-            Math.Max(unallocatedIncome - openingOriginal, 0m) + Math.Max(-garage.StartingBalance, 0m));
+            Math.Max(unallocatedIncome - openingOriginal, 0m) +
+            Math.Max(-garage.StartingBalance, 0m) +
+            accruals.Sum(accrual => accrual.ExcessPaidAmount));
         var accountingMonth = accruals.Count > 0
             ? accruals.Min(accrual => accrual.AccountingMonth)
             : GetCurrentAccountingMonth();
@@ -685,6 +687,11 @@ public sealed class FinanceService(
 
         foreach (var accrual in accruals)
         {
+            if (accrual.OutstandingAmount <= 0m)
+            {
+                continue;
+            }
+
             var creditApplied = Math.Min(remainingCredit, accrual.OutstandingAmount);
             remainingCredit = MoneyMath.RoundMoney(remainingCredit - creditApplied);
             var outstanding = MoneyMath.RoundMoney(accrual.OutstandingAmount - creditApplied);
