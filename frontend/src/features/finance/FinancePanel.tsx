@@ -29,7 +29,7 @@ import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toS
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
-import { createGarageIncomeRowsFromWorksheet } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -3535,11 +3535,35 @@ function PaymentsPrototypePanel({
         documentNumber: historyEdit.documentNumber.trim() || undefined,
         comment: historyEdit.comment.trim() || undefined,
       })
+      const balanceDelta = operation.amount - amount
+      setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+        ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + balanceDelta) }
+        : currentGarage)
       closeHistoryEditDialog()
+      let overdueRefreshFailed = false
+      const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
+        .then((details) => {
+          if (selectedGarageIdRef.current !== selectedGarage.id) {
+            return
+          }
+
+          setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+            ? { ...currentGarage, overdueDebt: details.total }
+            : currentGarage)
+          setOverdueDebtDetails(details.total > 0 ? details : null)
+          setOverdueDebtError(null)
+        })
+        .catch(() => {
+          overdueRefreshFailed = true
+        })
       await Promise.all([
+        overdueRefresh,
         loadGaragePaymentHistory(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
       ])
+      if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+        setPaymentError('Платеж изменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
+      }
     } catch (error) {
       setHistoryEdit((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось изменить платеж.' } : state)
     } finally {
@@ -3561,12 +3585,36 @@ function PaymentsPrototypePanel({
     setHistoryActionSaving(true)
     setHistoryCancel((state) => state ? { ...state, error: null } : state)
     try {
+      const canceledAmount = historyCancel.row.operation.amount
       await financeClient.cancelOperation(auth.accessToken, historyCancel.row.operation.id, { reason })
+      setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+        ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + canceledAmount) }
+        : currentGarage)
       closeHistoryCancelDialog()
+      let overdueRefreshFailed = false
+      const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
+        .then((details) => {
+          if (selectedGarageIdRef.current !== selectedGarage.id) {
+            return
+          }
+
+          setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+            ? { ...currentGarage, overdueDebt: details.total }
+            : currentGarage)
+          setOverdueDebtDetails(details.total > 0 ? details : null)
+          setOverdueDebtError(null)
+        })
+        .catch(() => {
+          overdueRefreshFailed = true
+        })
       await Promise.all([
+        overdueRefresh,
         loadGaragePaymentHistory(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
       ])
+      if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+        setPaymentError('Платеж отменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
+      }
     } catch (error) {
       setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось отменить платеж.' } : state)
     } finally {
@@ -4295,7 +4343,7 @@ function PaymentsPrototypePanel({
       return 'Выберите сотрудника из справочника персонала.'
     }
 
-    const operation = await financeClient.createStaffPayment(auth.accessToken, {
+    await financeClient.createStaffPayment(auth.accessToken, {
       staffMemberId: staffMember.id,
       operationDate: request.operationDate,
       accountingMonth: request.accountingMonth,
@@ -4304,20 +4352,15 @@ function PaymentsPrototypePanel({
       comment: request.comment.trim() || undefined,
     })
 
-    setExpenseRows((currentRows) => currentRows.map((row, index) => {
-      const normalizedCounterparty = row.counterparty?.trim().toLocaleLowerCase('ru-RU') ?? ''
-      const normalizedStaffName = (operation.staffMemberName ?? staffMember.fullName).trim().toLocaleLowerCase('ru-RU')
-      const shouldUpdate = request.rowIndex === index
-        || (request.rowIndex === undefined && normalizedCounterparty.length > 0 && normalizedStaffName.includes(normalizedCounterparty))
-      if (!shouldUpdate) {
-        return row
-      }
-
-      const paid = (typeof row.paid === 'number' ? row.paid : 0) + operation.amount
-      const cost = typeof row.cost === 'number' ? row.cost : staffMember.rate
-      const balance = Math.max(cost - paid, 0)
-      return { ...row, paid, balance }
-    }))
+    const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, expenseWorksheetMonthFrom === expenseWorksheetMonthTo
+      ? { accountingMonth: `${expenseWorksheetMonthTo}-01` }
+      : {
+          monthFrom: `${expenseWorksheetMonthFrom}-01`,
+          monthTo: `${expenseWorksheetMonthTo}-01`,
+        })
+    setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
+    setExpenseBankAmount(worksheet.bankAmount)
+    setExpenseCashAmount(worksheet.cashAmount)
 
     return null
   }
@@ -4881,7 +4924,10 @@ function PaymentsPrototypePanel({
                                       <CircleHelp size={15} aria-hidden="true" />
                                     </button>
                                     <span className="field-help__tooltip payments-prototype-calculation-tooltip">
-                                      {row.calculationDetails?.lines[0]?.formula ?? `Сохранённое начисление: ${formatPaymentMoney(row.payable)}`}
+                                      {getAccrualCalculationSummary(
+                                        row.calculationDetails,
+                                        `Сохранённое начисление: ${formatPaymentMoney(row.payable)}`,
+                                      )}
                                     </span>
                                   </span>
                                 ) : null}

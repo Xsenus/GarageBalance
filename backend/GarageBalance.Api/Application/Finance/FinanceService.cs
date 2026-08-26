@@ -1091,12 +1091,15 @@ public sealed class FinanceService(
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierOpeningExpenses = worksheetData.SupplierOpeningExpenses
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
+        var supplierStartingBalances = worksheetData.SupplierStartingBalances
+            .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierFunds = worksheetData.SupplierFunds
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierKeys = supplierAccruals.Keys
             .Concat(supplierExpenses.Keys)
             .Concat(supplierOpeningAccruals.Keys)
             .Concat(supplierOpeningExpenses.Keys)
+            .Concat(supplierStartingBalances.Keys)
             .Distinct()
             .ToList();
 
@@ -1106,12 +1109,16 @@ public sealed class FinanceService(
             supplierExpenses.TryGetValue(key, out var expense);
             supplierOpeningAccruals.TryGetValue(key, out var openingAccrual);
             supplierOpeningExpenses.TryGetValue(key, out var openingExpense);
+            supplierStartingBalances.TryGetValue(key, out var startingBalance);
             supplierFunds.TryGetValue(key, out var expenseFund);
-            var sample = accrual ?? expense ?? openingAccrual ?? openingExpense!;
+            var sample = accrual ?? expense ?? openingAccrual ?? openingExpense ?? startingBalance!;
             var accrualAmount = MoneyMath.RoundMoney(accrual?.Amount ?? 0m);
             var expenseAmount = MoneyMath.RoundMoney(expense?.Amount ?? 0m);
             var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
-            var openingBalance = MoneyMath.RoundMoney((openingAccrual?.Amount ?? 0m) - (openingExpense?.Amount ?? 0m));
+            var openingBalance = MoneyMath.RoundMoney(
+                (startingBalance?.Amount ?? 0m) +
+                (openingAccrual?.Amount ?? 0m) -
+                (openingExpense?.Amount ?? 0m));
             var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualAmount - expenseAmount);
             decimal? collected = expenseFund is null
                 ? null
@@ -1810,6 +1817,7 @@ public sealed class FinanceService(
         }
 
         var operations = new List<FinancialOperation>(normalizedLines.Count);
+        var batchCreatedAtUtc = DateTimeOffset.UtcNow;
         foreach (var line in normalizedLines)
         {
             var incomeType = line.IsOpeningDebt ? openingDebtIncomeType! : incomeTypes[line.IncomeTypeId!.Value];
@@ -1834,7 +1842,9 @@ public sealed class FinanceService(
                 IrregularPaymentId = line.IrregularPaymentId,
                 IrregularPayment = line.IrregularPaymentId.HasValue && irregularPayments.TryGetValue(line.IrregularPaymentId.Value, out var irregularPayment)
                     ? irregularPayment
-                    : null
+                    : null,
+                CreatedAtUtc = batchCreatedAtUtc.AddTicks(operations.Count * TimeSpan.TicksPerMicrosecond),
+                UpdatedAtUtc = batchCreatedAtUtc.AddTicks(operations.Count * TimeSpan.TicksPerMicrosecond)
             };
             financialOperationRepository.Add(operation);
             operations.Add(operation);

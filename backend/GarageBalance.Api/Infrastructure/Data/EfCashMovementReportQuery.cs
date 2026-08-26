@@ -27,6 +27,8 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
+                (operation.ExpensePaymentSource == ExpensePaymentSources.Cash ||
+                    operation.ExpensePaymentSource == null) &&
                 operation.OperationDate >= dateFrom &&
                 operation.OperationDate <= dateTo);
 
@@ -104,6 +106,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
                 WHERE operation."IsCanceled" = FALSE
                   AND operation."OperationKind" = 'expense'
+                  AND (operation."ExpensePaymentSource" = 'cash' OR operation."ExpensePaymentSource" IS NULL)
                   AND operation."OperationDate" >= @date_from::date
                   AND operation."OperationDate" <= @date_to::date
                   {{searchClause}}

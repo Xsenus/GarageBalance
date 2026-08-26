@@ -76,3 +76,17 @@ export function formatPaymentPrototypeMonthLabel(value: string) {
   const monthLabel = monthLabels[monthIndex] ?? match[2]
   return `${monthLabel}.${match[1].slice(2)}`
 }
+
+export function getAccrualCalculationSummary(
+  details: AccrualCalculationDetailsDto | null | undefined,
+  fallback: string,
+) {
+  if (!details || details.lines.length === 0) {
+    return fallback
+  }
+
+  return details.lines.find((line) => line.hasTariff && line.amount !== 0)?.formula
+    ?? details.lines.find((line) => line.hasTariff)?.formula
+    ?? details.lines[0]?.formula
+    ?? fallback
+}

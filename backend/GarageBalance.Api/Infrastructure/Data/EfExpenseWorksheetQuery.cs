@@ -27,6 +27,7 @@ public sealed class EfExpenseWorksheetQuery(
     private const int BalanceAdjustmentCategory = 16;
     private const int SupplierFundCategory = 17;
     private const int SalaryConfigurationCategory = 18;
+    private const int SupplierStartingBalanceCategory = 19;
 
     public Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
@@ -529,6 +530,32 @@ public sealed class EfExpenseWorksheetQuery(
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
+        var supplierStartingBalances = dbContext.Suppliers
+            .AsNoTracking()
+            .Where(supplier =>
+                !supplier.IsArchived &&
+                supplier.StartingBalance != 0 &&
+                supplier.ExpenseTypeId != null &&
+                supplier.ExpenseType != null &&
+                !supplier.ExpenseType.IsArchived)
+            .Select(supplier => new
+            {
+                Category = SupplierStartingBalanceCategory,
+                SupplierId = (Guid?)supplier.Id,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)supplier.Name,
+                TypeId = supplier.ExpenseTypeId,
+                TypeName = (string?)supplier.ExpenseType!.Name,
+                TypeCode = supplier.ExpenseType.Code,
+                Amount = supplier.StartingBalance,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
         var salaryConfiguration = dbContext.ApplicationSettings
             .AsNoTracking()
             .Where(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey)
@@ -568,6 +595,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Concat(balanceAdjustments)
             .Concat(supplierFunds)
             .Concat(salaryConfiguration)
+            .Concat(supplierStartingBalances)
             .ToListAsync(cancellationToken);
 
         var salaryAccrualMonthTo = monthTo;
@@ -650,6 +678,15 @@ public sealed class EfExpenseWorksheetQuery(
                     row.Amount))
                 .ToList(),
             SupplierOpeningExpenses = rows.Where(row => row.Category == SupplierOpeningExpenseCategory)
+                .Select(row => new ExpenseWorksheetSupplierData(
+                    row.SupplierId!.Value,
+                    row.CounterpartyName!,
+                    row.TypeId!.Value,
+                    row.TypeName!,
+                    row.TypeCode,
+                    row.Amount))
+                .ToList(),
+            SupplierStartingBalances = rows.Where(row => row.Category == SupplierStartingBalanceCategory)
                 .Select(row => new ExpenseWorksheetSupplierData(
                     row.SupplierId!.Value,
                     row.CounterpartyName!,

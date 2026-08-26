@@ -1443,7 +1443,15 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const deactivateButton = await within(tariffsPanel).findByRole('button', { name: 'Деактивировать услугу Охрана' })
+    const addServiceButton = within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' })
+    const announceFeeButton = within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })
 
+    expect(addServiceButton).toBeDisabled()
+    expect(announceFeeButton).toBeDisabled()
+    await user.click(addServiceButton)
+    await user.click(announceFeeButton)
+    expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Объявить сбор' })).not.toBeInTheDocument()
     expect(deactivateButton).toBeDisabled()
     await user.click(deactivateButton)
     expect(screen.queryByRole('dialog', { name: 'Деактивировать услугу?' })).not.toBeInTheDocument()
@@ -6713,6 +6721,7 @@ describe('App', () => {
         const penaltyAmount = savedStaffSalaryAdjustmentRequests
           .filter((request) => request.adjustmentType === 'penalty')
           .reduce((total, request) => total + request.amount, 0)
+        const staffPaidAmount = savedStaffPaymentRequests.reduce((total, request) => total + request.amount, 0)
         return createExpenseWorksheet({
         accountingMonth: params?.accountingMonth ?? '2026-06-01',
         accrualTotal: 235000,
@@ -6721,7 +6730,7 @@ describe('App', () => {
         collectedTotal: 257100,
         differenceTotal: 61300,
         bankAmount: 234000 + transferredAmount,
-        cashAmount: 201600 - transferredAmount,
+        cashAmount: 201600 - transferredAmount - staffPaidAmount,
         rows: [
           {
             rowKind: 'supplier',
@@ -6812,7 +6821,7 @@ describe('App', () => {
             baseAccrualAmount: 40000,
             bonusAmount,
             penaltyAmount,
-            expenseAmount: 0,
+            expenseAmount: staffPaidAmount,
             balance: 0,
             collectedAmount: null,
             difference: null,
@@ -7335,6 +7344,7 @@ describe('App', () => {
     expect(within(staffPaymentDialog).getByText(/Доступно 201 600\.00/)).toBeInTheDocument()
     await user.clear(staffPaymentAmount)
     await user.type(staffPaymentAmount, '250000')
+    const worksheetRequestsBeforeStaffPayment = expenseWorksheetRequestCount
     await user.click(within(staffPaymentDialog).getByRole('button', { name: 'Провести' }))
     expect(within(staffPaymentDialog).getByRole('alert')).toHaveTextContent('В кассе недостаточно средств. Доступно 201 600.00.')
     expect(savedStaffPaymentRequests).toHaveLength(0)
@@ -7354,6 +7364,11 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Выплата сотруднику' })).not.toBeInTheDocument())
     await waitFor(() => expect(staffPaymentButton).toHaveFocus())
+    await waitFor(() => expect(expenseWorksheetRequestCount).toBe(worksheetRequestsBeforeStaffPayment + 1))
+    const petrovaRowAfterPayment = within(expenseTable).getByText('Петрова').closest('tr')
+    expect(petrovaRowAfterPayment).not.toBeNull()
+    expect(within(petrovaRowAfterPayment!).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(expect.arrayContaining(['40 000.00']))
+    expect(within(prototype).getByText('Касса').closest('div')).toHaveTextContent('161 600.00')
 
     const bonusButton = within(prototype).getByRole('button', { name: 'Начислить премию' })
     await user.click(bonusButton)
@@ -7485,7 +7500,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
     expect(bankButton).toHaveFocus()
     await waitFor(() => expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('246 300.00'))
-    expect(within(prototype).getByText('Касса').closest('div')).toHaveTextContent('189 300.00')
+    expect(within(prototype).getByText('Касса').closest('div')).toHaveTextContent('149 300.00')
   }, 180000)
 
   it('does not submit a penalty when the system income type is unavailable', async () => {
@@ -9424,6 +9439,8 @@ describe('App', () => {
     await user.type(within(cancelDialog).getByLabelText('Причина отмены платежа'), 'Ошибочный платеж')
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
+    const finances = within(prototype).getByRole('region', { name: 'Финансы' })
+    await waitFor(() => expect(finances).toHaveTextContent('Баланс6 232.00'))
   })
 
   it('prints one receipt for all services in a full-payment batch', async () => {

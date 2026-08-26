@@ -41,6 +41,19 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
                     ExpenseType = repair,
                     Comment = "Свободный получатель"
                 },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(9),
+                    AccountingMonth = month,
+                    Amount = 400m,
+                    ExpensePaymentSource = ExpensePaymentSources.Bank,
+                    ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt,
+                    Supplier = firstSupplier,
+                    ExpenseType = electricity,
+                    DocumentNumber = "BANK-EXCLUDED",
+                    Comment = "Банковская выплата не относится к кассе"
+                },
                 CreateExpense(firstSupplier, electricity, month.AddDays(10), 999m, "CANCELED", "Отменено", true),
                 CreateExpense(firstSupplier, electricity, month.AddMonths(-1), 200m, "OUTSIDE", "Другой месяц"),
                 new FinancialOperation
@@ -135,6 +148,7 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
             AccountingMonth = new DateOnly(operationDate.Year, operationDate.Month, 1),
             Amount = amount,
             ExpensePaymentType = expensePaymentType,
+            ExpensePaymentSource = ExpensePaymentSources.Cash,
             Supplier = supplier,
             ExpenseType = expenseType,
             DocumentNumber = documentNumber,

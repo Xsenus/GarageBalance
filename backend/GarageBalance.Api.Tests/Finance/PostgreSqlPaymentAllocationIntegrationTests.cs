@@ -12,6 +12,69 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlPaymentAllocationIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task OperationsPage_PreservesOpeningBalanceAndSameDayPaymentSequence()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var garage = new Garage
+        {
+            Number = "PG-OPENING-HISTORY",
+            PeopleCount = 1,
+            FloorCount = 1,
+            StartingBalance = 1_000m
+        };
+        var incomeType = new IncomeType { Name = "PG-OPENING-HISTORY" };
+        context.AddRange(
+            garage,
+            incomeType,
+            new Accrual
+            {
+                Garage = garage,
+                IncomeType = incomeType,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                DueDate = new DateOnly(2026, 8, 31),
+                OverdueFromDate = new DateOnly(2026, 9, 1),
+                Amount = 200m,
+                Source = AccrualSources.Manual
+            });
+        await context.SaveChangesAsync();
+
+        var service = FinanceServiceTestFactory.Create(context);
+        foreach (var amount in new[] { 300m, 400m })
+        {
+            var created = await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    garage.Id,
+                    incomeType.Id,
+                    new DateOnly(2026, 8, 26),
+                    new DateOnly(2026, 8, 1),
+                    amount,
+                    null,
+                    "Проверка истории одного дня"),
+                null,
+                CancellationToken.None);
+            Assert.True(created.Succeeded, created.ErrorMessage);
+        }
+
+        var page = await service.GetOperationsPageAsync(
+            new FinancialOperationListRequest(
+                null,
+                null,
+                FinancialOperationKinds.Income,
+                null,
+                Limit: 100,
+                GarageId: garage.Id),
+            CancellationToken.None);
+        var ordered = page.Items.OrderBy(operation => operation.CreatedAtUtc).ToArray();
+
+        Assert.Equal(2, ordered.Length);
+        Assert.Equal(1_200m, ordered[0].GarageDebtBefore);
+        Assert.Equal(900m, ordered[0].GarageDebtAfter);
+        Assert.Equal(900m, ordered[1].GarageDebtBefore);
+        Assert.Equal(500m, ordered[1].GarageDebtAfter);
+    }
+
+    [PostgreSqlFact]
     public async Task GarageWorksheetLock_SerializesSameGarageWithoutBlockingAnotherGarage()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

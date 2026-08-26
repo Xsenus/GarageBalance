@@ -92,6 +92,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.Comment,
                 operation.GarageId,
                 GarageNumber = operation.Garage == null ? null : operation.Garage.Number,
+                GarageStartingBalance = operation.Garage == null ? null : (decimal?)operation.Garage.StartingBalance,
                 OwnerId = operation.Garage == null ? null : operation.Garage.OwnerId,
                 OwnerLastName = operation.Garage == null || operation.Garage.Owner == null ? null : operation.Garage.Owner.LastName,
                 OwnerFirstName = operation.Garage == null || operation.Garage.Owner == null ? null : operation.Garage.Owner.FirstName,
@@ -100,6 +101,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 IncomeTypeName = operation.IncomeType == null ? null : operation.IncomeType.Name,
                 operation.SupplierId,
                 SupplierName = operation.Supplier == null ? null : operation.Supplier.Name,
+                SupplierStartingBalance = operation.Supplier == null ? null : (decimal?)operation.Supplier.StartingBalance,
                 operation.StaffMemberId,
                 StaffMemberName = operation.StaffMember == null ? null : operation.StaffMember.FullName,
                 StaffDepartmentId = operation.StaffMember == null ? null : (Guid?)operation.StaffMember.DepartmentId,
@@ -129,6 +131,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 Comment = (string?)null,
                 GarageId = (Guid?)null,
                 GarageNumber = (string?)null,
+                GarageStartingBalance = (decimal?)null,
                 OwnerId = (Guid?)null,
                 OwnerLastName = (string?)null,
                 OwnerFirstName = (string?)null,
@@ -137,6 +140,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 IncomeTypeName = (string?)null,
                 SupplierId = (Guid?)null,
                 SupplierName = (string?)null,
+                SupplierStartingBalance = (decimal?)null,
                 StaffMemberId = (Guid?)null,
                 StaffMemberName = (string?)null,
                 StaffDepartmentId = (Guid?)null,
@@ -177,6 +181,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                     {
                         Id = row.GarageId.Value,
                         Number = row.GarageNumber!,
+                        StartingBalance = row.GarageStartingBalance ?? 0m,
                         OwnerId = row.OwnerId,
                         Owner = row.OwnerId is null
                             ? null
@@ -195,7 +200,12 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 SupplierId = row.SupplierId,
                 Supplier = row.SupplierId is null
                     ? null
-                    : new Supplier { Id = row.SupplierId.Value, Name = row.SupplierName! },
+                    : new Supplier
+                    {
+                        Id = row.SupplierId.Value,
+                        Name = row.SupplierName!,
+                        StartingBalance = row.SupplierStartingBalance ?? 0m
+                    },
                 StaffMemberId = row.StaffMemberId,
                 StaffMember = row.StaffMemberId is null
                     ? null
@@ -301,31 +311,93 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.AccountingMonth == accountingMonth)
             .SumAsync(operation => operation.Amount, cancellationToken);
 
-    public async Task<decimal> GetPreviousGarageIncomeTotalAsync(Guid ignoredId, Guid garageId, DateOnly operationDate, CancellationToken cancellationToken) =>
-        await dbContext.FinancialOperations.AsNoTracking()
+    public async Task<decimal> GetPreviousGarageIncomeTotalAsync(Guid ignoredId, Guid garageId, DateOnly operationDate, CancellationToken cancellationToken)
+    {
+        var operationCreatedAtUtc = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => operation.Id == ignoredId)
+            .Select(operation => (DateTimeOffset?)operation.CreatedAtUtc)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var query = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.Id != ignoredId &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.OperationDate < operationDate)
+                operation.GarageId == garageId);
+        if (IsSqliteProvider())
+        {
+            var earlierTotal = await query
+                .Where(operation => operation.OperationDate < operationDate)
+                .SumAsync(operation => operation.Amount, cancellationToken);
+            if (!operationCreatedAtUtc.HasValue)
+            {
+                return earlierTotal;
+            }
+
+            var sameDayRows = await query
+                .Where(operation => operation.OperationDate == operationDate)
+                .Select(operation => new { operation.CreatedAtUtc, operation.Amount })
+                .ToListAsync(cancellationToken);
+            return earlierTotal + sameDayRows
+                .Where(operation => operation.CreatedAtUtc < operationCreatedAtUtc.Value)
+                .Sum(operation => operation.Amount);
+        }
+
+        return await query
+            .Where(operation =>
+                operation.OperationDate < operationDate ||
+                (operation.OperationDate == operationDate &&
+                    operationCreatedAtUtc.HasValue &&
+                    operation.CreatedAtUtc < operationCreatedAtUtc.Value))
             .SumAsync(operation => operation.Amount, cancellationToken);
+    }
 
     public async Task<decimal> GetPreviousSupplierExpenseTotalAsync(
         Guid ignoredId,
         Guid supplierId,
         Guid expenseTypeId,
         DateOnly operationDate,
-        CancellationToken cancellationToken) =>
-        await dbContext.FinancialOperations.AsNoTracking()
+        CancellationToken cancellationToken)
+    {
+        var operationCreatedAtUtc = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => operation.Id == ignoredId)
+            .Select(operation => (DateTimeOffset?)operation.CreatedAtUtc)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var query = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.Id != ignoredId &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
                 operation.SupplierId == supplierId &&
-                operation.ExpenseTypeId == expenseTypeId &&
-                operation.OperationDate < operationDate)
+                operation.ExpenseTypeId == expenseTypeId);
+        if (IsSqliteProvider())
+        {
+            var earlierTotal = await query
+                .Where(operation => operation.OperationDate < operationDate)
+                .SumAsync(operation => operation.Amount, cancellationToken);
+            if (!operationCreatedAtUtc.HasValue)
+            {
+                return earlierTotal;
+            }
+
+            var sameDayRows = await query
+                .Where(operation => operation.OperationDate == operationDate)
+                .Select(operation => new { operation.CreatedAtUtc, operation.Amount })
+                .ToListAsync(cancellationToken);
+            return earlierTotal + sameDayRows
+                .Where(operation => operation.CreatedAtUtc < operationCreatedAtUtc.Value)
+                .Sum(operation => operation.Amount);
+        }
+
+        return await query
+            .Where(operation =>
+                operation.OperationDate < operationDate ||
+                (operation.OperationDate == operationDate &&
+                    operationCreatedAtUtc.HasValue &&
+                    operation.CreatedAtUtc < operationCreatedAtUtc.Value))
             .SumAsync(operation => operation.Amount, cancellationToken);
+    }
 
     public Task<DateOnly?> GetPreviousActiveIncomeDateAsync(
         Guid garageId,

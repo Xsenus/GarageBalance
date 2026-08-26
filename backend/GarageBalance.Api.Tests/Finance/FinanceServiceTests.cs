@@ -494,10 +494,12 @@ public sealed class FinanceServiceTests
                         "Прочие доходы")
                 ],
                 receiptBatchId);
+        var startedAtUtc = DateTimeOffset.UtcNow;
         var result = await service.CreateFullGaragePaymentAsync(
             request,
             actorUserId,
             CancellationToken.None);
+        var completedAtUtc = DateTimeOffset.UtcNow;
         var retry = await service.CreateFullGaragePaymentAsync(request, actorUserId, CancellationToken.None);
         var conflictingRetry = await service.CreateFullGaragePaymentAsync(
             request with
@@ -524,6 +526,16 @@ public sealed class FinanceServiceTests
         Assert.Equal(750m, result.Value.TotalAmount);
         Assert.Equal(2, result.Value.Operations.Count);
         Assert.All(result.Value.Operations, operation => Assert.Equal(receiptBatchId, operation.ReceiptBatchId));
+        Assert.InRange(result.Value.Operations[0].CreatedAtUtc, startedAtUtc, completedAtUtc);
+        Assert.Equal(
+            result.Value.Operations[0].CreatedAtUtc.AddTicks(TimeSpan.TicksPerMicrosecond),
+            result.Value.Operations[1].CreatedAtUtc);
+        Assert.Equal(
+            result.Value.Operations[0].GarageDebtAfter,
+            result.Value.Operations[1].GarageDebtBefore);
+        Assert.Equal(
+            result.Value.Operations[0].GarageDebtBefore - result.Value.TotalAmount,
+            result.Value.Operations[1].GarageDebtAfter);
         Assert.Equal(2, await database.Context.FinancialOperations.CountAsync(operation => operation.ReceiptBatchId == receiptBatchId));
         var assignment = await database.Context.FundOperations
             .SingleAsync(operation => operation.SourceFinancialOperationId != null);
@@ -10604,12 +10616,52 @@ public sealed class FinanceServiceTests
         Assert.Empty(result.StaffExpenses);
         Assert.Empty(result.SupplierOpeningAccruals);
         Assert.Empty(result.SupplierOpeningExpenses);
+        Assert.Empty(result.SupplierStartingBalances);
         Assert.Empty(result.StaffOpeningExpenses);
         Assert.Empty(result.Incomes);
         Assert.Equal(0m, result.AvailableBalance.IncomeTotal);
         Assert.Equal(0m, result.AvailableBalance.BankDepositTotal);
         Assert.Equal(0m, result.AvailableBalance.CashExpenseTotal);
         Assert.Equal(0m, result.AvailableBalance.BankExpenseTotal);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_IncludesSupplierStartingBalanceBeforeCurrentPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.StartingBalance = 2000m;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+
+        var payment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                month,
+                300m,
+                "TEST-OPENING-DEBT",
+                null),
+            null,
+            CancellationToken.None);
+        var worksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(month),
+            CancellationToken.None);
+
+        Assert.True(payment.Succeeded);
+        Assert.True(worksheet.Succeeded);
+        var row = Assert.Single(worksheet.Value!.Rows, item =>
+            item.SupplierId == fixtures.Supplier.Id && item.ExpenseTypeId == fixtures.ExpenseType.Id);
+        Assert.Equal(2000m, row.OpeningBalance);
+        Assert.Equal(2000m, row.OpeningDebt);
+        Assert.Equal(0m, row.OpeningAdvance);
+        Assert.Equal(300m, row.ExpenseAmount);
+        Assert.Equal(1700m, row.ClosingDebt);
+        Assert.Equal(0m, row.ClosingAdvance);
+        Assert.Equal(2000m, worksheet.Value.OpeningDebtTotal);
+        Assert.Equal(1700m, worksheet.Value.ClosingDebtTotal);
     }
 
     [Fact]

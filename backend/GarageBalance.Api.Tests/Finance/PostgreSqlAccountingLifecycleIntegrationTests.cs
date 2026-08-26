@@ -230,7 +230,9 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
         Assert.True(fundChanges.Succeeded, fundChanges.ErrorMessage);
         Assert.Equal((1150m, 250m), (fundChanges.Value!.DepositTotal, fundChanges.Value.WithdrawalTotal));
         Assert.True(cash.Succeeded, cash.ErrorMessage);
-        Assert.Equal(350m, cash.Value!.Total);
+        Assert.Equal(100m, cash.Value!.Total);
+        Assert.Single(cash.Value.Rows);
+        Assert.Equal($"{marker}-ЗП", cash.Value.Rows[0].DocumentNumber);
         Assert.True(bank.Succeeded, bank.ErrorMessage);
         Assert.Equal(400m, bank.Value!.Total);
         Assert.True(fees.Succeeded, fees.ErrorMessage);

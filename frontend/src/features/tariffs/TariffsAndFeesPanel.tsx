@@ -2341,11 +2341,31 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           ) : tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
         </div>
         <div className="contractors-actions">
-          <button className="secondary-button create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>
+          <button
+            className="secondary-button create-action-button tariffs-action-button"
+            type="button"
+            disabled={!canManageTariffs || tariffReferencesLoading}
+            title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined}
+            onClick={() => {
+              if (canManageTariffs) {
+                setModal('service')
+              }
+            }}
+          >
             <FileSpreadsheet size={17} aria-hidden="true" />
             <span>Добавить услугу</span>
           </button>
-          <button className="primary-button contractors-primary-action create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignCreateDialog()}>
+          <button
+            className="primary-button contractors-primary-action create-action-button tariffs-action-button"
+            type="button"
+            disabled={!canManageTariffs || tariffReferencesLoading || feeCampaignGarageOptionsLoading}
+            title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined}
+            onClick={() => {
+              if (canManageTariffs) {
+                void openFeeCampaignCreateDialog()
+              }
+            }}
+          >
             <FileText size={17} aria-hidden="true" />
             <span>Объявить сбор</span>
           </button>

@@ -164,10 +164,19 @@ public sealed class ReportServiceTests
             new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), month, 1500m, "PARITY-PKO", "PARITY-INCOME"),
             null,
             CancellationToken.None)).Succeeded);
-        Assert.True((await finance.CreateExpenseAsync(
-            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), month, 400m, "PARITY-RKO", "PARITY-EXPENSE"),
-            null,
-            CancellationToken.None)).Succeeded);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 6, 12),
+            AccountingMonth = month,
+            Amount = 400m,
+            ExpensePaymentSource = ExpensePaymentSources.Cash,
+            ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+            Supplier = fixtures.Supplier,
+            ExpenseType = fixtures.ExpenseType,
+            DocumentNumber = "PARITY-RKO",
+            Comment = "PARITY-EXPENSE"
+        });
         database.Context.SupplierAccruals.Add(new SupplierAccrual
         {
             SupplierId = fixtures.Supplier.Id,
@@ -2095,11 +2104,15 @@ public sealed class ReportServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        database.Context.FinancialOperations.Add(CreateCashIncome(fixtures, SeededBankAmount + 2000m));
+        await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
         var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
-        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
-        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
+        var cashExpense = await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды", ExpensePaymentSource: ExpensePaymentSources.Cash), null, CancellationToken.None);
+        Assert.True(cashExpense.Succeeded, cashExpense.ErrorMessage);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 13), new DateOnly(2026, 6, 1), 250m, "BANK-EXCLUDED", "Оплата воды через банк", ExpensePaymentSource: ExpensePaymentSources.Bank), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода", ExpensePaymentSource: ExpensePaymentSources.Cash), null, CancellationToken.None);
 
         var result = await service.GetCashPaymentReportAsync(
             new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "вод", 10, ActorUserId: actorUserId),
@@ -2132,6 +2145,7 @@ public sealed class ReportServiceTests
                 OperationDate = new DateOnly(2026, 6, 10),
                 AccountingMonth = new DateOnly(2026, 6, 1),
                 Amount = 100m,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
                 DocumentNumber = "RKO-LIMIT-1",
                 SupplierId = fixtures.Supplier.Id,
                 ExpenseTypeId = fixtures.ExpenseType.Id
@@ -2142,6 +2156,7 @@ public sealed class ReportServiceTests
                 OperationDate = new DateOnly(2026, 6, 11),
                 AccountingMonth = new DateOnly(2026, 6, 1),
                 Amount = 200m,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
                 DocumentNumber = "RKO-LIMIT-2",
                 SupplierId = fixtures.Supplier.Id,
                 ExpenseTypeId = fixtures.ExpenseType.Id
@@ -2152,6 +2167,7 @@ public sealed class ReportServiceTests
                 OperationDate = new DateOnly(2026, 6, 12),
                 AccountingMonth = new DateOnly(2026, 6, 1),
                 Amount = 300m,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
                 DocumentNumber = "RKO-LIMIT-3",
                 SupplierId = fixtures.Supplier.Id,
                 ExpenseTypeId = fixtures.ExpenseType.Id
@@ -2900,11 +2916,13 @@ public sealed class ReportServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        database.Context.FinancialOperations.Add(CreateCashIncome(fixtures, SeededBankAmount + 2000m));
+        await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
         var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
-        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
-        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода"), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды", ExpensePaymentSource: ExpensePaymentSources.Cash), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1), 800m, "RKO-2", "Вне периода", ExpensePaymentSource: ExpensePaymentSources.Cash), null, CancellationToken.None);
 
         var result = await service.ExportCashPaymentReportXlsxAsync(
             new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "RKO-1", ActorUserId: actorUserId),
@@ -2931,9 +2949,11 @@ public sealed class ReportServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        database.Context.FinancialOperations.Add(CreateCashIncome(fixtures, SeededBankAmount + 1000m));
+        await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
         var service = CreateService(database.Context);
-        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды"), null, CancellationToken.None);
+        await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 400m, "RKO-1", "Оплата воды", ExpensePaymentSource: ExpensePaymentSources.Cash), null, CancellationToken.None);
 
         var result = await service.ExportCashPaymentReportPdfAsync(
             new CashPaymentReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "RKO-1"),
@@ -3401,6 +3421,17 @@ public sealed class ReportServiceTests
             Environment.NewLine,
             document.GetPages().Select(page => ContentOrderTextExtractor.GetText(page)));
     }
+
+    private static FinancialOperation CreateCashIncome(Fixtures fixtures, decimal amount) => new()
+    {
+        OperationKind = FinancialOperationKinds.Income,
+        OperationDate = new DateOnly(2026, 5, 31),
+        AccountingMonth = new DateOnly(2026, 5, 1),
+        Amount = amount,
+        DocumentNumber = "CASH-SEED",
+        Garage = fixtures.FirstGarage,
+        IncomeType = fixtures.IncomeType
+    };
 
     private static void AssertPdfIsLandscape(byte[] content)
     {
