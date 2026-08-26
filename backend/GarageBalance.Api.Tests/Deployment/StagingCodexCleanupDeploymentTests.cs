@@ -31,7 +31,11 @@ public sealed class StagingCodexCleanupDeploymentTests
         Assert.True(script.IndexOf("pg_dump --format=custom", StringComparison.Ordinal) < script.IndexOf("BEGIN;", StringComparison.Ordinal));
         Assert.Contains("pg_restore", script, StringComparison.Ordinal);
         Assert.Contains("Safety limit exceeded", script, StringComparison.Ordinal);
-        Assert.Contains("financial dependencies; cleanup cancelled", script, StringComparison.Ordinal);
+        Assert.Contains("protected payments or payouts; cleanup cancelled", script, StringComparison.Ordinal);
+        Assert.Contains("payment allocations; cleanup cancelled", script, StringComparison.Ordinal);
+        Assert.Contains("DELETE FROM meter_readings", script, StringComparison.Ordinal);
+        Assert.Contains("DELETE FROM meter_devices", script, StringComparison.Ordinal);
+        Assert.Contains("DELETE FROM accruals", script, StringComparison.Ordinal);
         Assert.Contains("No Codex acceptance records were found", script, StringComparison.Ordinal);
         Assert.DoesNotContain("DROP TABLE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);

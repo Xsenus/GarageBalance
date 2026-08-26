@@ -105,7 +105,8 @@ WHERE concat_ws(' ', "LastName", "FirstName", "MiddleName", "Phone", "Address", 
 DO $guard$
 DECLARE
   target_count integer;
-  dependent_count integer;
+  protected_financial_count integer;
+  allocation_count integer;
 BEGIN
   SELECT (SELECT count(*) FROM codex_departments)
        + (SELECT count(*) FROM codex_staff)
@@ -123,18 +124,25 @@ BEGIN
   SELECT (SELECT count(*) FROM financial_operations WHERE "GarageId" IN (SELECT "Id" FROM codex_garages))
        + (SELECT count(*) FROM financial_operations WHERE "SupplierId" IN (SELECT "Id" FROM codex_suppliers))
        + (SELECT count(*) FROM financial_operations WHERE "StaffMemberId" IN (SELECT "Id" FROM codex_staff))
-       + (SELECT count(*) FROM accruals WHERE "GarageId" IN (SELECT "Id" FROM codex_garages))
-       + (SELECT count(*) FROM meter_readings WHERE "GarageId" IN (SELECT "Id" FROM codex_garages))
-       + (SELECT count(*) FROM meter_devices WHERE "GarageId" IN (SELECT "Id" FROM codex_garages))
        + (SELECT count(*) FROM supplier_accruals WHERE "SupplierId" IN (SELECT "Id" FROM codex_suppliers))
        + (SELECT count(*) FROM staff_salary_adjustments WHERE "StaffMemberId" IN (SELECT "Id" FROM codex_staff))
-    INTO dependent_count;
-  IF dependent_count <> 0 THEN
-    RAISE EXCEPTION 'Codex candidates have % financial dependencies; cleanup cancelled', dependent_count;
+    INTO protected_financial_count;
+  IF protected_financial_count <> 0 THEN
+    RAISE EXCEPTION 'Codex candidates have % protected payments or payouts; cleanup cancelled', protected_financial_count;
+  END IF;
+
+  SELECT count(*) INTO allocation_count
+  FROM accrual_payment_allocations
+  WHERE "AccrualId" IN (SELECT "Id" FROM accruals WHERE "GarageId" IN (SELECT "Id" FROM codex_garages));
+  IF allocation_count <> 0 THEN
+    RAISE EXCEPTION 'Codex garage accruals have % payment allocations; cleanup cancelled', allocation_count;
   END IF;
 END
 $guard$;
 
+DELETE FROM meter_readings WHERE "GarageId" IN (SELECT "Id" FROM codex_garages);
+DELETE FROM meter_devices WHERE "GarageId" IN (SELECT "Id" FROM codex_garages);
+DELETE FROM accruals WHERE "GarageId" IN (SELECT "Id" FROM codex_garages);
 DELETE FROM opening_balance_adjustments
 WHERE ("TargetKind" = 'garage' AND "TargetId" IN (SELECT "Id" FROM codex_garages))
    OR ("TargetKind" = 'supplier' AND "TargetId" IN (SELECT "Id" FROM codex_suppliers));
