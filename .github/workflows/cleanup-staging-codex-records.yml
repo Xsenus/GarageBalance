@@ -1,0 +1,58 @@
+name: Cleanup staging Codex records
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PURGE GARAGEBALANCE STAGING CODEX
+        required: true
+        type: string
+
+concurrency:
+  group: garagebalance-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Backup, purge and verify Codex acceptance records
+    if: ${{ inputs.confirmation == 'PURGE GARAGEBALANCE STAGING CODEX' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+
+    steps:
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/garagebalance_staging
+          chmod 600 ~/.ssh/garagebalance_staging
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host garagebalance-staging
+            HostName ${{ secrets.VPS_HOST }}
+            User ${{ secrets.VPS_DEPLOY_USER }}
+            IdentityFile ~/.ssh/garagebalance_staging
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Cleanup Codex acceptance records
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: >-
+          ssh garagebalance-staging
+          "sudo /usr/local/bin/garagebalance-deploy-apply cleanup-codex-records '${CONFIRMATION}'"
+
+      - name: Verify public staging
+        run: |
+          curl --http2 --compressed --fail --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            https://sgk.blagodaty.ru/health/ready
+          curl --http2 --compressed --fail --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            https://sgk.blagodaty.ru/ --output /dev/null

@@ -133,6 +133,7 @@ jobs:
             infrastructure/scripts/garagebalance-healthcheck.sh \
             infrastructure/scripts/garagebalance-performance-check.sh \
             infrastructure/scripts/prepare-staging-showcase.sh \
+            infrastructure/scripts/cleanup-staging-codex-records.sh \
             infrastructure/scripts/install-vps-performance-configuration.sh \
             infrastructure/scripts/vps-apply-release.sh
           test -s artifacts/api.tar.gz
