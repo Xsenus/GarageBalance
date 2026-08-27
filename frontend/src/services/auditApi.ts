@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type AuditEventDto = {
   id: string
@@ -44,34 +44,23 @@ export type AuditClient = {
   exportEventsXlsx(accessToken: string, params?: AuditEventQuery): Promise<Blob>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-
 async function requestJson<TResponse>(accessToken: string, path: string, signal?: AbortSignal): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
+  const response = await authenticatedApiFetch(accessToken, path, {
     signal,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
   })
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось загрузить историю изменений.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось загрузить историю изменений.'))
   }
 
   return response.json()
 }
 
 async function requestBlob(accessToken: string, path: string): Promise<Blob> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+  const response = await authenticatedApiFetch(accessToken, path)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось скачать историю изменений.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось скачать историю изменений.'))
   }
 
   return response.blob()

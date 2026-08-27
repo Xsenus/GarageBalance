@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedJsonApiFetch } from './authenticatedApiFetch'
 
 export type PaymentAllocationDto = {
   allocationKind: 'starting_balance' | 'month' | 'overpayment'
@@ -728,7 +728,6 @@ export type FinanceClient = {
   replaceMeterDevice?(accessToken: string, request: ReplaceMeterDeviceRequest): Promise<MeterDeviceReplacementDto>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const defaultFinanceListLimit = 50
 
 function withLimit(path: string, limit = defaultFinanceListLimit): string {
@@ -760,14 +759,7 @@ function toMonthEnd(value?: string): string | undefined {
 }
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedJsonApiFetch(accessToken, path, init)
 
   if (!response.ok) {
     const problem = await response.json().catch(() => null)

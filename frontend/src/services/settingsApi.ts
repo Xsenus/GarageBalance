@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedApiFetch, authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type PaymentDisplaySettingsDto = {
   showAllGarageOperationsByDefault: boolean
@@ -123,21 +123,11 @@ export type ApplicationSettingsClient = {
   createDiagnosticPackage(accessToken: string): Promise<Blob>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedJsonApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось загрузить настройки отображения.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось загрузить настройки отображения.'))
   }
 
   return response.json()
@@ -149,13 +139,9 @@ async function requestBlob(
   init?: RequestInit,
   fallbackMessage = 'Не удалось сформировать диагностический пакет.',
 ): Promise<Blob> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${accessToken}`, ...init?.headers },
-  })
+  const response = await authenticatedApiFetch(accessToken, path, init)
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? fallbackMessage)
+    throw new Error(await readApiErrorMessage(response, fallbackMessage))
   }
   return response.blob()
 }

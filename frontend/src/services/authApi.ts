@@ -1,4 +1,5 @@
 import { apiFetch } from './apiFetch'
+import { authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type CurrentUserDto = {
   id: string
@@ -48,26 +49,20 @@ async function postAuth<TRequest>(path: string, request: TRequest): Promise<Auth
   })
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить вход.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить вход.'))
   }
 
   return response.json()
 }
 
 async function putAuthorized<TRequest, TResponse>(path: string, accessToken: string, request: TRequest): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
+  const response = await authenticatedJsonApiFetch(accessToken, path, {
     method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(request),
   })
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить действие.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить действие.'))
   }
 
   return response.json()

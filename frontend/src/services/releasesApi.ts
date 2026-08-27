@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type AppReleaseItemDto = {
   type: string
@@ -41,21 +41,11 @@ export type ReleaseClient = {
   publishRelease(accessToken: string, releaseId: string): Promise<AppReleaseDto>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-
 async function requestJson<TResponse>(accessToken: string, path: string, init: RequestInit = {}): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...init.headers,
-    },
-  })
+  const response = await authenticatedJsonApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось загрузить историю обновлений.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось загрузить историю обновлений.'))
   }
 
   return response.json()

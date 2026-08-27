@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type AccessImportCheckDto = {
   code: string
@@ -94,37 +94,21 @@ export type ImportClient = {
   resolveQuarantineItem(accessToken: string, itemId: string, resolutionComment?: string): Promise<AccessImportQuarantineItemDto>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить импорт.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить импорт.'))
   }
 
   return response.json()
 }
 
 async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось скачать отчет импорта.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось скачать отчет импорта.'))
   }
 
   return response.blob()

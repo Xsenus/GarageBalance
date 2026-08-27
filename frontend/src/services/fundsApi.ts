@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedApiFetch, authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type FundDto = {
   id: string
@@ -82,7 +82,6 @@ export type FundsClient = {
   restoreOperation(accessToken: string, operationId: string): Promise<FundOperationDto>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const fundsResponseCacheLifetimeMs = 60_000
 
 type FundsCacheEntry = {
@@ -135,35 +134,20 @@ function getCachedFunds(accessToken: string): Promise<FundDto[]> {
 }
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedJsonApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить операцию фонда.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить операцию фонда.'))
   }
 
   return response.json()
 }
 
 async function requestVoid(accessToken: string, path: string, init?: RequestInit): Promise<void> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить операцию фонда.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить операцию фонда.'))
   }
 }
 

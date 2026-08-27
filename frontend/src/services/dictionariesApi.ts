@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedJsonApiFetch } from './authenticatedApiFetch'
 
 export type OwnerDto = {
   id: string
@@ -493,7 +493,6 @@ export type DictionaryClient = {
   restoreIrregularPayment(accessToken: string, id: string): Promise<IrregularPaymentDto>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const defaultDictionaryListLimit = 100
 const dictionaryResponseCacheLifetimeMs = 60_000
 
@@ -583,14 +582,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
     }
   }
 
-  const responsePromise = apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  }).then(async (response) => {
+  const responsePromise = authenticatedJsonApiFetch(accessToken, path, init).then(async (response) => {
     if (!response.ok) {
       const problem = await response.json().catch(() => null)
       const code = typeof problem?.code === 'string' ? problem.code : typeof problem?.title === 'string' ? problem.title : null

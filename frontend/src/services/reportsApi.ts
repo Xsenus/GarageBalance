@@ -1,4 +1,4 @@
-import { apiFetch } from './apiFetch'
+import { authenticatedApiFetch, authenticatedJsonBodyApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type MonthlyReportRowDto = {
   accountingMonth: string
@@ -506,38 +506,21 @@ export type ReportClient = {
   ): Promise<Blob>
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedJsonBodyApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось сформировать отчет.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось сформировать отчет.'))
   }
 
   return response.status === 204 ? undefined as TResponse : response.json()
 }
 
 async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
-  const response = await apiFetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...init?.headers,
-    },
-  })
+  const response = await authenticatedApiFetch(accessToken, path, init)
 
   if (!response.ok) {
-    const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выгрузить отчет.')
+    throw new Error(await readApiErrorMessage(response, 'Не удалось выгрузить отчет.'))
   }
 
   return response.blob()

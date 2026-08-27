@@ -10,11 +10,15 @@ describe('frontend API base URL', () => {
     const serviceFiles = readdirSync(servicesDir).filter((file) => file.endsWith('Api.ts'))
 
     expect(serviceFiles.length).toBeGreaterThan(0)
+    expect(readFileSync(join(servicesDir, 'authenticatedApiFetch.ts'), 'utf8')).toContain("import.meta.env.VITE_API_BASE_URL ?? ''")
 
     for (const file of serviceFiles) {
       const content = readFileSync(join(servicesDir, file), 'utf8')
 
-      expect(content).toContain("import.meta.env.VITE_API_BASE_URL ?? ''")
+      expect(
+        content.includes("import.meta.env.VITE_API_BASE_URL ?? ''") ||
+        content.includes("from './authenticatedApiFetch'"),
+      ).toBe(true)
       expect(content).not.toContain('http://127.0.0.1:5080')
       expect(content).not.toContain('http://localhost:5080')
     }
