@@ -890,6 +890,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const supplierContactsRef = useRef<SupplierContactDto[]>([])
   const loadedSupplierContactsRef = useRef(new Set<string>())
   const supplierEditorRequestSequenceRef = useRef(0)
+  const supplierEditorRequestControllerRef = useRef<AbortController | null>(null)
   const [supplierEditorLoadingId, setSupplierEditorLoadingId] = useState<string | null>(null)
   const garagePageRequestSequenceRef = useRef(0)
   const garagePageRequestControllerRef = useRef<AbortController | null>(null)
@@ -908,7 +909,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     staffPageRequestControllerRef.current?.abort()
     contractorReferenceControllersRef.current.garages?.abort()
     contractorReferenceControllersRef.current.suppliers?.abort()
+    supplierEditorRequestControllerRef.current?.abort()
   }, [])
+  useEffect(() => () => {
+    if (activeSection !== 'staff') {
+      contractorReferenceControllersRef.current[activeSection]?.abort()
+    }
+    if (activeSection === 'suppliers') {
+      supplierEditorRequestControllerRef.current?.abort()
+      supplierEditorRequestSequenceRef.current += 1
+    }
+  }, [activeSection])
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
@@ -960,7 +971,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         } else {
           const [groups, loadedChargeServices, loadedIncomeTypes, loadedTariffs, loadedFunds] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true, undefined, undefined, controller.signal),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             fundsClient.getFundOptions(auth.accessToken, controller.signal),
@@ -995,18 +1006,21 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const openSupplierEditor = useCallback(async (row: ContractorSupplierRow) => {
     setSupplierContextMenu(null)
     setFormStateError(null)
+    supplierEditorRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    supplierEditorRequestControllerRef.current = controller
     const requestSequence = ++supplierEditorRequestSequenceRef.current
     setSupplierEditorLoadingId(row.id)
     try {
       const shouldLoadContacts = isBackendDictionaryId(row.id) && !loadedSupplierContactsRef.current.has(row.id)
       const contactsRequest = shouldLoadContacts
-        ? dictionaryClient.getSupplierContacts(auth.accessToken, row.id, undefined, contractorsDictionaryListLimit, true)
+        ? dictionaryClient.getSupplierContacts(auth.accessToken, row.id, undefined, contractorsDictionaryListLimit, true, controller.signal)
         : Promise.resolve<SupplierContactDto[] | null>(null)
       const [referencesReady, loadedContacts] = await Promise.all([
         ensureContractorReferences('suppliers'),
         contactsRequest,
       ])
-      if (!referencesReady || requestSequence !== supplierEditorRequestSequenceRef.current) return
+      if (controller.signal.aborted || !referencesReady || requestSequence !== supplierEditorRequestSequenceRef.current) return
 
       if (!isBackendDictionaryId(row.id)) {
         setModal({ type: 'supplier', item: row })
@@ -1034,11 +1048,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       const nextRow = normalizeSupplierPrototype({ ...row, contacts: contactRows })
       setModal({ type: 'supplier', item: nextRow })
     } catch (error) {
-      if (requestSequence === supplierEditorRequestSequenceRef.current) {
+      if (!controller.signal.aborted && requestSequence === supplierEditorRequestSequenceRef.current) {
         setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контакты поставщика.')
       }
     } finally {
-      if (requestSequence === supplierEditorRequestSequenceRef.current) {
+      if (supplierEditorRequestControllerRef.current === controller) {
+        supplierEditorRequestControllerRef.current = null
         setSupplierEditorLoadingId(null)
       }
     }
@@ -1076,7 +1091,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           }
         } else {
           const [departmentRows, staffRows] = await Promise.all([
-            dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
+            dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getStaffMembersPage
               ? dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true, undefined, undefined, controller.signal)
               : dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),

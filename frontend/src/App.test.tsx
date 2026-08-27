@@ -4344,6 +4344,78 @@ describe('App', () => {
     expect(getSupplierContacts).toHaveBeenCalledTimes(1)
   })
 
+  it('cancels pending supplier-editor references when leaving the supplier tab', async () => {
+    const user = userEvent.setup()
+    const group = createGroup({ id: 'group-supplier-cancellation', name: 'Коммунальные услуги' })
+    const supplier = createSupplier({
+      id: '22222222-2222-4222-8222-222222222226',
+      name: 'Поставщик с отменой загрузки',
+      groupId: group.id,
+      groupName: group.name,
+    })
+    let contactsSignal: AbortSignal | undefined
+    let chargeServicesSignal: AbortSignal | undefined
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [group],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts: (...args: Parameters<DictionaryClient['getSupplierContacts']>) => {
+        contactsSignal = args[5]
+        return new Promise<SupplierContactDto[]>(() => undefined)
+      },
+      getChargeServiceSettings: (...args: Parameters<DictionaryClient['getChargeServiceSettings']>) => {
+        chargeServicesSignal = args[6]
+        return new Promise<ChargeServiceSettingDto[]>(() => undefined)
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    const supplierRow = within(suppliersTable).getByText(supplier.name).closest('[role="row"]')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика не найдена.')
+    }
+
+    await user.click(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` }))
+    await waitFor(() => {
+      expect(contactsSignal).toBeDefined()
+      expect(chargeServicesSignal).toBeDefined()
+    })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' }))
+
+    expect(contactsSignal?.aborted).toBe(true)
+    expect(chargeServicesSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: supplier.name })).not.toBeInTheDocument()
+  })
+
+  it('cancels the pending staff-department request when leaving the staff tab', async () => {
+    const user = userEvent.setup()
+    let departmentsSignal: AbortSignal | undefined
+    const dictionaryClient = createDictionaryClient({
+      getStaffDepartments: (...args: Parameters<DictionaryClient['getStaffDepartments']>) => {
+        departmentsSignal = args[3]
+        return new Promise<StaffDepartmentDto[]>(() => undefined)
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    await waitFor(() => expect(departmentsSignal).toBeDefined())
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' }))
+
+    expect(departmentsSignal?.aborted).toBe(true)
+  })
+
   it('reports a supplier contact loading error when editor references are not ready', async () => {
     const user = userEvent.setup()
     const group = createGroup({ id: 'group-water-loading', name: 'Коммунальные услуги' })
