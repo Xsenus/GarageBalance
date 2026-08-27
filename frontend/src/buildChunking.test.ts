@@ -5,6 +5,8 @@ describe('production chunking', () => {
   it('keeps shared controls and icons in the runtime chunk', () => {
     expect(getManualChunkName('C:\\project\\src\\shared\\LocalizedDatePicker.tsx')).toBe('app-runtime')
     expect(getManualChunkName('/project/node_modules/lucide-react/dist/esm/icons/save.js')).toBe('app-runtime')
+    expect(getManualChunkName('/project/src/services/apiFetch.ts')).toBe('app-runtime')
+    expect(getManualChunkName('C:\\project\\src\\services\\dictionaryResponseCache.ts')).toBe('app-runtime')
   })
 
   it('keeps feature groups isolated on Windows and Unix paths', () => {

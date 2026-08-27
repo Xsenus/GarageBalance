@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { extname, join, resolve } from 'node:path'
+import { dirname, extname, join, resolve } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 const budget = {
   mainJsGzipBytes: 180 * 1024,
+  initialJsGzipBytes: 110 * 1024,
   mainCssGzipBytes: 40 * 1024,
   totalAssetsGzipBytes: 262 * 1024,
 }
@@ -21,6 +22,28 @@ function collectAssetFiles(directory) {
 
 function measureGzipBytes(filePath) {
   return gzipSync(readFileSync(filePath)).length
+}
+
+function collectStaticJsGraph(entryPath, visited = new Set()) {
+  if (visited.has(entryPath)) {
+    return visited
+  }
+
+  visited.add(entryPath)
+  const source = readFileSync(entryPath, 'utf8')
+  const importSpecifiers = [
+    ...source.matchAll(/\bfrom["'](\.\/[^"']+\.js)["']/g),
+    ...source.matchAll(/\bimport["'](\.\/[^"']+\.js)["']/g),
+  ].map((match) => match[1])
+
+  for (const specifier of importSpecifiers) {
+    const dependencyPath = resolve(dirname(entryPath), specifier)
+    if (existsSync(dependencyPath)) {
+      collectStaticJsGraph(dependencyPath, visited)
+    }
+  }
+
+  return visited
 }
 
 function fail(message) {
@@ -49,6 +72,15 @@ if (!existsSync(assetsPath)) {
 
   const measuredAssets = assets.map((filePath) => ({ filePath, gzipBytes: measureGzipBytes(filePath) }))
   const totalAssetsGzipBytes = measuredAssets.reduce((total, asset) => total + asset.gzipBytes, 0)
+  const indexHtml = readFileSync(join(distPath, 'index.html'), 'utf8')
+  const entrySource = /<script\b[^>]*\bsrc=["']([^"']+\.js)["']/.exec(indexHtml)?.[1]
+  if (!entrySource) {
+    fail('Bundle budget check failed: production entry script was not found in index.html.')
+  }
+  const initialJsAssets = entrySource
+    ? collectStaticJsGraph(join(distPath, entrySource.replace(/^\/+/, '')))
+    : new Set()
+  const initialJsGzipBytes = [...initialJsAssets].reduce((total, filePath) => total + measureGzipBytes(filePath), 0)
   const largestJsAsset = measuredAssets
     .filter((asset) => extname(asset.filePath) === '.js')
     .sort((left, right) => right.gzipBytes - left.gzipBytes)[0]
@@ -57,11 +89,16 @@ if (!existsSync(assetsPath)) {
     .sort((left, right) => right.gzipBytes - left.gzipBytes)[0]
 
   console.log(`main JS gzip: ${formatBytes(largestJsAsset.gzipBytes)} / ${formatBytes(budget.mainJsGzipBytes)}`)
+  console.log(`initial JS gzip: ${formatBytes(initialJsGzipBytes)} / ${formatBytes(budget.initialJsGzipBytes)}`)
   console.log(`main CSS gzip: ${formatBytes(largestCssAsset.gzipBytes)} / ${formatBytes(budget.mainCssGzipBytes)}`)
   console.log(`total JS/CSS gzip: ${formatBytes(totalAssetsGzipBytes)} / ${formatBytes(budget.totalAssetsGzipBytes)}`)
 
   if (largestJsAsset.gzipBytes > budget.mainJsGzipBytes) {
     fail(`Bundle budget check failed: main JS gzip exceeds ${formatBytes(budget.mainJsGzipBytes)}.`)
+  }
+
+  if (initialJsGzipBytes > budget.initialJsGzipBytes) {
+    fail(`Bundle budget check failed: initial JS gzip exceeds ${formatBytes(budget.initialJsGzipBytes)}.`)
   }
 
   if (largestCssAsset.gzipBytes > budget.mainCssGzipBytes) {

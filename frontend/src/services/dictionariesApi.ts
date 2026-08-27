@@ -1,4 +1,11 @@
 import { authenticatedJsonApiFetch } from './authenticatedApiFetch'
+import {
+  getDictionaryCacheContext,
+  invalidateDictionaryResponseCache,
+  storeDictionaryResponse,
+} from './dictionaryResponseCache'
+
+export { clearDictionaryResponseCache } from './dictionaryResponseCache'
 
 export type OwnerDto = {
   id: string
@@ -494,66 +501,6 @@ export type DictionaryClient = {
 }
 
 const defaultDictionaryListLimit = 100
-const dictionaryResponseCacheLifetimeMs = 60_000
-
-type DictionaryCacheEntry = {
-  accessToken: string
-  expiresAt: number
-  response: Promise<unknown>
-  tag: string
-}
-
-const dictionaryResponseCache = new Map<string, DictionaryCacheEntry>()
-const dictionaryCacheVersions = new Map<string, number>()
-
-const dictionaryCacheDependencies: Record<string, string[]> = {
-  owners: ['owners', 'garages'],
-  garages: ['garages'],
-  'supplier-groups': ['supplier-groups', 'suppliers'],
-  suppliers: ['suppliers', 'supplier-contacts'],
-  'supplier-contacts': ['supplier-contacts'],
-  'staff-departments': ['staff-departments', 'staff-members'],
-  'staff-members': ['staff-members', 'staff-departments'],
-  'income-types': ['income-types', 'charge-services', 'fee-campaigns'],
-  'expense-types': ['expense-types', 'charge-services', 'suppliers'],
-  'measurement-units': ['measurement-units', 'charge-services'],
-  tariffs: ['tariffs', 'charge-services'],
-  'charge-services': ['charge-services', 'tariffs', 'suppliers', 'measurement-units'],
-  'fee-campaigns': ['fee-campaigns'],
-  'irregular-payments': ['irregular-payments'],
-}
-
-export function clearDictionaryResponseCache() {
-  dictionaryResponseCache.clear()
-  dictionaryCacheVersions.clear()
-}
-
-function getDictionaryCacheTag(path: string): string | null {
-  const match = /^\/api\/dictionaries\/([^/?]+)/.exec(path)
-  return match?.[1] ?? null
-}
-
-function getDictionaryCacheVersion(accessToken: string, tag: string): number {
-  return dictionaryCacheVersions.get(`${accessToken}\n${tag}`) ?? 0
-}
-
-function invalidateDictionaryResponseCache(accessToken: string, mutationTag: string | null) {
-  if (!mutationTag) {
-    return
-  }
-
-  const invalidatedTags = dictionaryCacheDependencies[mutationTag] ?? [mutationTag]
-  for (const tag of invalidatedTags) {
-    const versionKey = `${accessToken}\n${tag}`
-    dictionaryCacheVersions.set(versionKey, getDictionaryCacheVersion(accessToken, tag) + 1)
-  }
-
-  for (const [cacheKey, entry] of dictionaryResponseCache) {
-    if (entry.accessToken === accessToken && invalidatedTags.includes(entry.tag)) {
-      dictionaryResponseCache.delete(cacheKey)
-    }
-  }
-}
 
 export class DictionaryApiError extends Error {
   readonly code: string | null
@@ -569,17 +516,10 @@ export class DictionaryApiError extends Error {
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const method = init?.method?.toUpperCase() ?? 'GET'
-  const cacheTag = getDictionaryCacheTag(path)
-  const cacheVersion = cacheTag ? getDictionaryCacheVersion(accessToken, cacheTag) : 0
-  const cacheKey = `${accessToken}\n${cacheTag ?? ''}\n${cacheVersion}\n${path}`
-  if (method === 'GET' && cacheTag && !init?.signal) {
-    const cached = dictionaryResponseCache.get(cacheKey)
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.response as Promise<TResponse>
-    }
-    if (cached) {
-      dictionaryResponseCache.delete(cacheKey)
-    }
+  const canUseCache = method === 'GET' && !init?.signal
+  const { cacheKey, cacheTag, cachedResponse } = getDictionaryCacheContext<TResponse>(accessToken, path, canUseCache)
+  if (canUseCache && cacheTag && cachedResponse) {
+    return cachedResponse
   }
 
   const responsePromise = authenticatedJsonApiFetch(accessToken, path, init).then(async (response) => {
@@ -603,18 +543,8 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
     return result
   })
 
-  if (method === 'GET' && cacheTag && !init?.signal) {
-    dictionaryResponseCache.set(cacheKey, {
-      accessToken,
-      expiresAt: Date.now() + dictionaryResponseCacheLifetimeMs,
-      response: responsePromise,
-      tag: cacheTag,
-    })
-    responsePromise.catch(() => {
-      if (dictionaryResponseCache.get(cacheKey)?.response === responsePromise) {
-        dictionaryResponseCache.delete(cacheKey)
-      }
-    })
+  if (canUseCache && cacheTag) {
+    storeDictionaryResponse(accessToken, cacheTag, cacheKey, responsePromise)
   }
 
   return responsePromise

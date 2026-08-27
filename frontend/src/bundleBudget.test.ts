@@ -17,11 +17,13 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('Run npm run build first')
   })
 
-  it('keeps explicit gzip budgets for JS, CSS and total production assets', () => {
+  it('keeps explicit gzip budgets for initial JS, largest assets and the total production bundle', () => {
     expect(budgetScript).toContain('mainJsGzipBytes: 180 * 1024')
+    expect(budgetScript).toContain('initialJsGzipBytes: 110 * 1024')
     expect(budgetScript).toContain('mainCssGzipBytes: 40 * 1024')
     expect(budgetScript).toContain('totalAssetsGzipBytes: 262 * 1024')
     expect(budgetScript).toContain('gzipSync')
+    expect(budgetScript).toContain('collectStaticJsGraph')
   })
 
   it('groups the compact release panel with reporting instead of creating a separate tiny chunk', () => {

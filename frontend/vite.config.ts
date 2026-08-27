@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export function getManualChunkName(id: string): string | undefined {
+  if (/[/\\]src[/\\]services[/\\](apiFetch|authenticatedApiFetch|dictionaryResponseCache)\./.test(id)) return 'app-runtime'
   if (/[/\\]src[/\\]features[/\\](finance|funds)[/\\]/.test(id)) return 'financial-operations'
   if (/[/\\]src[/\\]features[/\\](contractors|tariffs)[/\\]/.test(id)) return 'cooperative-setup'
   if (/[/\\]src[/\\]features[/\\](settings[/\\]PasswordPanel|users[/\\]UserManagementPanel)\./.test(id)) return 'app-runtime'
