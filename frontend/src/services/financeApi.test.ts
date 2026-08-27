@@ -57,6 +57,37 @@ describe('financeApi', () => {
     })
   })
 
+  it('forwards cancellation for compact finance previews', async () => {
+    const fetchSignals: AbortSignal[] = []
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal
+      if (signal) {
+        fetchSignals.push(signal)
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = Promise.all([
+      financeApi.getOperations('token', 8, controller.signal),
+      financeApi.getAccruals('token', 8, controller.signal),
+      financeApi.getSupplierAccruals('token', 8, controller.signal),
+      financeApi.getMeterReadings('token', 8, controller.signal),
+    ])
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(4))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchSignals.every((signal) => signal.aborted)).toBe(true)
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/finance/operations?limit=8',
+      '/api/finance/accruals?limit=8',
+      '/api/finance/supplier-accruals?limit=8',
+      '/api/finance/meter-readings?limit=8',
+    ])
+  })
+
   it('posts regular catalog accrual generation to the catalog endpoint', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       accountingMonth: '2026-06-01',

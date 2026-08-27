@@ -373,6 +373,7 @@ export function FinancePanel({
   const financeReferenceBundlePromiseRef = useRef<Promise<void> | null>(null)
   const financeReferenceBundleLoadedRef = useRef(false)
   const financeReferenceBundleGenerationRef = useRef(0)
+  const financeReferenceBundleControllerRef = useRef<AbortController | null>(null)
   const financeGarageReferencesPromiseRef = useRef<Promise<GarageDto[] | undefined> | null>(null)
   const financeGarageReferencesRef = useRef<GarageDto[] | null>(null)
   const financeGarageReferencesControllerRef = useRef<AbortController | null>(null)
@@ -544,17 +545,19 @@ export function FinancePanel({
 
     if (!financeReferenceBundlePromiseRef.current) {
       const generation = financeReferenceBundleGenerationRef.current
+      const controller = new AbortController()
+      financeReferenceBundleControllerRef.current = controller
       setFinanceReferenceLoading((value) => value | 1)
       setError(null)
       financeReferenceBundlePromiseRef.current = Promise.all([
-        dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-        dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-        dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+        dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+        dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+        dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+        dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+        dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
       ]).then(([loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedIrregularPayments]) => {
-        if (generation !== financeReferenceBundleGenerationRef.current) {
+        if (controller.signal.aborted || generation !== financeReferenceBundleGenerationRef.current) {
           return
         }
 
@@ -598,18 +601,22 @@ export function FinancePanel({
     }
 
     const request = financeReferenceBundlePromiseRef.current
+    const requestController = financeReferenceBundleControllerRef.current
     try {
       await request
       return financeReferenceBundleLoadedRef.current
     } catch (caught) {
-      if (request === financeReferenceBundlePromiseRef.current) {
+      if (!requestController?.signal.aborted && request === financeReferenceBundlePromiseRef.current) {
         setError(caught instanceof Error ? caught.message : 'Не удалось загрузить справочники для формы платежа.')
       }
       return false
     } finally {
       if (request === financeReferenceBundlePromiseRef.current) {
         financeReferenceBundlePromiseRef.current = null
-        setFinanceReferenceLoading((value) => value & ~1)
+        financeReferenceBundleControllerRef.current = null
+        if (!requestController?.signal.aborted) {
+          setFinanceReferenceLoading((value) => value & ~1)
+        }
       }
     }
   }, [auth.accessToken, dictionaryClient])
@@ -664,6 +671,8 @@ export function FinancePanel({
   useEffect(() => {
     financeReferenceBundleGenerationRef.current += 1
     const referenceBundleGeneration = financeReferenceBundleGenerationRef.current
+    financeReferenceBundleControllerRef.current?.abort()
+    financeReferenceBundleControllerRef.current = null
     financeReferenceBundleLoadedRef.current = false
     financeReferenceBundlePromiseRef.current = null
     financeGarageReferencesControllerRef.current?.abort()
@@ -679,13 +688,15 @@ export function FinancePanel({
     })
     return () => {
       financeReferenceBundleGenerationRef.current += 1
+      financeReferenceBundleControllerRef.current?.abort()
       financeGarageReferencesControllerRef.current?.abort()
     }
   }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
-    settingsClient.getPaymentDisplaySettings(auth.accessToken)
+    const controller = new AbortController()
+    settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal)
       .then((settings) => {
         if (!ignore) {
           setShowAllGarageOperations(settings.showAllGarageOperationsByDefault)
@@ -706,6 +717,7 @@ export function FinancePanel({
 
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [auth.accessToken, settingsClient])
 
@@ -722,6 +734,7 @@ export function FinancePanel({
     }
 
     let ignore = false
+    const controller = new AbortController()
     const handle = window.setTimeout(() => {
       function loadPreview<T>(
         key: keyof FinancePreviewStatuses,
@@ -746,14 +759,15 @@ export function FinancePanel({
           })
       }
 
-      loadPreview('operations', financeClient.getOperations(auth.accessToken, financePreviewRequestLimit), setOperations)
-      loadPreview('accruals', financeClient.getAccruals(auth.accessToken, financePreviewRequestLimit), setAccruals)
-      loadPreview('supplierAccruals', financeClient.getSupplierAccruals(auth.accessToken, financePreviewRequestLimit), setSupplierAccruals)
-      loadPreview('meterReadings', financeClient.getMeterReadings(auth.accessToken, financePreviewRequestLimit), setMeterReadings)
+      loadPreview('operations', financeClient.getOperations(auth.accessToken, financePreviewRequestLimit, controller.signal), setOperations)
+      loadPreview('accruals', financeClient.getAccruals(auth.accessToken, financePreviewRequestLimit, controller.signal), setAccruals)
+      loadPreview('supplierAccruals', financeClient.getSupplierAccruals(auth.accessToken, financePreviewRequestLimit, controller.signal), setSupplierAccruals)
+      loadPreview('meterReadings', financeClient.getMeterReadings(auth.accessToken, financePreviewRequestLimit, controller.signal), setMeterReadings)
     }, 500)
 
     return () => {
       ignore = true
+      controller.abort()
       window.clearTimeout(handle)
     }
   }, [auth.accessToken, financeClient, paymentDisplaySettingsLoaded, showAllGarageOperations])

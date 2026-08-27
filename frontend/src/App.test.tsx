@@ -15297,6 +15297,51 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument()
   })
 
+  it('cancels every expanded-payment startup request when leaving payments', async () => {
+    const user = userEvent.setup()
+    const startupSignals = new Map<string, AbortSignal>()
+    const pendingRead = (name: string, signal?: AbortSignal) => {
+      if (signal) startupSignals.set(name, signal)
+      return new Promise<never>(() => undefined)
+    }
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: (_token, _search, _limit, _includeArchived, signal) => pendingRead('supplier-groups', signal),
+      getSuppliers: (_token, _groupId, _search, _limit, _includeArchived, signal) => pendingRead('suppliers', signal),
+      getStaffMembers: (_token, _departmentId, _search, _limit, _includeArchived, signal) => pendingRead('staff', signal),
+      getIncomeTypes: (_token, _search, _limit, _includeArchived, signal) => pendingRead('income-types', signal),
+      getExpenseTypes: (_token, _search, _limit, _includeArchived, signal) => pendingRead('expense-types', signal),
+      getIrregularPayments: (_token, _search, _limit, _includeArchived, signal) => pendingRead('irregular-payments', signal),
+      getGarages: (_token, _search, _limit, _includeArchived, signal) => pendingRead('garages', signal),
+    })
+    const financeClient = createFinanceClient({
+      getOperations: (_token, _limit, signal) => pendingRead('operations-preview', signal),
+      getAccruals: (_token, _limit, signal) => pendingRead('accruals-preview', signal),
+      getSupplierAccruals: (_token, _limit, signal) => pendingRead('supplier-accruals-preview', signal),
+      getMeterReadings: (_token, _limit, signal) => pendingRead('meter-readings-preview', signal),
+      getOperationsPage: (_token, _params, signal) => pendingRead('operations-page', signal),
+      getSummary: (_token, _params, signal) => pendingRead('summary', signal),
+    })
+    const settingsClient = createSettingsClient({
+      getPaymentDisplaySettings: async (_token, signal) => {
+        if (signal) startupSignals.set('display-settings', signal)
+        return { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    await waitFor(() => expect(startupSignals.size).toBe(14), { timeout: 3000 })
+    const paymentSignals = [...startupSignals.values()]
+
+    await openSection(user, 'Главное меню')
+
+    expect(paymentSignals).toHaveLength(14)
+    expect(paymentSignals.every((signal) => signal.aborted)).toBe(true)
+  })
+
   it('shows a ready payment page without waiting for the summary', async () => {
     const user = userEvent.setup()
     let resolveSummary!: (summary: FinanceSummaryDto) => void
