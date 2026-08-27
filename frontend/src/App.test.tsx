@@ -414,6 +414,28 @@ describe('App', () => {
     await waitFor(() => expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - разрешено' })).toHaveTextContent('Да'))
   })
 
+  it('cancels a pending role request when leaving user management', async () => {
+    const user = userEvent.setup()
+    let rolesSignal: AbortSignal | undefined
+    const userClient = createUserClient({
+      getUsersPage: async (_token, _search, offset = 0, limit = 25) => ({ items: [], totalCount: 0, offset, limit }),
+      getRoles: (_token, signal) => {
+        rolesSignal = signal
+        return new Promise<ManagedRoleDto[]>(() => undefined)
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    await waitFor(() => expect(rolesSignal).toBeDefined())
+    await openSection(user, 'Главное меню')
+
+    expect(rolesSignal?.aborted).toBe(true)
+  })
+
   it('shows icon back button in every dashboard section', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -17411,6 +17433,48 @@ describe('App', () => {
     await user.click(within(reopenedDetailDialog).getByRole('button', { name: 'Открыть раздел: Контрагенты' }))
     expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+  })
+
+  it('cancels stale audit-detail requests when the card closes or the section changes', async () => {
+    const user = userEvent.setup()
+    const auditEvent = createAuditEvent({
+      id: 'audit-detail-cancellation',
+      action: 'dictionary.owner_updated',
+      entityType: 'owner',
+      summary: 'Изменен владелец.',
+      section: 'dictionary',
+      actionKind: 'update',
+    })
+    const detailSignals: AbortSignal[] = []
+    const auth = createAuthResponse({ user: { permissions: ['audit.read'] } })
+    const auditClient = createAuditClient({
+      getEvents: async () => [auditEvent],
+      getEvent: (_token, _id, signal) => {
+        if (signal) detailSignals.push(signal)
+        return new Promise<AuditEventDto>(() => undefined)
+      },
+    })
+
+    render(<App authClient={createAuthClient({ login: async () => auth })} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    const openDetailButton = await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Изменение' })
+
+    await user.click(openDetailButton)
+    const firstDialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    await waitFor(() => expect(detailSignals).toHaveLength(1))
+    await user.click(within(firstDialog).getByRole('button', { name: 'Закрыть карточку события' }))
+    expect(detailSignals[0]?.aborted).toBe(true)
+
+    await user.click(openDetailButton)
+    await waitFor(() => expect(detailSignals).toHaveLength(2))
+    await openSection(user, 'Главное меню')
+
+    expect(detailSignals[1]?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: 'Изменение' })).not.toBeInTheDocument()
   })
 
   it('opens contractor object card from audit event workspace link', async () => {

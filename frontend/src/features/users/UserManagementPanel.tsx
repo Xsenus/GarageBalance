@@ -43,7 +43,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCodes: ['operator'], isActive: true, deactivationReason: '' })
-  const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; promise: Promise<ManagedRoleDto[]> } | null>(null)
+  const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; controller: AbortController; promise: Promise<ManagedRoleDto[]> } | null>(null)
   const busy = saving !== null
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
@@ -68,14 +68,20 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   useEscapeKey(Boolean(deleteTarget) && saving !== 'delete', () => closeDeleteDialog())
   useEscapeKey(Boolean(restoreTarget) && saving !== 'restore', () => closeRestoreDialog())
 
+  useEffect(() => () => {
+    rolesRequestRef.current?.controller.abort()
+  }, [])
+
   const getRolesOnce = useCallback(() => {
     const cached = rolesRequestRef.current
     if (cached?.accessToken === auth.accessToken && cached.client === userClient) {
       return cached.promise
     }
 
-    const request = userClient.getRoles(auth.accessToken)
-    rolesRequestRef.current = { accessToken: auth.accessToken, client: userClient, promise: request }
+    cached?.controller.abort()
+    const controller = new AbortController()
+    const request = userClient.getRoles(auth.accessToken, controller.signal)
+    rolesRequestRef.current = { accessToken: auth.accessToken, client: userClient, controller, promise: request }
     void request.catch(() => {
       if (rolesRequestRef.current?.promise === request) {
         rolesRequestRef.current = null

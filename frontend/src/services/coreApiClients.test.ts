@@ -209,4 +209,22 @@ describe('core API clients', () => {
     expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
     expect(fetchMock.mock.calls[1][1]?.signal).toBeInstanceOf(AbortSignal)
   })
+
+  it('forwards cancellation to the user-role request', async () => {
+    let fetchSignal: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      fetchSignal = init.signal ?? undefined
+      fetchSignal?.addEventListener('abort', () => reject(fetchSignal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = usersApi.getRoles('token', controller.signal)
+    await vi.waitFor(() => expect(fetchSignal).toBeDefined())
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/users/roles')
+    expect(fetchSignal?.aborted).toBe(true)
+  })
 })

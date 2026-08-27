@@ -47,7 +47,7 @@ export type UpdateRolePermissionsRequest = {
 }
 
 export type UserManagementClient = {
-  getRoles(accessToken: string): Promise<ManagedRoleDto[]>
+  getRoles(accessToken: string, signal?: AbortSignal): Promise<ManagedRoleDto[]>
   getUsers(accessToken: string, search?: string, limit?: number): Promise<ManagedUserDto[]>
   getUsersPage(accessToken: string, search?: string, offset?: number, limit?: number, signal?: AbortSignal): Promise<PagedManagedUsersDto>
   createUser(accessToken: string, request: CreateManagedUserRequest): Promise<ManagedUserDto>
@@ -81,8 +81,8 @@ function withQuery(path: string, params: Record<string, string | number | undefi
 }
 
 export const usersApi: UserManagementClient = {
-  getRoles(accessToken) {
-    return requestJson(accessToken, '/api/users/roles')
+  getRoles(accessToken, signal) {
+    return requestJson(accessToken, '/api/users/roles', { signal })
   },
   getUsers(accessToken, search, limit = defaultUserListLimit) {
     return requestJson(accessToken, withQuery('/api/users', { search, limit }))

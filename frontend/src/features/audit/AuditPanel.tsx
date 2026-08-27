@@ -293,6 +293,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [detailState, setDetailState] = useState<{ event: AuditEventDto; loading: boolean; error: string | null } | null>(null)
   const detailRequestIdRef = useRef(0)
+  const detailRequestControllerRef = useRef<AbortController | null>(null)
   useRestoreFocusOnClose(Boolean(detailState))
   const detailCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(detailState))
   const detailDialogRef = useFocusTrap<HTMLElement>(Boolean(detailState))
@@ -357,6 +358,8 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
 
   function closeAuditEventDetail() {
     detailRequestIdRef.current += 1
+    detailRequestControllerRef.current?.abort()
+    detailRequestControllerRef.current = null
     setDetailState(null)
   }
 
@@ -369,9 +372,12 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
   async function openAuditEventDetail(auditEvent: AuditEventDto) {
     const requestId = detailRequestIdRef.current + 1
     detailRequestIdRef.current = requestId
+    detailRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    detailRequestControllerRef.current = controller
     setDetailState({ event: auditEvent, loading: true, error: null })
     try {
-      const loadedEvent = await auditClient.getEvent(auth.accessToken, auditEvent.id)
+      const loadedEvent = await auditClient.getEvent(auth.accessToken, auditEvent.id, controller.signal)
       if (detailRequestIdRef.current === requestId) {
         setDetailState({ event: loadedEvent, loading: false, error: null })
       }
@@ -383,10 +389,18 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           error: caught instanceof Error ? caught.message : 'Не удалось загрузить карточку события.',
         })
       }
+    } finally {
+      if (detailRequestControllerRef.current === controller) {
+        detailRequestControllerRef.current = null
+      }
     }
   }
 
   useEscapeKey(Boolean(detailState), closeAuditEventDetail)
+  useEffect(() => () => {
+    detailRequestIdRef.current += 1
+    detailRequestControllerRef.current?.abort()
+  }, [])
 
   useEffect(() => {
     let ignore = false
