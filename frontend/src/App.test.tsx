@@ -1984,7 +1984,7 @@ describe('App', () => {
 
   it('hides financial report actions until contractor records are saved', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -2040,7 +2040,7 @@ describe('App', () => {
         throw new DictionaryApiError('department_save_failed', 'Отдел не сохранен.', 503)
       },
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -2676,7 +2676,7 @@ describe('App', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.garageColumnWidths') ?? '{}').number).toBe(136))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
-    await waitFor(() => expect(getFundOptions).toHaveBeenCalledWith('token', expect.any(AbortSignal)))
+    expect(getFundOptions).not.toHaveBeenCalled()
     expect(getFunds).not.toHaveBeenCalled()
     const supplierLayoutTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
     expect(supplierLayoutTable).toBeInTheDocument()
@@ -2690,6 +2690,7 @@ describe('App', () => {
 
     const addContractorServiceButton = within(contractorsPanel).getByRole('button', { name: 'Добавить услугу' })
     await user.click(addContractorServiceButton)
+    await waitFor(() => expect(getFundOptions).toHaveBeenCalledWith('token', expect.any(AbortSignal)))
     let serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Черновая услуга')
     await user.keyboard('{Escape}')
@@ -3236,7 +3237,7 @@ describe('App', () => {
       getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
       adjustSupplierOpeningBalance,
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3267,7 +3268,7 @@ describe('App', () => {
       getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
       adjustSupplierOpeningBalance: vi.fn().mockRejectedValue(new Error('Корректировка отклонена сервером.')),
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3295,7 +3296,7 @@ describe('App', () => {
       getSuppliers: async () => [supplier],
       getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
     })
-    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3307,7 +3308,7 @@ describe('App', () => {
     expect(within(await screen.findByRole('dialog', { name: /Поставщик без права/ })).queryByRole('button', { name: 'Корректировать начальный баланс' })).not.toBeInTheDocument()
   })
 
-  it('shows contractor pages without waiting for editor reference dictionaries', async () => {
+  it('shows contractor pages without requesting editor reference dictionaries until a form opens', async () => {
     const user = userEvent.setup()
     let resolveOwners!: (owners: OwnerDto[]) => void
     let resolveSupplierGroups!: (groups: SupplierGroupDto[]) => void
@@ -3322,7 +3323,7 @@ describe('App', () => {
       getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3331,17 +3332,26 @@ describe('App', () => {
 
     expect(await within(contractorsPanel).findByText('77')).toBeInTheDocument()
     expect(within(contractorsPanel).queryByText('Загружаем гаражи')).not.toBeInTheDocument()
+    expect(dictionaryClient.getOwners).not.toHaveBeenCalled()
 
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 77' }))
+    await waitFor(() => expect(dictionaryClient.getOwners).toHaveBeenCalledTimes(1))
     await act(async () => resolveOwners([]))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Гараж 77' })).getByRole('button', { name: 'Отмена' }))
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
 
     expect(await within(contractorsPanel).findByText('Быстрый поставщик')).toBeInTheDocument()
     expect(within(contractorsPanel).queryByText('Загружаем поставщиков')).not.toBeInTheDocument()
+    expect(dictionaryClient.getSupplierGroups).not.toHaveBeenCalled()
 
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить поставщика Быстрый поставщик' }))
+    await waitFor(() => expect(dictionaryClient.getSupplierGroups).toHaveBeenCalledTimes(1))
     await act(async () => resolveSupplierGroups([]))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Быстрый поставщик' })).toBeInTheDocument()
   })
 
-  it('starts contractor editor references only after the visible page finishes loading', async () => {
+  it('starts garage editor references only when the editor opens', async () => {
     const user = userEvent.setup()
     let resolveGaragePage!: (page: PagedResult<GarageDto>) => void
     const garagePagePromise = new Promise<PagedResult<GarageDto>>((resolve) => { resolveGaragePage = resolve })
@@ -3368,13 +3378,19 @@ describe('App', () => {
     }))
 
     expect(await within(contractorsPanel).findByText('91')).toBeInTheDocument()
+    expect(getOwners).not.toHaveBeenCalled()
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 91' }))
     await waitFor(() => expect(getOwners).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('dialog', { name: 'Гараж 91' })).toBeInTheDocument()
   })
 
-  it('keeps a contractor page available when its editor references fail', async () => {
+  it('keeps a contractor page available and reports an editor-reference failure only after opening the form', async () => {
     const user = userEvent.setup()
+    const getOwners = vi.fn()
+      .mockRejectedValueOnce(new Error('Справочник владельцев временно недоступен.'))
+      .mockResolvedValue([] as OwnerDto[])
     const dictionaryClient = createDictionaryClient({
-      getOwners: async () => { throw new Error('Справочник владельцев временно недоступен.') },
+      getOwners,
       getGaragesPage: async (_token, _search, offset = 0, limit = 25) => ({
         items: [createGarage({ id: 'garage-reference-error', number: '78', ownerName: 'Владелец из страницы' })],
         totalCount: 1,
@@ -3391,8 +3407,16 @@ describe('App', () => {
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
 
     expect(await within(contractorsPanel).findByText('78')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Справочник владельцев временно недоступен.')).not.toBeInTheDocument()
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 78' }))
     expect(await within(contractorsPanel).findByText('Справочник владельцев временно недоступен.')).toBeInTheDocument()
     expect(within(contractorsPanel).queryByText('Загружаем гаражи')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Гараж 78' })).not.toBeInTheDocument()
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(getOwners).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(within(contractorsPanel).queryByText('Справочник владельцев временно недоступен.')).not.toBeInTheDocument())
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 78' }))
+    expect(await screen.findByRole('dialog', { name: 'Гараж 78' })).toBeInTheDocument()
   })
 
   it('pages garages, suppliers and staff through server dictionary pages', async () => {
@@ -4231,7 +4255,7 @@ describe('App', () => {
       updateSupplier,
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4293,7 +4317,7 @@ describe('App', () => {
       getSupplierContacts,
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4342,7 +4366,7 @@ describe('App', () => {
       getSupplierContacts,
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))

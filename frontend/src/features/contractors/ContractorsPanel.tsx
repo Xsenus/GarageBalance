@@ -794,6 +794,12 @@ function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   return target.item.fullName || 'Сотрудник без имени'
 }
 
+function applyGarageOwner(row: ContractorGarageRow, owner?: OwnerDto | null): ContractorGarageRow {
+  return owner
+    ? { ...row, owner: row.owner || owner.fullName, phone: owner.phone ?? '', address: owner.address ?? '', meters: owner.meterNotes ?? '' }
+    : row
+}
+
 function FinancialReportPeriodFilters({ filters, targetLabel, onChange }: { filters: FinancialReportFilters; targetLabel: string; onChange: (filters: FinancialReportFilters) => void }) {
   return (
     <div className="balance-history-filters">
@@ -877,6 +883,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const openedInitialTargetRef = useRef<string | null>(null)
   const loadedContractorSectionsRef = useRef<Record<ContractorSection, boolean>>({ garages: false, suppliers: false, staff: false })
   const loadedContractorReferencesRef = useRef<Record<'garages' | 'suppliers', boolean>>({ garages: false, suppliers: false })
+  const contractorReferenceRequestsRef = useRef<Partial<Record<'garages' | 'suppliers', Promise<boolean>>>>({})
+  const contractorReferenceControllersRef = useRef<Partial<Record<'garages' | 'suppliers', AbortController>>>({})
+  const [contractorReferenceLoading, setContractorReferenceLoading] = useState<'garages' | 'suppliers' | null>(null)
   const ownersRef = useRef<OwnerDto[]>([])
   const supplierContactsRef = useRef<SupplierContactDto[]>([])
   const loadedSupplierContactsRef = useRef(new Set<string>())
@@ -897,6 +906,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     garagePageRequestControllerRef.current?.abort()
     supplierPageRequestControllerRef.current?.abort()
     staffPageRequestControllerRef.current?.abort()
+    contractorReferenceControllersRef.current.garages?.abort()
+    contractorReferenceControllersRef.current.suppliers?.abort()
   }, [])
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
@@ -924,35 +935,93 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   useEscapeKey(Boolean(departmentContextMenu), () => setDepartmentContextMenu(null))
   useEscapeKey(Boolean(departmentDeleteTarget), () => closeDepartmentDeleteDialog())
 
+  const ensureContractorReferences = useCallback((referenceSection: 'garages' | 'suppliers') => {
+    if (loadedContractorReferencesRef.current[referenceSection]) {
+      return Promise.resolve(true)
+    }
+
+    const pendingRequest = contractorReferenceRequestsRef.current[referenceSection]
+    if (pendingRequest) {
+      return pendingRequest
+    }
+
+    const controller = new AbortController()
+    contractorReferenceControllersRef.current[referenceSection] = controller
+    setContractorReferenceLoading(referenceSection)
+    const request = (async () => {
+      try {
+        if (referenceSection === 'garages') {
+          const ownerRows = await dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal)
+          if (controller.signal.aborted) return false
+          const ownersById = new Map(ownerRows.map((owner) => [owner.id, owner]))
+          ownersRef.current = ownerRows
+          setOwners(ownerRows)
+          setGarages((current) => current.map((garage) => applyGarageOwner(garage, garage.ownerId ? ownersById.get(garage.ownerId) : null)))
+        } else {
+          const [groups, loadedChargeServices, loadedIncomeTypes, loadedTariffs, loadedFunds] = await Promise.all([
+            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            fundsClient.getFundOptions(auth.accessToken, controller.signal),
+          ])
+          if (controller.signal.aborted) return false
+          setSupplierGroups(groups)
+          setChargeServices(loadedChargeServices)
+          setServiceIncomeTypes(loadedIncomeTypes)
+          setServiceTariffs(loadedTariffs)
+          setServiceFunds(loadedFunds)
+        }
+
+        loadedContractorReferencesRef.current[referenceSection] = true
+        return true
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить данные для формы контрагента.')
+        }
+        return false
+      } finally {
+        if (contractorReferenceControllersRef.current[referenceSection] === controller) {
+          delete contractorReferenceControllersRef.current[referenceSection]
+          delete contractorReferenceRequestsRef.current[referenceSection]
+          setContractorReferenceLoading((current) => current === referenceSection ? null : current)
+        }
+      }
+    })()
+    contractorReferenceRequestsRef.current[referenceSection] = request
+    return request
+  }, [auth.accessToken, dictionaryClient, fundsClient])
+
   const openSupplierEditor = useCallback(async (row: ContractorSupplierRow) => {
     setSupplierContextMenu(null)
     setFormStateError(null)
-    if (!isBackendDictionaryId(row.id)) {
-      setModal({ type: 'supplier', item: row })
-      return
-    }
-
-    if (loadedSupplierContactsRef.current.has(row.id)) {
-      const cachedContacts = supplierContactsRef.current
-        .filter((contact) => contact.supplierId === row.id)
-        .map(createSupplierContactFromDto)
-      setModal({ type: 'supplier', item: normalizeSupplierPrototype({ ...row, contacts: cachedContacts }) })
-      return
-    }
-
     const requestSequence = ++supplierEditorRequestSequenceRef.current
     setSupplierEditorLoadingId(row.id)
     try {
-      const contacts = await dictionaryClient.getSupplierContacts(
-        auth.accessToken,
-        row.id,
-        undefined,
-        contractorsDictionaryListLimit,
-        true,
-      )
-      if (requestSequence !== supplierEditorRequestSequenceRef.current) {
+      const shouldLoadContacts = isBackendDictionaryId(row.id) && !loadedSupplierContactsRef.current.has(row.id)
+      const contactsRequest = shouldLoadContacts
+        ? dictionaryClient.getSupplierContacts(auth.accessToken, row.id, undefined, contractorsDictionaryListLimit, true)
+        : Promise.resolve<SupplierContactDto[] | null>(null)
+      const [referencesReady, loadedContacts] = await Promise.all([
+        ensureContractorReferences('suppliers'),
+        contactsRequest,
+      ])
+      if (!referencesReady || requestSequence !== supplierEditorRequestSequenceRef.current) return
+
+      if (!isBackendDictionaryId(row.id)) {
+        setModal({ type: 'supplier', item: row })
         return
       }
+
+      if (loadedSupplierContactsRef.current.has(row.id)) {
+        const cachedContacts = supplierContactsRef.current
+          .filter((contact) => contact.supplierId === row.id)
+          .map(createSupplierContactFromDto)
+        setModal({ type: 'supplier', item: normalizeSupplierPrototype({ ...row, contacts: cachedContacts }) })
+        return
+      }
+
+      const contacts = loadedContacts ?? []
 
       const contactRows = contacts.map(createSupplierContactFromDto)
       const nextContacts = [
@@ -973,7 +1042,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         setSupplierEditorLoadingId(null)
       }
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [auth.accessToken, dictionaryClient, ensureContractorReferences])
 
   useEffect(() => {
     if (loadedContractorSectionsRef.current[activeSection]) {
@@ -1041,62 +1110,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [activeSection, auth.accessToken, dictionaryClient, sectionReloadRevision])
 
   useEffect(() => {
-    if (activeSection === 'staff' || activeContractorPageLoading || loadedContractorReferencesRef.current[activeSection]) {
-      return
-    }
-
-    const referenceSection = activeSection
-    let cancelled = false
-    const controller = new AbortController()
-    async function loadEditorReferences() {
-      try {
-        if (referenceSection === 'garages') {
-          const ownerRows = await dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal)
-          if (!cancelled) {
-            ownersRef.current = ownerRows
-            setOwners(ownerRows)
-            setGarages((current) => current.map((garage) => {
-              const owner = garage.ownerId ? ownerRows.find((item) => item.id === garage.ownerId) : null
-              return owner
-                ? { ...garage, owner: garage.owner || owner.fullName, phone: owner.phone ?? '', address: owner.address ?? '', meters: owner.meterNotes ?? '' }
-                : garage
-            }))
-          }
-        } else {
-          const [groups, loadedChargeServices, loadedIncomeTypes, loadedTariffs, loadedFunds] = await Promise.all([
-            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            fundsClient.getFundOptions(auth.accessToken, controller.signal),
-          ])
-          if (!cancelled) {
-            setSupplierGroups(groups)
-            setChargeServices(loadedChargeServices)
-            setServiceIncomeTypes(loadedIncomeTypes)
-            setServiceTariffs(loadedTariffs)
-            setServiceFunds(loadedFunds)
-          }
-        }
-
-        if (!cancelled) {
-          loadedContractorReferencesRef.current[referenceSection] = true
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить данные для форм контрагентов.')
-        }
-      }
-    }
-
-    void loadEditorReferences()
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [activeContractorPageLoading, activeSection, auth.accessToken, dictionaryClient, fundsClient])
-
-  useEffect(() => {
     if (!initialTarget) {
       openedInitialTargetRef.current = null
       return
@@ -1146,13 +1159,22 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       closeContextMenu()
       if (nextModal.type === 'supplier' && nextModal.item) {
         void openSupplierEditor(nextModal.item)
+      } else if (nextModal.type === 'garage') {
+        void ensureContractorReferences('garages').then((referencesReady) => {
+          if (referencesReady) {
+            const row = nextModal.item
+            setModal(row
+              ? { type: 'garage', item: applyGarageOwner(row, row.ownerId ? ownersRef.current.find((owner) => owner.id === row.ownerId) : null) }
+              : nextModal)
+          }
+        })
       } else {
         setModal(nextModal)
       }
     }, 0)
 
     return () => window.clearTimeout(handle)
-  }, [garages, initialTarget, openSupplierEditor, staff, suppliers])
+  }, [ensureContractorReferences, garages, initialTarget, openSupplierEditor, staff, suppliers])
 
   useEffect(() => {
     saveContractorColumnWidths(contractorGarageColumnStorageKey, garageColumnWidths)
@@ -1190,6 +1212,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   function retryActiveContractorSection() {
     setFormStateError(null)
+    if (activeSection !== 'staff' && loadedContractorSectionsRef.current[activeSection] && !loadedContractorReferencesRef.current[activeSection]) {
+      void ensureContractorReferences(activeSection)
+      return
+    }
     loadedContractorSectionsRef.current[activeSection] = false
     if (activeSection !== 'staff') {
       loadedContractorReferencesRef.current[activeSection] = false
@@ -1380,9 +1406,33 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setGarageContextMenu({ row, x: event.clientX, y: event.clientY })
   }
 
-  function openGarageEditor(row: ContractorGarageRow) {
+  async function openGarageEditor(row: ContractorGarageRow) {
     setGarageContextMenu(null)
-    setModal({ type: 'garage', item: row })
+    setFormStateError(null)
+    if (await ensureContractorReferences('garages')) {
+      setModal({ type: 'garage', item: applyGarageOwner(row, row.ownerId ? ownersRef.current.find((owner) => owner.id === row.ownerId) : null) })
+    }
+  }
+
+  async function openGarageCreator() {
+    setFormStateError(null)
+    if (await ensureContractorReferences('garages')) {
+      setModal({ type: 'garage' })
+    }
+  }
+
+  async function openSupplierCreator() {
+    setFormStateError(null)
+    if (await ensureContractorReferences('suppliers')) {
+      setModal({ type: 'supplier' })
+    }
+  }
+
+  async function openServiceCreator() {
+    setFormStateError(null)
+    if (await ensureContractorReferences('suppliers')) {
+      setModal({ type: 'service' })
+    }
   }
 
   function openGarageDeleteDialog(row: ContractorGarageRow) {
@@ -2122,7 +2172,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           {activeSection === 'garages' ? (
             <>
               <button className="secondary-button" type="button" aria-busy={contractorPageLoading.garages} onClick={toggleGarageDebtorsFilter}>{debtorsButtonLabel}</button>
-              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'garage' })}>
+              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'garages'} disabled={contractorReferenceLoading === 'garages'} onClick={() => void openGarageCreator()}>
                 <Gauge size={17} aria-hidden="true" />
                 <span>Добавить гараж</span>
               </button>
@@ -2130,11 +2180,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           ) : null}
           {activeSection === 'suppliers' ? (
             <>
-              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'supplier' })}>
+              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'suppliers'} disabled={contractorReferenceLoading === 'suppliers'} onClick={() => void openSupplierCreator()}>
                 <UsersRound size={17} aria-hidden="true" />
                 <span>Добавить поставщика</span>
               </button>
-              <button className="secondary-button create-action-button" type="button" disabled={!canManageTariffs} title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined} onClick={() => setModal({ type: 'service' })}>
+              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'suppliers'} disabled={!canManageTariffs || contractorReferenceLoading === 'suppliers'} title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined} onClick={() => void openServiceCreator()}>
                 <FileText size={17} aria-hidden="true" />
                 <span>Добавить услугу</span>
               </button>
@@ -2155,7 +2205,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       </div>
       {formStateError && !modal ? (
-        <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || supplierEditorLoadingId !== null} />
+        <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || contractorReferenceLoading !== null || supplierEditorLoadingId !== null} />
       ) : null}
 
       <div className="contractors-prototype-tabs" role="tablist" aria-label="Разделы контрагентов">
@@ -2255,7 +2305,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                     </button>
                   ) : (
                     <>
-                      <button className="icon-button" type="button" aria-label={`Изменить гараж ${row.number}`} title="Изменить" onClick={() => openGarageEditor(row)}>
+                      <button className="icon-button" type="button" aria-label={`Изменить гараж ${row.number}`} title="Изменить" aria-busy={contractorReferenceLoading === 'garages'} disabled={contractorReferenceLoading === 'garages'} onClick={() => void openGarageEditor(row)}>
                         <Pencil size={16} />
                       </button>
                       <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет гаража ${row.number}`} title="Финансовый отчет" onClick={() => openGarageFinancialReport(row)}>
@@ -2507,7 +2557,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             ) : (
               <>
                 <div className="context-menu-group" role="group">
-                  <button type="button" role="menuitem" onClick={() => openGarageEditor(garageContextMenu.row)}>
+                  <button type="button" role="menuitem" aria-busy={contractorReferenceLoading === 'garages'} disabled={contractorReferenceLoading === 'garages'} onClick={() => void openGarageEditor(garageContextMenu.row)}>
                     <Pencil size={16} />
                     <span>Изменить</span>
                   </button>
