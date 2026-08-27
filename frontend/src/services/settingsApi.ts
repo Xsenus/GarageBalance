@@ -107,19 +107,19 @@ export type ApplicationSettingsClient = {
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
   getTariffPanelsLayout(accessToken: string, signal?: AbortSignal): Promise<TariffPanelsLayoutDto>
   updateTariffPanelsLayout(accessToken: string, request: UpdateTariffPanelsLayoutRequest): Promise<TariffPanelsLayoutDto>
-  getSalaryAccrualSettings(accessToken: string): Promise<SalaryAccrualSettingsDto>
+  getSalaryAccrualSettings(accessToken: string, signal?: AbortSignal): Promise<SalaryAccrualSettingsDto>
   updateSalaryAccrualSettings(accessToken: string, request: SalaryAccrualSettingsDto): Promise<SalaryAccrualSettingsDto>
-  getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
+  getBusinessDateSettings(accessToken: string, signal?: AbortSignal): Promise<BusinessDateSettingsDto>
   previewBusinessDateChange(accessToken: string, request: { overrideDate: string | null; version?: string }): Promise<BusinessDateChangePreviewDto>
   updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null; version?: string }): Promise<BusinessDateSettingsDto>
-  getCashBankBalances(accessToken: string): Promise<CashBankBalanceSettingsDto>
+  getCashBankBalances(accessToken: string, signal?: AbortSignal): Promise<CashBankBalanceSettingsDto>
   updateCashBankOpeningBalances(accessToken: string, request: { cashOpeningBalance: number; bankOpeningBalance: number; reason: string }): Promise<CashBankBalanceSettingsDto>
   createCashBankBalanceAdjustment(accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }): Promise<CashBankBalanceSettingsDto>
-  getDatabaseBackups(accessToken: string): Promise<DatabaseBackupStatusDto>
+  getDatabaseBackups(accessToken: string, signal?: AbortSignal): Promise<DatabaseBackupStatusDto>
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
   downloadDatabaseBackup(accessToken: string, fileName: string): Promise<Blob>
   deleteDatabaseBackup(accessToken: string, fileName: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
-  getDiagnosticLogStatus(accessToken: string): Promise<DiagnosticLogStatusDto>
+  getDiagnosticLogStatus(accessToken: string, signal?: AbortSignal): Promise<DiagnosticLogStatusDto>
   createDiagnosticPackage(accessToken: string): Promise<Blob>
 }
 
@@ -159,14 +159,14 @@ export const settingsApi: ApplicationSettingsClient = {
   updateTariffPanelsLayout(accessToken, request) {
     return requestJson(accessToken, '/api/settings/tariffs/layout', { method: 'PUT', body: JSON.stringify(request) })
   },
-  getSalaryAccrualSettings(accessToken) {
-    return requestJson(accessToken, '/api/settings/salary-accrual')
+  getSalaryAccrualSettings(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/salary-accrual', { signal })
   },
   updateSalaryAccrualSettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/salary-accrual', { method: 'PUT', body: JSON.stringify(request) })
   },
-  getBusinessDateSettings(accessToken) {
-    return requestJson(accessToken, '/api/settings/business-date')
+  getBusinessDateSettings(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/business-date', { signal })
   },
   previewBusinessDateChange(accessToken, request) {
     return requestJson(accessToken, '/api/settings/business-date/preview', { method: 'POST', body: JSON.stringify(request) })
@@ -174,8 +174,8 @@ export const settingsApi: ApplicationSettingsClient = {
   updateBusinessDateSettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/business-date', { method: 'PUT', body: JSON.stringify(request) })
   },
-  getCashBankBalances(accessToken) {
-    return requestJson(accessToken, '/api/settings/cash-bank-balances')
+  getCashBankBalances(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/cash-bank-balances', { signal })
   },
   updateCashBankOpeningBalances(accessToken, request) {
     return requestJson(accessToken, '/api/settings/cash-bank-balances/opening', { method: 'PUT', body: JSON.stringify(request) })
@@ -183,8 +183,8 @@ export const settingsApi: ApplicationSettingsClient = {
   createCashBankBalanceAdjustment(accessToken, request) {
     return requestJson(accessToken, '/api/settings/cash-bank-balances/adjustments', { method: 'POST', body: JSON.stringify(request) })
   },
-  getDatabaseBackups(accessToken) {
-    return requestJson(accessToken, '/api/settings/backups')
+  getDatabaseBackups(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/backups', { signal })
   },
   createDatabaseBackup(accessToken, request) {
     return requestJson(accessToken, '/api/settings/backups', { method: 'POST', body: JSON.stringify(request) })
@@ -200,8 +200,8 @@ export const settingsApi: ApplicationSettingsClient = {
   deleteDatabaseBackup(accessToken, fileName, request) {
     return requestJson(accessToken, `/api/settings/backups/${encodeURIComponent(fileName)}`, { method: 'DELETE', body: JSON.stringify(request) })
   },
-  getDiagnosticLogStatus(accessToken) {
-    return requestJson(accessToken, '/api/diagnostics/status')
+  getDiagnosticLogStatus(accessToken, signal) {
+    return requestJson(accessToken, '/api/diagnostics/status', { signal })
   },
   createDiagnosticPackage(accessToken) {
     return requestBlob(accessToken, '/api/diagnostics/package', { method: 'POST' })

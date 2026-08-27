@@ -11912,9 +11912,72 @@ describe('App', () => {
     expect(getReceiptPrintingStatus).not.toHaveBeenCalled()
   })
 
+  it('cancels every pending settings read when switching tabs', async () => {
+    const user = userEvent.setup()
+    const signals = new Map<string, AbortSignal>()
+    const pendingRead = (name: string, signal?: AbortSignal) => {
+      if (signal) signals.set(name, signal)
+      return new Promise<never>(() => undefined)
+    }
+    const settingsClient = createSettingsClient({
+      getBusinessDateSettings: (_token, signal) => pendingRead('business-date', signal),
+      getSalaryAccrualSettings: (_token, signal) => pendingRead('salary-accrual', signal),
+      getCashBankBalances: (_token, signal) => pendingRead('cash-bank', signal),
+      getPaymentDisplaySettings: (_token, signal) => pendingRead('display', signal),
+      getDatabaseBackups: (_token, signal) => pendingRead('backups', signal),
+      getDiagnosticLogStatus: (_token, signal) => pendingRead('diagnostics', signal),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+
+    await user.click(within(settings).getByRole('tab', { name: 'Рабочая дата' }))
+    await waitFor(() => expect(signals.size).toBe(2))
+    await user.click(within(settings).getByRole('tab', { name: 'Касса и счёт' }))
+    await waitFor(() => expect(signals.size).toBe(3))
+    await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
+    await waitFor(() => expect(signals.size).toBe(4))
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    await waitFor(() => expect(signals.size).toBe(5))
+    await user.click(within(settings).getByRole('tab', { name: 'Диагностика' }))
+    await waitFor(() => expect(signals.size).toBe(6))
+    await user.click(within(settings).getByRole('tab', { name: 'Безопасность' }))
+
+    expect([...signals.values()]).toHaveLength(6)
+    expect([...signals.values()].every((signal) => signal.aborted)).toBe(true)
+  })
+
   describe('скрытые настройки интеграций — сценарии для контролируемого повторного включения', () => {
     beforeEach(() => vi.stubEnv('VITE_SHOW_INTEGRATION_SETTINGS', 'true'))
     afterEach(() => vi.unstubAllEnvs())
+
+  it('cancels pending integration statuses when leaving the integrations tab', async () => {
+    const user = userEvent.setup()
+    const signals: AbortSignal[] = []
+    const pendingStatus = (signal?: AbortSignal) => {
+      if (signal) signals.push(signal)
+      return new Promise<never>(() => undefined)
+    }
+    const integrationClient = createIntegrationClient({
+      getOneCFreshStatus: (_token, signal) => pendingStatus(signal),
+      getReceiptPrintingStatus: (_token, signal) => pendingStatus(signal),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await waitFor(() => expect(signals).toHaveLength(2))
+    await user.click(within(settings).getByRole('tab', { name: 'Безопасность' }))
+
+    expect(signals.every((signal) => signal.aborted)).toBe(true)
+  })
 
   it('shows safe 1C Fresh integration status in settings', async () => {
     const user = userEvent.setup()

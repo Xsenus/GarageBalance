@@ -99,6 +99,39 @@ describe('settingsApi', () => {
     ])
   })
 
+  it('forwards cancellation for settings workspace reads', async () => {
+    const fetchSignals: AbortSignal[] = []
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal
+      if (signal) {
+        fetchSignals.push(signal)
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = Promise.all([
+      settingsApi.getBusinessDateSettings('token', controller.signal),
+      settingsApi.getSalaryAccrualSettings('token', controller.signal),
+      settingsApi.getCashBankBalances('token', controller.signal),
+      settingsApi.getDatabaseBackups('token', controller.signal),
+      settingsApi.getDiagnosticLogStatus('token', controller.signal),
+    ])
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(5))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchSignals.every((signal) => signal.aborted)).toBe(true)
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/settings/business-date',
+      '/api/settings/salary-accrual',
+      '/api/settings/cash-bank-balances',
+      '/api/settings/backups',
+      '/api/diagnostics/status',
+    ])
+  })
+
   it('loads and updates the automatic salary accrual day', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ accrualDay: 10 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))

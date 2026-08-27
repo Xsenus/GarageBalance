@@ -159,4 +159,31 @@ describe('integrationsApi', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/suggestions/parties?query=%D0%B2%D0%BE%D0%B4&count=5')
     expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
   })
+
+  it('forwards cancellation to integration status requests', async () => {
+    const fetchSignals: AbortSignal[] = []
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal
+      if (signal) {
+        fetchSignals.push(signal)
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = Promise.all([
+      integrationsApi.getOneCFreshStatus('token', controller.signal),
+      integrationsApi.getReceiptPrintingStatus('token', controller.signal),
+    ])
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(2))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchSignals.every((signal) => signal.aborted)).toBe(true)
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/integrations/one-c-fresh/status',
+      '/api/integrations/receipt-printing/status',
+    ])
+  })
 })

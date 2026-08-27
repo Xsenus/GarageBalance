@@ -119,11 +119,11 @@ export type DadataAddressSuggestionDto = {
 }
 
 export type IntegrationClient = {
-  getOneCFreshStatus(accessToken: string): Promise<OneCFreshIntegrationStatusDto>
+  getOneCFreshStatus(accessToken: string, signal?: AbortSignal): Promise<OneCFreshIntegrationStatusDto>
   previewOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncPreviewDto>
   startOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncDto>
   retryOneCFreshSync(accessToken: string, request: OneCFreshSyncRequest): Promise<OneCFreshSyncDto>
-  getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
+  getReceiptPrintingStatus(accessToken: string, signal?: AbortSignal): Promise<ReceiptPrintingIntegrationStatusDto>
   registerReceiptPrintingAction(accessToken: string, operationId: string, request: ReceiptPrintingActionRequest): Promise<ReceiptPrintingActionDto>
   updateProtectedSetting(accessToken: string, provider: string, settingKey: string, plaintextValue: string): Promise<IntegrationSecretSettingDto>
   suggestParties(accessToken: string, query: string, count?: number, signal?: AbortSignal): Promise<DadataPartySuggestionDto[]>
@@ -131,8 +131,8 @@ export type IntegrationClient = {
 }
 
 export const integrationsApi: IntegrationClient = {
-  getOneCFreshStatus(accessToken) {
-    return requestJson<OneCFreshIntegrationStatusDto>(accessToken, '/api/integrations/one-c-fresh/status')
+  getOneCFreshStatus(accessToken, signal) {
+    return requestJson<OneCFreshIntegrationStatusDto>(accessToken, '/api/integrations/one-c-fresh/status', { signal })
   },
   previewOneCFreshSync(accessToken, request) {
     return requestJson<OneCFreshSyncPreviewDto>(accessToken, '/api/integrations/one-c-fresh/sync-runs/preview', {
@@ -152,8 +152,8 @@ export const integrationsApi: IntegrationClient = {
       body: JSON.stringify(request),
     })
   },
-  getReceiptPrintingStatus(accessToken) {
-    return requestJson<ReceiptPrintingIntegrationStatusDto>(accessToken, '/api/integrations/receipt-printing/status')
+  getReceiptPrintingStatus(accessToken, signal) {
+    return requestJson<ReceiptPrintingIntegrationStatusDto>(accessToken, '/api/integrations/receipt-printing/status', { signal })
   },
   registerReceiptPrintingAction(accessToken, operationId, request) {
     return requestJson<ReceiptPrintingActionDto>(

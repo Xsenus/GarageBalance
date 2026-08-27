@@ -144,11 +144,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   useEffect(() => {
     if (!canManageBusinessDate || activeSettingsTab !== 'business-date') return
     let ignore = false
+    const controller = new AbortController()
     setBusinessDateLoading(true)
     setBusinessDateError(null)
     Promise.all([
-      settingsClient.getBusinessDateSettings(auth.accessToken),
-      settingsClient.getSalaryAccrualSettings(auth.accessToken),
+      settingsClient.getBusinessDateSettings(auth.accessToken, controller.signal),
+      settingsClient.getSalaryAccrualSettings(auth.accessToken, controller.signal),
     ])
       .then(([settings, salarySettings]) => {
         if (ignore) return
@@ -163,15 +164,19 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .finally(() => {
         if (!ignore) setBusinessDateLoading(false)
       })
-    return () => { ignore = true }
+    return () => {
+      ignore = true
+      controller.abort()
+    }
   }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
     if (!canManageBusinessDate || activeSettingsTab !== 'cash-bank') return
     let ignore = false
+    const controller = new AbortController()
     setCashBankLoading(true)
     setCashBankError(null)
-    settingsClient.getCashBankBalances(auth.accessToken)
+    settingsClient.getCashBankBalances(auth.accessToken, controller.signal)
       .then((settings) => {
         if (ignore) return
         setCashBankSettings(settings)
@@ -182,7 +187,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .finally(() => {
         if (!ignore) setCashBankLoading(false)
       })
-    return () => { ignore = true }
+    return () => {
+      ignore = true
+      controller.abort()
+    }
   }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
@@ -191,9 +199,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
 
     let ignore = false
+    const controller = new AbortController()
     setPaymentDisplaySettingsLoading(true)
     setPaymentDisplaySettingsError(null)
-    settingsClient.getPaymentDisplaySettings(auth.accessToken)
+    settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal)
       .then((settings) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
@@ -215,6 +224,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, settingsClient, settingsReloadRevision])
 
@@ -224,9 +234,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
 
     let ignore = false
+    const controller = new AbortController()
     setBackupLoading(true)
     setBackupError(null)
-    settingsClient.getDatabaseBackups(auth.accessToken)
+    settingsClient.getDatabaseBackups(auth.accessToken, controller.signal)
       .then((status) => {
         if (!ignore) {
           setBackupStatus(status)
@@ -245,6 +256,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [activeSettingsTab, auth.accessToken, backupReloadToken, canManageApplicationSettings, settingsClient])
 
@@ -254,9 +266,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
 
     let ignore = false
+    const controller = new AbortController()
     setDiagnosticLoading(true)
     setDiagnosticError(null)
-    settingsClient.getDiagnosticLogStatus(auth.accessToken)
+    settingsClient.getDiagnosticLogStatus(auth.accessToken, controller.signal)
       .then((status) => {
         if (!ignore) {
           setDiagnosticStatus(status)
@@ -276,6 +289,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, diagnosticReloadToken, settingsClient])
 
@@ -531,11 +545,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   }
 
   useEffect(() => {
-    if (!canViewIntegrationStatus) {
+    if (!canViewIntegrationStatus || activeSettingsTab !== 'integrations') {
       return
     }
 
     let ignore = false
+    const controller = new AbortController()
     async function loadOneCFreshStatus() {
       await Promise.resolve()
       if (ignore) {
@@ -545,7 +560,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setIntegrationLoading(true)
       setIntegrationError(null)
       try {
-        const status = await integrationClient.getOneCFreshStatus(auth.accessToken)
+        const status = await integrationClient.getOneCFreshStatus(auth.accessToken, controller.signal)
         if (!ignore) {
           setOneCFreshStatus(status)
         }
@@ -565,15 +580,17 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     return () => {
       ignore = true
+      controller.abort()
     }
-  }, [auth.accessToken, canViewIntegrationStatus, integrationClient, settingsReloadRevision])
+  }, [activeSettingsTab, auth.accessToken, canViewIntegrationStatus, integrationClient, settingsReloadRevision])
 
   useEffect(() => {
-    if (!canViewReceiptPrintingStatus) {
+    if (!canViewReceiptPrintingStatus || activeSettingsTab !== 'integrations') {
       return
     }
 
     let ignore = false
+    const controller = new AbortController()
     async function loadReceiptPrintingStatus() {
       await Promise.resolve()
       if (ignore) {
@@ -583,7 +600,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setReceiptPrintingLoading(true)
       setReceiptPrintingError(null)
       try {
-        const status = await integrationClient.getReceiptPrintingStatus(auth.accessToken)
+        const status = await integrationClient.getReceiptPrintingStatus(auth.accessToken, controller.signal)
         if (!ignore) {
           setReceiptPrintingStatus(status)
         }
@@ -603,8 +620,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     return () => {
       ignore = true
+      controller.abort()
     }
-  }, [auth.accessToken, canViewReceiptPrintingStatus, integrationClient, settingsReloadRevision])
+  }, [activeSettingsTab, auth.accessToken, canViewReceiptPrintingStatus, integrationClient, settingsReloadRevision])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
