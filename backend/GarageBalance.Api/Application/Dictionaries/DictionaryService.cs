@@ -2098,12 +2098,14 @@ public sealed class DictionaryService(
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
 
-    public async Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    public async Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool? isRegular = null, bool? isMetered = null)
     {
         var normalizedSearch = NormalizeSearch(search);
         var settings = await chargeServiceSettingRepository.GetListAsync(
             normalizedSearch,
             includeArchived,
+            isRegular,
+            isMetered,
             NormalizeListLimit(limit),
             businessDateProvider.Today,
             cancellationToken);

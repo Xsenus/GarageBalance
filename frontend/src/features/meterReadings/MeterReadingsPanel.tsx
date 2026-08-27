@@ -302,11 +302,12 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
   useEffect(() => {
     let isMounted = true
+    const controller = new AbortController()
 
     async function loadMeterConfiguration() {
       setError(null)
       try {
-        const settings = await dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, 1000, false)
+        const settings = await dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, 1000, false, true, true, controller.signal)
         if (!isMounted) {
           return
         }
@@ -342,6 +343,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     void loadMeterConfiguration()
     return () => {
       isMounted = false
+      controller.abort()
     }
   }, [auth.accessToken, dictionaryClient])
 

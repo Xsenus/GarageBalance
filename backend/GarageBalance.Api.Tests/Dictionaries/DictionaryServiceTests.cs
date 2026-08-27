@@ -4168,6 +4168,30 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetChargeServiceSettingsAsync_FiltersRegularMeteredServicesBeforeLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.ChargeServiceSettings.AddRange(
+            new ChargeServiceSetting { Name = "Нерегулярная услуга", IsRegular = false, IsMetered = true },
+            new ChargeServiceSetting { Name = "Регулярная без счётчика", IsRegular = true, IsMetered = false },
+            new ChargeServiceSetting { Name = "Регулярная по счётчику", IsRegular = true, IsMetered = true });
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var settings = await service.GetChargeServiceSettingsAsync(
+            null,
+            CancellationToken.None,
+            limit: 1,
+            isRegular: true,
+            isMetered: true);
+
+        var setting = Assert.Single(settings);
+        Assert.Equal("Регулярная по счётчику", setting.Name);
+        Assert.True(setting.IsRegular);
+        Assert.True(setting.IsMetered);
+    }
+
+    [Fact]
     public async Task FeeCampaignAsync_CalculatesContributionFromExplicitTargetAmount()
     {
         await using var database = await TestDatabase.CreateAsync();

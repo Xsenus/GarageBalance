@@ -7,6 +7,8 @@ public interface IChargeServiceSettingRepository
     Task<IReadOnlyList<ChargeServiceSetting>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
+        bool? isRegular,
+        bool? isMetered,
         int limit,
         DateOnly businessDate,
         CancellationToken cancellationToken);

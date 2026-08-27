@@ -477,7 +477,7 @@ export type DictionaryClient = {
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff?(accessToken: string, id: string, reason: string): Promise<void>
   restoreTariff?(accessToken: string, id: string): Promise<TariffDto>
-  getChargeServiceSettings(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<ChargeServiceSettingDto[]>
+  getChargeServiceSettings(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, isRegular?: boolean, isMetered?: boolean, signal?: AbortSignal): Promise<ChargeServiceSettingDto[]>
   createChargeServiceWithTariff(accessToken: string, request: CreateChargeServiceWithTariffRequest): Promise<CreatedChargeServiceWithTariffDto>
   createChargeServiceSetting(accessToken: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   updateChargeServiceSetting(accessToken: string, id: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
@@ -749,8 +749,8 @@ export const dictionariesApi: DictionaryClient = {
   updateTariff(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  getChargeServiceSettings(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/charge-services', { search, limit, includeArchived: includeArchived || undefined }))
+  getChargeServiceSettings(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, isRegular, isMetered, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/charge-services', { search, limit, includeArchived: includeArchived || undefined, isRegular, isMetered }), { signal })
   },
   createChargeServiceWithTariff(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/charge-services/with-tariff', { method: 'POST', body: JSON.stringify(request) })

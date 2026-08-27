@@ -792,9 +792,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("charge-services")]
     [ProducesResponseType<IReadOnlyList<ChargeServiceSettingDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ChargeServiceSettingDto>>> GetChargeServiceSettings([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ChargeServiceSettingDto>>> GetChargeServiceSettings([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, [FromQuery] bool? isRegular, [FromQuery] bool? isMetered, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetChargeServiceSettingsAsync(search, cancellationToken, limit, includeArchived));
+        return Ok(await dictionaryService.GetChargeServiceSettingsAsync(search, cancellationToken, limit, includeArchived, isRegular, isMetered));
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]

@@ -10,6 +10,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
+        bool? isRegular,
+        bool? isMetered,
         int limit,
         DateOnly businessDate,
         CancellationToken cancellationToken)
@@ -21,6 +23,14 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         if (normalizedSearch is not null)
         {
             query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+        }
+        if (isRegular.HasValue)
+        {
+            query = query.Where(item => item.IsRegular == isRegular.Value);
+        }
+        if (isMetered.HasValue)
+        {
+            query = query.Where(item => item.IsMetered == isMetered.Value);
         }
 
         var settings = await query

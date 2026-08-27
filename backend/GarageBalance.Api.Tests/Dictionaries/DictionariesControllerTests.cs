@@ -1042,10 +1042,10 @@ public sealed class DictionariesControllerTests
         var service = new FakeDictionaryService();
         var controller = CreateController(service);
 
-        var result = await controller.GetChargeServiceSettings("электро", 25, true, CancellationToken.None);
+        var result = await controller.GetChargeServiceSettings("электро", 25, true, true, false, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        Assert.Equal(("электро", 25, true), service.LastChargeServiceListRequest);
+        Assert.Equal(("электро", 25, true, true, false), service.LastChargeServiceListRequest);
     }
 
     [Fact]
@@ -1941,7 +1941,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
         public (string? Search, int? Offset, int? Limit, bool IncludeArchived) LastTariffPageRequest { get; private set; }
-        public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived, bool? IsRegular, bool? IsMetered) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastFeeCampaignListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
@@ -2439,9 +2439,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreTariffResult);
         }
 
-        public Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        public Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool? isRegular = null, bool? isMetered = null)
         {
-            LastChargeServiceListRequest = (search, limit, includeArchived);
+            LastChargeServiceListRequest = (search, limit, includeArchived, isRegular, isMetered);
             return Task.FromResult<IReadOnlyList<ChargeServiceSettingDto>>([]);
         }
 

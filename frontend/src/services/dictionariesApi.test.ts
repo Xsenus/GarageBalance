@@ -305,6 +305,24 @@ describe('dictionariesApi response cache', () => {
     )
   })
 
+  it('requests only regular metered services and forwards cancellation', async () => {
+    let fetchSignal: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      fetchSignal = init.signal ?? undefined
+      fetchSignal?.addEventListener('abort', () => reject(fetchSignal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = dictionariesApi.getChargeServiceSettings('token', undefined, 1000, false, true, true, controller.signal)
+    await vi.waitFor(() => expect(fetchSignal).toBeDefined())
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/dictionaries/charge-services?limit=1000&isRegular=true&isMetered=true')
+    expect(fetchSignal?.aborted).toBe(true)
+  })
+
   it('loads and atomically saves a charge service tariff schedule', async () => {
     const periods = [
       { tariffId: 'tariff-1', effectiveFrom: null, effectiveTo: '2026-08-31', rate: 100, tariffVersion: 'v1' },

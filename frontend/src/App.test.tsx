@@ -6003,9 +6003,10 @@ describe('App', () => {
   it('explains how to enable readings when there are no active metered services', async () => {
     const user = userEvent.setup()
     const getMeterReadingYearPage = vi.fn()
+    const getChargeServiceSettings = vi.fn(async () => [])
     render(<App
       authClient={createAuthClient()}
-      dictionaryClient={createDictionaryClient({ getChargeServiceSettings: async () => [] })}
+      dictionaryClient={createDictionaryClient({ getChargeServiceSettings })}
       financeClient={createFinanceClient({ getMeterReadingYearPage })}
       importClient={createImportClient()}
       reportClient={createReportClient()}
@@ -6022,6 +6023,50 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('status')).toHaveTextContent('Нет действующих регулярных услуг по счётчику.')
     expect(within(readingsPanel).queryByRole('table')).not.toBeInTheDocument()
     expect(getMeterReadingYearPage).not.toHaveBeenCalled()
+    expect(getChargeServiceSettings).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      1000,
+      false,
+      true,
+      true,
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('cancels the metered-service request when the readings section unmounts', async () => {
+    const user = userEvent.setup()
+    let requestSignal: AbortSignal | undefined
+    const getChargeServiceSettings = vi.fn((
+      _token: string,
+      _search?: string,
+      _limit?: number,
+      _includeArchived?: boolean,
+      _isRegular?: boolean,
+      _isMetered?: boolean,
+      signal?: AbortSignal,
+    ) => {
+      requestSignal = signal
+      return new Promise<ChargeServiceSettingDto[]>(() => undefined)
+    })
+    const { unmount } = render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getChargeServiceSettings })}
+      financeClient={createFinanceClient()}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    await waitFor(() => expect(requestSignal).toBeDefined())
+
+    unmount()
+
+    expect(requestSignal?.aborted).toBe(true)
   })
 
   it('shows a meter configuration error without requesting an unrelated readings table', async () => {
