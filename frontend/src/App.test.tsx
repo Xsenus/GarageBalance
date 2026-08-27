@@ -7896,9 +7896,13 @@ describe('App', () => {
     const firstGarage = createGarage({ id: 'garage-first', number: '18', ownerName: 'Иванов Иван', overdueDebt: 500 })
     const secondGarage = createGarage({ id: 'garage-second', number: '19', ownerName: 'Петров Петр', overdueDebt: 300 })
     let resolveFirst!: (value: Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>) => void
+    let firstSignal: AbortSignal | undefined
     const firstRequest = new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>((resolve) => { resolveFirst = resolve })
-    const getGarageOverdueDebt = vi.fn(async (_token: string, garageId: string) => {
-      if (garageId === firstGarage.id) return firstRequest
+    const getGarageOverdueDebt = vi.fn(async (_token: string, garageId: string, signal?: AbortSignal) => {
+      if (garageId === firstGarage.id) {
+        firstSignal = signal
+        return firstRequest
+      }
       return {
         garageId: secondGarage.id,
         garageNumber: secondGarage.number,
@@ -7921,6 +7925,7 @@ describe('App', () => {
     await user.type(search, '19')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*19\s*Петров Петр/ }))
     expect(await within(prototype).findByText('Электроэнергия')).toBeInTheDocument()
+    expect(firstSignal?.aborted).toBe(true)
 
     resolveFirst({ garageId: firstGarage.id, garageNumber: firstGarage.number, ownerName: firstGarage.ownerName, asOfDate: '2026-07-17', total: 500, rows: [{ rowKind: 'accrual', incomeTypeId: 'water', incomeTypeName: 'Устаревшая вода', accountingMonth: '2026-05-01', dueDate: '2026-06-10', overdueFromDate: '2026-06-11', originalAmount: 500, paidAmount: 0, outstandingAmount: 500 }] })
     await act(async () => { await firstRequest })
@@ -9964,7 +9969,7 @@ describe('App', () => {
     expect(within(prototype).queryByLabelText('Поиск номера гаража или ФИО владельца')).not.toBeInTheDocument()
     expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
-    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2027-10-01' }))
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2027-10-01' }, expect.any(AbortSignal)))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за октябрь 2027' })).toBeInTheDocument()
     const monthInput = within(prototype).getByLabelText('Месяц выплат с')
     const monthToInput = within(prototype).getByLabelText('Месяц выплат по')
@@ -9991,7 +9996,7 @@ describe('App', () => {
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', {
       monthFrom: '2029-02-01',
       monthTo: '2029-03-01',
-    }))
+    }, expect.any(AbortSignal)))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за 02.2029 — 03.2029' })).toBeInTheDocument()
 
     const quickPeriods = within(prototype).getByRole('group', { name: 'Быстрый выбор периода' })
@@ -9999,13 +10004,33 @@ describe('App', () => {
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenLastCalledWith('token', {
       monthFrom: '2026-01-01',
       monthTo: '2026-12-01',
-    }))
+    }, expect.any(AbortSignal)))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за 01.2026 — 12.2026' })).toBeInTheDocument()
     expect(within(prototype).queryByRole('button', { name: 'Оплатить Водоснабжение' })).not.toBeInTheDocument()
 
     await user.click(within(prototype).getByRole('tab', { name: 'Поступления' }))
     expect(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')).toHaveValue('12')
     expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
+  })
+
+  it('cancels the expense worksheet when leaving the payouts tab', async () => {
+    const user = userEvent.setup()
+    let worksheetSignal: AbortSignal | undefined
+    const getExpenseWorksheet = vi.fn((_token: string, _params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal) => {
+      worksheetSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getExpenseWorksheet']>>>(() => undefined)
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    await waitFor(() => expect(worksheetSignal).toBeDefined())
+    await user.click(within(prototype).getByRole('tab', { name: 'Поступления' }))
+
+    expect(worksheetSignal?.aborted).toBe(true)
   })
 
   it('hides operational expense columns and row actions only in archived months', async () => {
@@ -10062,7 +10087,7 @@ describe('App', () => {
     const augustTable = await within(prototype).findByRole('table', { name: 'Форма выплат за август 2026' })
     expect(await within(augustTable).findByRole('button', { name: 'Оплатить Водоснабжение' })).toBeInTheDocument()
     expect(within(augustTable).getAllByRole('columnheader')).toHaveLength(8)
-    expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-08-01' })
+    expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-08-01' }, expect.any(AbortSignal))
   })
 
   it('loads expense worksheet from finance backend and allows payment when the service difference is negative', async () => {
@@ -10143,7 +10168,7 @@ describe('App', () => {
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
 
-    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-06-01' }))
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-06-01' }, expect.any(AbortSignal)))
     const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(await within(expenseTable).findByText('Серверный водоканал')).toBeInTheDocument()
     expect(within(expenseTable).getByText('Петрова Ольга')).toBeInTheDocument()
@@ -10248,7 +10273,7 @@ describe('App', () => {
     const augustRow = within(augustTable).getByText('Энергосбыт').closest('tr')
     expect(augustRow).not.toBeNull()
     expect(within(augustRow!).getAllByText('6 243.81')).toHaveLength(1)
-    expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-08-01' })
+    expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-08-01' }, expect.any(AbortSignal))
   })
 
   it('does not show prototype expense rows when expense worksheet is unavailable', async () => {
@@ -11004,6 +11029,10 @@ describe('App', () => {
     expect(within(fundsPanel).getByRole('status', { name: 'Загружаем общий нераспределенный пул' })).toBeInTheDocument()
     expect(within(fundsPanel).getByRole('status', { name: 'Загружаем операции фондов' })).toBeInTheDocument()
     expect(within(fundsPanel).queryByText('Загружаем фонды...')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(getFunds).toHaveBeenCalledTimes(1)
+      expect(getOperationsPage).toHaveBeenCalledTimes(1)
+    })
 
     await act(async () => {
       resolveFunds([createFund({ id: 'fund-electricity', name: 'Электроэнергия' })])
@@ -11288,7 +11317,7 @@ describe('App', () => {
     await openSection(user, 'Пользователи')
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const pagination = within(usersPanel).getByRole('navigation', { name: 'Пагинация пользователей' })
-    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    await user.click(await within(pagination).findByRole('button', { name: 'Страница 2' }))
     expect(await within(usersPanel).findByText('managed-26@example.com')).toBeInTheDocument()
 
     await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))

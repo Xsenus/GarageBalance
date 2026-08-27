@@ -57,7 +57,7 @@ describe('financeApi', () => {
     })
   })
 
-  it('forwards cancellation for compact finance previews', async () => {
+  it('forwards cancellation for compact finance previews and overdue debt', async () => {
     const fetchSignals: AbortSignal[] = []
     const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
       const signal = init.signal
@@ -74,8 +74,10 @@ describe('financeApi', () => {
       financeApi.getAccruals('token', 8, controller.signal),
       financeApi.getSupplierAccruals('token', 8, controller.signal),
       financeApi.getMeterReadings('token', 8, controller.signal),
+      financeApi.getGarageOverdueDebt('token', 'garage-88', controller.signal),
+      financeApi.getExpenseWorksheet('token', { accountingMonth: '2026-06' }, controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(4))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(6))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -85,6 +87,8 @@ describe('financeApi', () => {
       '/api/finance/accruals?limit=8',
       '/api/finance/supplier-accruals?limit=8',
       '/api/finance/meter-readings?limit=8',
+      '/api/finance/garages/garage-88/overdue-debt',
+      '/api/finance/expenses-worksheet?accountingMonth=2026-06-01',
     ])
   })
 
@@ -382,7 +386,8 @@ describe('financeApi', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await financeApi.getGarageOverdueDebt('token', 'garage-88')
+    const controller = new AbortController()
+    const result = await financeApi.getGarageOverdueDebt('token', 'garage-88', controller.signal)
 
     expect(result.total).toBe(500)
     expect(fetchMock).toHaveBeenCalledWith('/api/finance/garages/garage-88/overdue-debt', {
@@ -391,6 +396,7 @@ describe('financeApi', () => {
         Authorization: 'Bearer token',
       },
     })
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('loads the paged historical accrual due-date reconciliation report', async () => {

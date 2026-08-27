@@ -688,11 +688,11 @@ export type FinanceClient = {
   getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<MeterReadingYearPageDto>
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: string; search?: string; limit?: number }, signal?: AbortSignal): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
-  getGarageOverdueDebt(accessToken: string, garageId: string): Promise<GarageOverdueDebtDto>
+  getGarageOverdueDebt(accessToken: string, garageId: string, signal?: AbortSignal): Promise<GarageOverdueDebtDto>
   getGarageFullPaymentQuote(accessToken: string, garageId: string): Promise<GarageFullPaymentQuoteDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
-  getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }): Promise<ExpenseWorksheetDto>
+  getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -856,8 +856,8 @@ export const financeApi: FinanceClient = {
       monthTo: toMonthStart(params.monthTo),
     }))
   },
-  getGarageOverdueDebt(accessToken, garageId) {
-    return requestJson(accessToken, `/api/finance/garages/${garageId}/overdue-debt`)
+  getGarageOverdueDebt(accessToken, garageId, signal) {
+    return requestJson(accessToken, `/api/finance/garages/${garageId}/overdue-debt`, { signal })
   },
   getGarageFullPaymentQuote(accessToken, garageId) {
     return requestJson(accessToken, `/api/finance/garages/${garageId}/full-payment-quote`)
@@ -868,12 +868,12 @@ export const financeApi: FinanceClient = {
       monthTo: toMonthStart(params.monthTo),
     }))
   },
-  getExpenseWorksheet(accessToken, params = {}) {
+  getExpenseWorksheet(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet', {
       accountingMonth: toMonthStart(params.accountingMonth),
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
-    }))
+    }), { signal })
   },
   getSummary(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/summary', {

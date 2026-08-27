@@ -3146,10 +3146,11 @@ function PaymentsPrototypePanel({
     }
 
     let cancelled = false
+    const controller = new AbortController()
     setOverdueDebtDetails(null)
     setOverdueDebtLoading(true)
     setOverdueDebtError(null)
-    void financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarageId)
+    void financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarageId, controller.signal)
       .then((details) => {
         if (!cancelled) {
           setOverdueDebtDetails(details)
@@ -3168,6 +3169,7 @@ function PaymentsPrototypePanel({
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [auth.accessToken, financeClient, overdueDebtRefresh, selectedGarageId, selectedGarageOverdueDebt])
 
@@ -3199,6 +3201,7 @@ function PaymentsPrototypePanel({
     }
 
     let cancelled = false
+    const controller = new AbortController()
     setExpenseWorksheetLoading(true)
     setExpenseRows([])
     setExpenseBankAmount(0)
@@ -3210,7 +3213,7 @@ function PaymentsPrototypePanel({
         : {
             monthFrom: `${expenseWorksheetMonthFrom}-01`,
             monthTo: `${expenseWorksheetMonthTo}-01`,
-          })
+          }, controller.signal)
       .then((worksheet) => {
         if (!cancelled) {
           setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
@@ -3232,6 +3235,7 @@ function PaymentsPrototypePanel({
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [activeTab, auth.accessToken, expenseWorksheetMonthFrom, expenseWorksheetMonthTo, financeClient, refreshRevision])
 
