@@ -8300,11 +8300,11 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('+7 900 111-22-33')
 
     const currentMonth = getTestCurrentMonthInputValue()
-    await waitFor(() => expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: 'garage-77' }))
+    await waitFor(() => expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: 'garage-77' }, expect.any(AbortSignal)))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77', {
       monthFrom: '2024-05-01',
       monthTo: `${currentMonth}-01`,
-    }))
+    }, expect.any(AbortSignal)))
     const monthFromControl = within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })
     expect(monthFromControl).toHaveValue('05.2024')
     await user.clear(monthFromControl)
@@ -8312,7 +8312,7 @@ describe('App', () => {
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
       monthFrom: '2024-02-01',
       monthTo: `${currentMonth}-01`,
-    }))
+    }, expect.any(AbortSignal)))
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 77' })
     expect(await within(incomeTable).findByText('Серверная электроэнергия')).toBeInTheDocument()
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
@@ -8354,7 +8354,7 @@ describe('App', () => {
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
       monthFrom: `${currentMonth.slice(0, 4)}-01-01`,
       monthTo: `${currentMonth.slice(0, 4)}-12-01`,
-    }))
+    }, expect.any(AbortSignal)))
   })
 
   it('calculates a selected garage worksheet and saves a missing historical meter reading without requesting a comment', async () => {
@@ -8430,7 +8430,7 @@ describe('App', () => {
     await waitFor(() => expect(calculateGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id, {
       monthFrom: `${historicalMonth}-01`,
       monthTo: `${historicalMonth}-01`,
-    }))
+    }, expect.any(AbortSignal)))
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
     const meterInput = await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })
     await user.type(meterInput, '115')
@@ -8535,11 +8535,14 @@ describe('App', () => {
     const secondGarage = createGarage({ id: 'garage-period-second', number: '75', ownerName: 'Второй владелец' })
     let resolveFirstPeriod!: (value: { monthFrom: string; monthTo: string; defaultMonthFrom?: string; defaultMonthTo?: string }) => void
     const firstPeriodRequest = new Promise<{ monthFrom: string; monthTo: string; defaultMonthFrom?: string; defaultMonthTo?: string }>((resolve) => { resolveFirstPeriod = resolve })
-    const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1]) => (
-      params.garageId === firstGarage.id
-        ? firstPeriodRequest
-        : { monthFrom: '2025-03-01', monthTo: '2026-07-01', defaultMonthFrom: '2025-06-01', defaultMonthTo: '2026-07-01' }
-    ))
+    let firstPeriodSignal: AbortSignal | undefined
+    const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1], signal?: AbortSignal) => {
+      if (params.garageId === firstGarage.id) {
+        firstPeriodSignal = signal
+        return firstPeriodRequest
+      }
+      return { monthFrom: '2025-03-01', monthTo: '2026-07-01', defaultMonthFrom: '2025-06-01', defaultMonthTo: '2026-07-01' }
+    })
     const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
       garageId,
       garageNumber: garageId === secondGarage.id ? secondGarage.number : firstGarage.number,
@@ -8570,14 +8573,85 @@ describe('App', () => {
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', secondGarage.id, {
       monthFrom: '2025-06-01',
       monthTo: '2026-07-01',
-    }))
+    }, expect.any(AbortSignal)))
+    expect(firstPeriodSignal?.aborted).toBe(true)
     expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue('06.2025')
 
     resolveFirstPeriod({ monthFrom: '2020-01-01', monthTo: '2026-07-01', defaultMonthFrom: '2021-02-01', defaultMonthTo: '2026-07-01' })
     await act(async () => { await firstPeriodRequest })
 
-    expect(getGarageIncomeWorksheet).not.toHaveBeenCalledWith('token', firstGarage.id, expect.anything())
+    expect(getGarageIncomeWorksheet.mock.calls.some(([, garageId]) => garageId === firstGarage.id)).toBe(false)
     expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue('06.2025')
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
+  })
+
+  it('aborts a stale income worksheet request when another garage is selected', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-worksheet-first', number: '76', ownerName: 'Первый владелец' })
+    const secondGarage = createGarage({ id: 'garage-worksheet-second', number: '77', ownerName: 'Второй владелец' })
+    let resolveFirstWorksheet!: (value: GarageIncomeWorksheetDto) => void
+    const firstWorksheetRequest = new Promise<GarageIncomeWorksheetDto>((resolve) => { resolveFirstWorksheet = resolve })
+    let firstWorksheetSignal: AbortSignal | undefined
+    const getGarageIncomeWorksheet = vi.fn(async (
+      _token: string,
+      garageId: string,
+      _params: Parameters<FinanceClient['getGarageIncomeWorksheet']>[2],
+      signal?: AbortSignal,
+    ) => {
+      if (garageId === firstGarage.id) {
+        firstWorksheetSignal = signal
+        return firstWorksheetRequest
+      }
+
+      return createGarageIncomeWorksheet({
+        garageId,
+        garageNumber: secondGarage.number,
+        ownerName: secondGarage.ownerName,
+        rows: [],
+      })
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [firstGarage, secondGarage] })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({
+          monthFrom: '2026-06-01',
+          monthTo: '2026-07-01',
+          defaultMonthFrom: '2026-06-01',
+          defaultMonthTo: '2026-07-01',
+        }),
+        getGarageIncomeWorksheet,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '76')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*76\s*Первый владелец/ }))
+    await waitFor(() => expect(firstWorksheetSignal).toBeInstanceOf(AbortSignal))
+
+    await user.clear(search)
+    await user.type(search, '77')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Второй владелец/ }))
+
+    await waitFor(() => expect(firstWorksheetSignal?.aborted).toBe(true))
+    await waitFor(() => expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец'))
+
+    resolveFirstWorksheet(createGarageIncomeWorksheet({
+      garageId: firstGarage.id,
+      garageNumber: firstGarage.number,
+      ownerName: firstGarage.ownerName,
+      rows: [],
+    }))
+    await act(async () => { await firstWorksheetRequest })
+
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
   })
 
@@ -9643,9 +9717,13 @@ describe('App', () => {
     const firstGarage = createGarage({ id: 'garage-quote-stale-a', number: '103-А', ownerName: 'Первый владелец' })
     const secondGarage = createGarage({ id: 'garage-quote-stale-b', number: '104-Б', ownerName: 'Второй владелец' })
     let resolveStaleQuote!: (value: GarageFullPaymentQuoteDto) => void
+    let staleQuoteSignal: AbortSignal | undefined
     const staleQuotePromise = new Promise<GarageFullPaymentQuoteDto>((resolve) => { resolveStaleQuote = resolve })
-    const getGarageFullPaymentQuote = vi.fn(async (_token: string, garageId: string) => {
-      if (garageId === firstGarage.id) return staleQuotePromise
+    const getGarageFullPaymentQuote = vi.fn(async (_token: string, garageId: string, signal?: AbortSignal) => {
+      if (garageId === firstGarage.id) {
+        staleQuoteSignal = signal
+        return staleQuotePromise
+      }
       return {
         garageId: secondGarage.id,
         garageNumber: secondGarage.number,
@@ -9686,6 +9764,9 @@ describe('App', () => {
 
     await user.type(search, secondGarage.number)
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*104-Б\s*Второй владелец/ }))
+    expect(staleQuoteSignal?.aborted).toBe(true)
+    const unlockedButton = await within(prototype).findByRole('button', { name: 'Полная оплата' })
+    expect(unlockedButton).toBeEnabled()
     resolveStaleQuote({
       garageId: firstGarage.id,
       garageNumber: firstGarage.number,
@@ -9695,8 +9776,6 @@ describe('App', () => {
     })
     await act(async () => { await staleQuotePromise })
 
-    const unlockedButton = await within(prototype).findByRole('button', { name: 'Полная оплата' })
-    expect(unlockedButton).toBeEnabled()
     expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument()
     await user.click(unlockedButton)
     expect(within(await screen.findByRole('dialog', { name: 'Полная оплата' })).getByLabelText('Сумма полной оплаты')).toHaveValue('300.00')
@@ -9849,7 +9928,7 @@ describe('App', () => {
       operationKind: 'income',
       garageId: 'garage-77',
       limit: 100,
-    })))
+    }), expect.any(AbortSignal)))
     expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'true')
     const historyTable = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
@@ -10005,8 +10084,10 @@ describe('App', () => {
     const firstHistoryRequest = new Promise<FinancePagedResult<FinancialOperationDto>>((resolve) => {
       resolveFirstHistory = resolve
     })
-    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => {
+    let firstHistorySignal: AbortSignal | undefined
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1], signal?: AbortSignal) => {
       if (params?.garageId === firstGarage.id) {
+        firstHistorySignal = signal
         return firstHistoryRequest
       }
 
@@ -10037,6 +10118,7 @@ describe('App', () => {
     await user.clear(search)
     await user.type(search, '82')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*82\s*Петров Петр/ }))
+    expect(firstHistorySignal?.aborted).toBe(true)
     expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
     expect(within(prototype).getByRole('button', { name: 'История платежей' })).toHaveAttribute('aria-expanded', 'false')
 

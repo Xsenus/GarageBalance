@@ -79,8 +79,11 @@ describe('financeApi', () => {
       financeApi.getGarageBalanceHistory('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
       financeApi.getFinancialReportPeriod('token', { garageId: 'garage-88' }, controller.signal),
       financeApi.getSupplierOpeningBalance('token', 'supplier-88', '2026-05', controller.signal),
+      financeApi.getGarageFullPaymentQuote('token', 'garage-88', controller.signal),
+      financeApi.getGarageIncomeWorksheet('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
+      financeApi.calculateGarageIncomeWorksheet('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(9))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(12))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -95,6 +98,9 @@ describe('financeApi', () => {
       '/api/finance/garages/garage-88/balance-history?monthFrom=2026-05-01&monthTo=2026-06-01',
       '/api/finance/financial-report-period?garageId=garage-88',
       '/api/finance/suppliers/supplier-88/opening-balance?monthFrom=2026-05-01',
+      '/api/finance/garages/garage-88/full-payment-quote',
+      '/api/finance/garages/garage-88/income-worksheet?monthFrom=2026-05-01&monthTo=2026-06-01',
+      '/api/finance/garages/garage-88/income-worksheet/calculate',
     ])
   })
 

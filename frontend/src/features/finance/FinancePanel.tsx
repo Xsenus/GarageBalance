@@ -2978,6 +2978,7 @@ function PaymentsPrototypePanel({
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
+  const incomeWorksheetRequestControllerRef = useRef<AbortController | null>(null)
   const [selectedGarage, setSelectedGarage] = useState<PaymentsPrototypeGarage | null>(null)
   const [overdueDebtDetails, setOverdueDebtDetails] = useState<GarageOverdueDebtDto | null>(null)
   const [overdueDebtLoading, setOverdueDebtLoading] = useState(false)
@@ -3007,6 +3008,7 @@ function PaymentsPrototypePanel({
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
+  const paymentHistoryRequestControllerRef = useRef<AbortController | null>(null)
   const paymentHistoryId = useId()
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
@@ -3017,6 +3019,7 @@ function PaymentsPrototypePanel({
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const [fullPaymentQuote, setFullPaymentQuote] = useState<GarageFullPaymentQuoteDto | null>(null)
   const [fullPaymentQuoteLoading, setFullPaymentQuoteLoading] = useState(false)
+  const fullPaymentQuoteRequestControllerRef = useRef<AbortController | null>(null)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const fullPaymentReceiptBatchIdRef = useRef<string | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
@@ -3067,6 +3070,13 @@ function PaymentsPrototypePanel({
       })),
     [availableGarages],
   )
+  useEffect(() => () => {
+    incomeWorksheetRequests.invalidate()
+    incomeWorksheetRequestControllerRef.current?.abort()
+    paymentHistoryRequests.invalidate()
+    paymentHistoryRequestControllerRef.current?.abort()
+    fullPaymentQuoteRequestControllerRef.current?.abort()
+  }, [incomeWorksheetRequests, paymentHistoryRequests])
   const selectedGarageBalance = selectedGarage
     ? getGarageBalancePresentation(selectedGarage.balance, selectedGarage.overdueDebt)
     : null
@@ -3277,25 +3287,36 @@ function PaymentsPrototypePanel({
     if (!selectedGarage || !realGarageIds.has(selectedGarage.id) || !(await onEnsureReferences())) {
       return
     }
+    if (selectedGarageIdRef.current !== selectedGarage.id) {
+      return
+    }
 
+    fullPaymentQuoteRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    fullPaymentQuoteRequestControllerRef.current = controller
     setFullPaymentQuoteLoading(true)
     try {
-      const quote = await financeClient.getGarageFullPaymentQuote(auth.accessToken, selectedGarage.id)
-      if (selectedGarageIdRef.current !== selectedGarage.id) {
+      const quote = await financeClient.getGarageFullPaymentQuote(auth.accessToken, selectedGarage.id, controller.signal)
+      if (controller.signal.aborted || fullPaymentQuoteRequestControllerRef.current !== controller || selectedGarageIdRef.current !== selectedGarage.id) {
         return
       }
       setFullPaymentQuote(quote)
       fullPaymentReceiptBatchIdRef.current = crypto.randomUUID()
       setFullPaymentDialogOpen(true)
     } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : 'Не удалось точно рассчитать полную оплату.')
+      if (!controller.signal.aborted && fullPaymentQuoteRequestControllerRef.current === controller && selectedGarageIdRef.current === selectedGarage.id) {
+        setPaymentError(error instanceof Error ? error.message : 'Не удалось точно рассчитать полную оплату.')
+      }
     } finally {
-      setFullPaymentQuoteLoading(false)
+      if (fullPaymentQuoteRequestControllerRef.current === controller) {
+        setFullPaymentQuoteLoading(false)
+      }
     }
   }
 
   function closeFullPaymentDialog() {
     const trigger = fullPaymentTriggerRef.current
+    fullPaymentQuoteRequestControllerRef.current?.abort()
     setFullPaymentDialogOpen(false)
     setFullPaymentQuote(null)
     fullPaymentReceiptBatchIdRef.current = null
@@ -3390,6 +3411,9 @@ function PaymentsPrototypePanel({
     preservedMeter?: Pick<GarageIncomePrototypeRow, 'meterKind' | 'month' | 'meterDraft' | 'meterError'>,
     resolveAvailablePeriod = false,
   ) {
+    incomeWorksheetRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    incomeWorksheetRequestControllerRef.current = controller
     const requestId = incomeWorksheetRequests.begin()
     setGarageWorksheetLoadingId(garage.id)
     try {
@@ -3398,7 +3422,7 @@ function PaymentsPrototypePanel({
       let resolvedAvailableMonthFrom = incomeWorksheetAvailableMonthFrom
       let resolvedAvailableMonthTo = incomeWorksheetAvailableMonthTo
       if (resolveAvailablePeriod) {
-        const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id })
+        const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id }, controller.signal)
         if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
           return
         }
@@ -3414,8 +3438,8 @@ function PaymentsPrototypePanel({
         monthTo: `${resolvedMonthTo}-01`,
       }
       const worksheet = canWritePayments && financeClient.calculateGarageIncomeWorksheet
-        ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest)
-        : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest)
+        ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
+        : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
         return
       }
@@ -3447,11 +3471,11 @@ function PaymentsPrototypePanel({
         closingDebt: worksheet.closingDebt,
       })
     } catch (error) {
-      if (incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+      if (!controller.signal.aborted && incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
         setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
       }
     } finally {
-      if (incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+      if (!controller.signal.aborted && incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
         setGarageWorksheetLoadingId((currentId) => (currentId === garage.id ? null : currentId))
       }
     }
@@ -3477,6 +3501,9 @@ function PaymentsPrototypePanel({
   }
 
   async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
+    paymentHistoryRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    paymentHistoryRequestControllerRef.current = controller
     const requestId = paymentHistoryRequests.begin()
     setGaragePaymentHistoryLoadingId(garage.id)
     try {
@@ -3484,16 +3511,16 @@ function PaymentsPrototypePanel({
         operationKind: 'income',
         garageId: garage.id,
         limit: 100,
-      })
+      }, controller.signal)
       if (paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
         setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
       }
     } catch (error) {
-      if (paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+      if (!controller.signal.aborted && paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
         setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
       }
     } finally {
-      if (paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+      if (!controller.signal.aborted && paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
         setGaragePaymentHistoryLoadingId((currentId) => (currentId === garage.id ? null : currentId))
       }
     }
@@ -3506,6 +3533,7 @@ function PaymentsPrototypePanel({
 
     if (paymentHistoryOpen) {
       paymentHistoryRequests.invalidate()
+      paymentHistoryRequestControllerRef.current?.abort()
       setPaymentHistoryOpen(false)
       setGaragePaymentHistoryLoadingId(null)
       return
@@ -3687,7 +3715,10 @@ function PaymentsPrototypePanel({
     const currentMonth = getCurrentMonthInputValue()
     const previousMonth = getPreviousMonthInputValue(currentMonth)
     selectedGarageIdRef.current = garage.id
+    incomeWorksheetRequestControllerRef.current?.abort()
     paymentHistoryRequests.invalidate()
+    paymentHistoryRequestControllerRef.current?.abort()
+    fullPaymentQuoteRequestControllerRef.current?.abort()
     setSelectedGarageId(garage.id)
     setSelectedGarage(garage)
     setGarageRows([])
@@ -3695,6 +3726,9 @@ function PaymentsPrototypePanel({
     setHistoryRows([])
     setPaymentHistoryOpen(false)
     setGaragePaymentHistoryLoadingId(null)
+    setFullPaymentQuoteLoading(false)
+    setFullPaymentQuote(null)
+    setFullPaymentDialogOpen(false)
     setPaymentError(null)
     setIncomeWorksheetAvailableMonthFrom(previousMonth)
     setIncomeWorksheetAvailableMonthTo(currentMonth)

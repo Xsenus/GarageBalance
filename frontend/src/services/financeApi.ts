@@ -689,9 +689,9 @@ export type FinanceClient = {
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: string; search?: string; limit?: number }, signal?: AbortSignal): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageBalanceHistoryDto>
   getGarageOverdueDebt(accessToken: string, garageId: string, signal?: AbortSignal): Promise<GarageOverdueDebtDto>
-  getGarageFullPaymentQuote(accessToken: string, garageId: string): Promise<GarageFullPaymentQuoteDto>
-  getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
-  calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
+  getGarageFullPaymentQuote(accessToken: string, garageId: string, signal?: AbortSignal): Promise<GarageFullPaymentQuoteDto>
+  getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
+  calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest): Promise<IncomePaymentWarningDto>
@@ -859,14 +859,14 @@ export const financeApi: FinanceClient = {
   getGarageOverdueDebt(accessToken, garageId, signal) {
     return requestJson(accessToken, `/api/finance/garages/${garageId}/overdue-debt`, { signal })
   },
-  getGarageFullPaymentQuote(accessToken, garageId) {
-    return requestJson(accessToken, `/api/finance/garages/${garageId}/full-payment-quote`)
+  getGarageFullPaymentQuote(accessToken, garageId, signal) {
+    return requestJson(accessToken, `/api/finance/garages/${garageId}/full-payment-quote`, { signal })
   },
-  getGarageIncomeWorksheet(accessToken, garageId, params = {}) {
+  getGarageIncomeWorksheet(accessToken, garageId, params = {}, signal) {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/income-worksheet`, {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
-    }))
+    }), { signal })
   },
   getExpenseWorksheet(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet', {
@@ -887,13 +887,14 @@ export const financeApi: FinanceClient = {
       monthFrom: toMonthStart(monthFrom),
     }), { signal })
   },
-  calculateGarageIncomeWorksheet(accessToken, garageId, request) {
+  calculateGarageIncomeWorksheet(accessToken, garageId, request, signal) {
     return requestJson(accessToken, `/api/finance/garages/${garageId}/income-worksheet/calculate`, {
       method: 'POST',
       body: JSON.stringify({
         monthFrom: toMonthStart(request.monthFrom),
         monthTo: toMonthStart(request.monthTo),
       }),
+      signal,
     })
   },
   getFinancialReportPeriod(accessToken, params, signal) {
