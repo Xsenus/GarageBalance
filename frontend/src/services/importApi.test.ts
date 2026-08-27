@@ -38,6 +38,28 @@ describe('importApi', () => {
     })
   })
 
+  it.each([
+    ['reader status', (signal: AbortSignal) => importApi.getAccessReaderStatus('token', signal), '/api/import/access/reader/status'],
+    ['runs', (signal: AbortSignal) => importApi.getAccessRuns('token', 25, signal), '/api/import/access/runs?limit=25'],
+    ['run log', (signal: AbortSignal) => importApi.getAccessRunLog('token', 'run-42', 25, signal), '/api/import/access/runs/run-42/log?limit=25'],
+    ['created records', (signal: AbortSignal) => importApi.getAccessCreatedRecords('token', 'run-42', 25, signal), '/api/import/access/runs/run-42/created-records?limit=25'],
+    ['quarantine', (signal: AbortSignal) => importApi.getOpenQuarantineItems('token', 'run-42', 25, signal), '/api/import/access/quarantine?accessImportRunId=run-42&limit=25'],
+  ])('passes cancellation to the %s request', async (_name, request, expectedPath) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await request(controller.signal)
+
+    expect(fetchMock).toHaveBeenCalledWith(expectedPath, {
+      headers: {
+        Authorization: 'Bearer token',
+      },
+    })
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(requestInit.signal).toBeInstanceOf(AbortSignal)
+  })
+
   it('requests Access import rollback with a required reason', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'run-42', status: 'rollback_requested' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)

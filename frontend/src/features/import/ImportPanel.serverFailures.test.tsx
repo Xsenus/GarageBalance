@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AuthResponse } from '../../services/authApi'
 import type {
   AccessImportQuarantineItemDto,
@@ -95,6 +95,59 @@ function createClient(overrides: Partial<ImportClient> = {}): ImportClient {
 }
 
 describe('ImportPanel server failures', () => {
+  it('loads hidden import lists only when their tabs open and reuses successful results', async () => {
+    const user = userEvent.setup()
+    const getAccessRunLog = vi.fn(async () => [])
+    const getAccessCreatedRecords = vi.fn(async () => [])
+    const getOpenQuarantineItems = vi.fn(async () => [])
+    const client = createClient({ getAccessRunLog, getAccessCreatedRecords, getOpenQuarantineItems })
+
+    render(<ImportPanel auth={auth} importClient={client} />)
+
+    expect(await screen.findByText('Reader не настроен.')).toBeInTheDocument()
+    expect(getAccessRunLog).not.toHaveBeenCalled()
+    expect(getAccessCreatedRecords).not.toHaveBeenCalled()
+    expect(getOpenQuarantineItems).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('tab', { name: /Лог/ }))
+    expect(await screen.findByText('Лог выбранного запуска пока пуст')).toBeInTheDocument()
+    expect(getAccessRunLog).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('tab', { name: /Создано/ }))
+    expect(await screen.findByText('Созданные записи появятся после фактического переноса Access')).toBeInTheDocument()
+    expect(getAccessCreatedRecords).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('tab', { name: /Карантин/ }))
+    expect(await screen.findByText('Открытых строк карантина нет')).toBeInTheDocument()
+    expect(getOpenQuarantineItems).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('tab', { name: /Лог/ }))
+    expect(screen.getByText('Лог выбранного запуска пока пуст')).toBeInTheDocument()
+    expect(getAccessRunLog).toHaveBeenCalledTimes(1)
+  })
+
+  it('aborts a hidden import-tab request when the user switches tabs', async () => {
+    const user = userEvent.setup()
+    let requestSignal: AbortSignal | undefined
+    const getAccessRunLog = vi.fn((_token: string, _runId: string, _limit?: number, signal?: AbortSignal) => {
+      requestSignal = signal
+      return new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+      })
+    })
+    const client = createClient({ getAccessRunLog })
+
+    render(<ImportPanel auth={auth} importClient={client} />)
+    expect(await screen.findByText('Reader не настроен.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /Лог/ }))
+    await waitFor(() => expect(requestSignal).toBeDefined())
+    expect(requestSignal?.aborted).toBe(false)
+
+    await user.click(screen.getByRole('tab', { name: /Проверки/ }))
+    expect(requestSignal?.aborted).toBe(true)
+  })
+
   it('shows an apply failure inside the dialog, preserves input and allows retry', async () => {
     const user = userEvent.setup()
     let attempts = 0
@@ -129,7 +182,7 @@ describe('ImportPanel server failures', () => {
     expect(attempts).toBe(2)
   })
 
-  it('does not repeat a completed apply request when only the follow-up log refresh fails', async () => {
+  it('does not refresh a hidden log after apply and keeps a later log failure separate', async () => {
     const user = userEvent.setup()
     let applyAttempts = 0
     let logRequests = 0
@@ -138,10 +191,7 @@ describe('ImportPanel server failures', () => {
       getAccessRuns: async () => [run],
       getAccessRunLog: async () => {
         logRequests += 1
-        if (logRequests > 1) {
-          throw new Error('Журнал импорта временно недоступен.')
-        }
-        return []
+        throw new Error('Журнал импорта временно недоступен.')
       },
       requestAccessImportApply: async (_token, runId) => {
         applyAttempts += 1
@@ -157,9 +207,14 @@ describe('ImportPanel server failures', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Запросить импорт' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запросить фактический импорт?' })).not.toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(logRequests).toBe(0)
+    expect(applyAttempts).toBe(1)
+    await user.click(screen.getByRole('tab', { name: /Лог/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Журнал импорта временно недоступен.')
     expect(screen.getByText('Фактический импорт запрошен. Данные не переносились до подключения reader Access.')).toHaveAttribute('role', 'status')
     expect(applyAttempts).toBe(1)
+    expect(logRequests).toBe(1)
   })
 
   it('shows an apply-cancel failure inside the dialog, preserves the reason and allows retry', async () => {

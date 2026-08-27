@@ -81,11 +81,11 @@ export type AccessImportReaderStatusDto = {
 }
 
 export type ImportClient = {
-  getAccessReaderStatus(accessToken: string): Promise<AccessImportReaderStatusDto>
-  getAccessRuns(accessToken: string, limit?: number): Promise<AccessImportRunDto[]>
-  getAccessRunLog(accessToken: string, runId: string, limit?: number): Promise<AccessImportRunLogEntryDto[]>
-  getAccessCreatedRecords(accessToken: string, runId: string, limit?: number): Promise<AccessImportCreatedRecordDto[]>
-  getOpenQuarantineItems(accessToken: string, accessImportRunId?: string, limit?: number): Promise<AccessImportQuarantineItemDto[]>
+  getAccessReaderStatus(accessToken: string, signal?: AbortSignal): Promise<AccessImportReaderStatusDto>
+  getAccessRuns(accessToken: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunDto[]>
+  getAccessRunLog(accessToken: string, runId: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunLogEntryDto[]>
+  getAccessCreatedRecords(accessToken: string, runId: string, limit?: number, signal?: AbortSignal): Promise<AccessImportCreatedRecordDto[]>
+  getOpenQuarantineItems(accessToken: string, accessImportRunId?: string, limit?: number, signal?: AbortSignal): Promise<AccessImportQuarantineItemDto[]>
   dryRunAccess(accessToken: string, file: File): Promise<AccessImportRunDto>
   downloadAccessRunReport(accessToken: string, runId: string): Promise<Blob>
   requestAccessImportApply(accessToken: string, runId: string, reason: string, backupConfirmed: boolean): Promise<AccessImportRunDto>
@@ -115,25 +115,25 @@ async function requestBlob(accessToken: string, path: string, init?: RequestInit
 }
 
 export const importApi: ImportClient = {
-  getAccessReaderStatus(accessToken) {
-    return requestJson(accessToken, '/api/import/access/reader/status')
+  getAccessReaderStatus(accessToken, signal) {
+    return requestJson(accessToken, '/api/import/access/reader/status', signal ? { signal } : undefined)
   },
-  getAccessRuns(accessToken, limit = 50) {
-    return requestJson(accessToken, `/api/import/access/runs?limit=${encodeURIComponent(limit)}`)
+  getAccessRuns(accessToken, limit = 50, signal) {
+    return requestJson(accessToken, `/api/import/access/runs?limit=${encodeURIComponent(limit)}`, signal ? { signal } : undefined)
   },
-  getAccessRunLog(accessToken, runId, limit = 100) {
-    return requestJson(accessToken, `/api/import/access/runs/${runId}/log?limit=${encodeURIComponent(limit)}`)
+  getAccessRunLog(accessToken, runId, limit = 100, signal) {
+    return requestJson(accessToken, `/api/import/access/runs/${runId}/log?limit=${encodeURIComponent(limit)}`, signal ? { signal } : undefined)
   },
-  getAccessCreatedRecords(accessToken, runId, limit = 100) {
-    return requestJson(accessToken, `/api/import/access/runs/${runId}/created-records?limit=${encodeURIComponent(limit)}`)
+  getAccessCreatedRecords(accessToken, runId, limit = 100, signal) {
+    return requestJson(accessToken, `/api/import/access/runs/${runId}/created-records?limit=${encodeURIComponent(limit)}`, signal ? { signal } : undefined)
   },
-  getOpenQuarantineItems(accessToken, accessImportRunId, limit = 50) {
+  getOpenQuarantineItems(accessToken, accessImportRunId, limit = 50, signal) {
     const params = new URLSearchParams()
     if (accessImportRunId) {
       params.set('accessImportRunId', accessImportRunId)
     }
     params.set('limit', String(limit))
-    return requestJson(accessToken, `/api/import/access/quarantine?${params.toString()}`)
+    return requestJson(accessToken, `/api/import/access/quarantine?${params.toString()}`, signal ? { signal } : undefined)
   },
   dryRunAccess(accessToken, file) {
     const formData = new FormData()

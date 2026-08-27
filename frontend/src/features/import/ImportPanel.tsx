@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { DatabaseZap, FileText, RotateCcw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -37,6 +37,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const [loading, setLoading] = useState(true)
   const [loadingLog, setLoadingLog] = useState(false)
   const [loadingCreatedRecords, setLoadingCreatedRecords] = useState(false)
+  const [loadingQuarantine, setLoadingQuarantine] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resolvingQuarantineId, setResolvingQuarantineId] = useState<string | null>(null)
@@ -58,7 +59,11 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const [quarantineResolveError, setQuarantineResolveError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloadRevision, setReloadRevision] = useState(0)
+  const [quarantineReloadRevision, setQuarantineReloadRevision] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const loadedLogKeyRef = useRef<string | null>(null)
+  const loadedCreatedRecordsKeyRef = useRef<string | null>(null)
+  const loadedQuarantineRevisionRef = useRef(-1)
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
   const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
@@ -89,7 +94,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     { key: 'log', label: 'Лог', meta: loadingLog ? 'загрузка' : `${runLogEntries.length} строк` },
     { key: 'created', label: 'Создано', meta: loadingCreatedRecords ? 'загрузка' : `${createdRecords.length} записей` },
     { key: 'history', label: 'История', meta: `${runs.length} запусков` },
-    { key: 'quarantine', label: 'Карантин', meta: `${quarantineItems.length} открыто` },
+    { key: 'quarantine', label: 'Карантин', meta: loadingQuarantine ? 'загрузка' : `${quarantineItems.length} открыто` },
   ]
 
   useEscapeKey(Boolean(quarantineResolveTarget) && resolvingQuarantineId === null, () => closeQuarantineResolveDialog())
@@ -98,20 +103,25 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   useEscapeKey(Boolean(rollbackTarget) && rollbackingRunId === null, () => closeRollbackDialog())
 
   useEffect(() => {
+    loadedLogKeyRef.current = null
+    loadedCreatedRecordsKeyRef.current = null
+    loadedQuarantineRevisionRef.current = -1
+  }, [auth.accessToken, importClient])
+
+  useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
     async function load() {
       setLoading(true)
       setError(null)
       try {
-        const [loadedReaderStatus, loadedRuns, loadedQuarantineItems] = await Promise.all([
-          importClient.getAccessReaderStatus(auth.accessToken),
-          importClient.getAccessRuns(auth.accessToken),
-          importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit),
+        const [loadedReaderStatus, loadedRuns] = await Promise.all([
+          importClient.getAccessReaderStatus(auth.accessToken, controller.signal),
+          importClient.getAccessRuns(auth.accessToken, undefined, controller.signal),
         ])
         if (!ignore) {
           setReaderStatus(loadedReaderStatus)
           setRuns(loadedRuns)
-          setQuarantineItems(loadedQuarantineItems)
           setCurrentRun(loadedRuns[0] ?? null)
         }
       } catch (caught) {
@@ -128,24 +138,36 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     void load()
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [auth.accessToken, importClient, reloadRevision])
 
   useEffect(() => {
+    if (activeImportTab !== 'log') {
+      return undefined
+    }
+
     let ignore = false
+    const controller = new AbortController()
 
     async function loadRunLog() {
       if (!currentRun) {
         setRunLogEntries([])
+        loadedLogKeyRef.current = null
         return
       }
 
+      const loadKey = `${currentRun.id}:${currentRun.status}:${currentRun.finishedAtUtc ?? ''}`
+      if (loadedLogKeyRef.current === loadKey && currentRun.status !== 'queued' && currentRun.status !== 'processing') return
+
       setLogPageNumber(1)
       setLoadingLog(true)
+      setRunLogEntries([])
       try {
-        const entries = await importClient.getAccessRunLog(auth.accessToken, currentRun.id)
+        const entries = await importClient.getAccessRunLog(auth.accessToken, currentRun.id, undefined, controller.signal)
         if (!ignore) {
           setRunLogEntries(entries)
+          loadedLogKeyRef.current = loadKey
         }
       } catch (caught) {
         if (!ignore) {
@@ -162,8 +184,9 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     void loadRunLog()
     return () => {
       ignore = true
+      controller.abort()
     }
-  }, [auth.accessToken, currentRun, importClient])
+  }, [activeImportTab, auth.accessToken, currentRun, importClient, reloadRevision])
 
   useEffect(() => {
     if (!currentRun || (currentRun.status !== 'queued' && currentRun.status !== 'processing')) {
@@ -171,8 +194,10 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     let ignore = false
-    const timer = window.setInterval(() => {
-      void importClient.getAccessRuns(auth.accessToken).then((loadedRuns) => {
+    const controller = new AbortController()
+    let timer: number | undefined
+    const pollRuns = () => {
+      void importClient.getAccessRuns(auth.accessToken, undefined, controller.signal).then((loadedRuns) => {
         if (ignore) {
           return
         }
@@ -186,30 +211,45 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         if (!ignore) {
           setError(caught instanceof Error ? caught.message : 'Не удалось обновить состояние фоновой проверки.')
         }
+      }).finally(() => {
+        if (!ignore) timer = window.setTimeout(pollRuns, 1000)
       })
-    }, 1000)
+    }
+    timer = window.setTimeout(pollRuns, 1000)
 
     return () => {
       ignore = true
-      window.clearInterval(timer)
+      controller.abort()
+      if (timer !== undefined) window.clearTimeout(timer)
     }
   }, [auth.accessToken, currentRun, importClient])
 
   useEffect(() => {
+    if (activeImportTab !== 'created') {
+      return undefined
+    }
+
     let ignore = false
+    const controller = new AbortController()
 
     async function loadCreatedRecords() {
       if (!currentRun) {
         setCreatedRecords([])
+        loadedCreatedRecordsKeyRef.current = null
         return
       }
 
+      const loadKey = `${currentRun.id}:${currentRun.status}:${currentRun.finishedAtUtc ?? ''}`
+      if (loadedCreatedRecordsKeyRef.current === loadKey && currentRun.status !== 'queued' && currentRun.status !== 'processing') return
+
       setCreatedPageNumber(1)
       setLoadingCreatedRecords(true)
+      setCreatedRecords([])
       try {
-        const records = await importClient.getAccessCreatedRecords(auth.accessToken, currentRun.id, importCreatedRecordsScreenRequestLimit)
+        const records = await importClient.getAccessCreatedRecords(auth.accessToken, currentRun.id, importCreatedRecordsScreenRequestLimit, controller.signal)
         if (!ignore) {
           setCreatedRecords(records)
+          loadedCreatedRecordsKeyRef.current = loadKey
         }
       } catch (caught) {
         if (!ignore) {
@@ -226,8 +266,40 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     void loadCreatedRecords()
     return () => {
       ignore = true
+      controller.abort()
     }
-  }, [auth.accessToken, currentRun, importClient])
+  }, [activeImportTab, auth.accessToken, currentRun, importClient, reloadRevision])
+
+  useEffect(() => {
+    if (activeImportTab !== 'quarantine' || loadedQuarantineRevisionRef.current === quarantineReloadRevision) {
+      return undefined
+    }
+
+    let ignore = false
+    const controller = new AbortController()
+    setLoadingQuarantine(true)
+    setError(null)
+    importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit, controller.signal)
+      .then((items) => {
+        if (!ignore) {
+          setQuarantineItems(items)
+          loadedQuarantineRevisionRef.current = quarantineReloadRevision
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить карантин импорта.')
+        }
+      })
+      .finally(() => {
+        if (!ignore) setLoadingQuarantine(false)
+      })
+
+    return () => {
+      ignore = true
+      controller.abort()
+    }
+  }, [activeImportTab, auth.accessToken, importClient, quarantineReloadRevision, reloadRevision])
 
   async function runDryRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -243,7 +315,10 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       const run = await importClient.dryRunAccess(auth.accessToken, selectedFile)
       setCurrentRun(run)
       setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)])
-      setQuarantineItems(await importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit))
+      loadedLogKeyRef.current = null
+      loadedCreatedRecordsKeyRef.current = null
+      loadedQuarantineRevisionRef.current = -1
+      setQuarantineReloadRevision((value) => value + 1)
       setSelectedFile(null)
       setExportMessage(null)
       if (run.status === 'queued' || run.status === 'processing') {
@@ -476,7 +551,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       </div>
 
       {error && !applyTarget && !applyCancelTarget && !rollbackTarget && !quarantineResolveTarget ? (
-        <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading} />
+        <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading || loadingLog || loadingCreatedRecords || loadingQuarantine} />
       ) : null}
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
@@ -718,7 +793,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Причина</span>
               <span role="columnheader">Действие</span>
             </div>
-            {quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
+            {loadingQuarantine ? <TableLoadingState label="Загружаем карантин импорта" /> : null}
+            {!loadingQuarantine && quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
             {quarantinePage.items.map((item) => (
               <div className="operation-row" role="row" key={item.id}>
                 <span role="cell">
