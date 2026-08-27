@@ -15073,7 +15073,8 @@ describe('App', () => {
     const getStaffMembers = vi.fn(baseDictionaryClient.getStaffMembers)
     const getIncomeTypes = vi.fn(baseDictionaryClient.getIncomeTypes)
     const getExpenseTypes = vi.fn(baseDictionaryClient.getExpenseTypes)
-    const dictionaryClient = createDictionaryClient({ getSupplierGroups, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes })
+    const getGarages = vi.fn(baseDictionaryClient.getGarages)
+    const dictionaryClient = createDictionaryClient({ getSupplierGroups, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes, getGaragesPage: undefined, getGarages })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
 
@@ -15088,10 +15089,18 @@ describe('App', () => {
     expect(getStaffMembers).not.toHaveBeenCalled()
     expect(getIncomeTypes).not.toHaveBeenCalled()
     expect(getExpenseTypes).not.toHaveBeenCalled()
+    expect(getGarages).not.toHaveBeenCalled()
 
     const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
     const garageSearch = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
     await user.type(garageSearch, '1')
+    await waitFor(() => expect(getGarages).toHaveBeenCalledWith(
+      expect.any(String),
+      '1',
+      20,
+      false,
+      expect.any(AbortSignal),
+    ))
     const garageOptions = await within(prototype).findAllByRole('option')
     await user.click(garageOptions[0])
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
@@ -15113,6 +15122,101 @@ describe('App', () => {
     await user.click(addExpenseButton)
     expect(await screen.findByRole('dialog', { name: 'Добавить выплату' })).toBeInTheDocument()
     expect(getSuppliers).toHaveBeenCalledTimes(2)
+  })
+
+  it('loads the full garage list only when a payment editor needs it and caches success', async () => {
+    const user = userEvent.setup()
+    let resolveGarages!: (garages: GarageDto[]) => void
+    const garagesPromise = new Promise<GarageDto[]>((resolve) => { resolveGarages = resolve })
+    const getGarages = vi.fn(() => garagesPromise)
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => ({ items: [], totalCount: 0, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+    })
+    const dictionaryClient = createDictionaryClient({ getGarages })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+    expect(await within(tableArea).findByText('По выбранным условиям записей нет')).toBeInTheDocument()
+    expect(getGarages).not.toHaveBeenCalled()
+
+    fireEvent.contextMenu(tableArea)
+    await user.click(within(await screen.findByRole('menu', { name: 'Операции с платежами' })).getByRole('menuitem', { name: 'Добавить' }))
+    expect(getGarages).toHaveBeenCalledWith(expect.any(String), undefined, 100, false, expect.any(AbortSignal))
+    expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument()
+
+    await act(async () => resolveGarages([createGarage({ id: 'garage-editor-reference', number: '314' })]))
+    let dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(within(dialog).getByRole('combobox', { name: 'Гараж для поступления' })).toHaveTextContent('Гараж 314')
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
+
+    fireEvent.contextMenu(tableArea)
+    await user.click(within(await screen.findByRole('menu', { name: 'Операции с платежами' })).getByRole('menuitem', { name: 'Добавить' }))
+    dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(dialog).toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a failed garage-reference load for the requested payment editor', async () => {
+    const user = userEvent.setup()
+    const getGarages = vi.fn()
+      .mockRejectedValueOnce(new Error('Гаражи для формы временно недоступны.'))
+      .mockResolvedValueOnce([createGarage({ id: 'garage-editor-retry', number: '315' })])
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => ({ items: [], totalCount: 0, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+    })
+    const dictionaryClient = createDictionaryClient({ getGarages })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+
+    fireEvent.contextMenu(tableArea)
+    await user.click(within(await screen.findByRole('menu', { name: 'Операции с платежами' })).getByRole('menuitem', { name: 'Добавить' }))
+    expect(await within(financePanel).findByText('Гаражи для формы временно недоступны.')).toHaveAttribute('role', 'alert')
+    expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(tableArea)
+    await user.click(within(await screen.findByRole('menu', { name: 'Операции с платежами' })).getByRole('menuitem', { name: 'Добавить' }))
+    expect(await screen.findByRole('dialog', { name: 'Новое поступление' })).toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels a pending payment-editor garage request when leaving payments', async () => {
+    const user = userEvent.setup()
+    let garageReferenceSignal: AbortSignal | undefined
+    const getGarages = vi.fn((...args: Parameters<DictionaryClient['getGarages']>) => {
+      garageReferenceSignal = args[4]
+      return new Promise<GarageDto[]>(() => undefined)
+    })
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => ({ items: [], totalCount: 0, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+    })
+    const dictionaryClient = createDictionaryClient({ getGarages })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+
+    fireEvent.contextMenu(tableArea)
+    await user.click(within(await screen.findByRole('menu', { name: 'Операции с платежами' })).getByRole('menuitem', { name: 'Добавить' }))
+    await waitFor(() => expect(garageReferenceSignal).toBeDefined())
+    await openSection(user, 'Главное меню')
+
+    expect(garageReferenceSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument()
   })
 
   it('shows a ready payment page without waiting for the summary', async () => {

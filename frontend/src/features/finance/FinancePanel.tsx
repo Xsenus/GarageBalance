@@ -373,6 +373,9 @@ export function FinancePanel({
   const financeReferenceBundlePromiseRef = useRef<Promise<void> | null>(null)
   const financeReferenceBundleLoadedRef = useRef(false)
   const financeReferenceBundleGenerationRef = useRef(0)
+  const financeGarageReferencesPromiseRef = useRef<Promise<GarageDto[] | undefined> | null>(null)
+  const financeGarageReferencesRef = useRef<GarageDto[] | null>(null)
+  const financeGarageReferencesControllerRef = useRef<AbortController | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const [paymentsPrototypeRefreshRevision, setPaymentsPrototypeRefreshRevision] = useState(0)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -387,7 +390,7 @@ export function FinancePanel({
   const [salaryValidationErrors, setSalaryValidationErrors] = useState<string[]>([])
   const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
-  const [referencesLoading, setReferencesLoading] = useState(true)
+  const [financeReferenceLoading, setFinanceReferenceLoading] = useState(0)
   const [workbenchLoading, setWorkbenchLoading] = useState(false)
   const [workbenchLoaded, setWorkbenchLoaded] = useState(false)
   const [financePreviewLoading, setFinancePreviewLoading] = useState<FinancePreviewStatuses>({ operations: true, accruals: true, supplierAccruals: true, meterReadings: true })
@@ -398,6 +401,7 @@ export function FinancePanel({
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [financeReloadRevision, setFinanceReloadRevision] = useState(0)
+  const referencesLoading = financeReferenceLoading !== 0
   const loading = workbenchLoading || !paymentDisplaySettingsLoaded || (showAllGarageOperations && !workbenchLoaded)
   const paymentsPrototypeLoading = referencesLoading
   const closeCancelFinanceDialog = useCallback(() => {
@@ -540,7 +544,7 @@ export function FinancePanel({
 
     if (!financeReferenceBundlePromiseRef.current) {
       const generation = financeReferenceBundleGenerationRef.current
-      setReferencesLoading(true)
+      setFinanceReferenceLoading((value) => value | 1)
       setError(null)
       financeReferenceBundlePromiseRef.current = Promise.all([
         dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
@@ -605,48 +609,79 @@ export function FinancePanel({
     } finally {
       if (request === financeReferenceBundlePromiseRef.current) {
         financeReferenceBundlePromiseRef.current = null
-        setReferencesLoading(false)
+        setFinanceReferenceLoading((value) => value & ~1)
       }
     }
   }, [auth.accessToken, dictionaryClient])
 
-  useEffect(() => {
-    let ignore = false
-    financeReferenceBundleGenerationRef.current += 1
-    financeReferenceBundleLoadedRef.current = false
-    financeReferenceBundlePromiseRef.current = null
-    async function load() {
-      setReferencesLoading(true)
-      setError(null)
+  const ensureFinanceGarageReferences = useCallback(async () => {
+    if (financeGarageReferencesRef.current) {
+      return financeGarageReferencesRef.current
+    }
+    if (financeGarageReferencesPromiseRef.current) {
+      return financeGarageReferencesPromiseRef.current
+    }
+
+    const controller = new AbortController()
+    financeGarageReferencesControllerRef.current = controller
+    setFinanceReferenceLoading((value) => value | 2)
+    setError(null)
+    const request = (async () => {
       try {
-        const garagesPromise = dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
-        const loadedGarages = await garagesPromise
-        if (!ignore) {
-          setGarages(loadedGarages)
-          setIncomeGarageOptions(loadedGarages)
-          setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
-          setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
-          setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
-          setReferencesLoading(false)
+        const loadedGarages = await dictionaryClient.getGarages(
+          auth.accessToken,
+          undefined,
+          dictionaryScreenRequestLimit,
+          false,
+          controller.signal,
+        )
+        if (controller.signal.aborted) {
+          return
         }
 
+        setGarages(loadedGarages)
+        setIncomeGarageOptions(loadedGarages)
+        financeGarageReferencesRef.current = loadedGarages
+        setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+        setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+        setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+        return loadedGarages
       } catch (caught) {
-        if (!ignore) {
-          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить платежи.')
+        if (!controller.signal.aborted) {
+          setError(caught instanceof Error ? caught.message : 'Ошибка.')
         }
       } finally {
-        if (!ignore) {
-          setReferencesLoading(false)
+        if (!controller.signal.aborted) {
+          financeGarageReferencesPromiseRef.current = null
+          setFinanceReferenceLoading((value) => value & ~2)
         }
       }
-    }
+    })()
+    financeGarageReferencesPromiseRef.current = request
+    return request
+  }, [auth.accessToken, dictionaryClient])
 
-    void load()
+  useEffect(() => {
+    financeReferenceBundleGenerationRef.current += 1
+    const referenceBundleGeneration = financeReferenceBundleGenerationRef.current
+    financeReferenceBundleLoadedRef.current = false
+    financeReferenceBundlePromiseRef.current = null
+    financeGarageReferencesControllerRef.current?.abort()
+    financeGarageReferencesRef.current = null
+    financeGarageReferencesPromiseRef.current = null
+    queueMicrotask(() => {
+      if (referenceBundleGeneration === financeReferenceBundleGenerationRef.current) {
+        setFinanceReferenceLoading(
+          (financeReferenceBundlePromiseRef.current ? 1 : 0)
+          | (financeGarageReferencesPromiseRef.current ? 2 : 0),
+        )
+      }
+    })
     return () => {
-      ignore = true
       financeReferenceBundleGenerationRef.current += 1
+      financeGarageReferencesControllerRef.current?.abort()
     }
-  }, [auth.accessToken, dictionaryClient, financeReloadRevision])
+  }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
@@ -677,8 +712,9 @@ export function FinancePanel({
   useEffect(() => {
     if (paymentDisplaySettingsLoaded && showAllGarageOperations) {
       void ensureFinanceReferenceBundle()
+      void ensureFinanceGarageReferences()
     }
-  }, [ensureFinanceReferenceBundle, paymentDisplaySettingsLoaded, showAllGarageOperations])
+  }, [ensureFinanceGarageReferences, ensureFinanceReferenceBundle, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   useEffect(() => {
     if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
@@ -1513,9 +1549,14 @@ export function FinancePanel({
       return
     }
 
-    if (section !== 'meterReadings' && !await ensureFinanceReferenceBundle()) {
+    const [bundleReady, garageReferences] = await Promise.all([
+      section !== 'meterReadings' ? ensureFinanceReferenceBundle() : true,
+      section === 'income' || section === 'accruals' || section === 'meterReadings' ? ensureFinanceGarageReferences() : [],
+    ])
+    if (!bundleReady || !garageReferences) {
       return
     }
+    const defaultGarageId = garageReferences[0]?.id || ''
 
     financeEditorTriggerRef.current = trigger ?? null
     setError(null)
@@ -1563,7 +1604,7 @@ export function FinancePanel({
       setIncomeForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'income') {
-      const nextForm = { ...incomeForm, amount: 0, documentNumber: '', comment: '' }
+      const nextForm = { ...incomeForm, garageId: incomeForm.garageId || defaultGarageId, amount: 0, documentNumber: '', comment: '' }
       setIncomeForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'expense' && 'operationKind' in record) {
@@ -1598,7 +1639,7 @@ export function FinancePanel({
       setAccrualForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'accruals') {
-      const nextForm = { ...accrualForm, source: 'manual' as const, amount: 0, comment: '' }
+      const nextForm = { ...accrualForm, garageId: accrualForm.garageId || defaultGarageId, source: 'manual' as const, amount: 0, comment: '' }
       setAccrualForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'supplierAccruals' && 'supplierId' in record && !('operationKind' in record)) {
@@ -1637,7 +1678,9 @@ export function FinancePanel({
       setMeterForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'meterReadings') {
-      initialSnapshot = JSON.stringify(meterForm)
+      const nextForm = { ...meterForm, garageId: meterForm.garageId || defaultGarageId }
+      setMeterForm(nextForm)
+      initialSnapshot = JSON.stringify(nextForm)
     }
     setFinanceEditorInitialSnapshot(initialSnapshot || getFinanceEditorFormSnapshot(section))
     setFinanceEditor({ section, mode: record ? 'edit' : 'create', record })
