@@ -13,15 +13,25 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
+import { auditApi } from '../../services/auditApi'
 import type { AuditClient } from '../../services/auditApi'
+import { dictionariesApi } from '../../services/dictionariesApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
+import { financeApi } from '../../services/financeApi'
 import type { FinanceClient } from '../../services/financeApi'
+import { fundsApi } from '../../services/fundsApi'
 import type { FundsClient } from '../../services/fundsApi'
+import { importApi } from '../../services/importApi'
 import type { ImportClient } from '../../services/importApi'
+import { integrationsApi } from '../../services/integrationsApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
+import { releasesApi } from '../../services/releasesApi'
 import type { ReleaseClient } from '../../services/releasesApi'
+import { reportsApi } from '../../services/reportsApi'
 import type { ReportClient } from '../../services/reportsApi'
+import { usersApi } from '../../services/usersApi'
 import type { UserManagementClient } from '../../services/usersApi'
+import { settingsApi } from '../../services/settingsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
@@ -71,20 +81,20 @@ function saveStoredSidebarExpanded(expanded: boolean) {
 type AppShellProps = {
   auth: AuthResponse
   authClient: AuthClient
-  auditClient: AuditClient
-  dictionaryClient: DictionaryClient
-  financeClient: FinanceClient
-  fundsClient: FundsClient
-  importClient: ImportClient
-  integrationClient: IntegrationClient
-  reportClient: ReportClient
-  releaseClient: ReleaseClient
-  userClient: UserManagementClient
-  settingsClient: ApplicationSettingsClient
+  auditClient?: AuditClient
+  dictionaryClient?: DictionaryClient
+  financeClient?: FinanceClient
+  fundsClient?: FundsClient
+  importClient?: ImportClient
+  integrationClient?: IntegrationClient
+  reportClient?: ReportClient
+  releaseClient?: ReleaseClient
+  userClient?: UserManagementClient
+  settingsClient?: ApplicationSettingsClient
   onLogout: () => void
 }
 
-export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionaryClient, financeClient, fundsClient, importClient, integrationClient, reportClient, releaseClient, settingsClient, userClient, onLogout }: AppShellProps) {
+export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, settingsClient = settingsApi, userClient = usersApi, onLogout }: AppShellProps) {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
   const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)

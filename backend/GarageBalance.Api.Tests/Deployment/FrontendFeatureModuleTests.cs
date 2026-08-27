@@ -44,7 +44,8 @@ public sealed class FrontendFeatureModuleTests
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx"));
         var shellText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "AppShell.tsx"));
-        Assert.Contains("import { AuthenticatedAppShell } from './features/workspace/AppShell'", appText, StringComparison.Ordinal);
+        Assert.Contains("import('./features/workspace/AppShell')", appText, StringComparison.Ordinal);
+        Assert.DoesNotContain("import { AuthenticatedAppShell } from './features/workspace/AppShell'", appText, StringComparison.Ordinal);
         Assert.Contains("<AuthenticatedAppShell", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("sidebarExpandedStorageKey", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("const navigation", appText, StringComparison.Ordinal);

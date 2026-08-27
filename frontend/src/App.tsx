@@ -1,28 +1,20 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { authApi } from './services/authApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { AuthGate } from './features/auth/AuthGate'
-import { AuthenticatedAppShell } from './features/workspace/AppShell'
-import { auditApi } from './services/auditApi'
 import type { AuditClient } from './services/auditApi'
-import { clearDictionaryResponseCache, dictionariesApi } from './services/dictionariesApi'
+import { clearDictionaryResponseCache } from './services/dictionariesApi'
 import type { DictionaryClient } from './services/dictionariesApi'
-import { financeApi } from './services/financeApi'
 import type { FinanceClient } from './services/financeApi'
-import { fundsApi } from './services/fundsApi'
 import type { FundsClient } from './services/fundsApi'
-import { importApi } from './services/importApi'
 import type { ImportClient } from './services/importApi'
-import { integrationsApi } from './services/integrationsApi'
 import type { IntegrationClient } from './services/integrationsApi'
-import { reportsApi } from './services/reportsApi'
 import type { ReportClient } from './services/reportsApi'
-import { releasesApi } from './services/releasesApi'
 import type { ReleaseClient } from './services/releasesApi'
-import { usersApi } from './services/usersApi'
 import type { UserManagementClient } from './services/usersApi'
-import { settingsApi } from './services/settingsApi'
 import type { ApplicationSettingsClient } from './services/settingsApi'
+import { LoadingSkeleton } from './shared/AsyncState'
+import { createRetryableLazyLoader } from './shared/retryableLazyLoader'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import { useClientErrorReporting } from './shared/useClientErrorReporting'
 import { useSessionExpiration } from './shared/useSessionExpiration'
@@ -43,8 +35,10 @@ type AppProps = {
 }
 
 const authSessionStorageKey = 'garagebalance.auth.session'
+const loadAuthenticatedAppShell = createRetryableLazyLoader(() => import('./features/workspace/AppShell').then((module) => ({ default: module.AuthenticatedAppShell })))
+const AuthenticatedAppShell = lazy(loadAuthenticatedAppShell)
 
-function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, settingsClient = settingsApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, auditClient, dictionaryClient, financeClient, fundsClient, importClient, integrationClient, reportClient, releaseClient, settingsClient, userClient }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   useClientErrorReporting(auth?.accessToken ?? null)
 
@@ -70,7 +64,9 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
   }
 
   return (
-    <AuthenticatedAppShell auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onLogout={handleLogout} />
+    <Suspense fallback={<main className="auth-entry"><LoadingSkeleton label="Загружаем рабочее пространство" rows={5} columns={2} /></main>}>
+      <AuthenticatedAppShell auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onLogout={handleLogout} />
+    </Suspense>
   )
 }
 

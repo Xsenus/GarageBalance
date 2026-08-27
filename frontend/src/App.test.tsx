@@ -52,6 +52,12 @@ describe('App', () => {
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
+    if (screen.queryByRole('status', { name: 'Загружаем рабочее пространство' })) {
+      await waitFor(() => {
+        expect(screen.queryByRole('status', { name: 'Загружаем рабочее пространство' })).not.toBeInTheDocument()
+      })
+    }
+
     const mainNavigation = screen.queryByRole('navigation', { name: 'Основные разделы' })
     if (mainNavigation) {
       const tab = within(mainNavigation).getByRole('button', { name })

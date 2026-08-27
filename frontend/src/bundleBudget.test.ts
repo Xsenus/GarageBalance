@@ -10,6 +10,7 @@ describe('frontend bundle budget gate', () => {
   }
   const budgetScript = readFileSync(resolve(process.cwd(), 'scripts', 'check-bundle-budget.mjs'), 'utf8')
   const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')
+  const appSource = readFileSync(resolve(process.cwd(), 'src', 'App.tsx'), 'utf8')
 
   it('exposes an npm script that can run after production build', () => {
     expect(packageJson.scripts['check:bundle']).toBe('node scripts/check-bundle-budget.mjs')
@@ -31,5 +32,10 @@ describe('frontend bundle budget gate', () => {
   it('keeps related accounting screens in shared lazy chunks to avoid gzip overhead', () => {
     expect(viteConfig).toContain("return 'financial-operations'")
     expect(viteConfig).toContain("return 'cooperative-setup'")
+  })
+
+  it('loads the authenticated workspace only after authentication', () => {
+    expect(appSource).toContain("import('./features/workspace/AppShell')")
+    expect(appSource).not.toContain("import { AuthenticatedAppShell } from './features/workspace/AppShell'")
   })
 })

@@ -4,12 +4,15 @@ import type { AuthResponse } from '../../services/authApi'
 import { permissions } from '../../shared/accessControl'
 
 const workspaceRenderSpy = vi.hoisted(() => vi.fn())
+const workspacePropsSpy = vi.hoisted(() => vi.fn())
 
 vi.mock('./Workspace', async () => {
   const { memo } = await import('react')
   return {
-    Workspace: memo(function WorkspaceProbe({ activeSection }: { activeSection: string }) {
+    Workspace: memo(function WorkspaceProbe(props: { activeSection: string; [key: string]: unknown }) {
+      const { activeSection } = props
       workspaceRenderSpy(activeSection)
+      workspacePropsSpy(props)
       return <div role="region" aria-label={`workspace-${activeSection}`} />
     }),
   }
@@ -57,6 +60,7 @@ function renderShell() {
 describe('AuthenticatedAppShell performance', () => {
   afterEach(() => {
     workspaceRenderSpy.mockReset()
+    workspacePropsSpy.mockReset()
     window.localStorage.clear()
   })
 
@@ -105,6 +109,15 @@ describe('AuthenticatedAppShell performance', () => {
     expect(screen.getByRole('region', { name: 'workspace-settings' })).toBeInTheDocument()
     expect(workspaceRenderSpy.mock.calls.length - renderCountBeforeBurst).toBe(1)
     expect(withinNavigationButtons(navigation)).toHaveLength(13)
+  })
+
+  it('provides production API clients when callers do not inject test clients', () => {
+    render(<AuthenticatedAppShell auth={auth} authClient={{} as never} onLogout={vi.fn()} />)
+
+    const props = workspacePropsSpy.mock.calls[0]?.[0] as Record<string, unknown>
+    for (const clientName of ['auditClient', 'dictionaryClient', 'financeClient', 'fundsClient', 'importClient', 'integrationClient', 'reportClient', 'releaseClient', 'settingsClient', 'userClient']) {
+      expect(props[clientName]).toBeTruthy()
+    }
   })
 })
 
