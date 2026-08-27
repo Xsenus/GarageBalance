@@ -64,6 +64,10 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [ownerOptions, setOwnerOptions] = useState<OwnerDto[]>([])
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
   const loadedEditorReferences = useRef({ owners: false, garages: false })
+  const editorReferencesRequestRef = useRef<{ section: 'owners' | 'garages'; promise: Promise<boolean> } | null>(null)
+  const editorReferencesControllerRef = useRef<AbortController | null>(null)
+  const pendingEditorOpenRef = useRef<DictionaryEditorState | null>(null)
+  const editorOpenSequenceRef = useRef(0)
   const pageRequestSequence = useRef(0)
   const [editorReferencesLoading, setEditorReferencesLoading] = useState(false)
   const [pages, setPages] = useState<Record<DictionarySectionKey, PagedResult<DictionaryRecord>>>({
@@ -181,52 +185,15 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }, [])
 
   useEffect(() => {
-    let ignore = false
-    async function loadReferences() {
-      if (loading) {
-        return
-      }
-
-      const referenceSection = activeSection === 'owners' || activeSection === 'garages'
-        ? activeSection
-        : null
-      if (!referenceSection || loadedEditorReferences.current[referenceSection]) {
-        setEditorReferencesLoading(false)
-        return
-      }
-
-      setEditorReferencesLoading(true)
-      try {
-        if (referenceSection === 'owners') {
-          const loadedGarages = await dictionaryClient.getGarages(auth.accessToken, undefined, 500)
-          if (!ignore) {
-            setGarageOptions(loadedGarages)
-          }
-        } else if (referenceSection === 'garages') {
-          const loadedOwners = await dictionaryClient.getOwners(auth.accessToken, undefined, 500)
-          if (!ignore) {
-            setOwnerOptions(loadedOwners)
-          }
-        }
-        if (!ignore) {
-          loadedEditorReferences.current[referenceSection] = true
-        }
-      } catch {
-        if (!ignore) {
-          setError('Не удалось загрузить справочные значения для форм.')
-        }
-      } finally {
-        if (!ignore) {
-          setEditorReferencesLoading(false)
-        }
-      }
-    }
-
-    void loadReferences()
+    loadedEditorReferences.current = { owners: false, garages: false }
+    pendingEditorOpenRef.current = null
+    editorOpenSequenceRef.current += 1
     return () => {
-      ignore = true
+      editorReferencesControllerRef.current?.abort()
+      editorReferencesControllerRef.current = null
+      editorReferencesRequestRef.current = null
     }
-  }, [activeSection, auth.accessToken, dictionaryClient, loading])
+  }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
@@ -364,6 +331,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   async function retryActivePage() {
     setError(null)
+    const pendingEditor = pendingEditorOpenRef.current
+    if (pendingEditor && pendingEditor.section === activeSection) {
+      await openEditor(pendingEditor.section, pendingEditor.mode, pendingEditor.item)
+      return
+    }
     try {
       await loadPage(activeSection, activePage.offset, activePage.limit)
     } catch (caught) {
@@ -404,14 +376,78 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }
   }
 
-  function openEditor(section: DictionarySectionKey, mode: 'create' | 'edit', item?: DictionaryRecord) {
-    if (editorReferencesLoading && (section === 'owners' || section === 'garages')) {
-      return
+  function ensureEditorReferences(section: DictionarySectionKey): Promise<boolean> {
+    if (section !== 'owners' && section !== 'garages') {
+      return Promise.resolve(true)
     }
+    if (loadedEditorReferences.current[section]) {
+      return Promise.resolve(true)
+    }
+
+    const existingRequest = editorReferencesRequestRef.current
+    if (existingRequest?.section === section) {
+      return existingRequest.promise
+    }
+
+    editorReferencesControllerRef.current?.abort()
+    const controller = new AbortController()
+    editorReferencesControllerRef.current = controller
+    setEditorReferencesLoading(true)
+
+    const promise = (async () => {
+      try {
+        if (section === 'owners') {
+          const loadedGarages = await dictionaryClient.getGarages(auth.accessToken, undefined, 500, false, controller.signal)
+          if (controller.signal.aborted) {
+            return false
+          }
+          setGarageOptions(loadedGarages)
+        } else {
+          const loadedOwners = await dictionaryClient.getOwners(auth.accessToken, undefined, 500, false, controller.signal)
+          if (controller.signal.aborted) {
+            return false
+          }
+          setOwnerOptions(loadedOwners)
+        }
+        loadedEditorReferences.current[section] = true
+        return true
+      } catch (caught) {
+        if (!controller.signal.aborted) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить справочные значения для формы.')
+        }
+        return false
+      } finally {
+        if (editorReferencesControllerRef.current === controller) {
+          editorReferencesControllerRef.current = null
+          editorReferencesRequestRef.current = null
+          setEditorReferencesLoading(false)
+        }
+      }
+    })()
+    editorReferencesRequestRef.current = { section, promise }
+    return promise
+  }
+
+  function cancelEditorReferenceRequest() {
+    const controller = editorReferencesControllerRef.current
+    editorReferencesControllerRef.current = null
+    editorReferencesRequestRef.current = null
+    controller?.abort()
+    setEditorReferencesLoading(false)
+  }
+
+  async function openEditor(section: DictionarySectionKey, mode: 'create' | 'edit', item?: DictionaryRecord) {
+    const pendingEditor = { section, mode, item }
+    pendingEditorOpenRef.current = pendingEditor
+    const openSequence = ++editorOpenSequenceRef.current
     setValidationErrors([])
     setError(null)
     setContextMenu(null)
     resetOwnerAddressSuggestions()
+    if (!await ensureEditorReferences(section) || openSequence !== editorOpenSequenceRef.current) {
+      return
+    }
+    pendingEditorOpenRef.current = null
     if (mode === 'edit' && item) {
       if (section === 'owners') {
         const owner = item as OwnerDto
@@ -438,6 +474,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   function closeEditor() {
+    pendingEditorOpenRef.current = null
+    editorOpenSequenceRef.current += 1
     resetOwnerAddressSuggestions()
     setError(null)
     setPendingEditorConfirmation(null)
@@ -1020,7 +1058,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       </div>
 
       {error && !mutationDialogOpen ? (
-        <AsyncErrorState message={error} onRetry={() => void retryActivePage()} retrying={loading} />
+        <AsyncErrorState message={error} onRetry={() => void retryActivePage()} retrying={loading || editorReferencesLoading} />
       ) : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.</p> : null}
       <div className="dictionary-workbench">
@@ -1032,6 +1070,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 <button className={section.key === activeSection ? 'is-active' : undefined} type="button" aria-label={`Подгруппа: ${section.label}`} aria-current={section.key === activeSection ? 'page' : undefined} onClick={() => {
                   setSearch('')
                   if (section.key !== activeSection) {
+                    pendingEditorOpenRef.current = null
+                    editorOpenSequenceRef.current += 1
+                    cancelEditorReferenceRequest()
                     setLoading(true)
                     if (section.key !== 'owners' && section.key !== 'garages') {
                       setEditorReferencesLoading(false)
@@ -1074,7 +1115,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               <input aria-label="Показывать архивные" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
               <span>Показывать архивные</span>
             </label>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWriteActiveSection || editorReferencesLoading} onClick={() => openEditor(activeSection, 'create')}>
+            <button className="secondary-button create-action-button" type="button" aria-busy={editorReferencesLoading} disabled={!canWriteActiveSection || editorReferencesLoading} onClick={() => void openEditor(activeSection, 'create')}>
               <FileText size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
@@ -1089,7 +1130,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 {!loading ? rows.map((item) => (
                   <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
                     if (!editorReferencesLoading && !isArchivedRecord(item)) {
-                      openEditor(activeSection, 'edit', item)
+                      void openEditor(activeSection, 'edit', item)
                     }
                   }} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
                     {renderCells(item)}
@@ -1127,7 +1168,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       {contextMenu ? (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" aria-label="Операции со справочником" onClick={(event) => event.stopPropagation()}>
           <div className="context-menu-group" role="group">
-            <button type="button" role="menuitem" onClick={() => openEditor(contextMenu.section, 'create')}>
+            <button type="button" role="menuitem" onClick={() => void openEditor(contextMenu.section, 'create')}>
               <FileText size={15} aria-hidden="true" />
               <span>Добавить</span>
             </button>
@@ -1144,7 +1185,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </button>
             ) : (
               <>
-                <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => openEditor(contextMenu.section, 'edit', contextMenu.item)}>
+                <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => void openEditor(contextMenu.section, 'edit', contextMenu.item)}>
                   <Save size={15} />
                   <span>Изменить</span>
                 </button>

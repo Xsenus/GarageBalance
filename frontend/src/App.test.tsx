@@ -13156,12 +13156,14 @@ describe('App', () => {
   })
 
 
-  it('starts dictionary editor references only after the visible page finishes loading', async () => {
+  it('loads dictionary editor references only when the form opens and reuses them', async () => {
     const user = userEvent.setup()
     let resolveOwnerPage!: (page: PagedResult<OwnerDto>) => void
+    let resolveGarages!: (garages: GarageDto[]) => void
     const ownerPagePromise = new Promise<PagedResult<OwnerDto>>((resolve) => { resolveOwnerPage = resolve })
+    const garagesPromise = new Promise<GarageDto[]>((resolve) => { resolveGarages = resolve })
     const getOwnersPage = vi.fn(() => ownerPagePromise)
-    const getGarages = vi.fn(async () => [] as GarageDto[])
+    const getGarages = vi.fn(() => garagesPromise)
     const dictionaryClient = createDictionaryClient({ getOwnersPage, getGarages })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -13182,7 +13184,98 @@ describe('App', () => {
     }))
 
     expect(await within(dictionaryPanel).findByText('\u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446')).toBeInTheDocument()
-    await waitFor(() => expect(getGarages).toHaveBeenCalledWith(expect.any(String), undefined, 500))
+    expect(getGarages).not.toHaveBeenCalled()
+
+    const addButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
+    await user.click(addButton)
+    expect(getGarages).toHaveBeenCalledWith(expect.any(String), undefined, 500, false, expect.any(AbortSignal))
+    expect(addButton).toBeDisabled()
+    expect(addButton).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()
+
+    await act(async () => resolveGarages([]))
+    const editorDialog = await screen.findByRole('dialog', { name: 'Владельцы' })
+    await user.click(within(editorDialog).getByRole('button', { name: 'Отмена' }))
+    await user.click(addButton)
+    expect(await screen.findByRole('dialog', { name: 'Владельцы' })).toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries dictionary editor reference loading and opens the requested form', async () => {
+    const user = userEvent.setup()
+    const getGarages = vi.fn()
+      .mockRejectedValueOnce(new Error('Справочные значения временно недоступны.'))
+      .mockResolvedValueOnce([] as GarageDto[])
+    const dictionaryClient = createDictionaryClient({ getGarages })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await within(dictionaryPanel).findByText('Иванов Иван')
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить' }))
+    expect(await within(dictionaryPanel).findByText('Справочные значения временно недоступны.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Повторить загрузку' }))
+    expect(await screen.findByRole('dialog', { name: 'Владельцы' })).toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels a pending dictionary editor reference request when the subgroup changes', async () => {
+    const user = userEvent.setup()
+    let ownerReferenceSignal: AbortSignal | undefined
+    const getGarages = vi.fn((_token, _query, _limit, _includeArchived, signal?: AbortSignal) => {
+      ownerReferenceSignal = signal
+      return new Promise<GarageDto[]>(() => undefined)
+    })
+    const getGaragesPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 25 }))
+    const dictionaryClient = createDictionaryClient({ getGarages, getGaragesPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await within(dictionaryPanel).findByText('Иванов Иван')
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить' }))
+    await waitFor(() => expect(ownerReferenceSignal).toBeDefined())
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Подгруппа: Гаражи' }))
+
+    expect(ownerReferenceSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()
+    expect(await within(dictionaryPanel).findByText('В этом справочнике пока нет записей')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить' })).toBeEnabled()
+  })
+
+  it('loads owners for the garage editor only after that form is requested', async () => {
+    const user = userEvent.setup()
+    const visibleOwner = createOwner({ id: 'owner-visible', lastName: 'Иванов', firstName: 'Иван' })
+    const getOwnersPage = vi.fn(async () => ({ items: [visibleOwner], totalCount: 1, offset: 0, limit: 25 }))
+    const getGaragesPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 25 }))
+    const getOwners = vi.fn(async () => [createOwner({ id: 'owner-for-garage', lastName: 'Связанный', firstName: 'Владелец' })])
+    const dictionaryClient = createDictionaryClient({ getOwnersPage, getGaragesPage, getOwners })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await within(dictionaryPanel).findByText('Иванов Иван')
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Подгруппа: Гаражи' }))
+    expect(await within(dictionaryPanel).findByText('В этом справочнике пока нет записей')).toBeInTheDocument()
+    expect(getOwners).not.toHaveBeenCalled()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Добавить' }))
+    expect(await screen.findByRole('dialog', { name: 'Гаражи' })).toBeInTheDocument()
+    expect(getOwners).toHaveBeenCalledWith(expect.any(String), undefined, 500, false, expect.any(AbortSignal))
   })
 
   it('keeps the newest dictionary search result when an older request finishes later', async () => {
