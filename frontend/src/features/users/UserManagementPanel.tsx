@@ -44,6 +44,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCodes: ['operator'], isActive: true, deactivationReason: '' })
   const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; controller: AbortController; promise: Promise<ManagedRoleDto[]> } | null>(null)
+  const usersPageControllerRef = useRef<AbortController | null>(null)
   const busy = saving !== null
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
@@ -70,6 +71,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
   useEffect(() => () => {
     rolesRequestRef.current?.controller.abort()
+    usersPageControllerRef.current?.abort()
+    usersPageControllerRef.current = null
   }, [])
 
   const getRolesOnce = useCallback(() => {
@@ -90,44 +93,64 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     return request
   }, [auth.accessToken, userClient])
 
-  async function refreshUsers() {
+  const beginUsersPageRequest = useCallback((requestedOffset: number) => {
+    usersPageControllerRef.current?.abort()
+    const controller = new AbortController()
+    usersPageControllerRef.current = controller
+    return {
+      controller,
+      promise: userClient.getUsersPage(auth.accessToken, appliedSearch, requestedOffset, pageSize, controller.signal),
+    }
+  }, [appliedSearch, auth.accessToken, pageSize, userClient])
+
+  async function refreshUsers(requestedOffset = offset) {
+    const { controller, promise } = beginUsersPageRequest(requestedOffset)
     setLoading(true)
     setError(null)
     try {
-      const loadedPage = await userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize)
-      setPage(loadedPage)
+      const loadedPage = await promise
+      if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
+        setPage(loadedPage)
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
+      if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
+        setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
+      }
     } finally {
-      setLoading(false)
+      if (usersPageControllerRef.current === controller) {
+        usersPageControllerRef.current = null
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
     }
   }
 
   useEffect(() => {
     let ignore = false
-    const controller = new AbortController()
+    const { controller, promise } = beginUsersPageRequest(offset)
 
     async function loadUsers() {
       setLoading(true)
       setError(null)
       let pageFailed = false
       try {
-        const loadedPage = await userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize, controller.signal)
-        if (!ignore) {
+        const loadedPage = await promise
+        if (!ignore && usersPageControllerRef.current === controller) {
           setPage(loadedPage)
         }
       } catch (caught) {
-        if (!ignore) {
+        if (!ignore && usersPageControllerRef.current === controller && !controller.signal.aborted) {
           pageFailed = true
           setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
         }
       } finally {
-        if (!ignore) {
+        if (!ignore && usersPageControllerRef.current === controller && !controller.signal.aborted) {
           setLoading(false)
         }
       }
 
-      if (ignore) {
+      if (ignore || controller.signal.aborted || usersPageControllerRef.current !== controller) {
         return
       }
 
@@ -150,9 +173,12 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     void loadUsers()
     return () => {
       ignore = true
-      controller.abort()
+      if (usersPageControllerRef.current === controller) {
+        controller.abort()
+        usersPageControllerRef.current = null
+      }
     }
-  }, [appliedSearch, auth.accessToken, getRolesOnce, offset, pageSize, userClient])
+  }, [beginUsersPageRequest, getRolesOnce, offset])
 
   function openEditor(mode: 'create' | 'edit', user?: ManagedUserDto) {
     setContextMenu(null)
@@ -227,11 +253,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           isActive: form.isActive,
         }
         await userClient.createUser(auth.accessToken, request)
-        setOffset(0)
       }
 
       closeEditor()
-      await refreshUsers()
+      if (offset === 0) {
+        await refreshUsers(0)
+      } else {
+        setOffset(0)
+      }
       showToast('Пользователь добавлен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
@@ -258,19 +287,29 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   }
 
   async function retryUsersLoad() {
+    const { controller, promise } = beginUsersPageRequest(offset)
     setLoading(true)
     setError(null)
     try {
       const [loadedPage, loadedRoles] = await Promise.all([
-        userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize),
+        promise,
         getRolesOnce(),
       ])
-      setPage(loadedPage)
-      setRoles(loadedRoles)
+      if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
+        setPage(loadedPage)
+        setRoles(loadedRoles)
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
+      if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
+        setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
+      }
     } finally {
-      setLoading(false)
+      if (usersPageControllerRef.current === controller) {
+        usersPageControllerRef.current = null
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
     }
   }
 

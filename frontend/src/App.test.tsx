@@ -436,6 +436,35 @@ describe('App', () => {
     expect(rolesSignal?.aborted).toBe(true)
   })
 
+  it('cancels a pending user-page retry when leaving user management', async () => {
+    const user = userEvent.setup()
+    let attempt = 0
+    let retrySignal: AbortSignal | undefined
+    const userClient = createUserClient({
+      getUsersPage: (_token, _search, _offset, _limit, signal) => {
+        attempt += 1
+        if (attempt === 1) {
+          return Promise.reject(new Error('Список пользователей временно недоступен.'))
+        }
+
+        retrySignal = signal
+        return new Promise<Awaited<ReturnType<UserManagementClient['getUsersPage']>>>(() => undefined)
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    await user.click(await within(usersPanel).findByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(retrySignal).toBeDefined())
+    await openSection(user, 'Главное меню')
+
+    expect(retrySignal?.aborted).toBe(true)
+  })
+
   it('shows icon back button in every dashboard section', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -11225,6 +11254,55 @@ describe('App', () => {
     expect(visibleUserCounter).toHaveAttribute('aria-live', 'polite')
     expect(within(usersTable).getByText('Сотрудник 9')).toBeInTheDocument()
     expect(requestedPage).toEqual({ offset: 0, limit: 25 })
+  })
+
+  it('returns to the first user page after creation without reloading the stale page', async () => {
+    const user = userEvent.setup()
+    let users = Array.from({ length: 26 }, (_item, index) => createManagedUser({
+      id: `managed-user-${index + 1}`,
+      email: `managed-${index + 1}@example.com`,
+      displayName: `Сотрудник ${String(index + 1).padStart(2, '0')}`,
+    }))
+    const requestedOffsets: number[] = []
+    const userClient = createUserClient({
+      getUsersPage: async (_token, _search, offset = 0, limit = 25) => {
+        requestedOffsets.push(offset)
+        return { items: users.slice(offset, offset + limit), totalCount: users.length, offset, limit }
+      },
+      createUser: async (_token, request) => {
+        const created = createManagedUser({
+          id: 'created-on-second-page',
+          email: request.email,
+          displayName: request.displayName,
+          roles: request.roleCodes,
+          isActive: request.isActive,
+        })
+        users = [created, ...users]
+        return created
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    const pagination = within(usersPanel).getByRole('navigation', { name: 'Пагинация пользователей' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    expect(await within(usersPanel).findByText('managed-26@example.com')).toBeInTheDocument()
+
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'first-page@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Новый сотрудник')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
+    requestedOffsets.length = 0
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(usersPanel).findByText('first-page@example.com')).toBeInTheDocument()
+    expect(within(pagination).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+    expect(requestedOffsets).toEqual([0])
   })
 
   it('announces empty user and role lists for administrators', async () => {
