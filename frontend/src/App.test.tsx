@@ -19712,6 +19712,52 @@ describe('App', () => {
     expect(within(releasePanel).queryByText(/Прокрутите ниже/)).not.toBeInTheDocument()
   })
 
+  it('cancels release note autoload when the workspace is unmounted', async () => {
+    const user = userEvent.setup()
+    const releases = Array.from({ length: 12 }, (_, index) => createAppRelease({
+      releaseId: `release-${index + 1}`,
+      version: `0.${index + 1}.0`,
+      title: `Обновление ${index + 1}`,
+    }))
+    let observerCallback: IntersectionObserverCallback | null = null
+    let loadMoreSignal: AbortSignal | undefined
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) {
+        observerCallback = callback
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return [] }
+      root = null
+      rootMargin = ''
+      thresholds = []
+    })
+    const getPage = async (_token: string, offset = 0, limit = 9, signal?: AbortSignal) => {
+      if (offset === 0) {
+        return createReleasePage(releases.slice(0, limit), releases.length, offset, limit)
+      }
+
+      loadMoreSignal = signal
+      return new Promise<AppReleasePageDto>(() => {})
+    }
+    const view = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getManageableReleases: getPage })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Что нового')
+    await screen.findByText('12 версий')
+
+    await act(async () => {
+      observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+    })
+    await waitFor(() => expect(loadMoreSignal).toBeDefined())
+
+    view.unmount()
+
+    expect(loadMoreSignal?.aborted).toBe(true)
+  })
+
   it('shows workspace loading errors inside the related panel', async () => {
     const user = userEvent.setup()
     let failReportDictionaries = false

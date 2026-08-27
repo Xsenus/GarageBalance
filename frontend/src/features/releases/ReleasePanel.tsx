@@ -24,6 +24,8 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
   const [editor, setEditor] = useState<ReleaseEditorState | null>(null)
   const canManageReleases = hasPermission(auth, permissions.appReleasesManage)
   const loadingMoreRef = useRef(false)
+  const loadMoreControllerRef = useRef<AbortController | null>(null)
+  const listRevisionRef = useRef(0)
   const getReleasePage = useCallback((offset: number, signal?: AbortSignal) => canManageReleases
     ? releaseClient.getManageableReleases(auth.accessToken, offset, releasePageSize, signal)
     : releaseClient.getReleases(auth.accessToken, offset, releasePageSize, signal), [auth.accessToken, canManageReleases, releaseClient])
@@ -31,6 +33,10 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
   useEffect(() => {
     let ignore = false
     const controller = new AbortController()
+    const revision = ++listRevisionRef.current
+    loadMoreControllerRef.current?.abort()
+    loadMoreControllerRef.current = null
+    loadingMoreRef.current = false
 
     async function loadReleases() {
       setLoading(true)
@@ -38,17 +44,17 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
 
       try {
         const page = await getReleasePage(0, controller.signal)
-        if (!ignore) {
+        if (!ignore && revision === listRevisionRef.current) {
           setReleases(page.items)
           setTotalCount(page.totalCount)
           setHasMore(page.hasMore)
         }
       } catch (caught) {
-        if (!ignore) {
+        if (!ignore && revision === listRevisionRef.current) {
           setError(caught instanceof Error ? caught.message : 'Не удалось загрузить историю обновлений.')
         }
       } finally {
-        if (!ignore) {
+        if (!ignore && revision === listRevisionRef.current) {
           setLoading(false)
         }
       }
@@ -62,7 +68,19 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     }
   }, [getReleasePage])
 
+  useEffect(() => () => {
+    listRevisionRef.current += 1
+    loadMoreControllerRef.current?.abort()
+    loadMoreControllerRef.current = null
+    loadingMoreRef.current = false
+  }, [])
+
   async function refreshReleases() {
+    listRevisionRef.current += 1
+    loadMoreControllerRef.current?.abort()
+    loadMoreControllerRef.current = null
+    loadingMoreRef.current = false
+    setLoadingMore(false)
     const page = await getReleasePage(0)
     setReleases(page.items)
     setTotalCount(page.totalCount)
@@ -87,10 +105,16 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     }
 
     loadingMoreRef.current = true
+    const controller = new AbortController()
+    const revision = listRevisionRef.current
+    loadMoreControllerRef.current = controller
     setLoadingMore(true)
     setLoadMoreError(null)
     try {
-      const page = await getReleasePage(releases.length)
+      const page = await getReleasePage(releases.length, controller.signal)
+      if (controller.signal.aborted || revision !== listRevisionRef.current) {
+        return
+      }
       setReleases((current) => {
         const knownIds = new Set(current.map((release) => release.releaseId))
         return [...current, ...page.items.filter((release) => !knownIds.has(release.releaseId))]
@@ -98,10 +122,17 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
       setTotalCount(page.totalCount)
       setHasMore(page.hasMore)
     } catch (caught) {
-      setLoadMoreError(caught instanceof Error ? caught.message : 'Не удалось загрузить следующие новости.')
+      if (!controller.signal.aborted && revision === listRevisionRef.current) {
+        setLoadMoreError(caught instanceof Error ? caught.message : 'Не удалось загрузить следующие новости.')
+      }
     } finally {
-      loadingMoreRef.current = false
-      setLoadingMore(false)
+      if (loadMoreControllerRef.current === controller) {
+        loadMoreControllerRef.current = null
+        loadingMoreRef.current = false
+        if (!controller.signal.aborted) {
+          setLoadingMore(false)
+        }
+      }
     }
   }, [getReleasePage, hasMore, releases.length])
 
