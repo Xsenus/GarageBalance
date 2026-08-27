@@ -13876,6 +13876,62 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Гаражи' })).toBeInTheDocument()
   })
 
+  it('cancels garage balance period detection when the dictionaries workspace unmounts', async () => {
+    const user = userEvent.setup()
+    let periodSignal: AbortSignal | undefined
+    const getFinancialReportPeriod = vi.fn((_token: string, _params: { garageId?: string }, signal?: AbortSignal) => {
+      periodSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getFinancialReportPeriod']>>>(() => undefined)
+    })
+    const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getFinancialReportPeriod })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    fireEvent.contextMenu(within(dictionaryPanel).getByText('12').closest('tr') as HTMLTableRowElement)
+    await user.click(await screen.findByRole('menuitem', { name: 'История баланса' }))
+
+    await screen.findByRole('dialog', { name: 'Гараж 12' })
+    await waitFor(() => expect(periodSignal).toBeDefined())
+    unmount()
+
+    expect(periodSignal?.aborted).toBe(true)
+  })
+
+  it('cancels garage balance history loading when its dictionaries dialog closes', async () => {
+    const user = userEvent.setup()
+    let periodSignal: AbortSignal | undefined
+    let historySignal: AbortSignal | undefined
+    const getFinancialReportPeriod = vi.fn(async (_token: string, _params: { garageId?: string }, signal?: AbortSignal) => {
+      periodSignal = signal
+      return { monthFrom: '2026-01-01', monthTo: '2026-07-01' }
+    })
+    const getGarageBalanceHistory = vi.fn((_token: string, _garageId: string, _params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal) => {
+      historySignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getGarageBalanceHistory']>>>(() => undefined)
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageBalanceHistory })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    fireEvent.contextMenu(within(dictionaryPanel).getByText('12').closest('tr') as HTMLTableRowElement)
+    await user.click(await screen.findByRole('menuitem', { name: 'История баланса' }))
+
+    await screen.findByRole('dialog', { name: 'Гараж 12' })
+    await waitFor(() => expect(historySignal).toBeDefined())
+    expect(historySignal).toBe(periodSignal)
+    await user.keyboard('{Escape}')
+
+    expect(historySignal?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: 'Гараж 12' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Не удалось загрузить историю баланса гаража.')).not.toBeInTheDocument()
+  })
+
 
 
   it('archives owner from dictionaries workspace', async () => {

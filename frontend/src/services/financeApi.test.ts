@@ -57,7 +57,7 @@ describe('financeApi', () => {
     })
   })
 
-  it('forwards cancellation for compact finance previews and overdue debt', async () => {
+  it('forwards cancellation for compact previews and financial report reads', async () => {
     const fetchSignals: AbortSignal[] = []
     const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
       const signal = init.signal
@@ -76,8 +76,10 @@ describe('financeApi', () => {
       financeApi.getMeterReadings('token', 8, controller.signal),
       financeApi.getGarageOverdueDebt('token', 'garage-88', controller.signal),
       financeApi.getExpenseWorksheet('token', { accountingMonth: '2026-06' }, controller.signal),
+      financeApi.getGarageBalanceHistory('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
+      financeApi.getFinancialReportPeriod('token', { garageId: 'garage-88' }, controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(6))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(8))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -89,6 +91,8 @@ describe('financeApi', () => {
       '/api/finance/meter-readings?limit=8',
       '/api/finance/garages/garage-88/overdue-debt',
       '/api/finance/expenses-worksheet?accountingMonth=2026-06-01',
+      '/api/finance/garages/garage-88/balance-history?monthFrom=2026-05-01&monthTo=2026-06-01',
+      '/api/finance/financial-report-period?garageId=garage-88',
     ])
   })
 

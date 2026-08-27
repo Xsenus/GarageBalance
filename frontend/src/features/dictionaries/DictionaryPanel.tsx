@@ -96,6 +96,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false)
   const [balanceHistoryError, setBalanceHistoryError] = useState<string | null>(null)
   const balanceHistoryTriggerRef = useRef<HTMLElement | null>(null)
+  const balanceHistoryRequestSequenceRef = useRef(0)
+  const balanceHistoryRequestControllerRef = useRef<AbortController | null>(null)
   const [ownerForm, setOwnerForm] = useState<UpsertOwnerRequest>(createEmptyOwnerForm())
   const [ownerGarageLinkForm, setOwnerGarageLinkForm] = useState<OwnerGarageLinkForm>(createEmptyOwnerGarageLinkForm())
   const [ownerAddressSuggestions, setOwnerAddressSuggestions] = useState<DadataAddressSuggestionDto[]>([])
@@ -194,6 +196,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       editorReferencesRequestRef.current = null
     }
   }, [auth.accessToken, dictionaryClient])
+
+  useEffect(() => () => {
+    balanceHistoryRequestSequenceRef.current += 1
+    balanceHistoryRequestControllerRef.current?.abort()
+    balanceHistoryRequestControllerRef.current = null
+  }, [auth.accessToken, financeClient])
 
   useEffect(() => {
     let ignore = false
@@ -302,6 +310,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   async function openBalanceHistory(garage: GarageDto) {
     const fallbackFilters = createDefaultGarageBalanceHistoryFilters()
+    const request = beginBalanceHistoryRequest()
     setContextMenu(null)
     setBalanceHistoryGarage(garage)
     setBalanceHistoryFilters(fallbackFilters)
@@ -309,13 +318,20 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     setBalanceHistoryError(null)
 
     try {
-      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id })
+      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id }, request.controller.signal)
+      if (!isCurrentBalanceHistoryRequest(request)) {
+        return
+      }
       const filters = createFullFinancialReportFilters(period)
       setBalanceHistoryFilters(filters)
-      await loadBalanceHistory(garage.id, filters)
+      await loadBalanceHistory(garage.id, filters, request)
     } catch (error) {
+      if (!isCurrentBalanceHistoryRequest(request)) {
+        return
+      }
       setBalanceHistoryError(error instanceof Error ? error.message : 'Не удалось определить полный период истории баланса.')
       setBalanceHistoryLoading(false)
+      finishBalanceHistoryRequest(request)
     }
   }
 
@@ -345,6 +361,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   function closeBalanceHistory() {
     const trigger = balanceHistoryTriggerRef.current
+    balanceHistoryRequestSequenceRef.current += 1
+    balanceHistoryRequestControllerRef.current?.abort()
+    balanceHistoryRequestControllerRef.current = null
     setBalanceHistoryGarage(null)
     setBalanceHistory(null)
     setBalanceHistoryError(null)
@@ -356,23 +375,57 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }, 0)
   }
 
-  async function loadBalanceHistory(garageId = balanceHistoryGarage?.id, filters = balanceHistoryFilters) {
+  function beginBalanceHistoryRequest() {
+    balanceHistoryRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    const sequence = ++balanceHistoryRequestSequenceRef.current
+    balanceHistoryRequestControllerRef.current = controller
+    return { controller, sequence }
+  }
+
+  function isCurrentBalanceHistoryRequest(request: { controller: AbortController; sequence: number }) {
+    return !request.controller.signal.aborted
+      && request.sequence === balanceHistoryRequestSequenceRef.current
+      && balanceHistoryRequestControllerRef.current === request.controller
+  }
+
+  function finishBalanceHistoryRequest(request: { controller: AbortController; sequence: number }) {
+    if (balanceHistoryRequestControllerRef.current === request.controller) {
+      balanceHistoryRequestControllerRef.current = null
+    }
+  }
+
+  async function loadBalanceHistory(
+    garageId = balanceHistoryGarage?.id,
+    filters = balanceHistoryFilters,
+    existingRequest?: { controller: AbortController; sequence: number },
+  ) {
     if (!garageId) {
       return
     }
 
+    const request = existingRequest ?? beginBalanceHistoryRequest()
     setBalanceHistoryLoading(true)
     setBalanceHistoryError(null)
     try {
-      const history = await financeClient.getGarageBalanceHistory(auth.accessToken, garageId, filters)
+      const history = await financeClient.getGarageBalanceHistory(auth.accessToken, garageId, filters, request.controller.signal)
+      if (!isCurrentBalanceHistoryRequest(request)) {
+        return
+      }
       setBalanceHistory(history)
     } catch (caught) {
+      if (!isCurrentBalanceHistoryRequest(request)) {
+        return
+      }
       const message = caught instanceof Error ? caught.message : 'Не удалось загрузить историю баланса гаража.'
       setBalanceHistory(null)
       setBalanceHistoryError(message)
       showToast(message, 'error')
     } finally {
-      setBalanceHistoryLoading(false)
+      if (isCurrentBalanceHistoryRequest(request)) {
+        setBalanceHistoryLoading(false)
+        finishBalanceHistoryRequest(request)
+      }
     }
   }
 
