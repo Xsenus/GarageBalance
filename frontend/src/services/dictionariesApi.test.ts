@@ -379,6 +379,27 @@ describe('dictionariesApi response cache', () => {
     ])
   })
 
+  it('forwards cancellation when loading a charge service tariff schedule', async () => {
+    let requestSignal: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init.signal ?? undefined
+      requestSignal?.addEventListener('abort', () => reject(requestSignal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = dictionariesApi.getChargeServiceTariffSchedule('token', 'service-1', controller.signal)
+    await vi.waitFor(() => expect(requestSignal).toBeInstanceOf(AbortSignal))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(requestSignal?.aborted).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dictionaries/charge-services/service-1/tariff-schedule',
+      expect.objectContaining({ signal: requestSignal }),
+    )
+  })
+
   it('loads and atomically saves a charge service tariff schedule', async () => {
     const periods = [
       { tariffId: 'tariff-1', effectiveFrom: null, effectiveTo: '2026-08-31', rate: 100, tariffVersion: 'v1' },
@@ -390,7 +411,7 @@ describe('dictionariesApi response cache', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify(response), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(dictionariesApi.getChargeServiceTariffSchedule!('token', 'service-1')).resolves.toEqual(periods)
+    await expect(dictionariesApi.getChargeServiceTariffSchedule('token', 'service-1')).resolves.toEqual(periods)
     const request = { periods, allowGaps: false, changeReason: 'Новая ставка', serviceVersion: 'service-v1' }
     await expect(dictionariesApi.updateChargeServiceTariffSchedule!('token', 'service-1', request)).resolves.toEqual(response)
 

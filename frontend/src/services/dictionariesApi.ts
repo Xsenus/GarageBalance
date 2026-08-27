@@ -482,7 +482,7 @@ export type DictionaryClient = {
   createChargeServiceSetting(accessToken: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   updateChargeServiceSetting(accessToken: string, id: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   updateChargeServiceWithTariff(accessToken: string, id: string, request: UpdateChargeServiceWithTariffRequest): Promise<UpdatedChargeServiceWithTariffDto>
-  getChargeServiceTariffSchedule?(accessToken: string, id: string): Promise<ChargeServiceTariffPeriodDto[]>
+  getChargeServiceTariffSchedule(accessToken: string, id: string, signal?: AbortSignal): Promise<ChargeServiceTariffPeriodDto[]>
   updateChargeServiceTariffSchedule?(accessToken: string, id: string, request: UpsertChargeServiceTariffScheduleRequest): Promise<UpdatedChargeServiceTariffScheduleDto>
   archiveChargeServiceSetting(accessToken: string, id: string, reason: string): Promise<void>
   restoreChargeServiceSetting(accessToken: string, id: string): Promise<ChargeServiceSettingDto>
@@ -764,8 +764,8 @@ export const dictionariesApi: DictionaryClient = {
   updateChargeServiceWithTariff(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/with-tariff`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  getChargeServiceTariffSchedule(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/tariff-schedule`)
+  getChargeServiceTariffSchedule(accessToken, id, signal) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/tariff-schedule`, { signal })
   },
   updateChargeServiceTariffSchedule(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/tariff-schedule`, { method: 'PUT', body: JSON.stringify(request) })

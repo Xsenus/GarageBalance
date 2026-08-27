@@ -777,6 +777,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [chargeServiceEditTarget, setChargeServiceEditTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceTariffSchedule, setChargeServiceTariffSchedule] = useState<ChargeServiceTariffPeriodDto[] | null>(null)
   const [chargeServiceTariffScheduleLoading, setChargeServiceTariffScheduleLoading] = useState(false)
+  const chargeServiceEditorControllerRef = useRef<AbortController | null>(null)
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
   const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
@@ -920,6 +921,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   function closeFeeCampaignEditDialog() {
     setFeeCampaignEditTarget(null)
+  }
+
+  function closeChargeServiceEditor() {
+    chargeServiceEditorControllerRef.current?.abort()
+    setChargeServiceEditTarget(null)
   }
 
   function ensureTariffReferences() {
@@ -1183,6 +1189,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     return () => {
       ignore = true
       controller.abort()
+      chargeServiceEditorControllerRef.current?.abort()
     }
   }, [auth.accessToken, settingsClient])
 
@@ -1943,7 +1950,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         tariffVersion: currentTariff?.version,
       })
       applySavedServiceTariff(saved)
-      setChargeServiceEditTarget(null)
+      closeChargeServiceEditor()
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось изменить услугу.')
       throw caught
@@ -1955,35 +1962,31 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   async function openChargeServiceEditor(setting: ChargeServiceSettingDto) {
     setTariffPersistenceError(null)
     if (!await ensureTariffReferences()) return
+    chargeServiceEditorControllerRef.current?.abort()
+    const controller = new AbortController()
+    chargeServiceEditorControllerRef.current = controller
     if (setting.incomeTypeId && !backendIncomeTypes.some((incomeType) => incomeType.id === setting.incomeTypeId)) {
       try {
-        setBackendIncomeTypes(await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit))
+        setBackendIncomeTypes(await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal))
       } catch {
         // The editor can still open; saving will show the backend validation if the link is no longer available.
       }
     }
+    if (controller.signal.aborted) return
     setChargeServiceEditTarget(setting)
-    const currentTariff = backendTariffs.find((tariff) => tariff.id === setting.tariffId)
-    if (!dictionaryClient.getChargeServiceTariffSchedule) {
-      setChargeServiceTariffSchedule(currentTariff ? [{
-        tariffId: currentTariff.id,
-        effectiveFrom: currentTariff.effectiveFrom,
-        effectiveTo: null,
-        rate: currentTariff.rate,
-        tariffVersion: currentTariff.version,
-      }] : [])
-      return
-    }
-
     setChargeServiceTariffScheduleLoading(true)
-    setChargeServiceTariffSchedule(null)
     try {
-      setChargeServiceTariffSchedule(await dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, setting.id))
+      const schedule = await dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, setting.id, controller.signal)
+      if (controller.signal.aborted) return
+      setChargeServiceTariffSchedule(schedule)
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифную сетку.')
+      if (controller.signal.aborted) return
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы.')
       setChargeServiceTariffSchedule([])
     } finally {
-      setChargeServiceTariffScheduleLoading(false)
+      if (!controller.signal.aborted) {
+        setChargeServiceTariffScheduleLoading(false)
+      }
     }
   }
 
@@ -3405,7 +3408,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           measurementUnits={backendMeasurementUnits.filter((unit) => !unit.isArchived)}
-          onClose={() => setChargeServiceEditTarget(null)}
+          onClose={closeChargeServiceEditor}
           onUpdateWithTariff={updateServiceSettingWithTariff}
           onUpdateTariffSchedule={updateChargeServiceTariffSchedule}
           submitLabel="Сохранить изменения"

@@ -26,7 +26,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
@@ -5196,6 +5196,13 @@ describe('App', () => {
       getIncomeTypes: async () => [serviceIncomeType],
       getTariffs: async () => [serviceTariff, meterTariff],
       getChargeServiceSettings: async () => [serviceSetting],
+      getChargeServiceTariffSchedule: async () => [{
+        tariffId: serviceTariff.id,
+        effectiveFrom: serviceTariff.effectiveFrom,
+        effectiveTo: null,
+        rate: serviceTariff.rate,
+        tariffVersion: serviceTariff.version,
+      }],
       updateChargeServiceWithTariff: async (_token, id, request) => {
         updateRequests.push(request)
         if (updateRequests.length === 1) {
@@ -5923,6 +5930,108 @@ describe('App', () => {
 
     expect(tariffSignals).toHaveLength(7)
     expect(tariffSignals.every((signal) => signal.aborted)).toBe(true)
+  })
+
+  it('cancels a closed tariff schedule request and keeps a reopened editor on the latest response', async () => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'tariff-schedule-lifecycle', name: 'Тариф охраны', calculationBase: 'fixed', rate: 100 })
+    const service = createChargeServiceSetting({
+      id: 'service-schedule-lifecycle',
+      name: 'Охрана',
+      isRegular: true,
+      tariffId: tariff.id,
+      unitName: 'руб.',
+    })
+    let resolveFirstSchedule!: (value: ChargeServiceTariffPeriodDto[]) => void
+    const firstScheduleRequest = new Promise<ChargeServiceTariffPeriodDto[]>((resolve) => { resolveFirstSchedule = resolve })
+    const scheduleSignals: AbortSignal[] = []
+    const getChargeServiceTariffSchedule = vi.fn((
+      _token: string,
+      _serviceId: string,
+      signal?: AbortSignal,
+    ) => {
+      if (signal) scheduleSignals.push(signal)
+      if (scheduleSignals.length === 1) return firstScheduleRequest
+      return Promise.resolve([{
+        tariffId: tariff.id,
+        effectiveFrom: '2026-07-01',
+        effectiveTo: null,
+        rate: 222,
+        tariffVersion: 'tariff-version-latest',
+      }])
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [service],
+      getChargeServiceTariffSchedule,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const editButton = await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Охрана' })
+
+    await user.click(editButton)
+    const firstDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    await waitFor(() => expect(scheduleSignals).toHaveLength(1))
+    expect(within(firstDialog).getByRole('status')).toHaveTextContent('Загрузка тарифной сетки')
+    await user.click(within(firstDialog).getByRole('button', { name: 'Отмена' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
+    expect(scheduleSignals[0].aborted).toBe(true)
+
+    await user.click(editButton)
+    const reopenedDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    await waitFor(() => expect(scheduleSignals).toHaveLength(2))
+    await waitFor(() => expect(within(reopenedDialog).getByLabelText('Тариф регулярной услуги')).toHaveValue('222.00'))
+
+    resolveFirstSchedule([{
+      tariffId: tariff.id,
+      effectiveFrom: '2026-07-01',
+      effectiveTo: null,
+      rate: 111,
+      tariffVersion: 'tariff-version-stale',
+    }])
+    await act(async () => { await firstScheduleRequest })
+
+    expect(within(screen.getByRole('dialog', { name: 'Изменить услугу' })).getByLabelText('Тариф регулярной услуги')).toHaveValue('222.00')
+  })
+
+  it('cancels a tariff schedule request when leaving the tariffs section', async () => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'tariff-schedule-unmount', name: 'Тариф освещения', calculationBase: 'fixed', rate: 300 })
+    const service = createChargeServiceSetting({
+      id: 'service-schedule-unmount',
+      name: 'Освещение',
+      isRegular: true,
+      tariffId: tariff.id,
+      unitName: 'руб.',
+    })
+    let scheduleSignal: AbortSignal | undefined
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [service],
+      getChargeServiceTariffSchedule: (_token, _serviceId, signal) => {
+        scheduleSignal = signal
+        return new Promise<ChargeServiceTariffPeriodDto[]>(() => undefined)
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Освещение' }))
+    await waitFor(() => expect(scheduleSignal).toBeInstanceOf(AbortSignal))
+
+    await openSection(user, 'Отчеты')
+
+    expect(scheduleSignal?.aborted).toBe(true)
   })
 
   it('shows table-shaped tariff skeletons and hides empty messages while critical data is loading', async () => {
@@ -20843,6 +20952,13 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     archiveTariff: async () => undefined,
     restoreTariff: async () => tariff,
     getChargeServiceSettings: async () => [],
+    getChargeServiceTariffSchedule: async () => [{
+      tariffId: tariff.id,
+      effectiveFrom: tariff.effectiveFrom,
+      effectiveTo: null,
+      rate: tariff.rate,
+      tariffVersion: tariff.version,
+    }],
     createChargeServiceWithTariff: async (_token, request) => {
       const createdTariff = createTariff({
         id: 'charge-service-tariff-new',
