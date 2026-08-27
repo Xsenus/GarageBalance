@@ -21,7 +21,7 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('mainJsGzipBytes: 180 * 1024')
     expect(budgetScript).toContain('initialJsGzipBytes: 110 * 1024')
     expect(budgetScript).toContain('mainCssGzipBytes: 40 * 1024')
-    expect(budgetScript).toContain('totalAssetsGzipBytes: 262 * 1024')
+    expect(budgetScript).toContain('totalAssetsGzipBytes: 263 * 1024')
     expect(budgetScript).toContain('gzipSync')
     expect(budgetScript).toContain('collectStaticJsGraph')
   })
@@ -31,9 +31,12 @@ describe('frontend bundle budget gate', () => {
     expect(viteConfig).toContain("return 'reporting'")
   })
 
-  it('keeps related accounting screens in shared lazy chunks to avoid gzip overhead', () => {
+  it('keeps independently opened accounting screens in separate lazy chunks', () => {
+    expect(viteConfig).toContain('modulePreload: false')
     expect(viteConfig).toContain("return 'financial-operations'")
-    expect(viteConfig).toContain("return 'cooperative-setup'")
+    expect(viteConfig).toContain("return 'funds'")
+    expect(viteConfig).toContain("return 'contractors'")
+    expect(viteConfig).toContain("return 'tariffs'")
   })
 
   it('loads the authenticated workspace only after authentication', () => {
