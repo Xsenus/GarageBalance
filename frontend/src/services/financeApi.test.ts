@@ -78,8 +78,9 @@ describe('financeApi', () => {
       financeApi.getExpenseWorksheet('token', { accountingMonth: '2026-06' }, controller.signal),
       financeApi.getGarageBalanceHistory('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
       financeApi.getFinancialReportPeriod('token', { garageId: 'garage-88' }, controller.signal),
+      financeApi.getSupplierOpeningBalance('token', 'supplier-88', '2026-05', controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(8))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(9))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -93,6 +94,7 @@ describe('financeApi', () => {
       '/api/finance/expenses-worksheet?accountingMonth=2026-06-01',
       '/api/finance/garages/garage-88/balance-history?monthFrom=2026-05-01&monthTo=2026-06-01',
       '/api/finance/financial-report-period?garageId=garage-88',
+      '/api/finance/suppliers/supplier-88/opening-balance?monthFrom=2026-05-01',
     ])
   })
 

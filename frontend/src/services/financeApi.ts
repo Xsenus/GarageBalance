@@ -681,7 +681,7 @@ export type FinanceClient = {
   getAccrualDueDateReviewPage?(accessToken: string, params?: Pick<FinancePageParams, 'offset' | 'limit'>): Promise<FinancePagedResult<AccrualDueDateReviewDto>>
   getSupplierAccruals(accessToken: string, limit?: number, signal?: AbortSignal): Promise<SupplierAccrualDto[]>
   getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinancePagedResult<SupplierAccrualDto>>
-  getSupplierOpeningBalance(accessToken: string, supplierId: string, monthFrom: string): Promise<SupplierOpeningBalanceDto>
+  getSupplierOpeningBalance(accessToken: string, supplierId: string, monthFrom: string, signal?: AbortSignal): Promise<SupplierOpeningBalanceDto>
   getFinancialReportPeriod(accessToken: string, params: { garageId?: string; supplierId?: string; staffMemberId?: string }, signal?: AbortSignal): Promise<FinancialReportPeriodDto>
   getMeterReadings(accessToken: string, limit?: number, signal?: AbortSignal): Promise<MeterReadingDto[]>
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: string }, signal?: AbortSignal): Promise<FinancePagedResult<MeterReadingDto>>
@@ -882,10 +882,10 @@ export const financeApi: FinanceClient = {
       search: params.search,
     }), { signal })
   },
-  getSupplierOpeningBalance(accessToken, supplierId, monthFrom) {
+  getSupplierOpeningBalance(accessToken, supplierId, monthFrom, signal) {
     return requestJson(accessToken, withQuery(`/api/finance/suppliers/${supplierId}/opening-balance`, {
       monthFrom: toMonthStart(monthFrom),
-    }))
+    }), { signal })
   },
   calculateGarageIncomeWorksheet(accessToken, garageId, request) {
     return requestJson(accessToken, `/api/finance/garages/${garageId}/income-worksheet/calculate`, {

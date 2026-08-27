@@ -74,6 +74,7 @@ type ContractorSortDirection = 'asc' | 'desc'
 type ContractorSortableSection = ContractorSection
 type GarageColumnFilterForm = Record<keyof GarageColumnFilters, string>
 type FinancialReportFilters = ReturnType<typeof createDefaultGarageBalanceHistoryFilters>
+type FinancialReportRequest = { controller: AbortController; sequence: number }
 
 const emptyGarageColumnFilterForm: GarageColumnFilterForm = {
   number: '',
@@ -866,6 +867,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [garageFinancialReportLoading, setGarageFinancialReportLoading] = useState(false)
   const [garageFinancialReportError, setGarageFinancialReportError] = useState<string | null>(null)
   const financialReportRequestSequenceRef = useRef(0)
+  const financialReportRequestControllerRef = useRef<AbortController | null>(null)
   const [contractorFinancialReportTarget, setContractorFinancialReportTarget] = useState<ContractorFinancialReportTarget | null>(null)
   const [contractorFinancialReport, setContractorFinancialReport] = useState<ContractorFinancialReport | null>(null)
   const [contractorFinancialReportFilters, setContractorFinancialReportFilters] = useState(() => createDefaultGarageBalanceHistoryFilters())
@@ -910,6 +912,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     contractorReferenceControllersRef.current.garages?.abort()
     contractorReferenceControllersRef.current.suppliers?.abort()
     supplierEditorRequestControllerRef.current?.abort()
+    financialReportRequestControllerRef.current?.abort()
   }, [])
   useEffect(() => () => {
     if (activeSection !== 'staff') {
@@ -1500,7 +1503,37 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setRestoreTarget({ type: 'garage', item: row })
   }
 
-  async function loadGarageFinancialReport(row = garageFinancialReportTarget, filters = garageFinancialReportFilters) {
+  function beginFinancialReportRequest(): FinancialReportRequest {
+    financialReportRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    const sequence = ++financialReportRequestSequenceRef.current
+    financialReportRequestControllerRef.current = controller
+    return { controller, sequence }
+  }
+
+  function isCurrentFinancialReportRequest(request: FinancialReportRequest) {
+    return !request.controller.signal.aborted
+      && request.sequence === financialReportRequestSequenceRef.current
+      && financialReportRequestControllerRef.current === request.controller
+  }
+
+  function finishFinancialReportRequest(request: FinancialReportRequest) {
+    if (financialReportRequestControllerRef.current === request.controller) {
+      financialReportRequestControllerRef.current = null
+    }
+  }
+
+  function cancelFinancialReportRequest() {
+    financialReportRequestSequenceRef.current += 1
+    financialReportRequestControllerRef.current?.abort()
+    financialReportRequestControllerRef.current = null
+  }
+
+  async function loadGarageFinancialReport(
+    row = garageFinancialReportTarget,
+    filters = garageFinancialReportFilters,
+    existingRequest?: FinancialReportRequest,
+  ) {
     if (!row) {
       return
     }
@@ -1512,21 +1545,22 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
-    const requestSequence = ++financialReportRequestSequenceRef.current
+    const request = existingRequest ?? beginFinancialReportRequest()
     setGarageFinancialReportLoading(true)
     setGarageFinancialReportError(null)
 
     try {
-      const report = await financeClient.getGarageBalanceHistory(auth.accessToken, row.id, filters)
-      if (requestSequence !== financialReportRequestSequenceRef.current) return
+      const report = await financeClient.getGarageBalanceHistory(auth.accessToken, row.id, filters, request.controller.signal)
+      if (!isCurrentFinancialReportRequest(request)) return
       setGarageFinancialReport(report)
     } catch (error) {
-      if (requestSequence !== financialReportRequestSequenceRef.current) return
+      if (!isCurrentFinancialReportRequest(request)) return
       setGarageFinancialReportError(error instanceof Error ? error.message : 'Не удалось загрузить финансовый отчет гаража.')
       setGarageFinancialReport(null)
     } finally {
-      if (requestSequence === financialReportRequestSequenceRef.current) {
+      if (isCurrentFinancialReportRequest(request)) {
         setGarageFinancialReportLoading(false)
+        finishFinancialReportRequest(request)
       }
     }
   }
@@ -1539,6 +1573,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   async function openGarageFinancialReport(row: ContractorGarageRow) {
     setGarageContextMenu(null)
     const fallbackFilters = createDefaultGarageBalanceHistoryFilters()
+    const request = beginFinancialReportRequest()
     setGarageFinancialReportTarget(row)
     setGarageFinancialReportFilters(fallbackFilters)
     setGarageFinancialReport(null)
@@ -1546,26 +1581,32 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setGarageFinancialReportLoading(true)
 
     try {
-      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: row.id })
+      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: row.id }, request.controller.signal)
+      if (!isCurrentFinancialReportRequest(request)) return
       const filters = createFullFinancialReportFilters(period)
       setGarageFinancialReportFilters(filters)
-      await loadGarageFinancialReport(row, filters)
+      await loadGarageFinancialReport(row, filters, request)
     } catch {
+      if (!isCurrentFinancialReportRequest(request)) return
       // The period endpoint is an optimization. A temporary failure must not block
       // opening the report itself, so the standard period remains a safe fallback.
-      await loadGarageFinancialReport(row, fallbackFilters)
+      await loadGarageFinancialReport(row, fallbackFilters, request)
     }
   }
 
   function closeGarageFinancialReport() {
-    financialReportRequestSequenceRef.current += 1
+    cancelFinancialReportRequest()
     setGarageFinancialReportTarget(null)
     setGarageFinancialReport(null)
     setGarageFinancialReportError(null)
     setGarageFinancialReportLoading(false)
   }
 
-  async function loadContractorFinancialReport(target = contractorFinancialReportTarget, filters = contractorFinancialReportFilters) {
+  async function loadContractorFinancialReport(
+    target = contractorFinancialReportTarget,
+    filters = contractorFinancialReportFilters,
+    existingRequest?: FinancialReportRequest,
+  ) {
     if (!target) {
       return
     }
@@ -1576,20 +1617,20 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
-    const requestSequence = ++financialReportRequestSequenceRef.current
+    const request = existingRequest ?? beginFinancialReportRequest()
     setContractorFinancialReportLoading(true)
     setContractorFinancialReportError(null)
 
     try {
-      const operationsPage = await financeClient.getOperationsPage(auth.accessToken, {
+      const operationsRequest = financeClient.getOperationsPage(auth.accessToken, {
         monthFrom: filters.monthFrom,
         monthTo: filters.monthTo,
         operationKind: 'expense',
         supplierId: target.type === 'supplier' ? target.row.id : undefined,
         staffMemberId: target.type === 'employee' ? target.row.id : undefined,
         limit: 500,
-      })
-      const operationEntries = operationsPage.items
+      }, request.controller.signal)
+      const createOperationEntries = (operationsPage: Awaited<ReturnType<FinanceClient['getOperationsPage']>>) => operationsPage.items
         .filter((operation) => !operation.isCanceled)
         .map((operation) => ({
           id: `operation-${operation.id}`,
@@ -1604,15 +1645,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         }))
 
       if (target.type === 'supplier') {
-        const [accrualsPage, openingBalance] = await Promise.all([
+        const [operationsPage, accrualsPage, openingBalance] = await Promise.all([
+          operationsRequest,
           financeClient.getSupplierAccrualsPage(auth.accessToken, {
             monthFrom: filters.monthFrom,
             monthTo: filters.monthTo,
             supplierId: target.row.id,
             limit: 500,
-          }),
-          financeClient.getSupplierOpeningBalance(auth.accessToken, target.row.id, filters.monthFrom),
+          }, request.controller.signal),
+          financeClient.getSupplierOpeningBalance(auth.accessToken, target.row.id, filters.monthFrom, request.controller.signal),
         ])
+        const operationEntries = createOperationEntries(operationsPage)
         const accrualEntries = accrualsPage.items
           .filter((accrual) => !accrual.isCanceled)
           .map((accrual) => ({
@@ -1630,23 +1673,29 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           filters.monthFrom,
           openingBalance.priorAccrualTotal !== 0 || openingBalance.priorPaymentTotal !== 0,
         )
-        if (requestSequence !== financialReportRequestSequenceRef.current) return
+        if (!isCurrentFinancialReportRequest(request)) return
         setContractorFinancialReport(buildContractorFinancialReport(
           [...openingBalanceEntries, ...accrualEntries, ...operationEntries],
           openingBalance.openingBalance,
         ))
       } else {
+        const operationsPage = await operationsRequest
+        const operationEntries = createOperationEntries(operationsPage)
         const staffAccrualEntries = createStaffFinancialReportEntries(target.row, filters.monthFrom, filters.monthTo)
-        if (requestSequence !== financialReportRequestSequenceRef.current) return
+        if (!isCurrentFinancialReportRequest(request)) return
         setContractorFinancialReport(buildContractorFinancialReport([...staffAccrualEntries, ...operationEntries]))
       }
     } catch (error) {
-      if (requestSequence !== financialReportRequestSequenceRef.current) return
+      if (!isCurrentFinancialReportRequest(request)) return
       setContractorFinancialReportError(error instanceof Error ? error.message : 'Не удалось загрузить финансовый отчет контрагента.')
       setContractorFinancialReport(null)
+      setContractorFinancialReportLoading(false)
+      request.controller.abort()
+      finishFinancialReportRequest(request)
     } finally {
-      if (requestSequence === financialReportRequestSequenceRef.current) {
+      if (isCurrentFinancialReportRequest(request)) {
         setContractorFinancialReportLoading(false)
+        finishFinancialReportRequest(request)
       }
     }
   }
@@ -1661,6 +1710,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setEmployeeContextMenu(null)
     setModal(null)
     const fallbackFilters = createDefaultGarageBalanceHistoryFilters()
+    const request = beginFinancialReportRequest()
     setContractorFinancialReportTarget(target)
     setContractorFinancialReportFilters(fallbackFilters)
     setContractorFinancialReport(null)
@@ -1670,18 +1720,21 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     try {
       const period = await financeClient.getFinancialReportPeriod(auth.accessToken, target.type === 'supplier'
         ? { supplierId: target.row.id }
-        : { staffMemberId: target.row.id })
+        : { staffMemberId: target.row.id }, request.controller.signal)
+      if (!isCurrentFinancialReportRequest(request)) return
       const filters = createFullFinancialReportFilters(period)
       setContractorFinancialReportFilters(filters)
-      await loadContractorFinancialReport(target, filters)
+      await loadContractorFinancialReport(target, filters, request)
     } catch (error) {
+      if (!isCurrentFinancialReportRequest(request)) return
       setContractorFinancialReportError(error instanceof Error ? error.message : 'Не удалось определить полный период финансового отчета контрагента.')
       setContractorFinancialReportLoading(false)
+      finishFinancialReportRequest(request)
     }
   }
 
   function closeContractorFinancialReport() {
-    financialReportRequestSequenceRef.current += 1
+    cancelFinancialReportRequest()
     setContractorFinancialReportTarget(null)
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)

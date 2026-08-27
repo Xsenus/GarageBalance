@@ -3271,8 +3271,49 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 105' })
     expect(await within(dialog).findByRole('table', { name: 'Финансовый отчет гаража' })).toHaveTextContent('300.00')
     expect(within(dialog).queryByText('Период временно недоступен.')).not.toBeInTheDocument()
-    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: garage.id })
-    expect(getGarageBalanceHistory).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({ monthFrom: expect.any(String), monthTo: expect.any(String) }))
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: garage.id }, expect.any(AbortSignal))
+    expect(getGarageBalanceHistory).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({ monthFrom: expect.any(String), monthTo: expect.any(String) }), expect.any(AbortSignal))
+  })
+
+  it('cancels the garage financial report request when its contractors dialog closes', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({
+      id: '11111111-1111-7111-c111-111111111112',
+      number: '106',
+      ownerName: 'Владелец отменяемого отчета',
+    })
+    let reportSignal: AbortSignal | undefined
+    const getGarageBalanceHistory = vi.fn((_token: string, _garageId: string, _params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal) => {
+      reportSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getGarageBalanceHistory']>>>(() => undefined)
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({ monthFrom: '2026-01-01', monthTo: '2026-07-01' }),
+        getGarageBalanceHistory,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const row = within(await within(panel).findByRole('table', { name: 'Гаражи' })).getByRole('row', { name: /106/ })
+    await user.click(within(row).getByRole('button', { name: 'Открыть финансовый отчет гаража 106' }))
+
+    await screen.findByRole('dialog', { name: 'Гараж 106' })
+    await waitFor(() => expect(reportSignal).toBeDefined())
+    await user.keyboard('{Escape}')
+
+    expect(reportSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: 'Гараж 106' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Не удалось загрузить финансовый отчет гаража.')).not.toBeInTheDocument()
   })
 
   it('creates an auditable supplier opening-balance adjustment from the contractor card', async () => {
@@ -4048,10 +4089,10 @@ describe('App', () => {
     expect(within(supplierReport).getByText('RKO-1')).toBeInTheDocument()
     expect(within(supplierReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
     expect(within(supplierReport).getByRole('button', { name: 'Открыть в истории изменений' })).toBeInTheDocument()
-    expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }))
-    expect(getSupplierOpeningBalance).toHaveBeenCalledWith('token', supplierId, '2024-03')
-    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { supplierId })
-    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }))
+    expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }), expect.any(AbortSignal))
+    expect(getSupplierOpeningBalance).toHaveBeenCalledWith('token', supplierId, '2024-03', expect.any(AbortSignal))
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { supplierId }, expect.any(AbortSignal))
+    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }), expect.any(AbortSignal))
     expect(getEvents).not.toHaveBeenCalled()
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Водоканал' })).not.toBeInTheDocument()
@@ -4068,8 +4109,8 @@ describe('App', () => {
     expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(3)
     expect(within(staffReport).getByText('RKO-2')).toBeInTheDocument()
     expect(within(staffReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
-    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }))
-    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { staffMemberId })
+    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }), expect.any(AbortSignal))
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { staffMemberId }, expect.any(AbortSignal))
     await user.click(within(staffReport).getByRole('button', { name: 'Открыть в истории изменений' }))
     expect(screen.queryByRole('dialog', { name: 'Петрова Ольга' })).not.toBeInTheDocument()
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
@@ -4143,7 +4184,7 @@ describe('App', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Поставщик без периода' })
     expect(await within(dialog).findByText('Не удалось определить период обслуживания.')).toHaveAttribute('role', 'alert')
-    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { supplierId })
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { supplierId }, expect.any(AbortSignal))
     expect(getOperationsPage).not.toHaveBeenCalled()
     expect(getSupplierAccrualsPage).not.toHaveBeenCalled()
   })
@@ -4199,6 +4240,135 @@ describe('App', () => {
     expect(within(dialog).queryByRole('status', { name: 'Загружаем финансовый отчет контрагента' })).not.toBeInTheDocument()
   })
 
+  it('loads supplier report sources in parallel and cancels all of them when the dialog closes', async () => {
+    const user = userEvent.setup()
+    const supplierId = '22222222-2222-4222-8222-222222222228'
+    const supplier = createSupplier({
+      id: supplierId,
+      name: 'Поставщик с параллельным отчетом',
+      groupId: '44444444-4444-4444-8444-444444444449',
+      groupName: 'Услуги',
+    })
+    let operationsSignal: AbortSignal | undefined
+    let accrualsSignal: AbortSignal | undefined
+    let openingBalanceSignal: AbortSignal | undefined
+    const getOperationsPage = vi.fn((_token: string, _params?: Parameters<FinanceClient['getOperationsPage']>[1], signal?: AbortSignal) => {
+      operationsSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getOperationsPage']>>>(() => undefined)
+    })
+    const getSupplierAccrualsPage = vi.fn((_token: string, _params?: Parameters<FinanceClient['getSupplierAccrualsPage']>[1], signal?: AbortSignal) => {
+      accrualsSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getSupplierAccrualsPage']>>>(() => undefined)
+    })
+    const getSupplierOpeningBalance = vi.fn((_token: string, _supplierId: string, _monthFrom: string, signal?: AbortSignal) => {
+      openingBalanceSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getSupplierOpeningBalance']>>>(() => undefined)
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
+        getSuppliers: async () => [supplier],
+        getSupplierContacts: async () => [],
+      })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({ monthFrom: '2026-01-01', monthTo: '2026-07-01' }),
+        getOperationsPage,
+        getSupplierAccrualsPage,
+        getSupplierOpeningBalance,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Поставщик с параллельным отчетом' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Поставщик с параллельным отчетом' })
+    await waitFor(() => {
+      expect(operationsSignal).toBeDefined()
+      expect(accrualsSignal).toBeDefined()
+      expect(openingBalanceSignal).toBeDefined()
+    })
+    expect(accrualsSignal).toBe(operationsSignal)
+    expect(openingBalanceSignal).toBe(operationsSignal)
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть финансовый отчет контрагента' }))
+
+    expect(operationsSignal?.aborted).toBe(true)
+    expect(accrualsSignal?.aborted).toBe(true)
+    expect(openingBalanceSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('dialog', { name: 'Поставщик с параллельным отчетом' })).not.toBeInTheDocument()
+  })
+
+  it('cancels the remaining supplier report sources when one source fails', async () => {
+    const user = userEvent.setup()
+    const supplierId = '22222222-2222-4222-8222-222222222229'
+    const supplier = createSupplier({
+      id: supplierId,
+      name: 'Поставщик с ошибкой отчета',
+      groupId: '44444444-4444-4444-8444-444444444450',
+      groupName: 'Услуги',
+    })
+    let rejectOperations!: (reason: Error) => void
+    let accrualsSignal: AbortSignal | undefined
+    let openingBalanceSignal: AbortSignal | undefined
+    const getOperationsPage = vi.fn(() => new Promise<Awaited<ReturnType<FinanceClient['getOperationsPage']>>>((_resolve, reject) => {
+      rejectOperations = reject
+    }))
+    const getSupplierAccrualsPage = vi.fn((_token: string, _params?: Parameters<FinanceClient['getSupplierAccrualsPage']>[1], signal?: AbortSignal) => {
+      accrualsSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getSupplierAccrualsPage']>>>(() => undefined)
+    })
+    const getSupplierOpeningBalance = vi.fn((_token: string, _supplierId: string, _monthFrom: string, signal?: AbortSignal) => {
+      openingBalanceSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getSupplierOpeningBalance']>>>(() => undefined)
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
+        getSuppliers: async () => [supplier],
+        getSupplierContacts: async () => [],
+      })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({ monthFrom: '2026-01-01', monthTo: '2026-07-01' }),
+        getOperationsPage,
+        getSupplierAccrualsPage,
+        getSupplierOpeningBalance,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Поставщик с ошибкой отчета' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Поставщик с ошибкой отчета' })
+    await waitFor(() => {
+      expect(rejectOperations).toBeTypeOf('function')
+      expect(accrualsSignal).toBeDefined()
+      expect(openingBalanceSignal).toBeDefined()
+    })
+    await act(async () => rejectOperations(new Error('Не удалось загрузить выплаты поставщика.')))
+
+    expect(await within(dialog).findByText('Не удалось загрузить выплаты поставщика.')).toHaveAttribute('role', 'alert')
+    expect(accrualsSignal?.aborted).toBe(true)
+    expect(openingBalanceSignal?.aborted).toBe(true)
+    expect(dialog).toHaveAttribute('aria-busy', 'false')
+  })
+
   it('applies financial report periods automatically and ignores a stale failed request', async () => {
     const user = userEvent.setup()
     const supplierId = '22222222-2222-4222-8222-222222222226'
@@ -4218,8 +4388,12 @@ describe('App', () => {
     }>((_resolve, reject) => {
       rejectCurrentYearRequest = reject
     })
-    const getOperationsPage = vi.fn((_token: string, filters?: Parameters<FinanceClient['getOperationsPage']>[1]) => {
-      if (filters?.monthFrom === `${currentYear}-01`) return currentYearRequest
+    let currentYearSignal: AbortSignal | undefined
+    const getOperationsPage = vi.fn((_token: string, filters?: Parameters<FinanceClient['getOperationsPage']>[1], signal?: AbortSignal) => {
+      if (filters?.monthFrom === `${currentYear}-01`) {
+        currentYearSignal = signal
+        return currentYearRequest
+      }
       return Promise.resolve({ items: [], totalCount: 0, offset: 0, limit: 500 })
     })
     const getSupplierAccrualsPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 500 }))
@@ -4264,12 +4438,13 @@ describe('App', () => {
     await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
       monthFrom: `${currentYear}-01`,
       monthTo: `${currentYear}-12`,
-    })))
+    }), expect.any(AbortSignal)))
     await user.click(within(dialog).getByRole('button', { name: 'Предыдущий год' }))
     await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
       monthFrom: `${currentYear - 1}-01`,
       monthTo: `${currentYear - 1}-12`,
-    })))
+    }), expect.any(AbortSignal)))
+    expect(currentYearSignal?.aborted).toBe(true)
     await waitFor(() => expect(dialog).toHaveAttribute('aria-busy', 'false'))
     expect(within(dialog).getByLabelText('Начало периода финансового отчета контрагента')).toHaveValue(`01.${currentYear - 1}`)
     expect(within(dialog).getByLabelText('Конец периода финансового отчета контрагента')).toHaveValue(`12.${currentYear - 1}`)
