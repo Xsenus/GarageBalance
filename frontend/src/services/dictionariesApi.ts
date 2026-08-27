@@ -443,7 +443,7 @@ export type DictionaryClient = {
   archiveSupplierContact(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplierContact(accessToken: string, id: string): Promise<SupplierContactDto>
   getStaffDepartments(accessToken: string, limit?: number, includeArchived?: boolean): Promise<StaffDepartmentDto[]>
-  getSalaryFund(accessToken: string): Promise<StaffDepartmentSalaryFundDto[]>
+  getSalaryFund(accessToken: string, signal?: AbortSignal): Promise<StaffDepartmentSalaryFundDto[]>
   createStaffDepartment(accessToken: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
   updateStaffDepartment(accessToken: string, id: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
   archiveStaffDepartment(accessToken: string, id: string, reason: string): Promise<void>
@@ -486,13 +486,13 @@ export type DictionaryClient = {
   updateChargeServiceTariffSchedule?(accessToken: string, id: string, request: UpsertChargeServiceTariffScheduleRequest): Promise<UpdatedChargeServiceTariffScheduleDto>
   archiveChargeServiceSetting(accessToken: string, id: string, reason: string): Promise<void>
   restoreChargeServiceSetting(accessToken: string, id: string): Promise<ChargeServiceSettingDto>
-  getFeeCampaigns(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<FeeCampaignDto[]>
+  getFeeCampaigns(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<FeeCampaignDto[]>
   createFeeCampaign(accessToken: string, request: UpsertFeeCampaignRequest): Promise<FeeCampaignDto>
   updateFeeCampaign(accessToken: string, id: string, request: UpsertFeeCampaignRequest): Promise<FeeCampaignDto>
   closeFeeCampaign(accessToken: string, id: string, request: { comment?: string | null }): Promise<FeeCampaignDto>
   archiveFeeCampaign(accessToken: string, id: string, reason: string): Promise<void>
   restoreFeeCampaign(accessToken: string, id: string): Promise<FeeCampaignDto>
-  getIrregularPayments(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<IrregularPaymentDto[]>
+  getIrregularPayments(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<IrregularPaymentDto[]>
   createIrregularPayment(accessToken: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
   updateIrregularPayment(accessToken: string, id: string, request: UpsertIrregularPaymentRequest): Promise<IrregularPaymentDto>
   setIrregularPaymentStatus(accessToken: string, id: string, request: { isActive: boolean; reason?: string }): Promise<IrregularPaymentDto>
@@ -656,8 +656,8 @@ export const dictionariesApi: DictionaryClient = {
   getStaffDepartments(accessToken, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/staff-departments', { limit, includeArchived: includeArchived || undefined }))
   },
-  getSalaryFund(accessToken) {
-    return requestJson(accessToken, '/api/dictionaries/staff-departments/salary-fund')
+  getSalaryFund(accessToken, signal) {
+    return requestJson(accessToken, '/api/dictionaries/staff-departments/salary-fund', { signal })
   },
   createStaffDepartment(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/staff-departments', { method: 'POST', body: JSON.stringify(request) })
@@ -776,8 +776,8 @@ export const dictionariesApi: DictionaryClient = {
   restoreChargeServiceSetting(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/restore`, { method: 'POST' })
   },
-  getFeeCampaigns(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/fee-campaigns', { search, limit, includeArchived: includeArchived || undefined }))
+  getFeeCampaigns(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/fee-campaigns', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createFeeCampaign(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/fee-campaigns', { method: 'POST', body: JSON.stringify(request) })
@@ -794,8 +794,8 @@ export const dictionariesApi: DictionaryClient = {
   restoreFeeCampaign(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}/restore`, { method: 'POST' })
   },
-  getIrregularPayments(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/irregular-payments', { search, limit, includeArchived: includeArchived || undefined }))
+  getIrregularPayments(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/irregular-payments', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createIrregularPayment(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/irregular-payments', { method: 'POST', body: JSON.stringify(request) })

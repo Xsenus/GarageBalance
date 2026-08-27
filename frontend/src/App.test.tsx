@@ -5594,6 +5594,39 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByLabelText('Вода: Старый тариф без БД: значение')).not.toBeInTheDocument()
   })
 
+  it('cancels every tariff startup request when leaving the section', async () => {
+    const user = userEvent.setup()
+    const startupSignals = new Map<string, AbortSignal>()
+    const pendingRead = (name: string, signal?: AbortSignal) => {
+      if (signal) startupSignals.set(name, signal)
+      return new Promise<never>(() => undefined)
+    }
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: (_token, _search, _limit, _includeArchived, signal) => pendingRead('tariffs', signal),
+      getChargeServiceSettings: (_token, _search, _limit, _includeArchived, _isRegular, _isMetered, signal) => pendingRead('charge-services', signal),
+      getSalaryFund: (_token, signal) => pendingRead('salary-fund', signal),
+      getIrregularPayments: (_token, _search, _limit, _includeArchived, signal) => pendingRead('irregular-payments', signal),
+      getFeeCampaigns: (_token, _search, _limit, _includeArchived, signal) => pendingRead('fee-campaigns', signal),
+    })
+    const settingsClient = createSettingsClient({
+      getPaymentDisplaySettings: (_token, signal) => pendingRead('display-settings', signal),
+      getTariffPanelsLayout: (_token, signal) => pendingRead('panel-layout', signal),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    await waitFor(() => expect(startupSignals.size).toBe(7))
+    const tariffSignals = [...startupSignals.values()]
+
+    await openSection(user, 'Отчеты')
+
+    expect(tariffSignals).toHaveLength(7)
+    expect(tariffSignals.every((signal) => signal.aborted)).toBe(true)
+  })
+
   it('shows table-shaped tariff skeletons and hides empty messages while critical data is loading', async () => {
     const user = userEvent.setup()
     let resolveTariffs!: (value: TariffDto[]) => void

@@ -818,15 +818,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
 
     async function loadTariffsAndServices() {
       setTariffPersistenceError(null)
       setTariffsLoading(true)
       try {
         const [loadedTariffs, loadedChargeServices, loadedSalaryFund] = await Promise.all([
-          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
-          dictionaryClient.getSalaryFund(auth.accessToken),
+          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, undefined, undefined, controller.signal),
+          dictionaryClient.getSalaryFund(auth.accessToken, controller.signal),
         ])
         if (!ignore) {
           const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices, loadedSalaryFund)
@@ -849,7 +850,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     async function loadIrregularPayments() {
       setOneTimeLoading(true)
       try {
-        const loadedIrregularPayments = await dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true)
+        const loadedIrregularPayments = await dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, controller.signal)
         if (!ignore) {
           const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows([], loadedIrregularPayments, true)
           setOneTimeRows(mergedOneTimeRows)
@@ -870,7 +871,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       const mutationVersionAtStart = feeCampaignMutationVersionRef.current
       setFeeCampaignsLoading(true)
       try {
-        const loadedFeeCampaigns = await dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true)
+        const loadedFeeCampaigns = await dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, controller.signal)
         if (!ignore) {
           if (feeCampaignMutationVersionRef.current === mutationVersionAtStart) {
             setFeeCampaigns(loadedFeeCampaigns)
@@ -895,6 +896,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     return () => {
       ignore = true
+      controller.abort()
       const tariffReferencesController = tariffReferencesControllerRef.current
       tariffReferencesControllerRef.current = null
       tariffReferencesRequestRef.current = null
@@ -1168,21 +1170,26 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
     tariffReferencesLoadedRef.current = false
     tariffReferencesFailedRef.current = false
     tariffReferencesRequestRef.current = null
-    settingsClient.getPaymentDisplaySettings(auth.accessToken)
+    settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal)
       .then((settings) => {
         if (ignore) return
         setTableColumns([settings.showPeriodicityColumn, settings.showAccrualMonthColumn])
       })
       .catch(() => undefined)
-    return () => { ignore = true }
+    return () => {
+      ignore = true
+      controller.abort()
+    }
   }, [auth.accessToken, settingsClient])
 
   useEffect(() => {
     let ignore = false
-    settingsClient.getTariffPanelsLayout(auth.accessToken)
+    const controller = new AbortController()
+    settingsClient.getTariffPanelsLayout(auth.accessToken, controller.signal)
       .then((layout) => {
         if (ignore) return
         const width = layout.irregularPaymentsWidthPercent
@@ -1190,7 +1197,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         setTariffPanelsWidthState(width)
       })
       .catch(() => undefined)
-    return () => { ignore = true }
+    return () => {
+      ignore = true
+      controller.abort()
+    }
   }, [auth.accessToken, settingsClient])
 
   function setTariffPanelsWidth(width: number) {

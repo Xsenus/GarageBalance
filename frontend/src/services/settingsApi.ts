@@ -103,9 +103,9 @@ export type DiagnosticLogStatusDto = {
 }
 
 export type ApplicationSettingsClient = {
-  getPaymentDisplaySettings(accessToken: string): Promise<PaymentDisplaySettingsDto>
+  getPaymentDisplaySettings(accessToken: string, signal?: AbortSignal): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
-  getTariffPanelsLayout(accessToken: string): Promise<TariffPanelsLayoutDto>
+  getTariffPanelsLayout(accessToken: string, signal?: AbortSignal): Promise<TariffPanelsLayoutDto>
   updateTariffPanelsLayout(accessToken: string, request: UpdateTariffPanelsLayoutRequest): Promise<TariffPanelsLayoutDto>
   getSalaryAccrualSettings(accessToken: string): Promise<SalaryAccrualSettingsDto>
   updateSalaryAccrualSettings(accessToken: string, request: SalaryAccrualSettingsDto): Promise<SalaryAccrualSettingsDto>
@@ -147,14 +147,14 @@ async function requestBlob(
 }
 
 export const settingsApi: ApplicationSettingsClient = {
-  getPaymentDisplaySettings(accessToken) {
-    return requestJson(accessToken, '/api/settings/payments/display')
+  getPaymentDisplaySettings(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/payments/display', { signal })
   },
   updatePaymentDisplaySettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/payments/display', { method: 'PUT', body: JSON.stringify(request) })
   },
-  getTariffPanelsLayout(accessToken) {
-    return requestJson(accessToken, '/api/settings/tariffs/layout')
+  getTariffPanelsLayout(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/tariffs/layout', { signal })
   },
   updateTariffPanelsLayout(accessToken, request) {
     return requestJson(accessToken, '/api/settings/tariffs/layout', { method: 'PUT', body: JSON.stringify(request) })

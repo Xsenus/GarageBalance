@@ -323,6 +323,35 @@ describe('dictionariesApi response cache', () => {
     expect(fetchSignal?.aborted).toBe(true)
   })
 
+  it('forwards cancellation for tariff startup dictionaries', async () => {
+    const fetchSignals: AbortSignal[] = []
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal
+      if (signal) {
+        fetchSignals.push(signal)
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      }
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = Promise.all([
+      dictionariesApi.getSalaryFund('token', controller.signal),
+      dictionariesApi.getIrregularPayments('token', undefined, 100, true, controller.signal),
+      dictionariesApi.getFeeCampaigns('token', undefined, 100, true, controller.signal),
+    ])
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(3))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchSignals.every((signal) => signal.aborted)).toBe(true)
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/dictionaries/staff-departments/salary-fund',
+      '/api/dictionaries/irregular-payments?limit=100&includeArchived=true',
+      '/api/dictionaries/fee-campaigns?limit=100&includeArchived=true',
+    ])
+  })
+
   it('loads and atomically saves a charge service tariff schedule', async () => {
     const periods = [
       { tariffId: 'tariff-1', effectiveFrom: null, effectiveTo: '2026-08-31', rate: 100, tariffVersion: 'v1' },
