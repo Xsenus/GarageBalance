@@ -9,6 +9,22 @@ namespace GarageBalance.Api.Tests.Deployment;
 [Collection(ApiBenchmarkScriptCollection.Name)]
 public sealed class ApiBenchmarkScriptTests
 {
+    private static readonly string[] ExpectedWorkspaceSections =
+    [
+        "users",
+        "tariffsAndFees",
+        "contractors",
+        "dictionaries",
+        "meterReadings",
+        "payments",
+        "funds",
+        "reports",
+        "import",
+        "audit",
+        "releases",
+        "settings"
+    ];
+
     [Fact]
     public void DefaultScenarios_CoverMainReadSectionsWithFixedSafeThresholds()
     {
@@ -22,10 +38,16 @@ public sealed class ApiBenchmarkScriptTests
 
         Assert.Contains("$scenarios = @($scenarioDocument)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$scenarioDocument.GetEnumerator()", script, StringComparison.Ordinal);
-        Assert.Equal(10, scenarios.Length);
+        Assert.Equal(14, scenarios.Length);
         Assert.Equal(
             scenarios.Length,
             scenarios.Select(item => item.GetProperty("name").GetString()).Distinct().Count());
+        Assert.Equal(
+            ExpectedWorkspaceSections.OrderBy(section => section),
+            scenarios
+                .Where(item => item.TryGetProperty("workspaceSection", out _))
+                .Select(item => item.GetProperty("workspaceSection").GetString())
+                .OrderBy(section => section));
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString() == "/health/ready");
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/dictionaries/", StringComparison.Ordinal));
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/finance/", StringComparison.Ordinal));

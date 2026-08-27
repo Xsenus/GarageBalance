@@ -17,6 +17,7 @@
   },
   {
     "name": "garage-page",
+    "workspaceSection": "dictionaries",
     "path": "/api/dictionaries/garages/page?offset=0&limit=25&sortBy=number&sortDirection=asc",
     "authorized": true,
     "p50Milliseconds": 500,
@@ -24,7 +25,26 @@
     "maxErrorRatePercent": 0
   },
   {
+    "name": "supplier-page",
+    "workspaceSection": "contractors",
+    "path": "/api/dictionaries/suppliers/page?offset=0&limit=25&sortBy=name&sortDirection=asc",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "charge-services",
+    "workspaceSection": "tariffsAndFees",
+    "path": "/api/dictionaries/charge-services?limit=100",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
     "name": "finance-page",
+    "workspaceSection": "payments",
     "path": "/api/finance/operations/page?offset=0&limit=25",
     "authorized": true,
     "p50Milliseconds": 750,
@@ -33,6 +53,7 @@
   },
   {
     "name": "meter-year",
+    "workspaceSection": "meterReadings",
     "path": "/api/finance/meter-readings/year?year=2025&meterKind=electricity&offset=0&limit=25",
     "authorized": true,
     "p50Milliseconds": 750,
@@ -41,6 +62,7 @@
   },
   {
     "name": "funds",
+    "workspaceSection": "funds",
     "path": "/api/funds",
     "authorized": true,
     "p50Milliseconds": 500,
@@ -49,6 +71,7 @@
   },
   {
     "name": "consolidated-report",
+    "workspaceSection": "reports",
     "path": "/api/reports/consolidated?monthFrom=2025-01-01&monthTo=2025-12-01&offset=0&limit=25",
     "authorized": true,
     "p50Milliseconds": 1000,
@@ -57,6 +80,7 @@
   },
   {
     "name": "import-runs",
+    "workspaceSection": "import",
     "path": "/api/import/access/runs",
     "authorized": true,
     "p50Milliseconds": 500,
@@ -65,6 +89,7 @@
   },
   {
     "name": "audit-page",
+    "workspaceSection": "audit",
     "path": "/api/audit/events/page?offset=0&limit=25",
     "authorized": true,
     "p50Milliseconds": 750,
@@ -73,7 +98,26 @@
   },
   {
     "name": "users-page",
+    "workspaceSection": "users",
     "path": "/api/users/page?offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "app-releases",
+    "workspaceSection": "releases",
+    "path": "/api/app-releases?offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "payment-display-settings",
+    "workspaceSection": "settings",
+    "path": "/api/settings/payments/display",
     "authorized": true,
     "p50Milliseconds": 500,
     "p95Milliseconds": 1000,
