@@ -9,6 +9,9 @@ APP_USER="garagebalance"
 APP_GROUP="garagebalance"
 PUBLIC_HOST="sgk.blagodaty.ru"
 FRONTEND_ASSET_RETENTION_DAYS=30
+PREVIOUS_RELEASE_RETENTION_COUNT=2
+RELEASE_METADATA_RETENTION_COUNT=5
+OPERATIONAL_BACKUP_RETENTION_COUNT=30
 
 if [[ "${1:-}" == "prepare-showcase" ]]; then
   [[ "$#" == "3" ]] || {
@@ -79,6 +82,61 @@ ensure_env_setting() {
   if ! grep -qE "^${name}=" "$ENV_FILE"; then
     printf '%s=%s\n' "$name" "$value" >> "$ENV_FILE"
   fi
+}
+
+prune_old_directories() {
+  local parent_directory="$1"
+  local name_prefix="$2"
+  local retention_count="$3"
+  local obsolete_path
+
+  while IFS= read -r obsolete_path; do
+    [[ -n "$obsolete_path" ]] || continue
+    if [[ "$obsolete_path" != "${parent_directory}/${name_prefix}"* ]]; then
+      log "retentionStatus=refused; path=${obsolete_path}"
+      return 1
+    fi
+    if ! rm -rf -- "$obsolete_path"; then
+      log "retentionStatus=remove-failed; path=${obsolete_path}"
+      return 1
+    fi
+    log "retentionStatus=removed-directory; path=${obsolete_path}"
+  done < <(
+    find "$parent_directory" \
+      -mindepth 1 \
+      -maxdepth 1 \
+      -type d \
+      -name "${name_prefix}*" \
+      -printf '%T@ %p\n' \
+      | sort -nr \
+      | awk -v keep="$retention_count" 'NR > keep { sub(/^[^ ]+ /, ""); print }'
+  )
+}
+
+prune_operational_backups() {
+  local obsolete_path
+
+  while IFS= read -r obsolete_path; do
+    [[ -n "$obsolete_path" ]] || continue
+    if [[ "$obsolete_path" != "${BACKUP_DIR}/garagebalance_"*.pgdump ]]; then
+      log "retentionStatus=refused; path=${obsolete_path}"
+      return 1
+    fi
+    if ! rm -f -- "$obsolete_path"; then
+      log "retentionStatus=remove-failed; path=${obsolete_path}"
+      return 1
+    fi
+    log "retentionStatus=removed-backup; path=${obsolete_path}"
+  done < <(
+    find "$BACKUP_DIR" \
+      -mindepth 1 \
+      -maxdepth 1 \
+      -type f \
+      -name 'garagebalance_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]_*.pgdump' \
+      -printf '%T@ %p\n' \
+      | sort -nr \
+      | awk -v keep="$OPERATIONAL_BACKUP_RETENTION_COUNT" 'NR > keep { sub(/^[^ ]+ /, ""); print }'
+  )
 }
 
 restore_previous_release() {
@@ -329,5 +387,12 @@ install -o root -g root -m 0750 \
   /usr/local/bin/garagebalance-audit-database
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
+prune_old_directories "$APP_ROOT" "api.prev-" "$PREVIOUS_RELEASE_RETENTION_COUNT" ||
+  log "retentionStatus=warning; target=previous-api"
+prune_old_directories "$APP_ROOT" "frontend.prev-" "$PREVIOUS_RELEASE_RETENTION_COUNT" ||
+  log "retentionStatus=warning; target=previous-frontend"
+prune_old_directories "${APP_ROOT}/releases" "" "$RELEASE_METADATA_RETENTION_COUNT" ||
+  log "retentionStatus=warning; target=release-metadata"
+prune_operational_backups || log "retentionStatus=warning; target=operational-backups"
 
 log "deployStatus=ok; releaseId=${release_id}; backup=${BACKUP_FILE}; previousApi=${PREV_API}; previousFrontend=${PREV_FRONTEND}"

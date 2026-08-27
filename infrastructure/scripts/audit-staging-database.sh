@@ -6,6 +6,7 @@ ENV_FILE="/etc/garagebalance-staging.env"
 EXPECTED_DATABASE="garagebalance_staging"
 EXPECTED_CONFIRMATION="AUDIT GARAGEBALANCE STAGING"
 BACKUP_DIR="${APP_ROOT}/backups"
+OPERATIONAL_BACKUP_RETENTION_COUNT=30
 confirmation="${1:-}"
 audit_database=""
 critical_findings=0
@@ -98,6 +99,32 @@ run_check() {
   fi
 }
 
+prune_operational_backups() {
+  local obsolete_path
+
+  while IFS= read -r obsolete_path; do
+    [[ -n "$obsolete_path" ]] || continue
+    if [[ "$obsolete_path" != "${BACKUP_DIR}/garagebalance_"*.pgdump ]]; then
+      log "retentionStatus=refused"
+      return 1
+    fi
+    if ! rm -f -- "$obsolete_path"; then
+      log "retentionStatus=remove-failed"
+      return 1
+    fi
+    log "retentionStatus=removed-backup"
+  done < <(
+    find "$BACKUP_DIR" \
+      -mindepth 1 \
+      -maxdepth 1 \
+      -type f \
+      -name 'garagebalance_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]_*.pgdump' \
+      -printf '%T@ %p\n' \
+      | sort -nr \
+      | awk -v keep="$OPERATIONAL_BACKUP_RETENTION_COUNT" 'NR > keep { sub(/^[^ ]+ /, ""); print }'
+  )
+}
+
 run_check "unvalidated_constraints" "critical" \
   "SELECT count(*) FROM pg_catalog.pg_constraint WHERE connamespace = 'public'::regnamespace AND NOT convalidated;"
 run_check "invalid_indexes" "critical" \
@@ -183,6 +210,7 @@ run_check "codex_marked_business_records" "critical" \
   "SELECT (SELECT count(*) FROM garages WHERE coalesce(\"Number\", '') ILIKE '%codex%' OR coalesce(\"Comment\", '') ILIKE '%codex%') + (SELECT count(*) FROM suppliers WHERE coalesce(\"Name\", '') ILIKE '%codex%' OR coalesce(\"Comment\", '') ILIKE '%codex%') + (SELECT count(*) FROM accruals WHERE coalesce(\"Basis\", '') ILIKE '%codex%' OR coalesce(\"Comment\", '') ILIKE '%codex%') + (SELECT count(*) FROM financial_operations WHERE coalesce(\"DocumentNumber\", '') ILIKE '%codex%' OR coalesce(\"CounterpartyName\", '') ILIKE '%codex%' OR coalesce(\"Comment\", '') ILIKE '%codex%') + (SELECT count(*) FROM meter_readings WHERE coalesce(\"Comment\", '') ILIKE '%codex%') + (SELECT count(*) FROM fee_campaigns WHERE coalesce(\"Name\", '') ILIKE '%codex%' OR coalesce(\"Goal\", '') ILIKE '%codex%' OR coalesce(\"ClosureComment\", '') ILIKE '%codex%') + (SELECT count(*) FROM fund_operations WHERE coalesce(\"Reason\", '') ILIKE '%codex%');"
 
 log "auditStatus=completed; criticalFindings=${critical_findings}; warningFindings=${warning_findings}"
+prune_operational_backups || log "retentionStatus=warning; target=operational-backups"
 if (( critical_findings > 0 )); then
   exit 3
 fi

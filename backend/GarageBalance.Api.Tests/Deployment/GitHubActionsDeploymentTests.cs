@@ -84,6 +84,16 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("/usr/local/bin/garagebalance-deploy-apply", script, StringComparison.Ordinal);
         Assert.Contains("audit-database", script, StringComparison.Ordinal);
         Assert.Contains("/usr/local/bin/garagebalance-audit-database", script, StringComparison.Ordinal);
+        Assert.Contains("PREVIOUS_RELEASE_RETENTION_COUNT=2", script, StringComparison.Ordinal);
+        Assert.Contains("RELEASE_METADATA_RETENTION_COUNT=5", script, StringComparison.Ordinal);
+        Assert.Contains("OPERATIONAL_BACKUP_RETENTION_COUNT=30", script, StringComparison.Ordinal);
+        Assert.Contains("prune_old_directories \"$APP_ROOT\" \"api.prev-\"", script, StringComparison.Ordinal);
+        Assert.Contains("prune_old_directories \"$APP_ROOT\" \"frontend.prev-\"", script, StringComparison.Ordinal);
+        Assert.Contains("prune_old_directories \"${APP_ROOT}/releases\" \"\"", script, StringComparison.Ordinal);
+        Assert.Contains("-name 'garagebalance_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]_*.pgdump'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("-name 'garagebalance_*.pgdump'", script, StringComparison.Ordinal);
+        Assert.Contains("retentionStatus=refused; path=${obsolete_path}", script, StringComparison.Ordinal);
+        Assert.Contains("retentionStatus=warning; target=operational-backups", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -126,6 +136,11 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("fund_balance_mismatch", script, StringComparison.Ordinal);
         Assert.Contains("codex_marked_business_records", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--dbname=\"$database_name\"", script, StringComparison.Ordinal);
+        Assert.Contains("OPERATIONAL_BACKUP_RETENTION_COUNT=30", script, StringComparison.Ordinal);
+        Assert.Contains("prune_operational_backups", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("-name 'garagebalance_*.pgdump'", script, StringComparison.Ordinal);
+        Assert.Contains("retentionStatus=refused", script, StringComparison.Ordinal);
+        Assert.Contains("retentionStatus=warning; target=operational-backups", script, StringComparison.Ordinal);
     }
 
     [Fact]

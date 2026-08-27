@@ -913,8 +913,10 @@ describe('App', () => {
     const splitter = await within(tariffsPanel).findByRole('separator', { name: 'Изменить ширину таблиц' })
     const bottomGrid = splitter.closest('.contractors-bottom-grid') as HTMLElement
 
-    expect(splitter).toHaveAttribute('aria-valuenow', '35')
-    expect(bottomGrid.style.getPropertyValue('--tariffs-irregular-width')).toBe('35%')
+    await waitFor(() => {
+      expect(splitter).toHaveAttribute('aria-valuenow', '35')
+      expect(bottomGrid.style.getPropertyValue('--tariffs-irregular-width')).toBe('35%')
+    })
 
     vi.spyOn(bottomGrid, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 1000 } as DOMRect)
     Object.defineProperties(splitter, {
