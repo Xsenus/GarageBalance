@@ -1082,7 +1082,7 @@ describe('App', () => {
       getFeeCampaigns: async () => [endedCampaign, closedCampaign, activeCampaign, openEndedCampaign, endOnlyCampaign],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Тарифы и сборы')
@@ -4573,7 +4573,7 @@ describe('App', () => {
       },
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4614,7 +4614,7 @@ describe('App', () => {
       })],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5291,7 +5291,7 @@ describe('App', () => {
       getChargeServiceSettings: async () => [customService, renamedWaterService],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5330,7 +5330,7 @@ describe('App', () => {
       getChargeServiceSettings: async () => [lightingService],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5394,7 +5394,7 @@ describe('App', () => {
       },
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5484,7 +5484,7 @@ describe('App', () => {
       ],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5498,6 +5498,75 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: оплата до: месяц')).toHaveTextContent('Декабрь')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
+  })
+
+  it('loads tariff form references only when a form opens and reuses the result', async () => {
+    const user = userEvent.setup()
+    const getIncomeTypes = vi.fn(async () => [createAccountingType({ id: 'income-lazy-tariff', name: 'Прочие доходы', destinationFundId: 'fund-other' })])
+    const getMeasurementUnitsPage = vi.fn(async () => ({
+      items: [{ id: 'unit-ruble-lazy', name: 'руб.', isArchived: false }],
+      totalCount: 1,
+      offset: 0,
+      limit: 100,
+    }))
+    const getFundOptions = vi.fn(async () => [{ id: 'fund-other', name: 'Прочее', allowOperations: true }])
+    const dictionaryClient = createDictionaryClient({ getIncomeTypes, getMeasurementUnitsPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient({ getFundOptions })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Загружаем тарифы и услуги')).not.toBeInTheDocument())
+
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+    expect(getMeasurementUnitsPage).not.toHaveBeenCalled()
+    expect(getFundOptions).not.toHaveBeenCalled()
+
+    const addServiceButton = within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' })
+    await user.click(addServiceButton)
+    expect(await screen.findByRole('dialog', { name: 'Добавить услугу' })).toBeInTheDocument()
+    expect(getIncomeTypes).toHaveBeenCalledTimes(1)
+    expect(getMeasurementUnitsPage).toHaveBeenCalledTimes(1)
+    expect(getFundOptions).toHaveBeenCalledTimes(1)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
+
+    await user.click(addServiceButton)
+    expect(await screen.findByRole('dialog', { name: 'Добавить услугу' })).toBeInTheDocument()
+    expect(getIncomeTypes).toHaveBeenCalledTimes(1)
+    expect(getMeasurementUnitsPage).toHaveBeenCalledTimes(1)
+    expect(getFundOptions).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps tariff tables visible and retries an on-demand form-reference failure', async () => {
+    const user = userEvent.setup()
+    const getIncomeTypes = vi.fn()
+      .mockRejectedValueOnce(new Error('Справочники формы тарифов временно недоступны.'))
+      .mockResolvedValue([createAccountingType({ id: 'income-retried-tariff', name: 'Прочие доходы', destinationFundId: 'fund-other' })])
+    const dictionaryClient = createDictionaryClient({ getIncomeTypes })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Загружаем тарифы и услуги')).not.toBeInTheDocument())
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' }))
+    expect(await within(tariffsPanel).findByText('Справочники формы тарифов временно недоступны.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(getIncomeTypes).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(within(tariffsPanel).queryByText('Справочники формы тарифов временно недоступны.')).not.toBeInTheDocument())
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' }))
+    expect(await screen.findByRole('dialog', { name: 'Добавить услугу' })).toBeInTheDocument()
+    expect(getIncomeTypes).toHaveBeenCalledTimes(2)
   })
 
   it('keeps empty backend tariff dictionaries empty', async () => {
@@ -5577,7 +5646,7 @@ describe('App', () => {
       getTariffs: async () => [createTariff({ id: 'fast-water', name: 'Быстрый тариф', calculationBase: 'meter_water', rate: 42 })],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5611,7 +5680,7 @@ describe('App', () => {
       .mockResolvedValueOnce([])
     const dictionaryClient = createDictionaryClient({ getGarages })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))

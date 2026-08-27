@@ -758,6 +758,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [feeCampaignActiveGarageCount, setFeeCampaignActiveGarageCount] = useState(0)
   const feeCampaignGarageOptionsLoadedRef = useRef(false)
   const feeCampaignGarageOptionsRequestRef = useRef<Promise<boolean> | null>(null)
+  const tariffReferencesLoadedRef = useRef(false)
+  const tariffReferencesFailedRef = useRef(false)
+  const tariffReferencesRequestRef = useRef<Promise<boolean> | null>(null)
+  const tariffReferencesControllerRef = useRef<AbortController | null>(null)
   const feeCampaignMutationVersionRef = useRef(0)
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
   const [feeCampaignPageNumber, setFeeCampaignPageNumber] = useState(1)
@@ -796,7 +800,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffsLoading, setTariffsLoading] = useState(true)
   const [oneTimeLoading, setOneTimeLoading] = useState(true)
   const [feeCampaignsLoading, setFeeCampaignsLoading] = useState(true)
-  const [tariffReferencesLoading, setTariffReferencesLoading] = useState(true)
+  const [tariffReferencesLoading, setTariffReferencesLoading] = useState(false)
   const [feeCampaignGarageOptionsLoading, setFeeCampaignGarageOptionsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
   const [tableColumns, setTableColumns] = useState([false, false])
@@ -889,34 +893,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     void loadIrregularPayments()
     void loadFeeCampaigns()
 
-    async function loadTariffReferences() {
-      setTariffReferencesLoading(true)
-      try {
-        const [loadedIncomeTypes, loadedMeasurementUnits, loadedFunds] = await Promise.all([
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getMeasurementUnitsPage(auth.accessToken, undefined, 0, dictionaryScreenRequestLimit),
-          fundsClient.getFundOptions(auth.accessToken),
-        ])
-        if (!ignore) {
-          setBackendIncomeTypes(loadedIncomeTypes)
-          setBackendMeasurementUnits(loadedMeasurementUnits.items)
-          setBackendFunds(loadedFunds)
-        }
-      } catch (caught: unknown) {
-        if (!ignore) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить данные для форм тарифов и сборов.')
-        }
-      } finally {
-        if (!ignore) {
-          setTariffReferencesLoading(false)
-        }
-      }
-    }
-
-    void loadTariffReferences()
-
     return () => {
       ignore = true
+      const tariffReferencesController = tariffReferencesControllerRef.current
+      tariffReferencesControllerRef.current = null
+      tariffReferencesRequestRef.current = null
+      tariffReferencesController?.abort()
     }
   }, [auth.accessToken, dictionaryClient, fundsClient, tariffReloadRevision])
 
@@ -936,6 +918,42 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   function closeFeeCampaignEditDialog() {
     setFeeCampaignEditTarget(null)
+  }
+
+  function ensureTariffReferences() {
+    if (tariffReferencesLoadedRef.current) return Promise.resolve(true)
+    if (tariffReferencesRequestRef.current) return tariffReferencesRequestRef.current
+
+    const controller = new AbortController()
+    tariffReferencesControllerRef.current = controller
+    tariffReferencesFailedRef.current = false
+    setTariffReferencesLoading(true)
+    const request = Promise.all([
+      dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+      dictionaryClient.getMeasurementUnitsPage(auth.accessToken, undefined, 0, dictionaryScreenRequestLimit, false, controller.signal),
+      fundsClient.getFundOptions(auth.accessToken, controller.signal),
+    ]).then(([loadedIncomeTypes, loadedMeasurementUnits, loadedFunds]) => {
+      if (controller.signal.aborted) return false
+      setBackendIncomeTypes(loadedIncomeTypes)
+      setBackendMeasurementUnits(loadedMeasurementUnits.items)
+      setBackendFunds(loadedFunds)
+      tariffReferencesLoadedRef.current = true
+      return true
+    }).catch((caught: unknown) => {
+      if (!controller.signal.aborted) {
+        tariffReferencesFailedRef.current = true
+        setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить данные для формы.')
+      }
+      return false
+    }).finally(() => {
+      if (tariffReferencesControllerRef.current === controller) {
+        tariffReferencesControllerRef.current = null
+        tariffReferencesRequestRef.current = null
+        setTariffReferencesLoading(false)
+      }
+    })
+    tariffReferencesRequestRef.current = request
+    return request
   }
 
   function closeFeeCampaignCloseDialog() {
@@ -982,16 +1000,23 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   async function openFeeCampaignCreateDialog() {
     setTariffPersistenceError(null)
-    if (await ensureFeeCampaignGarageOptions()) {
+    const [referencesReady, garagesReady] = await Promise.all([ensureTariffReferences(), ensureFeeCampaignGarageOptions()])
+    if (referencesReady && garagesReady) {
       setModal('fee')
     }
   }
 
   async function openFeeCampaignEditDialog(campaign: FeeCampaignDto) {
     setTariffPersistenceError(null)
-    if (await ensureFeeCampaignGarageOptions()) {
+    const [referencesReady, garagesReady] = await Promise.all([ensureTariffReferences(), ensureFeeCampaignGarageOptions()])
+    if (referencesReady && garagesReady) {
       setFeeCampaignEditTarget(campaign)
     }
+  }
+
+  async function openServiceCreateDialog() {
+    setTariffPersistenceError(null)
+    if (await ensureTariffReferences()) setModal('service')
   }
 
   function closeFeeCampaignRestoreDialog() {
@@ -1143,6 +1168,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   useEffect(() => {
     let ignore = false
+    tariffReferencesLoadedRef.current = false
+    tariffReferencesFailedRef.current = false
+    tariffReferencesRequestRef.current = null
     settingsClient.getPaymentDisplaySettings(auth.accessToken)
       .then((settings) => {
         if (ignore) return
@@ -1916,6 +1944,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   async function openChargeServiceEditor(setting: ChargeServiceSettingDto) {
     setTariffPersistenceError(null)
+    if (!await ensureTariffReferences()) return
     if (setting.incomeTypeId && !backendIncomeTypes.some((incomeType) => incomeType.id === setting.incomeTypeId)) {
       try {
         setBackendIncomeTypes(await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit))
@@ -2326,6 +2355,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     return selectedNumbers.length > 4 ? `${visibleNumbers} и еще ${selectedNumbers.length - 4}` : visibleNumbers
   }
 
+  function retryTariffLoading() {
+    setTariffPersistenceError(null)
+    if (tariffReferencesFailedRef.current) {
+      void ensureTariffReferences()
+      return
+    }
+    setTariffReloadRevision((value) => value + 1)
+  }
+
   return (
     <section className="contractors-page tariffs-page" aria-label="Тарифы и сборы">
       <div className="contractors-heading">
@@ -2335,7 +2373,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           {tariffPersistenceError && !modal ? (
             <AsyncErrorState
               message={tariffPersistenceError}
-              onRetry={() => setTariffReloadRevision((value) => value + 1)}
+              onRetry={retryTariffLoading}
               retrying={tariffsLoading || oneTimeLoading || feeCampaignsLoading || tariffReferencesLoading}
             />
           ) : tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
@@ -2344,12 +2382,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           <button
             className="secondary-button create-action-button tariffs-action-button"
             type="button"
+            aria-busy={tariffReferencesLoading}
             disabled={!canManageTariffs || tariffReferencesLoading}
             title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined}
             onClick={() => {
-              if (canManageTariffs) {
-                setModal('service')
-              }
+              if (canManageTariffs) void openServiceCreateDialog()
             }}
           >
             <FileSpreadsheet size={17} aria-hidden="true" />
@@ -2358,6 +2395,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           <button
             className="primary-button contractors-primary-action create-action-button tariffs-action-button"
             type="button"
+            aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading}
             disabled={!canManageTariffs || tariffReferencesLoading || feeCampaignGarageOptionsLoading}
             title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined}
             onClick={() => {
@@ -2678,6 +2716,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                             type="button"
                             aria-label={`Изменить услугу ${serviceSetting.name}`}
                             title="Изменить"
+                            aria-busy={tariffReferencesLoading}
                             disabled={!canManageTariffs || isRowDisabled || tariffReferencesLoading}
                             onClick={() => {
                               void openChargeServiceEditor(serviceSetting)
@@ -2917,7 +2956,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       </button>
                     ) : campaign.closedAtUtc ? (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить закрытый сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
                         <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
@@ -2929,7 +2968,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       </>
                     ) : (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
                         {!campaign.endsOn || campaign.endsOn > currentBusinessDate ? (
