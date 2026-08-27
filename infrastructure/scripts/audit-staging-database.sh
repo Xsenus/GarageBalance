@@ -144,6 +144,18 @@ run_check "duplicate_active_supplier_names" "critical" \
   "SELECT count(*) FROM (SELECT \"GroupId\", lower(btrim(\"Name\")) FROM suppliers WHERE NOT \"IsArchived\" GROUP BY \"GroupId\", lower(btrim(\"Name\")) HAVING count(*) > 1) q;"
 run_check "duplicate_active_fund_names" "critical" \
   "SELECT count(*) FROM (SELECT lower(btrim(\"NormalizedName\")) FROM funds WHERE NOT \"IsArchived\" GROUP BY lower(btrim(\"NormalizedName\")) HAVING count(*) > 1) q;"
+run_check "duplicate_active_supplier_group_names" "critical" \
+  "SELECT count(*) FROM (SELECT lower(btrim(\"Name\")) FROM supplier_groups WHERE NOT \"IsArchived\" GROUP BY lower(btrim(\"Name\")) HAVING count(*) > 1) q;"
+run_check "duplicate_active_staff_department_names" "critical" \
+  "SELECT count(*) FROM (SELECT lower(btrim(\"Name\")) FROM staff_departments WHERE NOT \"IsArchived\" GROUP BY lower(btrim(\"Name\")) HAVING count(*) > 1) q;"
+run_check "duplicate_active_irregular_payment_names" "critical" \
+  "SELECT count(*) FROM (SELECT lower(btrim(\"Name\")) FROM irregular_payments WHERE NOT \"IsArchived\" GROUP BY lower(btrim(\"Name\")) HAVING count(*) > 1) q;"
+run_check "duplicate_active_fee_campaign_names" "critical" \
+  "SELECT count(*) FROM (SELECT lower(btrim(\"Name\")) FROM fee_campaigns WHERE NOT \"IsArchived\" GROUP BY lower(btrim(\"Name\")) HAVING count(*) > 1) q;"
+run_check "duplicate_active_quick_list_names" "critical" \
+  "SELECT count(*) FROM (SELECT lower(btrim(\"NormalizedName\")) FROM garage_report_quick_lists WHERE NOT \"IsArchived\" GROUP BY lower(btrim(\"NormalizedName\")) HAVING count(*) > 1) q;"
+run_check "invalid_garage_starting_overdue_debt" "critical" \
+  "SELECT count(*) FROM garages WHERE \"StartingOverdueDebt\" IS NOT NULL AND (\"StartingOverdueDebt\" < 0 OR \"StartingOverdueDebt\" > GREATEST(\"StartingBalance\", 0));"
 
 run_check "invalid_tariff_periods" "critical" \
   "SELECT count(*) FROM charge_service_tariff_versions WHERE NOT \"IsArchived\" AND \"EffectiveTo\" IS NOT NULL AND \"EffectiveTo\" < \"EffectiveFrom\";"
@@ -181,10 +193,33 @@ run_check "allocations_to_invalid_operations" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND (f.\"IsCanceled\" OR a.\"IsCanceled\" OR f.\"OperationKind\" <> 'income' OR f.\"GarageId\" IS DISTINCT FROM a.\"GarageId\");"
 run_check "allocation_totals_above_operation" "critical" \
   "SELECT count(*) FROM (SELECT p.\"FinancialOperationId\" FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" WHERE p.\"IsActive\" GROUP BY p.\"FinancialOperationId\", f.\"Amount\" HAVING sum(p.\"Amount\") > f.\"Amount\") q;"
+run_check "allocation_totals_above_accrual" "critical" \
+  "SELECT count(*) FROM (SELECT p.\"AccrualId\" FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" GROUP BY p.\"AccrualId\", a.\"Amount\" HAVING sum(p.\"Amount\") > a.\"Amount\") q;"
 run_check "nonpositive_active_allocations" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations WHERE \"IsActive\" AND \"Amount\" <= 0;"
+run_check "duplicate_active_allocations" "critical" \
+  "SELECT count(*) FROM (SELECT \"FinancialOperationId\", \"AccrualId\" FROM accrual_payment_allocations WHERE \"IsActive\" GROUP BY \"FinancialOperationId\", \"AccrualId\" HAVING count(*) > 1) q;"
 run_check "allocation_income_type_mismatches" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND NOT f.\"IsCanceled\" AND NOT a.\"IsCanceled\" AND f.\"IncomeTypeId\" IS NOT NULL AND f.\"IncomeTypeId\" <> a.\"IncomeTypeId\";"
+
+run_check "duplicate_active_supplier_accruals" "critical" \
+  "SELECT count(*) FROM (SELECT \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", \"Source\", coalesce(\"DocumentNumber\", '') FROM supplier_accruals WHERE NOT \"IsCanceled\" GROUP BY \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", \"Source\", coalesce(\"DocumentNumber\", '') HAVING count(*) > 1) q;"
+run_check "nonpositive_active_supplier_accruals" "critical" \
+  "SELECT count(*) FROM supplier_accruals WHERE NOT \"IsCanceled\" AND \"Amount\" <= 0;"
+run_check "linked_supplier_accrual_mismatches" "critical" \
+  "SELECT count(*) FROM supplier_accruals a JOIN financial_operations f ON f.\"Id\" = a.\"SourceFinancialOperationId\" WHERE a.\"SourceFinancialOperationId\" IS NOT NULL AND (a.\"IsCanceled\" IS DISTINCT FROM f.\"IsCanceled\" OR f.\"OperationKind\" <> 'expense' OR a.\"SupplierId\" IS DISTINCT FROM f.\"SupplierId\" OR a.\"ExpenseTypeId\" IS DISTINCT FROM f.\"ExpenseTypeId\" OR a.\"ExpenseFundId\" IS DISTINCT FROM f.\"ExpenseFundId\" OR a.\"AccountingMonth\" <> f.\"AccountingMonth\" OR a.\"Amount\" <> f.\"Amount\");"
+
+run_check "invalid_opening_balance_adjustment_targets" "critical" \
+  "SELECT count(*) FROM opening_balance_adjustments a WHERE (a.\"TargetKind\" = 'garage' AND NOT EXISTS (SELECT 1 FROM garages g WHERE g.\"Id\" = a.\"TargetId\")) OR (a.\"TargetKind\" = 'supplier' AND NOT EXISTS (SELECT 1 FROM suppliers s WHERE s.\"Id\" = a.\"TargetId\")) OR a.\"TargetKind\" NOT IN ('garage', 'supplier');"
+
+run_check "invalid_cash_bank_transfers" "critical" \
+  "SELECT count(*) FROM cash_bank_transfers WHERE NOT \"IsCanceled\" AND \"Amount\" <= 0;"
+run_check "exact_duplicate_cash_bank_transfers" "warning" \
+  "SELECT count(*) FROM (SELECT \"TransferDate\", \"Amount\", coalesce(\"Comment\", '') FROM cash_bank_transfers WHERE NOT \"IsCanceled\" GROUP BY \"TransferDate\", \"Amount\", coalesce(\"Comment\", '') HAVING count(*) > 1) q;"
+run_check "invalid_cash_bank_balance_operations" "critical" \
+  "SELECT count(*) FROM cash_bank_balance_operations WHERE \"Amount\" <= 0 OR \"Account\" NOT IN ('cash', 'bank') OR \"OperationKind\" NOT IN ('opening_balance', 'adjustment') OR \"Direction\" NOT IN ('increase', 'decrease');"
+run_check "negative_cash_or_bank_balance" "critical" \
+  "WITH financial AS (SELECT coalesce(sum(f.\"Amount\") FILTER (WHERE f.\"OperationKind\" = 'income'), 0) AS income_total, coalesce(sum(f.\"Amount\") FILTER (WHERE f.\"OperationKind\" = 'expense' AND (f.\"ExpensePaymentSource\" = 'cash' OR (f.\"ExpensePaymentSource\" IS NULL AND (f.\"ExpensePaymentType\" = 'without_receipt' OR (f.\"ExpensePaymentType\" IS NULL AND (e.\"Code\" IN ('advance','advance_payment','advance_payments','cash_advance','no_receipt','without_receipt','no_check','without_check','cash_no_receipt') OR e.\"Name\" IN ('Авансовые выплаты','Выплата без чека'))))))), 0) AS cash_expense_total, coalesce(sum(f.\"Amount\") FILTER (WHERE f.\"OperationKind\" = 'expense' AND (f.\"ExpensePaymentSource\" = 'bank' OR (f.\"ExpensePaymentSource\" IS NULL AND f.\"ExpensePaymentType\" IS DISTINCT FROM 'without_receipt' AND (f.\"ExpensePaymentType\" IS NOT NULL OR e.\"Id\" IS NULL OR NOT (e.\"Code\" IN ('advance','advance_payment','advance_payments','cash_advance','no_receipt','without_receipt','no_check','without_check','cash_no_receipt') OR e.\"Name\" IN ('Авансовые выплаты','Выплата без чека')))))), 0) AS bank_expense_total FROM financial_operations f LEFT JOIN expense_types e ON e.\"Id\" = f.\"ExpenseTypeId\" WHERE NOT f.\"IsCanceled\"), transfers AS (SELECT coalesce(sum(\"Amount\"), 0) AS total FROM cash_bank_transfers WHERE NOT \"IsCanceled\"), adjustments AS (SELECT coalesce(sum(CASE WHEN \"Account\" = 'cash' THEN CASE WHEN \"Direction\" = 'increase' THEN \"Amount\" ELSE -\"Amount\" END ELSE 0 END), 0) AS cash_total, coalesce(sum(CASE WHEN \"Account\" = 'bank' THEN CASE WHEN \"Direction\" = 'increase' THEN \"Amount\" ELSE -\"Amount\" END ELSE 0 END), 0) AS bank_total FROM cash_bank_balance_operations) SELECT (CASE WHEN financial.income_total - transfers.total - financial.cash_expense_total + adjustments.cash_total < 0 THEN 1 ELSE 0 END) + (CASE WHEN transfers.total - financial.bank_expense_total + adjustments.bank_total < 0 THEN 1 ELSE 0 END) FROM financial CROSS JOIN transfers CROSS JOIN adjustments;"
 
 run_check "duplicate_meter_readings" "critical" \
   "SELECT count(*) FROM (SELECT \"GarageId\", \"MeterKind\", \"AccountingMonth\" FROM meter_readings WHERE NOT \"IsCanceled\" GROUP BY \"GarageId\", \"MeterKind\", \"AccountingMonth\" HAVING count(*) > 1) q;"
