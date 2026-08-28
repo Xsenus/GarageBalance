@@ -12293,7 +12293,7 @@ describe('App', () => {
     expect(getOperationsPage).toHaveBeenCalledTimes(2)
   })
 
-  it('cancels a pending fund operations page when the user leaves funds without showing an abort error', async () => {
+  it('keeps loaded fund operations visible and cancels a pending page when leaving funds', async () => {
     const user = userEvent.setup()
     let pendingPageSignal: AbortSignal | undefined
     let resolveAbortObserved!: () => void
@@ -12304,7 +12304,12 @@ describe('App', () => {
       const offset = query?.offset ?? 0
       const limit = query?.limit ?? 25
       if (offset === 0) {
-        return Promise.resolve({ items: [], totalCount: 60, offset, limit })
+        return Promise.resolve({
+          items: [createFundOperation({ id: 'known-fund-operation', fundName: 'Подтверждённый фонд' })],
+          totalCount: 60,
+          offset,
+          limit,
+        })
       }
 
       pendingPageSignal = signal
@@ -12323,9 +12328,17 @@ describe('App', () => {
     await openSection(user, 'Фонды')
 
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const operationsTable = await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })
+    expect(within(operationsTable).getByText('Подтверждённый фонд')).toBeInTheDocument()
     const pagination = await within(fundsPanel).findByRole('navigation', { name: 'Пагинация операций фондов' })
     await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
     await waitFor(() => expect(pendingPageSignal).toBeInstanceOf(AbortSignal))
+
+    expect(within(operationsTable).getByText('Подтверждённый фонд')).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('status', { name: 'Обновляем операции фондов' })).toBeInTheDocument()
+    expect(operationsTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(operationsTable).getByRole('button', { name: 'Изменить операцию фонда Подтверждённый фонд' })).toBeDisabled()
+    expect(within(fundsPanel).getByRole('navigation', { name: 'Пагинация операций фондов' })).toBeInTheDocument()
 
     await openSection(user, 'Контрагенты')
 

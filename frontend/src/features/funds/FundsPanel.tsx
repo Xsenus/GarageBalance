@@ -115,6 +115,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
   const [fundsLoading, setFundsLoading] = useState(true)
   const [operationsLoading, setOperationsLoading] = useState(true)
+  const [loadedOperationsState, setLoadedOperationsState] = useState(() => ({
+    accessToken: auth.accessToken,
+    client: fundsClient,
+    loaded: false,
+  }))
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [savingFund, setSavingFund] = useState(false)
@@ -123,6 +128,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [savingStatusAction, setSavingStatusAction] = useState(false)
   const [pageController] = useState(() => new AbortController())
   const mutationRefreshControllerRef = useRef<AbortController | null>(null)
+  const operationsLoaded = loadedOperationsState.accessToken === auth.accessToken
+    && loadedOperationsState.client === fundsClient
+    && loadedOperationsState.loaded
   useRestoreFocusOnClose(Boolean(fundEditor))
   useRestoreFocusOnClose(Boolean(fundDelete))
   useRestoreFocusOnClose(Boolean(operation))
@@ -197,6 +205,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         )
         if (!cancelled) {
           setOperationPage(operations)
+          setLoadedOperationsState({ accessToken: auth.accessToken, client: fundsClient, loaded: true })
         }
       } catch (error: unknown) {
         if (!cancelled) {
@@ -229,6 +238,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         signal,
       )
       setOperationPage(page)
+      setLoadedOperationsState({ accessToken: auth.accessToken, client: fundsClient, loaded: true })
     } catch (error: unknown) {
       if (!signal.aborted) {
         setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить операции фондов.')
@@ -258,6 +268,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
 
     setRows(funds.map(mapFundDtoToPrototypeRow))
     setOperationPage(operations)
+    setLoadedOperationsState({ accessToken: auth.accessToken, client: fundsClient, loaded: true })
     setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
   }
 
@@ -722,12 +733,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           <h2>Ручные перераспределения</h2>
           <p>Автоматические поступления сразу увеличивают назначенный фонд и сохраняются в общем аудите и отчётах.</p>
         </header>
-        {operationsLoading ? (
+        {operationsLoading && !operationsLoaded ? (
           <TableLoadingState label="Загружаем операции фондов" />
-        ) : (
+        ) : operationsLoaded ? (
           <>
             <div className="funds-operations-table-scroll">
-              <table className="funds-table funds-operations-table" aria-label="Операции фондов">
+              <table className="funds-table funds-operations-table" aria-label="Операции фондов" aria-busy={operationsLoading}>
           <thead>
             <tr>
               <th scope="col">Дата</th>
@@ -757,18 +768,18 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                     {fundOperation.isAutomaticIncomeAssignment ? (
                       <span className="funds-operation-managed-label">Управляется поступлением</span>
                     ) : fundOperation.isCanceled ? (
-                      <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} onClick={() => openFundStatusAction('restore', fundOperation)}>
+                      <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} disabled={operationsLoading} onClick={() => openFundStatusAction('restore', fundOperation)}>
                         <RotateCcw size={16} aria-hidden="true" />
                       </button>
                     ) : (
                       <>
-                        <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={`Изменить операцию фонда ${fundOperation.fundName}`} onClick={() => openFundOperationEdit(fundOperation)}>
+                        <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={`Изменить операцию фонда ${fundOperation.fundName}`} disabled={operationsLoading} onClick={() => openFundOperationEdit(fundOperation)}>
                           <Pencil size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={`Создать обратную операцию фонда ${fundOperation.fundName}`} onClick={() => openFundOperationReverse(fundOperation)}>
+                        <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={`Создать обратную операцию фонда ${fundOperation.fundName}`} disabled={operationsLoading} onClick={() => openFundOperationReverse(fundOperation)}>
                           <RefreshCw size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} onClick={() => openFundStatusAction('cancel', fundOperation)}>
+                        <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} disabled={operationsLoading} onClick={() => openFundStatusAction('cancel', fundOperation)}>
                           <Trash2 size={16} aria-hidden="true" />
                         </button>
                       </>
@@ -784,6 +795,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           </tbody>
               </table>
             </div>
+            {operationsLoading ? <div className="form-hint" role="status" aria-label="Обновляем операции фондов" aria-live="polite">Обновляем операции фондов…</div> : null}
             <TablePagination
               ariaLabel="Пагинация операций фондов"
               totalCount={operationPage.totalCount}
@@ -796,7 +808,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               onPageSizeChange={(limit) => void changeOperationsPage(1, limit)}
             />
           </>
-        )}
+        ) : null}
         </div>
       </div>
 
