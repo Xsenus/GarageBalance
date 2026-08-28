@@ -81,6 +81,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadedSectionState, setLoadedSectionState] = useState(() => ({
+    accessToken: auth.accessToken,
+    client: dictionaryClient,
+    sections: { owners: false, garages: false, incomeTypes: false, expenseTypes: false, measurementUnits: false } as Record<DictionarySectionKey, boolean>,
+  }))
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { toast, showToast, dismissToast } = useToast(3200)
@@ -128,6 +133,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const balanceHistoryDialogRef = useFocusTrap<HTMLElement>(Boolean(balanceHistoryGarage))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
   const activePage = pages[activeSection]
+  const activeSectionLoaded = loadedSectionState.accessToken === auth.accessToken
+    && loadedSectionState.client === dictionaryClient
+    && loadedSectionState.sections[activeSection]
   const activeOption = getDictionarySectionOption(activeSection)
   const canWriteActiveSection = canWriteDictionarySection(activeSection, canWriteDictionaries)
   const supportsSearch = supportsDictionarySearch(activeSection)
@@ -272,6 +280,16 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       else setMeasurementUnits(page.items as MeasurementUnitDto[])
 
       setPages((current) => ({ ...current, [section]: page }))
+      setLoadedSectionState((current) => ({
+        accessToken: auth.accessToken,
+        client: dictionaryClient,
+        sections: {
+          ...(current.accessToken === auth.accessToken && current.client === dictionaryClient
+            ? current.sections
+            : { owners: false, garages: false, incomeTypes: false, expenseTypes: false, measurementUnits: false }),
+          [section]: true,
+        },
+      }))
     } catch (caught) {
       if (requestSequence !== pageRequestSequence.current || signal?.aborted) {
         return
@@ -840,7 +858,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   function changePageSize(value: number) {
-    setPages((current) => ({ ...current, [activeSection]: { ...current[activeSection], offset: 0, limit: value } }))
     setError(null)
     void loadPage(activeSection, 0, value).catch(reportPageLoadError)
   }
@@ -869,14 +886,14 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   function renderRowAction(item: DictionaryRecord) {
     if (isArchivedRecord(item)) {
       return (
-        <button className="ghost-button dictionary-row-action" type="button" aria-label="Вернуть" title="Вернуть" disabled={!canWriteActiveSection} onClick={() => openRestoreTarget(activeSection, item)}>
+        <button className="ghost-button dictionary-row-action" type="button" aria-label="Вернуть" title="Вернуть" disabled={loading || !canWriteActiveSection} onClick={() => openRestoreTarget(activeSection, item)}>
           <RotateCcw size={15} aria-hidden="true" />
         </button>
       )
     }
 
     return (
-      <button className="ghost-button dictionary-row-action danger-icon-button" type="button" aria-label="Удалить" title="Удалить" disabled={!canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
+      <button className="ghost-button dictionary-row-action danger-icon-button" type="button" aria-label="Удалить" title="Удалить" disabled={loading || !canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
         <Trash2 size={15} aria-hidden="true" />
       </button>
     )
@@ -1109,7 +1126,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           <p className="eyebrow">Справочники</p>
           <h2>{activeOption.label}</h2>
         </div>
-        {!loading ? <span>{activePage.totalCount} записей</span> : null}
+        {activeSectionLoaded ? <span>{activePage.totalCount} записей</span> : null}
       </div>
 
       {error && !mutationDialogOpen ? (
@@ -1170,21 +1187,21 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               <input aria-label="Показывать архивные" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
               <span>Показывать архивные</span>
             </label>
-            <button className="secondary-button create-action-button" type="button" aria-busy={editorReferencesLoading} disabled={!canWriteActiveSection || editorReferencesLoading} onClick={() => void openEditor(activeSection, 'create')}>
+            <button className="secondary-button create-action-button" type="button" aria-busy={editorReferencesLoading} disabled={loading || !canWriteActiveSection || editorReferencesLoading} onClick={() => void openEditor(activeSection, 'create')}>
               <FileText size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </div>
 
           <div className="dictionary-table-scroll">
-            <table className="dictionary-data-table" aria-label={`Таблица: ${activeOption.label}`}>
+            <table className="dictionary-data-table" aria-label={`Таблица: ${activeOption.label}`} aria-busy={loading}>
               <thead>
                 <tr>{renderHeaders()}</tr>
               </thead>
               <tbody>
-                {!loading ? rows.map((item) => (
-                  <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
-                    if (!editorReferencesLoading && !isArchivedRecord(item)) {
+                {activeSectionLoaded ? rows.map((item) => (
+                  <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={loading ? undefined : (event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
+                    if (!loading && !editorReferencesLoading && !isArchivedRecord(item)) {
                       void openEditor(activeSection, 'edit', item)
                     }
                   }} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
@@ -1199,8 +1216,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 )) : null}
               </tbody>
             </table>
-            {loading ? <TableLoadingState label={`Загружаем справочник: ${activeOption.label}`} /> : null}
-            {!loading && rows.length === 0 ? <EmptyState>В этом справочнике пока нет записей</EmptyState> : null}
+            {loading && !activeSectionLoaded ? <TableLoadingState label={`Загружаем справочник: ${activeOption.label}`} /> : null}
+            {loading && activeSectionLoaded ? <div className="form-hint" role="status" aria-label={`Обновляем справочник: ${activeOption.label}`} aria-live="polite">Обновляем справочник: {activeOption.label}…</div> : null}
+            {activeSectionLoaded && !loading && rows.length === 0 ? <EmptyState>В этом справочнике пока нет записей</EmptyState> : null}
           </div>
 
           <TablePagination
@@ -1220,7 +1238,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         </div>
       </div>
 
-      {contextMenu ? (
+      {contextMenu && !loading ? (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" aria-label="Операции со справочником" onClick={(event) => event.stopPropagation()}>
           <div className="context-menu-group" role="group">
             <button type="button" role="menuitem" onClick={() => void openEditor(contextMenu.section, 'create')}>

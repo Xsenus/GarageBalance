@@ -15534,10 +15534,18 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
-    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+    const dictionaryTable = within(dictionaryPanel).getByRole('table', { name: 'Таблица: Владельцы' })
+    expect(await within(dictionaryTable).findByText('Владелец1 Тест')).toBeInTheDocument()
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
     await waitFor(() => expect(paginationSignal).toBeDefined())
+
+    expect(within(dictionaryTable).getByText('Владелец1 Тест')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('status', { name: 'Обновляем справочник: Владельцы' })).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('26 записей')).toBeInTheDocument()
+    expect(dictionaryTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Добавить' })).toBeDisabled()
+    expect(within(dictionaryTable).getAllByRole('button', { name: 'Удалить' })[0]).toBeDisabled()
     await openSection(user, 'Платежи')
 
     expect(paginationSignal?.aborted).toBe(true)
