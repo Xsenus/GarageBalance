@@ -3000,6 +3000,7 @@ function PaymentsPrototypePanel({
   const [expenseWorksheetMonthTo, setExpenseWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [expenseCashAmount, setExpenseCashAmount] = useState(0)
+  const [expenseWorksheetRefreshRevision, setExpenseWorksheetRefreshRevision] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
@@ -3246,7 +3247,7 @@ function PaymentsPrototypePanel({
       cancelled = true
       controller.abort()
     }
-  }, [activeTab, auth.accessToken, expenseWorksheetMonthFrom, expenseWorksheetMonthTo, financeClient, refreshRevision])
+  }, [activeTab, auth.accessToken, expenseWorksheetMonthFrom, expenseWorksheetMonthTo, expenseWorksheetRefreshRevision, financeClient, refreshRevision])
 
   function activateExpenseTab() {
     if (activeTab !== 'expense') {
@@ -3264,6 +3265,18 @@ function PaymentsPrototypePanel({
 
     setExpenseWorksheetLoading(true)
     setExpenseWorksheetMonthFrom(value)
+  }
+
+  function refreshExpenseWorksheetAfterSave(accountingMonth: string) {
+    const requestedMonth = accountingMonth.slice(0, 7)
+    setExpenseWorksheetLoading(true)
+    if (requestedMonth < expenseWorksheetMonthFrom || requestedMonth > expenseWorksheetMonthTo) {
+      setExpenseWorksheetMonthFrom(requestedMonth)
+      setExpenseWorksheetMonthTo(requestedMonth)
+      return
+    }
+
+    setExpenseWorksheetRefreshRevision((value) => value + 1)
   }
 
   function handleExpenseWorksheetMonthToChange(value: string) {
@@ -4380,12 +4393,7 @@ function PaymentsPrototypePanel({
       comment: request.comment.trim() || undefined,
     })
 
-    const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, {
-      accountingMonth: request.accountingMonth,
-    })
-    setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
-    setExpenseBankAmount(worksheet.bankAmount)
-    setExpenseCashAmount(worksheet.cashAmount)
+    refreshExpenseWorksheetAfterSave(request.accountingMonth)
 
     return null
   }
@@ -4405,15 +4413,7 @@ function PaymentsPrototypePanel({
       comment: request.comment.trim() || undefined,
     })
 
-    const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, expenseWorksheetMonthFrom === expenseWorksheetMonthTo
-      ? { accountingMonth: `${expenseWorksheetMonthTo}-01` }
-      : {
-          monthFrom: `${expenseWorksheetMonthFrom}-01`,
-          monthTo: `${expenseWorksheetMonthTo}-01`,
-        })
-    setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
-    setExpenseBankAmount(worksheet.bankAmount)
-    setExpenseCashAmount(worksheet.cashAmount)
+    refreshExpenseWorksheetAfterSave(request.accountingMonth)
 
     return null
   }
@@ -4433,21 +4433,7 @@ function PaymentsPrototypePanel({
       reason: request.reason.trim(),
     })
 
-    const requestedMonth = request.accountingMonth.slice(0, 7)
-    if (requestedMonth !== expenseWorksheetMonthFrom || requestedMonth !== expenseWorksheetMonthTo) {
-      setExpenseWorksheetLoading(true)
-      setExpenseWorksheetMonthFrom(requestedMonth)
-      setExpenseWorksheetMonthTo(requestedMonth)
-      return null
-    }
-
-    const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, {
-      monthFrom: request.accountingMonth,
-      monthTo: request.accountingMonth,
-    })
-    setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
-    setExpenseBankAmount(worksheet.bankAmount)
-    setExpenseCashAmount(worksheet.cashAmount)
+    refreshExpenseWorksheetAfterSave(request.accountingMonth)
 
     return null
   }

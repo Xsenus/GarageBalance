@@ -7240,6 +7240,7 @@ describe('App', () => {
     const noReceiptExpenseType = createAccountingType({ id: 'expense-no-receipt', name: 'Выплата без чека', code: 'no_receipt' })
     const expenseTypes = [electricityExpenseType, advanceExpenseType, noReceiptExpenseType]
     let expenseWorksheetRequestCount = 0
+    const expenseWorksheetSignals: Array<AbortSignal | undefined> = []
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedFullPaymentRequests: CreateFullGaragePaymentRequest[] = []
     const savedAccrualRequests: CreateIrregularAccrualRequest[] = []
@@ -7567,8 +7568,9 @@ describe('App', () => {
           lines,
         }
       },
-      getExpenseWorksheet: async (_token, params) => {
+      getExpenseWorksheet: async (_token, params, signal) => {
         expenseWorksheetRequestCount += 1
+        expenseWorksheetSignals.push(signal)
         const transferredAmount = savedCashBankTransferRequests.reduce((total, request) => total + request.amount, 0)
         const bonusAmount = savedStaffSalaryAdjustmentRequests
           .filter((request) => request.adjustmentType === 'bonus')
@@ -8276,6 +8278,7 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить штраф сотруднику' })).not.toBeInTheDocument())
     await waitFor(() => expect(penaltyButton).toHaveFocus())
+    expect(expenseWorksheetSignals).not.toContain(undefined)
     const petrovaRowAfterPenalty = within(expenseTable).getByText('Петрова').closest('tr')
     expect(within(petrovaRowAfterPenalty!).getByText('Оклад 40 000.00 · премия 5 000.00 · штраф 1 000.00')).toBeInTheDocument()
 
@@ -10827,6 +10830,44 @@ describe('App', () => {
     await user.click(within(prototype).getByRole('tab', { name: 'Поступления' }))
 
     expect(worksheetSignal?.aborted).toBe(true)
+  })
+
+  it('closes a saved expense immediately and cancels its background worksheet refresh', async () => {
+    const user = userEvent.setup()
+    let refreshSignal: AbortSignal | undefined
+    let requestCount = 0
+    const getExpenseWorksheet = vi.fn((_token: string, _params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal) => {
+      requestCount += 1
+      if (requestCount === 1) {
+        return Promise.resolve(createExpenseWorksheet({ bankAmount: 12000 }))
+      }
+
+      refreshSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getExpenseWorksheet']>>>(() => undefined)
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledTimes(1))
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить выплату' }))
+    const expenseDialog = await screen.findByRole('dialog', { name: 'Добавить выплату' })
+    const expenseMonth = within(expenseDialog).getByLabelText('Месяц выплаты')
+    await user.clear(expenseMonth)
+    await user.type(expenseMonth, '07.2026')
+    await user.type(within(expenseDialog).getByLabelText('Сумма выплаты'), '100')
+    await user.click(within(expenseDialog).getByRole('button', { name: 'Провести' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить выплату' })).not.toBeInTheDocument())
+    await waitFor(() => expect(refreshSignal).toBeDefined())
+    expect(within(prototype).getByRole('table', { name: 'Форма выплат за июль 2026' })).toBeInTheDocument()
+    expect(getExpenseWorksheet).toHaveBeenLastCalledWith('token', { accountingMonth: '2026-07-01' }, refreshSignal)
+    expect(refreshSignal?.aborted).toBe(false)
+    await user.click(within(prototype).getByRole('tab', { name: 'Поступления' }))
+    expect(refreshSignal?.aborted).toBe(true)
   })
 
   it('hides operational expense columns and row actions only in archived months', async () => {
