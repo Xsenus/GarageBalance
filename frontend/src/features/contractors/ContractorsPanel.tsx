@@ -2178,13 +2178,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setOpeningBalanceAdjustmentTarget({ type: 'supplier', id: row.id, name: row.name, currentAmount: Number(row.startingBalance || 0) })
   }
 
-  async function handleOpeningBalanceAdjusted() {
+  function handleOpeningBalanceAdjusted() {
     const target = openingBalanceAdjustmentTarget
     setOpeningBalanceAdjustmentTarget(null)
     if (target?.type === 'garage') {
-      await loadGaragePage()
+      void loadGaragePage()
     } else if (target?.type === 'supplier') {
-      await loadSupplierPage()
+      void loadSupplierPage()
     }
   }
 
@@ -2429,7 +2429,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
               ))}
             </div>
-            {!contractorPageLoading.suppliers ? visibleSuppliers.map((row) => {
+            {visibleSuppliers.map((row) => {
               const primaryContact = getSupplierPrimaryContact(row)
               return (
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openSupplierContextMenu(event, row)}>
@@ -2462,8 +2462,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                 </div>
               )
-            }) : null}
-            {contractorPageLoading.suppliers ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поставщиков" /> : null}
+            })}
+            {contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поставщиков" /> : null}
+            {contractorPageLoading.suppliers && visibleSuppliers.length > 0 ? <div className="contractors-table-refresh" role="status" aria-label="Обновляем список поставщиков" aria-live="polite">Обновляем список поставщиков…</div> : null}
             {!contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">Поставщики пока не настроены.</span>
@@ -2506,7 +2507,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                 ))}
               </div>
-              {!contractorPageLoading.staff ? visibleStaff.map((row) => (
+              {visibleStaff.map((row) => (
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
                   <span role="cell">{row.fullName}</span>
                   <span role="cell">{row.department}</span>
@@ -2531,8 +2532,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                     )}
                   </span>
                 </div>
-              )) : null}
-              {contractorPageLoading.staff ? <TableLoadingState className="table-loading-state--compact" label="Загружаем персонал" /> : null}
+              ))}
+              {contractorPageLoading.staff && visibleStaff.length === 0 ? <TableLoadingState className="table-loading-state--compact" label="Загружаем персонал" /> : null}
+              {contractorPageLoading.staff && visibleStaff.length > 0 ? <div className="contractors-table-refresh" role="status" aria-label="Обновляем список персонала" aria-live="polite">Обновляем список персонала…</div> : null}
               {!contractorPageLoading.staff && visibleStaff.length === 0 ? (
                 <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                   <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
@@ -2783,7 +2785,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           dictionaryClient={dictionaryClient}
           target={openingBalanceAdjustmentTarget}
           onClose={() => setOpeningBalanceAdjustmentTarget(null)}
-          onSaved={() => void handleOpeningBalanceAdjusted()}
+          onSaved={handleOpeningBalanceAdjusted}
         />
       ) : null}
 
