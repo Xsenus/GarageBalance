@@ -1280,7 +1280,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             offset,
             limit,
           )
-      if (requestSequence !== garagePageRequestSequenceRef.current) {
+      if (controller.signal.aborted || requestSequence !== garagePageRequestSequenceRef.current) {
         return null
       }
       setGarages(page.items.map((garage) => createGarageRowFromDto(garage, owners)))
@@ -1289,7 +1289,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       setFormStateError(null)
       return true
     } catch (error) {
-      if (requestSequence !== garagePageRequestSequenceRef.current) {
+      if (controller.signal.aborted || requestSequence !== garagePageRequestSequenceRef.current) {
         return null
       }
       setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу гаражей.')

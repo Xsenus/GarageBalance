@@ -3619,7 +3619,14 @@ describe('App', () => {
     const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, _filters?: Record<string, unknown>, signal?: AbortSignal) => {
       if (offset > 0) {
         garagePageSignal = signal
-        return new Promise<PagedResult<GarageDto>>(() => undefined)
+        return new Promise<PagedResult<GarageDto>>((resolve) => {
+          signal?.addEventListener('abort', () => resolve({
+            items: [createGarage({ id: 'garage-page-stale-after-cancel', number: '99' })],
+            totalCount: 30,
+            offset,
+            limit,
+          }), { once: true })
+        })
       }
       return { items: [createGarage({ id: 'garage-page-cancellation', number: '1' })], totalCount: 30, offset, limit }
     })
@@ -3667,6 +3674,43 @@ describe('App', () => {
     await waitFor(() => expect(staffPageSignal).toBeDefined())
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' }))
     expect(staffPageSignal?.aborted).toBe(true)
+    expect(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 1' })).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByRole('button', { name: 'Изменить гараж 99' })).not.toBeInTheDocument()
+  })
+
+  it('does not report an aborted garage page as a contractor error', async () => {
+    const user = userEvent.setup()
+    const abortMessage = 'Отменённая страница гаражей не должна показывать ошибку.'
+    let garagePageSignal: AbortSignal | undefined
+    let resolveAbortObserved!: () => void
+    const abortObserved = new Promise<void>((resolve) => { resolveAbortObserved = resolve })
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, _filters?: Record<string, unknown>, signal?: AbortSignal) => {
+      if (offset > 0) {
+        garagePageSignal = signal
+        return new Promise<PagedResult<GarageDto>>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new Error(abortMessage))
+            queueMicrotask(resolveAbortObserved)
+          }, { once: true })
+        })
+      }
+      return { items: [createGarage({ id: 'garage-abort-error', number: '1' })], totalCount: 30, offset, limit }
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const garagePagination = await within(contractorsPanel).findByRole('navigation', { name: 'Пагинация гаражей' })
+    await user.click(within(garagePagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(garagePageSignal).toBeDefined())
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await act(async () => { await abortObserved })
+
+    expect(garagePageSignal?.aborted).toBe(true)
+    expect(within(contractorsPanel).queryByText(abortMessage)).not.toBeInTheDocument()
   })
 
   it('keeps the server garage debtor filter during pagination and sorting', async () => {
