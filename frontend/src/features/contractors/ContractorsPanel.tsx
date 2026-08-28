@@ -915,6 +915,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     financialReportRequestControllerRef.current?.abort()
   }, [])
   useEffect(() => () => {
+    if (activeSection === 'garages') {
+      garagePageRequestControllerRef.current?.abort()
+    } else if (activeSection === 'suppliers') {
+      supplierPageRequestControllerRef.current?.abort()
+    } else {
+      staffPageRequestControllerRef.current?.abort()
+    }
     if (activeSection !== 'staff') {
       contractorReferenceControllersRef.current[activeSection]?.abort()
     }

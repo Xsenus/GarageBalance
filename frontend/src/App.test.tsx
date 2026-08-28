@@ -3610,6 +3610,65 @@ describe('App', () => {
     await waitFor(() => expect(staffPageRequests).toContainEqual({ offset: 0, limit: 25, includeArchived: true, sortBy: 'rate', sortDirection: 'desc' }))
   })
 
+  it('cancels pending contractor page requests when switching tabs', async () => {
+    const user = userEvent.setup()
+    const supplierGroup = createGroup({ id: 'group-page-cancellation', name: 'Коммунальные услуги' })
+    let garagePageSignal: AbortSignal | undefined
+    let supplierPageSignal: AbortSignal | undefined
+    let staffPageSignal: AbortSignal | undefined
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, _filters?: Record<string, unknown>, signal?: AbortSignal) => {
+      if (offset > 0) {
+        garagePageSignal = signal
+        return new Promise<PagedResult<GarageDto>>(() => undefined)
+      }
+      return { items: [createGarage({ id: 'garage-page-cancellation', number: '1' })], totalCount: 30, offset, limit }
+    })
+    const getSuppliersPage = vi.fn(async (_token: string, _groupId?: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, signal?: AbortSignal) => {
+      if (offset > 0) {
+        supplierPageSignal = signal
+        return new Promise<PagedResult<SupplierDto>>(() => undefined)
+      }
+      return {
+        items: [createSupplier({ id: 'supplier-page-cancellation', name: 'Поставщик для отмены', groupId: supplierGroup.id, groupName: supplierGroup.name })],
+        totalCount: 30,
+        offset,
+        limit,
+      }
+    })
+    const getStaffMembersPage = vi.fn(async (_token: string, _departmentId?: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, signal?: AbortSignal) => {
+      if (offset > 0) {
+        staffPageSignal = signal
+        return new Promise<PagedResult<StaffMemberDto>>(() => undefined)
+      }
+      return { items: [createStaffMember({ id: 'staff-page-cancellation', fullName: 'Сотрудник для отмены' })], totalCount: 30, offset, limit }
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage, getSupplierGroups: async () => [supplierGroup], getSuppliersPage, getStaffMembersPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    const garagePagination = await within(contractorsPanel).findByRole('navigation', { name: 'Пагинация гаражей' })
+    await user.click(within(garagePagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(garagePageSignal).toBeDefined())
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    expect(garagePageSignal?.aborted).toBe(true)
+
+    const supplierPagination = await within(contractorsPanel).findByRole('navigation', { name: 'Пагинация поставщиков' })
+    await user.click(within(supplierPagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(supplierPageSignal).toBeDefined())
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    expect(supplierPageSignal?.aborted).toBe(true)
+
+    const staffPagination = await within(contractorsPanel).findByRole('navigation', { name: 'Пагинация персонала' })
+    await user.click(within(staffPagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(staffPageSignal).toBeDefined())
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' }))
+    expect(staffPageSignal?.aborted).toBe(true)
+  })
+
   it('keeps the server garage debtor filter during pagination and sorting', async () => {
     const user = userEvent.setup()
     const requests: Array<{ offset: number; sortBy?: string; sortDirection?: string; debtorsOnly: boolean }> = []
