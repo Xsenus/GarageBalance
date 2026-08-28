@@ -735,26 +735,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   async function refreshAfterMutation(section: DictionarySectionKey) {
+    if (section === 'owners' || section === 'garages') {
+      loadedEditorReferences.current = { owners: false, garages: false }
+    }
     const page = pages[section]
     await loadPage(section, Math.min(page.offset, Math.max(0, page.totalCount - 1)), page.limit)
-    if (section === 'owners') {
-      const [loadedOwners, loadedGarages] = await Promise.all([
-        dictionaryClient.getOwners(auth.accessToken, undefined, 500),
-        dictionaryClient.getGarages(auth.accessToken, undefined, 500),
-      ])
-      setOwnerOptions(loadedOwners)
-      setGarageOptions(loadedGarages)
-      loadedEditorReferences.current.owners = true
-    }
-    if (section === 'garages') {
-      const [loadedOwners, loadedGarages] = await Promise.all([
-        dictionaryClient.getOwners(auth.accessToken, undefined, 500),
-        dictionaryClient.getGarages(auth.accessToken, undefined, 500),
-      ])
-      setOwnerOptions(loadedOwners)
-      setGarageOptions(loadedGarages)
-      loadedEditorReferences.current.garages = true
-    }
   }
 
   async function confirmArchive() {

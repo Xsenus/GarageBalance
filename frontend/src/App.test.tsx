@@ -13894,9 +13894,11 @@ describe('App', () => {
       })
       return garage
     })
+    const getOwners = vi.fn(async () => [currentOwner, nextOwner])
+    const getGarages = vi.fn(async () => [garage])
     const dictionaryClient = createDictionaryClient({
-      getOwners: async () => [currentOwner, nextOwner],
-      getGarages: async () => [garage],
+      getOwners,
+      getGarages,
       updateGarage,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -13957,6 +13959,17 @@ describe('App', () => {
     })))
     expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('350.00')).toBeInTheDocument()
+    expect(getOwners).toHaveBeenCalledTimes(2)
+    expect(getGarages).toHaveBeenCalledTimes(2)
+
+    garageRow = within(await within(dictionaryPanel).findByRole('table', { name: /Таблица: Гаражи/ })).getByText('12').closest('tr')
+    if (!garageRow) {
+      throw new Error('Обновлённая строка гаража 12 не найдена.')
+    }
+    await user.dblClick(garageRow)
+    garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
+    expect(getOwners).toHaveBeenCalledTimes(3)
+    await user.click(within(garageDialog).getByRole('button', { name: 'Отмена' }))
 
     await openSection(user, 'Платежи')
     const paymentsPrototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
@@ -14744,9 +14757,11 @@ describe('App', () => {
       })
       return owner
     })
+    const getOwners = vi.fn(async () => [owner])
+    const getGarages = vi.fn(async () => [] as GarageDto[])
     const dictionaryClient = createDictionaryClient({
-      getOwners: async () => [owner],
-      getGarages: async () => [],
+      getOwners,
+      getGarages,
       updateOwner,
     })
     const suggestAddresses = vi.fn(async () => [{
@@ -14830,6 +14845,13 @@ describe('App', () => {
     expect(updateOwner.mock.calls[0][2].phone).toBe('+7 (901) 111-22-33')
     expect(updateOwner.mock.calls[0][2].address).toBe('630000, г Новосибирск, ул Советская, д 2')
     expect(await screen.findByText('Изменения сохранены.')).toBeInTheDocument()
+    expect(getOwners).toHaveBeenCalledTimes(2)
+    expect(getGarages).toHaveBeenCalledTimes(1)
+
+    fireEvent.doubleClick(within(dictionaryPanel).getByText('Иванов Иван').closest('tr')!)
+    const reopenedEditor = await screen.findByRole('dialog', { name: 'Владельцы' })
+    expect(getGarages).toHaveBeenCalledTimes(2)
+    await user.click(within(reopenedEditor).getByRole('button', { name: 'Отмена' }))
   })
 
   it('closes owner dictionary editor without api call when nothing changed', async () => {
