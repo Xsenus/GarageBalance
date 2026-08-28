@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { createClientPage, createEmptyPage, createFallbackPage, getPageNavigation, getPageVisibleRange, pageSizeOptions } from './pagination'
+import { createClientPage, createEmptyPage, createFallbackPage, getLastPageOffset, getPageNavigation, getPageVisibleRange, pageSizeOptions } from './pagination'
 
 describe('pagination helpers', () => {
   it('keeps shared page size options stable', () => {
@@ -33,6 +33,16 @@ describe('pagination helpers', () => {
   it('creates a client page and clamps an outdated page number', () => {
     expect(createClientPage(['one', 'two', 'three'], 2, 2)).toEqual({ items: ['three'], totalCount: 3, offset: 2, limit: 2 })
     expect(createClientPage(['one'], 8, 10)).toEqual({ items: ['one'], totalCount: 1, offset: 0, limit: 10 })
+  })
+
+  it.each([
+    [0, 25, 0],
+    [1, 25, 0],
+    [25, 25, 0],
+    [26, 25, 25],
+    [51, 25, 50],
+  ])('calculates the last aligned offset for %i rows with page size %i', (totalCount, pageSize, expectedOffset) => {
+    expect(getLastPageOffset(totalCount, pageSize)).toBe(expectedOffset)
   })
 
   it('returns the visible row range for paged tables', () => {

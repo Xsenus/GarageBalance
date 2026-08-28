@@ -22,7 +22,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
-import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
+import { createEmptyPage, createFallbackPage, getLastPageOffset } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
@@ -260,10 +260,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       }
 
       if (offset > 0 && page.items.length === 0 && offset >= page.totalCount) {
-        const lastOffset = page.totalCount > 0
-          ? Math.floor((page.totalCount - 1) / limit) * limit
-          : 0
-        return loadPage(section, lastOffset, limit)
+        return loadPage(section, getLastPageOffset(page.totalCount, limit), limit)
       }
 
       if (section === 'owners') setOwners(page.items as OwnerDto[])
@@ -741,12 +738,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }
   }
 
-  async function refreshAfterMutation(section: DictionarySectionKey) {
+  async function refreshAfterMutation(section: DictionarySectionKey, visibleCountDelta = 0) {
     if (section === 'owners' || section === 'garages') {
       loadedEditorReferences.current = { owners: false, garages: false }
     }
     const page = pages[section]
-    await loadPage(section, Math.min(page.offset, Math.max(0, page.totalCount - 1)), page.limit)
+    await loadPage(section, Math.min(page.offset, getLastPageOffset(page.totalCount + visibleCountDelta, page.limit)), page.limit)
   }
 
   async function confirmArchive() {
@@ -783,7 +780,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
       const section = archiveTarget.section
       closeArchiveTarget()
-      await refreshAfterMutation(section)
+      await refreshAfterMutation(section, showArchived ? 0 : -1)
       showToast('Запись удалена из рабочего списка.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось удалить запись.'

@@ -14576,7 +14576,7 @@ describe('App', () => {
 
   it('returns to the previous dictionary page after archiving its only row', async () => {
     const user = userEvent.setup()
-    let owners = Array.from({ length: 26 }, (_, index) => createOwner({
+    let owners = Array.from({ length: 51 }, (_, index) => createOwner({
       id: `owner-last-page-${index + 1}`,
       lastName: `Владелец${index + 1}`,
       firstName: 'Тест',
@@ -14602,17 +14602,19 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
 
-    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
-    const lastOwnerRow = (await within(dictionaryPanel).findByText('Владелец26 Тест')).closest('tr')!
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 3' }))
+    const lastOwnerRow = (await within(dictionaryPanel).findByText('Владелец51 Тест')).closest('tr')!
     fireEvent.contextMenu(lastOwnerRow)
     await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
     const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
     await user.type(within(deleteDialog).getByLabelText('Причина удаления'), 'Проверка последней страницы')
+    const pageCallsBeforeArchive = getOwnersPage.mock.calls.length
     await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
 
-    expect(archiveOwner).toHaveBeenCalledWith('token', 'owner-last-page-26', 'Проверка последней страницы')
-    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
-    await waitFor(() => expect(getOwnersPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, false, expect.any(AbortSignal)))
+    expect(archiveOwner).toHaveBeenCalledWith('token', 'owner-last-page-51', 'Проверка последней страницы')
+    expect(await within(dictionaryPanel).findByText('Владелец26 Тест')).toBeInTheDocument()
+    await waitFor(() => expect(getOwnersPage).toHaveBeenLastCalledWith('token', undefined, 25, 25, false, expect.any(AbortSignal)))
+    expect(getOwnersPage.mock.calls.slice(pageCallsBeforeArchive).map(([, , offset]) => offset)).toEqual([25])
   })
 
   it('returns to the first dictionary page when a mutation empties the result set', async () => {
@@ -14649,6 +14651,51 @@ describe('App', () => {
 
     expect(await within(dictionaryPanel).findByText('В этом справочнике пока нет записей')).toBeInTheDocument()
     await waitFor(() => expect(getOwnersPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, false, expect.any(AbortSignal)))
+  })
+
+  it('keeps the current dictionary page when archiving a row with archived records visible', async () => {
+    const user = userEvent.setup()
+    let owners = Array.from({ length: 51 }, (_, index) => createOwner({
+      id: `owner-archive-visible-${index + 1}`,
+      lastName: `Архивный${index + 1}`,
+      firstName: 'Тест',
+    }))
+    const getOwnersPage = vi.fn(async (_token: string, _query?: string, offset = 0, limit = 25, includeArchived = false) => {
+      const visibleOwners = owners.filter((owner) => includeArchived || !owner.isArchived)
+      return {
+        items: visibleOwners.slice(offset, offset + limit),
+        totalCount: visibleOwners.length,
+        offset,
+        limit,
+      }
+    })
+    const archiveOwner = vi.fn(async (_token: string, ownerId: string) => {
+      owners = owners.map((owner) => owner.id === ownerId ? { ...owner, isArchived: true } : owner)
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getOwnersPage, archiveOwner })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(await within(dictionaryPanel).findByText('Архивный1 Тест')).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByLabelText('Показывать архивные'))
+    await user.click(await within(dictionaryPanel).findByRole('button', { name: 'Страница 3' }))
+    const lastOwnerRow = (await within(dictionaryPanel).findByText('Архивный51 Тест')).closest('tr')!
+    fireEvent.contextMenu(lastOwnerRow)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления'), 'Проверка архива на текущей странице')
+    const pageCallsBeforeArchive = getOwnersPage.mock.calls.length
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
+
+    expect(archiveOwner).toHaveBeenCalledWith('token', 'owner-archive-visible-51', 'Проверка архива на текущей странице')
+    const archivedRow = (await within(dictionaryPanel).findByText('Архивный51 Тест')).closest('tr')!
+    expect(within(archivedRow).getByText('Архив')).toBeInTheDocument()
+    await waitFor(() => expect(getOwnersPage).toHaveBeenLastCalledWith('token', undefined, 50, 25, true, expect.any(AbortSignal)))
+    expect(getOwnersPage.mock.calls.slice(pageCallsBeforeArchive).map(([, , offset]) => offset)).toEqual([50])
   })
 
 

@@ -23,6 +23,10 @@ export function createClientPage<TItem>(items: TItem[], pageNumber: number, limi
   return { items: items.slice(offset, offset + safeLimit), totalCount: items.length, offset, limit: safeLimit }
 }
 
+export function getLastPageOffset(totalCount: number, pageSize: number) {
+  return Math.max(0, Math.ceil(totalCount / pageSize) - 1) * pageSize
+}
+
 export function getPageVisibleRange(page: PagedItems<unknown>) {
   if (page.totalCount === 0 || page.items.length === 0) {
     return { from: 0, to: 0 }
