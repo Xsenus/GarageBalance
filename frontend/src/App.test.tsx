@@ -19030,6 +19030,152 @@ describe('App', () => {
     expect(runListRequests).toBeGreaterThanOrEqual(2)
   })
 
+  it('keeps the loaded import log visible while the same background run refreshes', async () => {
+    const user = userEvent.setup()
+    const queuedRun = createAccessImportRun({ id: 'background-log-run', status: 'queued', finishedAtUtc: null })
+    const completedRun = createAccessImportRun({ ...queuedRun, status: 'completed', finishedAtUtc: '2026-06-30T10:05:00Z' })
+    const knownEntry = createAccessImportRunLogEntry({ accessImportRunId: queuedRun.id, stepCode: 'known_log_step', message: 'Подтверждённая строка лога.' })
+    let resolvePoll!: (runs: AccessImportRunDto[]) => void
+    const pollResult = new Promise<AccessImportRunDto[]>((resolve) => { resolvePoll = resolve })
+    let runRequests = 0
+    let logRequests = 0
+    let refreshSignal: AbortSignal | undefined
+    const importClient = createImportClient({
+      getAccessRuns: () => {
+        runRequests += 1
+        return runRequests === 1 ? Promise.resolve([queuedRun]) : pollResult
+      },
+      getAccessRunLog: (_token, _runId, _limit, signal) => {
+        logRequests += 1
+        if (logRequests === 1) {
+          return Promise.resolve([knownEntry])
+        }
+        refreshSignal = signal
+        return new Promise<never>(() => undefined)
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
+    const logTable = within(importPanel).getByRole('table', { name: 'Лог запуска Access' })
+    expect(await within(logTable).findByText('known_log_step')).toBeInTheDocument()
+
+    await act(async () => resolvePoll([completedRun]))
+    await waitFor(() => expect(refreshSignal).toBeDefined(), { timeout: 2500 })
+
+    expect(within(logTable).getByText('known_log_step')).toBeInTheDocument()
+    expect(within(importPanel).getByRole('status', { name: 'Обновляем лог импорта' })).toBeInTheDocument()
+    expect(logTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(importPanel).getByRole('navigation', { name: 'Пагинация лога импорта' })).toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
+    expect(refreshSignal?.aborted).toBe(true)
+  })
+
+  it('keeps created import records visible while the same background run refreshes', async () => {
+    const user = userEvent.setup()
+    const queuedRun = createAccessImportRun({ id: 'background-created-run', status: 'queued', finishedAtUtc: null })
+    const completedRun = createAccessImportRun({ ...queuedRun, status: 'completed', finishedAtUtc: '2026-06-30T10:05:00Z' })
+    const knownRecord = createAccessImportCreatedRecord({ accessImportRunId: queuedRun.id, targetDisplayName: 'Подтверждённый гараж 88' })
+    let resolvePoll!: (runs: AccessImportRunDto[]) => void
+    const pollResult = new Promise<AccessImportRunDto[]>((resolve) => { resolvePoll = resolve })
+    let runRequests = 0
+    let createdRequests = 0
+    let refreshSignal: AbortSignal | undefined
+    const importClient = createImportClient({
+      getAccessRuns: () => {
+        runRequests += 1
+        return runRequests === 1 ? Promise.resolve([queuedRun]) : pollResult
+      },
+      getAccessCreatedRecords: (_token, _runId, _limit, signal) => {
+        createdRequests += 1
+        if (createdRequests === 1) {
+          return Promise.resolve([knownRecord])
+        }
+        refreshSignal = signal
+        return new Promise<never>(() => undefined)
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    await user.click(within(importPanel).getByRole('tab', { name: /Создано/ }))
+    const createdTable = within(importPanel).getByRole('table', { name: 'Созданные импортом записи Access' })
+    expect(await within(createdTable).findByText('Подтверждённый гараж 88')).toBeInTheDocument()
+
+    await act(async () => resolvePoll([completedRun]))
+    await waitFor(() => expect(refreshSignal).toBeDefined(), { timeout: 2500 })
+
+    expect(within(createdTable).getByText('Подтверждённый гараж 88')).toBeInTheDocument()
+    expect(within(importPanel).getByRole('status', { name: 'Обновляем созданные импортом записи' })).toBeInTheDocument()
+    expect(createdTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(importPanel).getByRole('navigation', { name: 'Пагинация созданных импортом записей' })).toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
+    expect(refreshSignal?.aborted).toBe(true)
+  })
+
+  it('does not show log or created records from another import run while loading its details', async () => {
+    const user = userEvent.setup()
+    const firstRun = createAccessImportRun({ id: 'first-isolated-run', originalFileName: 'Первый.accdb' })
+    const secondRun = createAccessImportRun({ id: 'second-isolated-run', originalFileName: 'Второй.accdb' })
+    const firstLogEntry = createAccessImportRunLogEntry({ accessImportRunId: firstRun.id, stepCode: 'first_run_only_log' })
+    const firstCreatedRecord = createAccessImportCreatedRecord({ accessImportRunId: firstRun.id, targetDisplayName: 'Только гараж первого запуска' })
+    let secondLogSignal: AbortSignal | undefined
+    let secondCreatedSignal: AbortSignal | undefined
+    const importClient = createImportClient({
+      getAccessRuns: async () => [firstRun, secondRun],
+      getAccessRunLog: (_token, runId, _limit, signal) => {
+        if (runId === firstRun.id) {
+          return Promise.resolve([firstLogEntry])
+        }
+        secondLogSignal = signal
+        return new Promise<never>(() => undefined)
+      },
+      getAccessCreatedRecords: (_token, runId, _limit, signal) => {
+        if (runId === firstRun.id) {
+          return Promise.resolve([firstCreatedRecord])
+        }
+        secondCreatedSignal = signal
+        return new Promise<never>(() => undefined)
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
+    expect(await within(importPanel).findByText('first_run_only_log')).toBeInTheDocument()
+
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
+    await user.click(within(importPanel).getByText('Второй.accdb').closest('button')!)
+    await user.click(within(importPanel).getByRole('tab', { name: /Лог/ }))
+    await waitFor(() => expect(secondLogSignal).toBeDefined())
+    expect(within(importPanel).queryByText('first_run_only_log')).not.toBeInTheDocument()
+    expect(within(importPanel).getByRole('status', { name: 'Загружаем лог импорта' })).toBeInTheDocument()
+
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
+    await user.click(within(importPanel).getByText('Первый.accdb').closest('button')!)
+    await user.click(within(importPanel).getByRole('tab', { name: /Создано/ }))
+    expect(await within(importPanel).findByText('Только гараж первого запуска')).toBeInTheDocument()
+
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
+    await user.click(within(importPanel).getByText('Второй.accdb').closest('button')!)
+    await user.click(within(importPanel).getByRole('tab', { name: /Создано/ }))
+    await waitFor(() => expect(secondCreatedSignal).toBeDefined())
+    expect(within(importPanel).queryByText('Только гараж первого запуска')).not.toBeInTheDocument()
+    expect(within(importPanel).getByRole('status', { name: 'Загружаем созданные импортом записи' })).toBeInTheDocument()
+  })
+
   it('requests Access import rollback through confirmation with reason', async () => {
     const user = userEvent.setup()
     let rollbackReason: string | undefined

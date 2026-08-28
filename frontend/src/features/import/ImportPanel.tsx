@@ -62,7 +62,9 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const [quarantineReloadRevision, setQuarantineReloadRevision] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const loadedLogKeyRef = useRef<string | null>(null)
+  const loadedLogRunIdRef = useRef<string | null>(null)
   const loadedCreatedRecordsKeyRef = useRef<string | null>(null)
+  const loadedCreatedRecordsRunIdRef = useRef<string | null>(null)
   const loadedQuarantineRevisionRef = useRef(-1)
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
@@ -89,6 +91,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const createdPage = createClientPage(createdRecords, createdPageNumber, createdPageSize)
   const historyPage = createClientPage(runs, historyPageNumber, historyPageSize)
   const quarantinePage = createClientPage(quarantineItems, quarantinePageNumber, quarantinePageSize)
+  const logLoadedForCurrentRun = Boolean(currentRun && loadedLogRunIdRef.current === currentRun.id)
+  const createdRecordsLoadedForCurrentRun = Boolean(currentRun && loadedCreatedRecordsRunIdRef.current === currentRun.id)
   const importTabs: Array<{ key: ImportTab; label: string; meta: string }> = [
     { key: 'checks', label: 'Проверки', meta: currentRun ? formatImportRunCheckSummary(currentRun) : 'ожидают запуска' },
     { key: 'log', label: 'Лог', meta: loadingLog ? 'загрузка' : `${runLogEntries.length} строк` },
@@ -104,7 +108,9 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
 
   useEffect(() => {
     loadedLogKeyRef.current = null
+    loadedLogRunIdRef.current = null
     loadedCreatedRecordsKeyRef.current = null
+    loadedCreatedRecordsRunIdRef.current = null
     loadedQuarantineRevisionRef.current = -1
   }, [auth.accessToken, importClient])
 
@@ -154,24 +160,31 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       if (!currentRun) {
         setRunLogEntries([])
         loadedLogKeyRef.current = null
+        loadedLogRunIdRef.current = null
         return
       }
 
       const loadKey = `${currentRun.id}:${currentRun.status}:${currentRun.finishedAtUtc ?? ''}`
       if (loadedLogKeyRef.current === loadKey && currentRun.status !== 'queued' && currentRun.status !== 'processing') return
+      const preserveLoadedEntries = loadedLogRunIdRef.current === currentRun.id
 
       setLogPageNumber(1)
       setLoadingLog(true)
-      setRunLogEntries([])
+      if (!preserveLoadedEntries) {
+        setRunLogEntries([])
+      }
       try {
         const entries = await importClient.getAccessRunLog(auth.accessToken, currentRun.id, undefined, controller.signal)
         if (!ignore) {
-          setRunLogEntries(entries)
           loadedLogKeyRef.current = loadKey
+          loadedLogRunIdRef.current = currentRun.id
+          setRunLogEntries(entries)
         }
       } catch (caught) {
         if (!ignore) {
-          setRunLogEntries([])
+          if (!preserveLoadedEntries) {
+            setRunLogEntries([])
+          }
           setError(caught instanceof Error ? caught.message : 'Не удалось загрузить лог импорта.')
         }
       } finally {
@@ -236,24 +249,31 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       if (!currentRun) {
         setCreatedRecords([])
         loadedCreatedRecordsKeyRef.current = null
+        loadedCreatedRecordsRunIdRef.current = null
         return
       }
 
       const loadKey = `${currentRun.id}:${currentRun.status}:${currentRun.finishedAtUtc ?? ''}`
       if (loadedCreatedRecordsKeyRef.current === loadKey && currentRun.status !== 'queued' && currentRun.status !== 'processing') return
+      const preserveLoadedRecords = loadedCreatedRecordsRunIdRef.current === currentRun.id
 
       setCreatedPageNumber(1)
       setLoadingCreatedRecords(true)
-      setCreatedRecords([])
+      if (!preserveLoadedRecords) {
+        setCreatedRecords([])
+      }
       try {
         const records = await importClient.getAccessCreatedRecords(auth.accessToken, currentRun.id, importCreatedRecordsScreenRequestLimit, controller.signal)
         if (!ignore) {
-          setCreatedRecords(records)
           loadedCreatedRecordsKeyRef.current = loadKey
+          loadedCreatedRecordsRunIdRef.current = currentRun.id
+          setCreatedRecords(records)
         }
       } catch (caught) {
         if (!ignore) {
-          setCreatedRecords([])
+          if (!preserveLoadedRecords) {
+            setCreatedRecords([])
+          }
           setError(caught instanceof Error ? caught.message : 'Не удалось загрузить созданные импортом записи.')
         }
       } finally {
@@ -704,15 +724,16 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
 
         {activeImportTab === 'log' ? (
         <>
-          <div className="operation-list import-table import-table--log" role="table" aria-label="Лог запуска Access">
+          <div className="operation-list import-table import-table--log" role="table" aria-label="Лог запуска Access" aria-busy={loadingLog}>
             <div className="operation-row header" role="row">
               <span role="columnheader">Шаг</span>
               <span role="columnheader">Уровень</span>
               <span role="columnheader">Сообщение</span>
             </div>
-            {loadingLog ? <TableLoadingState label="Загружаем лог импорта" /> : null}
-            {!loadingLog && runLogEntries.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
-            {logPage.items.map((entry) => (
+            {loadingLog && !logLoadedForCurrentRun ? <TableLoadingState label="Загружаем лог импорта" /> : null}
+            {loadingLog && logLoadedForCurrentRun ? <div className="form-hint" role="status" aria-label="Обновляем лог импорта" aria-live="polite">Обновляем лог импорта…</div> : null}
+            {!loadingLog && (!currentRun || (logLoadedForCurrentRun && runLogEntries.length === 0)) ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
+            {logLoadedForCurrentRun ? logPage.items.map((entry) => (
               <div className="operation-row" role="row" key={entry.id}>
                 <span role="cell">
                   <strong>{entry.stepCode}</strong>
@@ -723,7 +744,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                 </span>
                 <span role="cell">{entry.message}</span>
               </div>
-            ))}
+            )) : null}
           </div>
           <TablePagination ariaLabel="Пагинация лога импорта" totalCount={logPage.totalCount} offset={logPage.offset} limit={logPage.limit} visibleCount={logPage.items.length} disabled={loadingLog} pageSizeLabel="Количество строк лога импорта" onPageChange={setLogPageNumber} onPageSizeChange={(limit) => { setLogPageSize(limit); setLogPageNumber(1) }} />
         </>
@@ -757,15 +778,16 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
 
         {activeImportTab === 'created' ? (
         <>
-          <div className="operation-list import-table import-table--created" role="table" aria-label="Созданные импортом записи Access">
+          <div className="operation-list import-table import-table--created" role="table" aria-label="Созданные импортом записи Access" aria-busy={loadingCreatedRecords}>
             <div className="operation-row header" role="row">
               <span role="columnheader">Созданная запись</span>
               <span role="columnheader">Источник</span>
               <span role="columnheader">Rollback</span>
             </div>
-            {loadingCreatedRecords ? <TableLoadingState label="Загружаем созданные импортом записи" /> : null}
-            {!loadingCreatedRecords && createdRecords.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
-            {createdPage.items.map((record) => (
+            {loadingCreatedRecords && !createdRecordsLoadedForCurrentRun ? <TableLoadingState label="Загружаем созданные импортом записи" /> : null}
+            {loadingCreatedRecords && createdRecordsLoadedForCurrentRun ? <div className="form-hint" role="status" aria-label="Обновляем созданные импортом записи" aria-live="polite">Обновляем созданные импортом записи…</div> : null}
+            {!loadingCreatedRecords && (!currentRun || (createdRecordsLoadedForCurrentRun && createdRecords.length === 0)) ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
+            {createdRecordsLoadedForCurrentRun ? createdPage.items.map((record) => (
               <div className="operation-row" role="row" key={record.id}>
                 <span role="cell">
                   <strong>{record.targetDisplayName ?? record.targetEntityId}</strong>
@@ -779,7 +801,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   {formatImportCreatedRecordRollbackStatus(record.rollbackStatus)}
                 </span>
               </div>
-            ))}
+            )) : null}
           </div>
           <TablePagination ariaLabel="Пагинация созданных импортом записей" totalCount={createdPage.totalCount} offset={createdPage.offset} limit={createdPage.limit} visibleCount={createdPage.items.length} disabled={loadingCreatedRecords} pageSizeLabel="Количество созданных импортом записей" onPageChange={setCreatedPageNumber} onPageSizeChange={(limit) => { setCreatedPageSize(limit); setCreatedPageNumber(1) }} />
         </>
