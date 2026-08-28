@@ -13634,6 +13634,68 @@ describe('App', () => {
     expect([...signals.values()].every((signal) => signal.aborted)).toBe(true)
   })
 
+  it('keeps known business date and cash balances visible while revisiting settings tabs', async () => {
+    const user = userEvent.setup()
+    const businessDate = {
+      systemDate: '2026-07-21',
+      effectiveDate: '2026-07-21',
+      overrideDate: null,
+      isOverrideActive: false,
+      updatedAtUtc: null,
+      automation: null,
+      version: 'business-date-version',
+    }
+    const salaryAccrual = { accrualDay: 10, version: 'salary-version' }
+    const cashBank = {
+      cashOpeningBalance: 1000,
+      bankOpeningBalance: 5000,
+      cashCurrentBalance: 1200,
+      bankCurrentBalance: 4800,
+      recentOperations: [],
+    }
+    const pendingRead = () => new Promise<never>(() => undefined)
+    const getBusinessDateSettings = vi.fn()
+      .mockResolvedValueOnce(businessDate)
+      .mockImplementationOnce(pendingRead)
+    const getSalaryAccrualSettings = vi.fn()
+      .mockResolvedValueOnce(salaryAccrual)
+      .mockImplementationOnce(pendingRead)
+    const getCashBankBalances = vi.fn()
+      .mockResolvedValueOnce(cashBank)
+      .mockImplementationOnce(pendingRead)
+    const settingsClient = createSettingsClient({ getBusinessDateSettings, getSalaryAccrualSettings, getCashBankBalances })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    const securityTab = within(settings).getByRole('tab', { name: 'Безопасность' })
+    const businessDateTab = within(settings).getByRole('tab', { name: 'Рабочая дата' })
+    const cashBankTab = within(settings).getByRole('tab', { name: 'Касса и счёт' })
+
+    await user.click(businessDateTab)
+    let panel = await within(settings).findByRole('region', { name: 'Эмулятор рабочей даты' })
+    await within(panel).findByLabelText('Состояние рабочей даты')
+    await user.click(securityTab)
+    await user.click(businessDateTab)
+    panel = await within(settings).findByRole('region', { name: 'Эмулятор рабочей даты' })
+    await waitFor(() => expect(getBusinessDateSettings).toHaveBeenCalledTimes(2))
+    expect(within(panel).getByLabelText('Состояние рабочей даты')).toBeInTheDocument()
+    expect(within(panel).getByRole('status', { name: 'Обновляем рабочую дату' })).toBeInTheDocument()
+
+    await user.click(cashBankTab)
+    panel = await within(settings).findByRole('region', { name: 'Остатки кассы и банковского счёта' })
+    await within(panel).findByLabelText('Текущие остатки')
+    await user.click(securityTab)
+    await user.click(cashBankTab)
+    panel = await within(settings).findByRole('region', { name: 'Остатки кассы и банковского счёта' })
+    await waitFor(() => expect(getCashBankBalances).toHaveBeenCalledTimes(2))
+    expect(within(panel).getByLabelText('Текущие остатки')).toBeInTheDocument()
+    expect(within(panel).getByRole('status', { name: 'Обновляем остатки кассы и банковского счёта' })).toBeInTheDocument()
+  })
+
   describe('скрытые настройки интеграций — сценарии для контролируемого повторного включения', () => {
     beforeEach(() => vi.stubEnv('VITE_SHOW_INTEGRATION_SETTINGS', 'true'))
     afterEach(() => vi.unstubAllEnvs())

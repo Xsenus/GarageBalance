@@ -919,8 +919,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <p>Позволяет безопасно проверить начисления, перенос долга в просроченный и попадание гаражей в список должников без изменения дат документов и технических журналов.</p>
         </div>
         <div className="dictionary-form settings-card-form">
-          {businessDateLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем рабочую дату" rows={2} columns={3} /> : null}
-          {businessDateSettings && !businessDateLoading ? (
+          {businessDateLoading && !businessDateSettings ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем рабочую дату" rows={2} columns={3} /> : null}
+          {businessDateLoading && businessDateSettings ? <div className="form-hint" role="status" aria-label="Обновляем рабочую дату">Обновляем данные...</div> : null}
+          {businessDateSettings ? (
             <>
               <div className="summary-strip" aria-label="Состояние рабочей даты">
                 <div><span>Системная дата</span><strong>{formatBusinessDate(businessDateSettings.systemDate)}</strong></div>
@@ -984,8 +985,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <p>Текущие остатки изменяются отдельными операциями пополнения и списания. Каждая операция сохраняет дату, время и причину в истории.</p>
         </div>
         <div className="dictionary-form settings-card-form cash-bank-settings">
-          {cashBankLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем остатки кассы и банковского счёта" rows={3} columns={4} /> : null}
-          {cashBankSettings && !cashBankLoading ? (
+          {cashBankLoading && !cashBankSettings ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем остатки кассы и банковского счёта" rows={3} columns={4} /> : null}
+          {cashBankLoading && cashBankSettings ? <div className="form-hint" role="status" aria-label="Обновляем остатки кассы и банковского счёта">Обновляем данные...</div> : null}
+          {cashBankSettings ? (
             <>
               <div className="summary-strip cash-bank-summary" aria-label="Текущие остатки">
                 <div>
