@@ -3,9 +3,10 @@ import { FormError, FormValidationSummary } from './formFeedback'
 
 describe('form feedback shared UI', () => {
   it('renders form errors as alerts', () => {
-    render(<FormError>Ошибка сохранения</FormError>)
+    render(<FormError id="save-error">Ошибка сохранения</FormError>)
 
     expect(screen.getByRole('alert')).toHaveTextContent('Ошибка сохранения')
+    expect(screen.getByRole('alert')).toHaveAttribute('id', 'save-error')
   })
 
   it('hides empty validation summary', () => {

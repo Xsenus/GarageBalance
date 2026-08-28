@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { AsyncErrorBoundary, AsyncErrorState, EmptyState, LoadingSkeleton, TableLoadingState } from './AsyncState'
+import { AsyncErrorBoundary, AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage, TableLoadingState } from './AsyncState'
 
 describe('AsyncState', () => {
   it('announces loading without exposing decorative bars', () => {
@@ -16,6 +16,20 @@ describe('AsyncState', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Записей пока нет')
     expect(screen.getByRole('status')).toHaveClass('empty-state--spacious')
+  })
+
+  it('announces a background refresh without replacing loaded content', () => {
+    render(<BackgroundRefreshStatus label="Обновляем список" />)
+
+    expect(screen.getByRole('status', { name: 'Обновляем список' })).toHaveTextContent('Обновляем список…')
+    expect(screen.getByRole('status')).toHaveClass('form-hint')
+  })
+
+  it('renders a compact shared status message', () => {
+    render(<StatusMessage>Нет доступных строк</StatusMessage>)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Нет доступных строк')
+    expect(screen.getByRole('status')).toHaveClass('empty-state')
   })
 
   it('announces an error and lets the user retry', () => {

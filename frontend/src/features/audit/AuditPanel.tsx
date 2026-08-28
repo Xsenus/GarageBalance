@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
-import { AsyncErrorState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -605,8 +605,8 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <span role="columnheader">Карточка</span>
         </div>
         {loading && !hasLoadedPage ? <TableLoadingState label="Загружаем историю изменений" /> : null}
-        {loading && hasLoadedPage ? <div className="form-hint" role="status" aria-label="Обновляем историю изменений" aria-live="polite">Обновляем историю изменений…</div> : null}
-        {hasLoadedPage && !loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
+        {loading && hasLoadedPage ? <BackgroundRefreshStatus label="Обновляем историю изменений" /> : null}
+        {hasLoadedPage && !loading && page.items.length === 0 ? <StatusMessage>Событий пока нет</StatusMessage> : null}
         {hasLoadedPage ? page.items.map((auditEvent) => {
           const beforeAfter = getAuditBeforeAfter(auditEvent)
           return (

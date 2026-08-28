@@ -10,7 +10,7 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, MeasurementUnitDto
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { DadataAddressSuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey } from '../../shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createGarageFormFromDto, createOwnerFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from '../../shared/dictionaryWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -1217,7 +1217,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </tbody>
             </table>
             {loading && !activeSectionLoaded ? <TableLoadingState label={`Загружаем справочник: ${activeOption.label}`} /> : null}
-            {loading && activeSectionLoaded ? <div className="form-hint" role="status" aria-label={`Обновляем справочник: ${activeOption.label}`} aria-live="polite">Обновляем справочник: {activeOption.label}…</div> : null}
+            {loading && activeSectionLoaded ? <BackgroundRefreshStatus label={`Обновляем справочник: ${activeOption.label}`} /> : null}
             {activeSectionLoaded && !loading && rows.length === 0 ? <EmptyState>В этом справочнике пока нет записей</EmptyState> : null}
           </div>
 
@@ -1360,7 +1360,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                       ))}
                     </tbody>
                   </table>
-                  {balanceHistory.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
+                  {balanceHistory.rows.length === 0 ? <StatusMessage>По выбранному периоду строк нет</StatusMessage> : null}
                 </div>
               </>
             ) : null}

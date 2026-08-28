@@ -7,7 +7,7 @@ import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/fina
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -2388,7 +2388,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               </div>
             ))}
             {contractorPageLoading.garages && visibleGarages.length === 0 ? <TableLoadingState className="table-loading-state--compact" label="Загружаем гаражи" /> : null}
-            {contractorPageLoading.garages && visibleGarages.length > 0 ? <div className="contractors-table-refresh" role="status" aria-label="Обновляем список гаражей" aria-live="polite">Обновляем список гаражей…</div> : null}
+            {contractorPageLoading.garages && visibleGarages.length > 0 ? <BackgroundRefreshStatus className="contractors-table-refresh" label="Обновляем список гаражей" /> : null}
             {!contractorPageLoading.garages && visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">{hasActiveGarageFilters ? 'По заданным фильтрам гаражи не найдены.' : showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
@@ -2464,7 +2464,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               )
             })}
             {contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поставщиков" /> : null}
-            {contractorPageLoading.suppliers && visibleSuppliers.length > 0 ? <div className="contractors-table-refresh" role="status" aria-label="Обновляем список поставщиков" aria-live="polite">Обновляем список поставщиков…</div> : null}
+            {contractorPageLoading.suppliers && visibleSuppliers.length > 0 ? <BackgroundRefreshStatus className="contractors-table-refresh" label="Обновляем список поставщиков" /> : null}
             {!contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">Поставщики пока не настроены.</span>
@@ -2534,7 +2534,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </div>
               ))}
               {contractorPageLoading.staff && visibleStaff.length === 0 ? <TableLoadingState className="table-loading-state--compact" label="Загружаем персонал" /> : null}
-              {contractorPageLoading.staff && visibleStaff.length > 0 ? <div className="contractors-table-refresh" role="status" aria-label="Обновляем список персонала" aria-live="polite">Обновляем список персонала…</div> : null}
+              {contractorPageLoading.staff && visibleStaff.length > 0 ? <BackgroundRefreshStatus className="contractors-table-refresh" label="Обновляем список персонала" /> : null}
               {!contractorPageLoading.staff && visibleStaff.length === 0 ? (
                 <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                   <span className="contractors-directory-empty-cell" role="cell">Сотрудники пока не настроены.</span>
@@ -2849,7 +2849,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                       ))}
                     </tbody>
                   </table>
-                  {garageFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
+                  {garageFinancialReport.rows.length === 0 ? <StatusMessage>По выбранному периоду строк нет</StatusMessage> : null}
                 </div>
               </>
             ) : null}
@@ -2927,7 +2927,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                       ))}
                     </tbody>
                   </table>
-                  {contractorFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
+                  {contractorFinancialReport.rows.length === 0 ? <StatusMessage>По выбранному периоду строк нет</StatusMessage> : null}
                 </div>
                 {canReadContractorHistory ? (
                   <section className="contractor-history-section" aria-label="Переход к истории изменений контрагента">

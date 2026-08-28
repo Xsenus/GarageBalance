@@ -5,8 +5,9 @@ import type { AuthResponse } from '../../services/authApi'
 import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
-import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
+import { FormError } from '../../shared/formFeedback'
 import { formatDateTime, formatMoney } from '../../shared/formatters'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { formatMoneyTextInput, parseMoneyInput } from '../../shared/moneyInputFormatting'
@@ -795,7 +796,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           </tbody>
               </table>
             </div>
-            {operationsLoading ? <div className="form-hint" role="status" aria-label="Обновляем операции фондов" aria-live="polite">Обновляем операции фондов…</div> : null}
+            {operationsLoading ? <BackgroundRefreshStatus label="Обновляем операции фондов" /> : null}
             <TablePagination
               ariaLabel="Пагинация операций фондов"
               totalCount={operationPage.totalCount}
@@ -862,7 +863,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   ) : null}
                 </section>
               ) : null}
-              {fundEditorError ? <p className="form-error" role="alert">{fundEditorError}</p> : null}
+              {fundEditorError ? <FormError>{fundEditorError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="secondary-button create-action-button" type="submit" disabled={savingFund}>
                   <Save size={16} aria-hidden="true" />
@@ -919,7 +920,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 }}
               />
             </FormField>
-            {fundDeleteError ? <p className="form-error" role="alert">{fundDeleteError}</p> : null}
+            {fundDeleteError ? <FormError>{fundDeleteError}</FormError> : null}
             <div className="detail-dialog-actions">
               <button className="ghost-button danger-button" type="button" onClick={() => void deleteFund()} disabled={deletingFund}>
                 <Trash2 size={16} aria-hidden="true" />
@@ -986,7 +987,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   <dd>{operationAmount === null ? '—' : `${formatMoney(operationAmount)} руб.`}</dd>
                 </div>
               </dl>
-              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              {operationError ? <FormError>{operationError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button ref={operationCancelRef} className="ghost-button" type="button" onClick={closeFundOperation} disabled={savingOperation}>Отмена</button>
                 <button className="secondary-button create-action-button" type="submit" disabled={savingOperation}>
@@ -1055,7 +1056,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   <dd>{operationEditAmount === null ? '—' : `${formatMoney(operationEditAmount)} руб.`}</dd>
                 </div>
               </dl>
-              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              {operationError ? <FormError>{operationError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button ref={operationEditCancelRef} className="ghost-button" type="button" onClick={closeFundOperationEdit} disabled={savingOperation}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={savingOperation}>
@@ -1097,7 +1098,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 </li>
               ))}
             </ul>
-            {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+            {operationError ? <FormError>{operationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={operationEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setOperationEditConfirmation(null)} disabled={savingOperation}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmFundOperationEdit} disabled={savingOperation}>
@@ -1154,7 +1155,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   <dd>{formatMoney(operationReverse.operation.amount)} руб.</dd>
                 </div>
               </dl>
-              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              {operationError ? <FormError>{operationError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeFundOperationReverse} disabled={savingOperation}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={savingOperation}>
@@ -1208,7 +1209,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   />
                 </FormField>
               ) : null}
-              {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
+              {operationError ? <FormError>{operationError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button ref={statusCancelRef} className="ghost-button" type="button" onClick={closeFundStatusAction} disabled={savingStatusAction}>Отмена</button>
                 <button className={statusAction.action === 'cancel' ? 'secondary-button danger-button' : 'secondary-button'} type="submit" disabled={savingStatusAction}>

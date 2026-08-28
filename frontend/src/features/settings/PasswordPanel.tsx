@@ -5,7 +5,7 @@ import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage } from '../../shared/AsyncState'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { parseMoneyInput } from '../../shared/moneyInputFormatting'
@@ -920,7 +920,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
         <div className="dictionary-form settings-card-form">
           {businessDateLoading && !businessDateSettings ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем рабочую дату" rows={2} columns={3} /> : null}
-          {businessDateLoading && businessDateSettings ? <div className="form-hint" role="status" aria-label="Обновляем рабочую дату">Обновляем данные...</div> : null}
+          {businessDateLoading && businessDateSettings ? <BackgroundRefreshStatus label="Обновляем рабочую дату" /> : null}
           {businessDateSettings ? (
             <>
               <div className="summary-strip" aria-label="Состояние рабочей даты">
@@ -986,7 +986,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
         <div className="dictionary-form settings-card-form cash-bank-settings">
           {cashBankLoading && !cashBankSettings ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем остатки кассы и банковского счёта" rows={3} columns={4} /> : null}
-          {cashBankLoading && cashBankSettings ? <div className="form-hint" role="status" aria-label="Обновляем остатки кассы и банковского счёта">Обновляем данные...</div> : null}
+          {cashBankLoading && cashBankSettings ? <BackgroundRefreshStatus label="Обновляем остатки кассы и банковского счёта" /> : null}
           {cashBankSettings ? (
             <>
               <div className="summary-strip cash-bank-summary" aria-label="Текущие остатки">
@@ -1157,7 +1157,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
         <div className="settings-card-body">
         {backupLoading && !backupStatus ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
-        {backupLoading && backupStatus ? <div className="form-hint" role="status" aria-label="Обновляем состояние резервного копирования" aria-live="polite">Обновляем состояние резервного копирования…</div> : null}
+        {backupLoading && backupStatus ? <BackgroundRefreshStatus label="Обновляем состояние резервного копирования" /> : null}
         {backupError ? (
           <div className="settings-backup-error">
             <FormError>{backupError}</FormError>
@@ -1271,7 +1271,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
         <div className="settings-card-body">
         {diagnosticLoading && !diagnosticStatus ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние журнала ошибок" rows={3} columns={4} /> : null}
-        {diagnosticLoading && diagnosticStatus ? <div className="form-hint" role="status" aria-label="Обновляем состояние журнала ошибок" aria-live="polite">Обновляем состояние журнала ошибок…</div> : null}
+        {diagnosticLoading && diagnosticStatus ? <BackgroundRefreshStatus label="Обновляем состояние журнала ошибок" /> : null}
         {diagnosticError ? (
           <div className="settings-backup-error">
             <FormError>{diagnosticError}</FormError>
@@ -1451,7 +1451,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           ) : null}
           {receiptPrintingStatus ? (
             <>
-              <p className="empty-state" role="status" aria-live="polite">{receiptPrintingStatus.statusMessage}</p>
+              <StatusMessage>{receiptPrintingStatus.statusMessage}</StatusMessage>
               <p className="form-hint">Будущие действия: {receiptPrintingStatus.plannedActions.join(', ')}.</p>
             </>
           ) : null}

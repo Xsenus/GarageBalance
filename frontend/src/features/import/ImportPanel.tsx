@@ -3,9 +3,10 @@ import type { FormEvent } from 'react'
 import { DatabaseZap, FileText, RotateCcw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from '../../services/importApi'
-import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { buildImportReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
+import { FormError } from '../../shared/formFeedback'
 import { formatDateTime, formatImportCheckStatus, formatImportCreatedRecordRollbackStatus, formatImportLogLevel, formatImportReaderStatus, formatImportRunCheckSummary, formatImportRunStatus } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage } from '../../shared/pagination'
@@ -660,7 +661,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   </div>
                 </div>
               </>
-            ) : <p className="empty-state" role="status" aria-live="polite">Выберите запуск dry-run</p>}
+            ) : <StatusMessage>Выберите запуск dry-run</StatusMessage>}
             <div className="import-report-group import-report-actions" aria-label="Действия с отчетом проверки">
               <h4>Действия</h4>
               <div>
@@ -710,7 +711,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
             <span role="columnheader">Статус</span>
             <span role="columnheader">Итог</span>
           </div>
-          {!currentRun ? <p className="empty-state" role="status" aria-live="polite">Проверок пока нет</p> : null}
+          {!currentRun ? <StatusMessage>Проверок пока нет</StatusMessage> : null}
           {currentRun?.checks.map((check) => (
             <div className="operation-row" role="row" key={check.code}>
               <span role="cell">
@@ -735,8 +736,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Сообщение</span>
             </div>
             {loadingLog && !logLoadedForCurrentRun ? <TableLoadingState label="Загружаем лог импорта" /> : null}
-            {loadingLog && logLoadedForCurrentRun ? <div className="form-hint" role="status" aria-label="Обновляем лог импорта" aria-live="polite">Обновляем лог импорта…</div> : null}
-            {!loadingLog && (!currentRun || (logLoadedForCurrentRun && runLogEntries.length === 0)) ? <p className="empty-state" role="status" aria-live="polite">Лог выбранного запуска пока пуст</p> : null}
+            {loadingLog && logLoadedForCurrentRun ? <BackgroundRefreshStatus label="Обновляем лог импорта" /> : null}
+            {!loadingLog && (!currentRun || (logLoadedForCurrentRun && runLogEntries.length === 0)) ? <StatusMessage>Лог выбранного запуска пока пуст</StatusMessage> : null}
             {logLoadedForCurrentRun ? logPage.items.map((entry) => (
               <div className="operation-row" role="row" key={entry.id}>
                 <span role="cell">
@@ -762,7 +763,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Статус</span>
               <span role="columnheader">Проверки</span>
             </div>
-            {runs.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Истории импорта пока нет</p> : null}
+            {runs.length === 0 ? <StatusMessage>Истории импорта пока нет</StatusMessage> : null}
             {historyPage.items.map((run) => (
               <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
                 <span role="cell">
@@ -789,8 +790,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Rollback</span>
             </div>
             {loadingCreatedRecords && !createdRecordsLoadedForCurrentRun ? <TableLoadingState label="Загружаем созданные импортом записи" /> : null}
-            {loadingCreatedRecords && createdRecordsLoadedForCurrentRun ? <div className="form-hint" role="status" aria-label="Обновляем созданные импортом записи" aria-live="polite">Обновляем созданные импортом записи…</div> : null}
-            {!loadingCreatedRecords && (!currentRun || (createdRecordsLoadedForCurrentRun && createdRecords.length === 0)) ? <p className="empty-state" role="status" aria-live="polite">Созданные записи появятся после фактического переноса Access</p> : null}
+            {loadingCreatedRecords && createdRecordsLoadedForCurrentRun ? <BackgroundRefreshStatus label="Обновляем созданные импортом записи" /> : null}
+            {!loadingCreatedRecords && (!currentRun || (createdRecordsLoadedForCurrentRun && createdRecords.length === 0)) ? <StatusMessage>Созданные записи появятся после фактического переноса Access</StatusMessage> : null}
             {createdRecordsLoadedForCurrentRun ? createdPage.items.map((record) => (
               <div className="operation-row" role="row" key={record.id}>
                 <span role="cell">
@@ -820,8 +821,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <span role="columnheader">Действие</span>
             </div>
             {loadingQuarantine && !quarantineLoadedForCurrentSession ? <TableLoadingState label="Загружаем карантин импорта" /> : null}
-            {loadingQuarantine && quarantineLoadedForCurrentSession ? <div className="form-hint" role="status" aria-label="Обновляем карантин импорта" aria-live="polite">Обновляем карантин импорта…</div> : null}
-            {!loadingQuarantine && quarantineLoadedForCurrentSession && quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
+            {loadingQuarantine && quarantineLoadedForCurrentSession ? <BackgroundRefreshStatus label="Обновляем карантин импорта" /> : null}
+            {!loadingQuarantine && quarantineLoadedForCurrentSession && quarantineItems.length === 0 ? <StatusMessage>Открытых строк карантина нет</StatusMessage> : null}
             {quarantineLoadedForCurrentSession ? quarantinePage.items.map((item) => (
               <div className="operation-row" role="row" key={item.id}>
                 <span role="cell">
@@ -908,7 +909,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   <dd>{formatImportRunCheckSummary(applyTarget)}</dd>
                 </div>
               </dl>
-              {applyError ? <p className="form-error" id="import-apply-error" role="alert">{applyError}</p> : null}
+              {applyError ? <FormError id="import-apply-error">{applyError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeApplyDialog} disabled={applyingRunId !== null}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={applyingRunId !== null}>
@@ -968,7 +969,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   <dd>{formatImportRunCheckSummary(applyCancelTarget)}</dd>
                 </div>
               </dl>
-              {applyCancelError ? <p className="form-error" id="import-apply-cancel-error" role="alert">{applyCancelError}</p> : null}
+              {applyCancelError ? <FormError id="import-apply-cancel-error">{applyCancelError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeApplyCancelDialog} disabled={cancelingApplyRunId !== null}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={cancelingApplyRunId !== null}>
@@ -1028,7 +1029,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   <dd>{formatImportRunCheckSummary(rollbackTarget)}</dd>
                 </div>
               </dl>
-              {rollbackError ? <p className="form-error" id="import-rollback-error" role="alert">{rollbackError}</p> : null}
+              {rollbackError ? <FormError id="import-rollback-error">{rollbackError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeRollbackDialog} disabled={rollbackingRunId !== null}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={rollbackingRunId !== null}>
@@ -1088,7 +1089,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   <dd>{quarantineResolveTarget.reasonMessage}</dd>
                 </div>
               </dl>
-              {quarantineResolveError ? <p className="form-error" id="import-quarantine-resolve-error" role="alert">{quarantineResolveError}</p> : null}
+              {quarantineResolveError ? <FormError id="import-quarantine-resolve-error">{quarantineResolveError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeQuarantineResolveDialog} disabled={resolvingQuarantineId !== null}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={resolvingQuarantineId !== null}>

@@ -8,7 +8,7 @@ import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -2315,7 +2315,7 @@ export function FinancePanel({
           >
             {renderFinanceTable()}
             {loading ? <TableLoadingState label="Загружаем таблицу платежей" /> : null}
-            {!loading && getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
+            {!loading && getActiveFinanceRowsCount() === 0 ? <StatusMessage>{getFinanceToolbarLabel('emptyState')}</StatusMessage> : null}
           </div>
           <TablePagination
             ariaLabel={getFinanceToolbarLabel('pagination')}
@@ -2505,7 +2505,7 @@ export function FinancePanel({
             {getFinanceVisibleListTableHeaders('operations').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
           {financePreviewPending.operations ? <TableLoadingState label="Загружаем последние операции" rows={2} columns={3} /> : null}
-          {!financePreviewPending.operations && !financePreviewFailures.operations && operations.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('operations')}</p> : null}
+          {!financePreviewPending.operations && !financePreviewFailures.operations && operations.length === 0 ? <StatusMessage>{getFinanceVisibleListEmptyLabel('operations')}</StatusMessage> : null}
           {!financePreviewPending.operations && !financePreviewFailures.operations ? visibleOperations.map((operation) => (
             <div className="operation-row" role="row" key={operation.id}>
               <span role="cell">{formatDateOnly(operation.operationDate)}</span>
@@ -2528,7 +2528,7 @@ export function FinancePanel({
               </span>
             </div>
           )) : null}
-          {!financePreviewPending.operations && !financePreviewFailures.operations && operationPreviewTotal > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operationPreviewTotal, 'operations')}</p> : null}
+          {!financePreviewPending.operations && !financePreviewFailures.operations && operationPreviewTotal > visibleOperations.length ? <StatusMessage>{formatFinanceVisibleListStatus(visibleOperations.length, operationPreviewTotal, 'operations')}</StatusMessage> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('accruals')}>
@@ -2536,7 +2536,7 @@ export function FinancePanel({
             {getFinanceVisibleListTableHeaders('accruals').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
           {financePreviewPending.accruals ? <TableLoadingState label="Загружаем последние начисления" rows={2} columns={3} /> : null}
-          {!financePreviewPending.accruals && !financePreviewFailures.accruals && accruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('accruals')}</p> : null}
+          {!financePreviewPending.accruals && !financePreviewFailures.accruals && accruals.length === 0 ? <StatusMessage>{getFinanceVisibleListEmptyLabel('accruals')}</StatusMessage> : null}
           {!financePreviewPending.accruals && !financePreviewFailures.accruals ? visibleAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
@@ -2559,7 +2559,7 @@ export function FinancePanel({
               </span>
             </div>
           )) : null}
-          {!financePreviewPending.accruals && !financePreviewFailures.accruals && summary.accrualCount > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, summary.accrualCount, 'accruals')}</p> : null}
+          {!financePreviewPending.accruals && !financePreviewFailures.accruals && summary.accrualCount > visibleAccruals.length ? <StatusMessage>{formatFinanceVisibleListStatus(visibleAccruals.length, summary.accrualCount, 'accruals')}</StatusMessage> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('supplierAccruals')}>
@@ -2567,7 +2567,7 @@ export function FinancePanel({
             {getFinanceVisibleListTableHeaders('supplierAccruals').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
           {financePreviewPending.supplierAccruals ? <TableLoadingState label="Загружаем последние начисления поставщикам" rows={2} columns={3} /> : null}
-          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals && supplierAccruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('supplierAccruals')}</p> : null}
+          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals && supplierAccruals.length === 0 ? <StatusMessage>{getFinanceVisibleListEmptyLabel('supplierAccruals')}</StatusMessage> : null}
           {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals ? visibleSupplierAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
@@ -2589,7 +2589,7 @@ export function FinancePanel({
               </span>
             </div>
           )) : null}
-          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals && supplierAccrualPreviewTotal > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccrualPreviewTotal, 'supplierAccruals')}</p> : null}
+          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals && supplierAccrualPreviewTotal > visibleSupplierAccruals.length ? <StatusMessage>{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccrualPreviewTotal, 'supplierAccruals')}</StatusMessage> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('meterReadings')}>
@@ -2597,7 +2597,7 @@ export function FinancePanel({
             {getFinanceVisibleListTableHeaders('meterReadings').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
           {financePreviewPending.meterReadings ? <TableLoadingState label="Загружаем последние показания" rows={2} columns={3} /> : null}
-          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings && meterReadings.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('meterReadings')}</p> : null}
+          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings && meterReadings.length === 0 ? <StatusMessage>{getFinanceVisibleListEmptyLabel('meterReadings')}</StatusMessage> : null}
           {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings ? visibleMeterReadings.map((reading) => (
             <div className="operation-row" role="row" key={reading.id}>
               <span role="cell">{formatMonth(reading.accountingMonth)}</span>
@@ -2613,7 +2613,7 @@ export function FinancePanel({
               </span>
             </div>
           )) : null}
-          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings && summary.meterReadingCount > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, summary.meterReadingCount, 'meterReadings')}</p> : null}
+          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings && summary.meterReadingCount > visibleMeterReadings.length ? <StatusMessage>{formatFinanceVisibleListStatus(visibleMeterReadings.length, summary.meterReadingCount, 'meterReadings')}</StatusMessage> : null}
         </div>
       </div>
       {financeContextMenu ? (

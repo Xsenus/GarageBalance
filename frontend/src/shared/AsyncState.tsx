@@ -38,6 +38,14 @@ export function EmptyState({ children, className = '' }: { children: ReactNode; 
   )
 }
 
+export function BackgroundRefreshStatus({ label, className = 'form-hint' }: { label: string; className?: string }) {
+  return <div className={className} role="status" aria-label={label} aria-live="polite">{label}…</div>
+}
+
+export function StatusMessage({ children, className = 'empty-state' }: { children: ReactNode; className?: string }) {
+  return <p className={className} role="status" aria-live="polite">{children}</p>
+}
+
 type AsyncErrorStateProps = {
   message: ReactNode
   onRetry: () => void

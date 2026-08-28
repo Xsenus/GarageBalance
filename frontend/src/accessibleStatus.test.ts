@@ -44,7 +44,7 @@ describe('accessible dynamic messages', () => {
 
   it('keeps shared form errors and validation summaries exposed as alerts', () => {
     expect(financePanelSource).toContain("import { FormError, FormValidationSummary } from '../../shared/formFeedback'")
-    expect(formFeedbackSource).toContain('<div className="form-error" role="alert">')
+    expect(formFeedbackSource).toContain('<div className="form-error" id={id} role="alert">')
     expect(formFeedbackSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
   })
 

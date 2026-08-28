@@ -4,7 +4,7 @@ import { Pencil, RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } fro
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { expandPermissionDependencies, isPermissionRequiredBySelection, permissions, rolePermissionGroups } from '../../shared/accessControl'
-import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime } from '../../shared/formatters'
@@ -579,7 +579,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               </tbody>
             </table>
             {loading && !hasLoadedPage ? <TableLoadingState label="Загружаем пользователей" /> : null}
-            {loading && hasLoadedPage ? <div className="form-hint" role="status" aria-label="Обновляем список пользователей" aria-live="polite">Обновляем список пользователей…</div> : null}
+            {loading && hasLoadedPage ? <BackgroundRefreshStatus label="Обновляем список пользователей" /> : null}
           </div>
 
           <TablePagination
@@ -786,7 +786,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   )
                 })}
               </div>
-              {rolePermissionError ? <p className="form-error" role="alert">{rolePermissionError}</p> : null}
+              {rolePermissionError ? <FormError>{rolePermissionError}</FormError> : null}
               {dialogErrorMessage}
               <p className="form-hint">Права применяются к пользователям с этой ролью после обновления их сессии. Изменение будет записано в историю.</p>
               <div className="detail-dialog-actions">
@@ -903,7 +903,7 @@ function RolePermissionMatrix({ roles, onEditRole }: { roles: ManagedRoleDto[]; 
           <tbody>
             {roles.length === 0 ? (
               <tr>
-                <td colSpan={rolePermissionGroups.length + 2}><p className="empty-state" role="status" aria-live="polite">Роли пока не загружены</p></td>
+                <td colSpan={rolePermissionGroups.length + 2}><StatusMessage>Роли пока не загружены</StatusMessage></td>
               </tr>
             ) : null}
             {roles.map((role) => (

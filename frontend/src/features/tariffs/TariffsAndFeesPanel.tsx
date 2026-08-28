@@ -8,7 +8,7 @@ import { areFeeCampaignAmountsEqual, calculateFeeCampaignContributionAmount, cal
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
@@ -2479,7 +2479,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <span className="table-actions-column" role="columnheader">Действия</span>
             </div>
             {tariffsLoading && !tariffsLoaded ? <TableLoadingState label="Загружаем тарифы и услуги" /> : null}
-            {tariffsLoading && tariffsLoaded ? <div className="form-hint" role="status" aria-label="Обновляем тарифы и услуги" aria-live="polite">Обновляем тарифы и услуги…</div> : null}
+            {tariffsLoading && tariffsLoaded ? <BackgroundRefreshStatus label="Обновляем тарифы и услуги" /> : null}
             {tariffPage.items.map((row, pageIndex) => {
               const serviceSetting = row.backendServiceSettingId
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
@@ -2842,7 +2842,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             }}
           />
 
-          {tariffPanelsLayoutError ? <p className="form-error" role="alert">{tariffPanelsLayoutError}</p> : null}
+          {tariffPanelsLayoutError ? <FormError>{tariffPanelsLayoutError}</FormError> : null}
           <div
             className="contractors-bottom-grid"
             ref={tariffPanelsGridRef}
@@ -2856,7 +2856,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <span>Сумма, руб.</span>
               </div>
               {oneTimeLoading && !oneTimeLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
-              {oneTimeLoading && oneTimeLoaded ? <div className="form-hint" role="status" aria-label="Обновляем нерегулярные платежи" aria-live="polite">Обновляем нерегулярные платежи…</div> : null}
+              {oneTimeLoading && oneTimeLoaded ? <BackgroundRefreshStatus label="Обновляем нерегулярные платежи" /> : null}
               {oneTimePage.items.map((row) => (
                 <div
                   aria-label={`Нерегулярный платеж ${row.name}`}
@@ -2944,7 +2944,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   <span>Действия</span>
                 </div>
                 {feeCampaignsLoading && !feeCampaignsLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
-                {feeCampaignsLoading && feeCampaignsLoaded ? <div className="form-hint" role="status" aria-label="Обновляем объявленные сборы" aria-live="polite">Обновляем объявленные сборы…</div> : null}
+                {feeCampaignsLoading && feeCampaignsLoaded ? <BackgroundRefreshStatus label="Обновляем объявленные сборы" /> : null}
                 {feeCampaignPage.items.map((campaign) => {
                   const isPeriodMuted = getFeeCampaignDisplayRank(campaign, currentBusinessDate) > 0
                   return (

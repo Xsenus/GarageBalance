@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 
-export function FormError({ children }: { children: ReactNode }) {
+export function FormError({ children, id }: { children: ReactNode; id?: string }) {
   return (
-    <div className="form-error" role="alert">
+    <div className="form-error" id={id} role="alert">
       {children}
     </div>
   )
