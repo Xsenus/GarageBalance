@@ -25,6 +25,7 @@ import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
+import { formatFinanceGarageReference, formatFinanceReference } from './financeChangePreview'
 import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
@@ -909,32 +910,8 @@ export function FinancePanel({
 
   function getIncomeEditChangePreview(record: FinancialOperationDto, request: CreateIncomeOperationRequest) {
     const changes: ChangePreview[] = []
-    const formatIncomeGarage = (garageId: string | null | undefined, fallbackGarageNumber: string | null | undefined) => {
-      if (!garageId) {
-        return 'пусто'
-      }
-
-      if (fallbackGarageNumber) {
-        return formatFinanceGarageLabel(fallbackGarageNumber)
-      }
-
-      const garage = incomeGarageOptions.find((item) => item.id === garageId)
-      return garage ? formatFinanceGarageLabel(garage.number) : formatFinanceGarageLabel(garageId)
-    }
-    const formatIncomeType = (incomeTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
-      if (!incomeTypeId) {
-        return 'пусто'
-      }
-
-      if (fallbackName) {
-        return fallbackName
-      }
-
-      return incomeTypes.find((item) => item.id === incomeTypeId)?.name ?? fallbackName ?? incomeTypeId
-    }
-
-    appendChangePreview(changes, 'Гараж', formatIncomeGarage(record.garageId, record.garageNumber), formatIncomeGarage(request.garageId, request.garageId === record.garageId ? record.garageNumber : null))
-    appendChangePreview(changes, 'Вид поступления', formatIncomeType(record.incomeTypeId, record.incomeTypeName), formatIncomeType(request.incomeTypeId, request.incomeTypeId === record.incomeTypeId ? record.incomeTypeName : null))
+    appendChangePreview(changes, 'Гараж', formatFinanceGarageReference(record.garageId, record.garageNumber, incomeGarageOptions), formatFinanceGarageReference(request.garageId, request.garageId === record.garageId ? record.garageNumber : null, incomeGarageOptions))
+    appendChangePreview(changes, 'Вид поступления', formatFinanceReference(record.incomeTypeId, record.incomeTypeName, incomeTypes), formatFinanceReference(request.incomeTypeId, request.incomeTypeId === record.incomeTypeId ? record.incomeTypeName : null, incomeTypes))
     appendChangePreview(changes, 'Дата поступления', formatChangeDate(record.operationDate), formatChangeDate(request.operationDate))
     appendChangePreview(changes, 'Месяц поступления', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
     appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
@@ -945,31 +922,8 @@ export function FinancePanel({
 
   function getExpenseEditChangePreview(record: FinancialOperationDto, request: CreateExpenseOperationRequest) {
     const changes: ChangePreview[] = []
-    const formatSupplier = (supplierId: string | null | undefined, fallbackName: string | null | undefined) => {
-      if (!supplierId) {
-        return 'пусто'
-      }
-
-      if (fallbackName) {
-        return fallbackName
-      }
-
-      return suppliers.find((item) => item.id === supplierId)?.name ?? supplierId
-    }
-    const formatExpenseType = (expenseTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
-      if (!expenseTypeId) {
-        return 'пусто'
-      }
-
-      if (fallbackName) {
-        return fallbackName
-      }
-
-      return expenseTypes.find((item) => item.id === expenseTypeId)?.name ?? expenseTypeId
-    }
-
-    appendChangePreview(changes, 'Поставщик', formatSupplier(record.supplierId, record.supplierName), formatSupplier(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null))
-    appendChangePreview(changes, 'Услуга', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Поставщик', formatFinanceReference(record.supplierId, record.supplierName, suppliers), formatFinanceReference(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null, suppliers))
+    appendChangePreview(changes, 'Услуга', formatFinanceReference(record.expenseTypeId, record.expenseTypeName, expenseTypes), formatFinanceReference(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null, expenseTypes))
     appendChangePreview(changes, 'Источник выплаты', record.expensePaymentSource === 'cash' || (!record.expensePaymentSource && record.expensePaymentType === 'without_receipt') ? 'Касса' : 'Банк', request.expensePaymentSource === 'cash' ? 'Касса' : 'Банк')
     appendChangePreview(changes, 'Тип выплаты', formatExpensePaymentType(record.expensePaymentType), formatExpensePaymentType(request.expensePaymentType))
     appendChangePreview(
@@ -988,32 +942,8 @@ export function FinancePanel({
 
   function getAccrualEditChangePreview(record: AccrualDto, request: CreateAccrualRequest) {
     const changes: ChangePreview[] = []
-    const formatAccrualGarage = (garageId: string | null | undefined, fallbackGarageNumber: string | null | undefined) => {
-      if (!garageId) {
-        return 'пусто'
-      }
-
-      if (fallbackGarageNumber) {
-        return formatFinanceGarageLabel(fallbackGarageNumber)
-      }
-
-      const garage = incomeGarageOptions.find((item) => item.id === garageId)
-      return garage ? formatFinanceGarageLabel(garage.number) : formatFinanceGarageLabel(garageId)
-    }
-    const formatAccrualIncomeType = (incomeTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
-      if (!incomeTypeId) {
-        return 'пусто'
-      }
-
-      if (fallbackName) {
-        return fallbackName
-      }
-
-      return incomeTypes.find((item) => item.id === incomeTypeId)?.name ?? incomeTypeId
-    }
-
-    appendChangePreview(changes, 'Гараж', formatAccrualGarage(record.garageId, record.garageNumber), formatAccrualGarage(request.garageId, request.garageId === record.garageId ? record.garageNumber : null))
-    appendChangePreview(changes, 'Вид начисления', formatAccrualIncomeType(record.incomeTypeId, record.incomeTypeName), formatAccrualIncomeType(request.incomeTypeId, request.incomeTypeId === record.incomeTypeId ? record.incomeTypeName : null))
+    appendChangePreview(changes, 'Гараж', formatFinanceGarageReference(record.garageId, record.garageNumber, incomeGarageOptions), formatFinanceGarageReference(request.garageId, request.garageId === record.garageId ? record.garageNumber : null, incomeGarageOptions))
+    appendChangePreview(changes, 'Вид начисления', formatFinanceReference(record.incomeTypeId, record.incomeTypeName, incomeTypes), formatFinanceReference(request.incomeTypeId, request.incomeTypeId === record.incomeTypeId ? record.incomeTypeName : null, incomeTypes))
     appendChangePreview(changes, 'Месяц начисления', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
     appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
     appendChangePreview(changes, 'Источник', formatAccrualSource(record.source), formatAccrualSource(request.source))
@@ -1023,31 +953,8 @@ export function FinancePanel({
 
   function getSupplierAccrualEditChangePreview(record: SupplierAccrualDto, request: CreateSupplierAccrualRequest) {
     const changes: ChangePreview[] = []
-    const formatSupplier = (supplierId: string | null | undefined, fallbackName: string | null | undefined) => {
-      if (!supplierId) {
-        return 'пусто'
-      }
-
-      if (fallbackName) {
-        return fallbackName
-      }
-
-      return suppliers.find((item) => item.id === supplierId)?.name ?? supplierId
-    }
-    const formatExpenseType = (expenseTypeId: string | null | undefined, fallbackName: string | null | undefined) => {
-      if (!expenseTypeId) {
-        return 'пусто'
-      }
-
-      if (fallbackName) {
-        return fallbackName
-      }
-
-      return expenseTypes.find((item) => item.id === expenseTypeId)?.name ?? expenseTypeId
-    }
-
-    appendChangePreview(changes, 'Поставщик', formatSupplier(record.supplierId, record.supplierName), formatSupplier(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null))
-    appendChangePreview(changes, 'Вид начисления', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Поставщик', formatFinanceReference(record.supplierId, record.supplierName, suppliers), formatFinanceReference(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null, suppliers))
+    appendChangePreview(changes, 'Вид начисления', formatFinanceReference(record.expenseTypeId, record.expenseTypeName, expenseTypes), formatFinanceReference(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null, expenseTypes))
     appendChangePreview(changes, 'Месяц начисления', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
     appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
     appendChangePreview(changes, 'Источник', formatAccrualSource(record.source), formatAccrualSource(request.source))
