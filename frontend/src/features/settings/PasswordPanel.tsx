@@ -6,6 +6,7 @@ import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto
 import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage } from '../../shared/AsyncState'
+import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { parseMoneyInput } from '../../shared/moneyInputFormatting'
@@ -1572,16 +1573,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               </button>
             </div>
             <p className="confirmation-text" id="password-change-confirmation-description">После подтверждения пароль будет изменен, текущая сессия завершится, а действие появится в истории изменений без раскрытия самого пароля.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля настройки">
-              <li>
-                <span className="dictionary-change-field">Пароль</span>
-                <span className="dictionary-change-values">
-                  <span className="dictionary-change-value">Без изменения</span>
-                  <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                  <span className="dictionary-change-value dictionary-change-value-after">{formatSensitiveChange(pendingPasswordChange.newPassword)}</span>
-                </span>
-              </li>
-            </ul>
+            <ChangePreviewList ariaLabel="Изменяемые поля настройки" changes={[{
+              field: 'Пароль',
+              before: 'Без изменения',
+              after: formatSensitiveChange(pendingPasswordChange.newPassword),
+            }]} />
             {error ? <FormError>{error}</FormError> : null}
             <div className="dialog-actions">
               <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingPasswordChange(null)} disabled={saving}>Отмена</button>

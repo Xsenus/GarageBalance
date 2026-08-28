@@ -4,6 +4,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormField } from '../../shared/FormField'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -659,16 +660,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
               </button>
             </div>
             <p className="confirmation-text" id="meter-reading-change-description">Проверьте показание. После сохранения изменение появится в истории гаража.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля показания">
-              <li>
-                <span className="dictionary-change-field">Показание</span>
-                <span className="dictionary-change-values">
-                  <span className="dictionary-change-value">{formatPrototypeChangeValue(pendingReadingChange.previousValue)}</span>
-                  <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                  <span className="dictionary-change-value dictionary-change-value-after">{formatPrototypeChangeValue(pendingReadingChange.nextValue)}</span>
-                </span>
-              </li>
-            </ul>
+            <ChangePreviewList ariaLabel="Изменяемые поля показания" changes={[{
+              field: 'Показание',
+              before: formatPrototypeChangeValue(pendingReadingChange.previousValue),
+              after: formatPrototypeChangeValue(pendingReadingChange.nextValue),
+            }]} />
             {pendingReadingChange.suggestsReplacement ? (
               <>
                 <div className="form-warning" role="status">
