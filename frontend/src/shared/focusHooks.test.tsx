@@ -1,6 +1,21 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
+import { useState } from 'react'
+import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
+
+function OutsidePointerProbe() {
+  const [open, setOpen] = useState(true)
+  const ref = useCloseOnOutsidePointer<HTMLDivElement>(open, setOpen)
+  return (
+    <>
+      <div ref={ref}>
+        <button type="button">Внутри</button>
+        <span>{open ? 'Открыто' : 'Закрыто'}</span>
+      </div>
+      <button type="button">Снаружи</button>
+    </>
+  )
+}
 
 function EscapeProbe({ enabled, onEscape }: { enabled: boolean; onEscape: () => void }) {
   useEscapeKey(enabled, onEscape)
@@ -28,6 +43,17 @@ function RestoreFocusProbe({ open }: { open: boolean }) {
 }
 
 describe('focus shared hooks', () => {
+  it('keeps an active surface open for inside clicks and closes it on an outside pointer', async () => {
+    const user = userEvent.setup()
+    render(<OutsidePointerProbe />)
+
+    await user.click(screen.getByRole('button', { name: 'Внутри' }))
+    expect(screen.getByText('Открыто')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Снаружи' }))
+    expect(screen.getByText('Закрыто')).toBeInTheDocument()
+  })
+
   it('calls escape handler only while enabled', async () => {
     const user = userEvent.setup()
     const calls: string[] = []

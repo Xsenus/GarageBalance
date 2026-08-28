@@ -1,4 +1,20 @@
 import { useEffect, useRef } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
+
+export function useCloseOnOutsidePointer<TElement extends HTMLElement>(enabled: boolean, setOpen: Dispatch<SetStateAction<boolean>>) {
+  const ref = useRef<TElement | null>(null)
+
+  useEffect(() => {
+    if (!enabled) return
+    const closeOnOutsidePointer = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', closeOnOutsidePointer, true)
+    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
+  }, [enabled, setOpen])
+
+  return ref
+}
 
 export function useEscapeKey(enabled: boolean, onEscape: () => void) {
   useEffect(() => {

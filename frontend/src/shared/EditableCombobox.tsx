@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 
 import type { SelectControlOption } from './SelectControl'
 import { editableComboboxValuesMatch, findEditableComboboxMatch } from './editableComboboxMatching'
+import { useCloseOnOutsidePointer } from './focusHooks'
 
 export function EditableCombobox({
   'aria-label': ariaLabel,
@@ -23,20 +24,11 @@ export function EditableCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
-  const rootRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const listboxId = useId()
   const optionIds = options.map((_, index) => `${listboxId}-option-${index}`)
   const effectiveOpen = open && !disabled && options.length > 0
-
-  useEffect(() => {
-    if (!effectiveOpen) return
-    const closeOnOutsidePointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', closeOnOutsidePointer, true)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
-  }, [effectiveOpen])
+  const rootRef = useCloseOnOutsidePointer<HTMLDivElement>(effectiveOpen, setOpen)
 
   useEffect(() => {
     if (!effectiveOpen || activeIndex < 0) return

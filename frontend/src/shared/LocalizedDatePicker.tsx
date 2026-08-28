@@ -1,5 +1,6 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCloseOnOutsidePointer } from './focusHooks'
 
 const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const weekDayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -28,7 +29,6 @@ export function LocalizedDatePicker({
     draft: formatLocalizedValue(value, mode),
     viewDate: parseIsoValue(value, mode) ?? new Date(),
   }))
-  const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const sourceChanged = pickerState.sourceValue !== value || pickerState.sourceMode !== mode
   const synchronizedState = sourceChanged
@@ -44,15 +44,7 @@ export function LocalizedDatePicker({
   const effectiveOpen = open && !disabled
   const expectedDraftLength = mode === 'date' ? 10 : 7
   const draftIsInvalid = draft.length >= expectedDraftLength && parseLocalizedValue(draft, mode) === null
-
-  useEffect(() => {
-    if (!effectiveOpen) return
-    const closeOnOutsidePointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', closeOnOutsidePointer, true)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
-  }, [effectiveOpen])
+  const rootRef = useCloseOnOutsidePointer<HTMLDivElement>(effectiveOpen, setOpen)
 
   useEffect(() => {
     if (!effectiveOpen) return

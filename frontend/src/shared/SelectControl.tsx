@@ -1,6 +1,7 @@
 import { Check, ChevronDown } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { useCloseOnOutsidePointer } from './focusHooks'
 
 export type SelectControlOption = {
   value: string
@@ -28,7 +29,6 @@ export function SelectControl({
 }) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
-  const rootRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const typeaheadRef = useRef('')
   const typeaheadTimerRef = useRef<number | null>(null)
@@ -42,15 +42,7 @@ export function SelectControl({
   const listStyle = visibleOptionCount === null
     ? undefined
     : { '--select-control-visible-options': visibleOptionCount } as CSSProperties
-
-  useEffect(() => {
-    if (!effectiveOpen) return
-    const closeOnOutsidePointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', closeOnOutsidePointer, true)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
-  }, [effectiveOpen])
+  const rootRef = useCloseOnOutsidePointer<HTMLDivElement>(effectiveOpen, setOpen)
 
   useEffect(() => {
     if (!effectiveOpen) return
