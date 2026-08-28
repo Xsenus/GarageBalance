@@ -103,9 +103,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     }
   }, [appliedSearch, auth.accessToken, pageSize, userClient])
 
-  async function refreshUsers(requestedOffset = offset) {
+  async function refreshUsers(requestedOffset = offset, background = false) {
     const { controller, promise } = beginUsersPageRequest(requestedOffset)
-    setLoading(true)
+    if (!background) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const loadedPage = await promise
@@ -119,11 +121,15 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     } finally {
       if (usersPageControllerRef.current === controller) {
         usersPageControllerRef.current = null
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !background) {
           setLoading(false)
         }
       }
     }
+  }
+
+  function refreshUsersAfterMutation(requestedOffset = offset) {
+    void refreshUsers(requestedOffset, true)
   }
 
   useEffect(() => {
@@ -257,7 +263,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
       closeEditor()
       if (offset === 0) {
-        await refreshUsers(0)
+        refreshUsersAfterMutation(0)
       } else {
         setOffset(0)
       }
@@ -276,7 +282,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     try {
       await userClient.updateUser(auth.accessToken, user.id, request)
       closeEditor()
-      await refreshUsers()
+      refreshUsersAfterMutation()
       showToast(user.isActive && !request.isActive ? 'Пользователь отключен.' : 'Пользователь изменен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
@@ -345,7 +351,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         deactivationReason: reason,
       })
       closeDeleteDialog()
-      await refreshUsers()
+      refreshUsersAfterMutation()
       showToast('Пользователь отключен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось отключить пользователя.'
@@ -365,7 +371,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     try {
       await userClient.restoreUser(auth.accessToken, restoreTarget.id)
       closeRestoreDialog()
-      await refreshUsers()
+      refreshUsersAfterMutation()
       showToast('Пользователь восстановлен.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось восстановить пользователя.')
@@ -439,7 +445,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleEditor.role.code, { permissions: roleEditor.permissions })
       setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
       closeRoleEditor()
-      await refreshUsers()
+      refreshUsersAfterMutation()
       showToast('Права роли изменены.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить права роли.'

@@ -349,6 +349,18 @@ describe('App', () => {
   it('edits role permissions directly and skips unchanged saves', async () => {
     const user = userEvent.setup()
     let roles = createRoles()
+    const baseUserClient = createUserClient()
+    let releaseRoleRefresh!: () => void
+    const roleRefreshGate = new Promise<void>((resolve) => { releaseRoleRefresh = resolve })
+    let markRoleRefreshStarted!: () => void
+    const roleRefreshStarted = new Promise<void>((resolve) => { markRoleRefreshStarted = resolve })
+    const getUsersPage = vi.fn(async (...args: Parameters<UserManagementClient['getUsersPage']>) => {
+      if (getUsersPage.mock.calls.length > 1) {
+        markRoleRefreshStarted()
+        await roleRefreshGate
+      }
+      return baseUserClient.getUsersPage(...args)
+    })
     let updateAttempt = 0
     let rejectRoleUpdate: ((reason?: unknown) => void) | undefined
     const updateRolePermissions = vi.fn(async (_token: string, roleCode: string, request: { permissions: string[] }) => {
@@ -370,6 +382,7 @@ describe('App', () => {
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({
       getRoles: async () => roles,
+      getUsersPage,
       updateRolePermissions,
     })} />)
 
@@ -410,8 +423,12 @@ describe('App', () => {
     })))
     expect(updateRolePermissions).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменение прав роли' })).not.toBeInTheDocument()
+    await roleRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить права роли' })).not.toBeInTheDocument())
     await waitFor(() => expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - разрешено' })).toHaveTextContent('Да'))
+    expect((await screen.findByText('Права роли изменены.')).closest('[role="status"]')).toBeInTheDocument()
+    expect(within(usersPanel).getByRole('table', { name: 'Список пользователей' })).toBeInTheDocument()
+    await act(async () => releaseRoleRefresh())
   })
 
   it('cancels a pending role request when leaving user management', async () => {
@@ -13989,7 +14006,19 @@ describe('App', () => {
 
   it('adds managed user from protected workspace', async () => {
     const user = userEvent.setup()
-    const userClient = createStatefulUserClient()
+    const statefulUserClient = createStatefulUserClient()
+    let releaseRefresh!: () => void
+    const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve })
+    let markRefreshStarted!: () => void
+    const refreshStarted = new Promise<void>((resolve) => { markRefreshStarted = resolve })
+    const getUsersPage = vi.fn(async (...args: Parameters<UserManagementClient['getUsersPage']>) => {
+      if (getUsersPage.mock.calls.length > 1) {
+        markRefreshStarted()
+        await refreshGate
+      }
+      return statefulUserClient.getUsersPage(...args)
+    })
+    const userClient = { ...statefulUserClient, getUsersPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -14015,12 +14044,80 @@ describe('App', () => {
     await user.click(within(dialog).getByRole('checkbox', { name: 'Роль пользователя: Просмотр отчетов' }))
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
+    await refreshStarted
+    expect(screen.queryByRole('dialog', { name: 'Новый пользователь' })).not.toBeInTheDocument()
+    expect((await screen.findByText('Пользователь добавлен.')).closest('[role="status"]')).toBeInTheDocument()
+    expect(addUserButton).toBeEnabled()
+    expect(within(usersPanel).getByRole('table', { name: 'Список пользователей' })).toBeInTheDocument()
+    await act(async () => releaseRefresh())
     expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
     expect(within(usersPanel).getByText('operator@example.com')).toBeInTheDocument()
     expect(within(usersPanel).getByText('Оператор, Просмотр отчетов')).toBeInTheDocument()
     expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
-    expect((await screen.findByText('Пользователь добавлен.')).closest('[role="status"]')).toBeInTheDocument()
     await waitFor(() => expect(addUserButton).toHaveFocus())
+  })
+
+  it('keeps a created user form closed and reports a background list failure', async () => {
+    const user = userEvent.setup()
+    const statefulUserClient = createStatefulUserClient()
+    const getUsersPage = vi.fn()
+      .mockImplementationOnce(statefulUserClient.getUsersPage)
+      .mockRejectedValueOnce(new Error('Список пользователей не обновился после сохранения.'))
+    const userClient = { ...statefulUserClient, getUsersPage }
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'background@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Фоновый оператор')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый пользователь' })).not.toBeInTheDocument())
+    expect((await screen.findByText('Пользователь добавлен.')).closest('[role="status"]')).toBeInTheDocument()
+    expect(await within(usersPanel).findByText('Список пользователей не обновился после сохранения.')).toBeInTheDocument()
+    expect(within(usersPanel).getByRole('table', { name: 'Список пользователей' })).toBeInTheDocument()
+    expect(getUsersPage).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels the background user refresh when leaving after creation', async () => {
+    const user = userEvent.setup()
+    const statefulUserClient = createStatefulUserClient()
+    let refreshSignal: AbortSignal | undefined
+    const getUsersPage = vi.fn((...args: Parameters<UserManagementClient['getUsersPage']>) => {
+      if (getUsersPage.mock.calls.length === 1) {
+        return statefulUserClient.getUsersPage(...args)
+      }
+
+      refreshSignal = args[4]
+      return new Promise<Awaited<ReturnType<UserManagementClient['getUsersPage']>>>(() => undefined)
+    })
+    const userClient = { ...statefulUserClient, getUsersPage }
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'cancel-refresh@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор отмены')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(refreshSignal).toBeInstanceOf(AbortSignal))
+    expect(screen.queryByRole('dialog', { name: 'Новый пользователь' })).not.toBeInTheDocument()
+    expect((await screen.findByText('Пользователь добавлен.')).closest('[role="status"]')).toBeInTheDocument()
+    await openSection(user, 'Контрагенты')
+    expect(refreshSignal?.aborted).toBe(true)
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
   })
 
   it('does not call user API when managed user password violates policy', async () => {
@@ -14120,8 +14217,15 @@ describe('App', () => {
     const user = userEvent.setup()
     const statefulUserClient = createStatefulUserClient()
     let deactivationReason: string | null = null
-    let releaseDeactivationRefresh: (() => void) | undefined
-    let deactivationRefresh: Promise<void> | null = null
+    let pendingUserRefresh: { started: () => void; wait: Promise<void> } | null = null
+    function blockNextUserRefresh() {
+      let started!: () => void
+      const startedPromise = new Promise<void>((resolve) => { started = resolve })
+      let release!: () => void
+      const wait = new Promise<void>((resolve) => { release = resolve })
+      pendingUserRefresh = { started, wait }
+      return { started: startedPromise, release }
+    }
     let updateCalls = 0
     let failNextOrdinaryUpdate = true
     let rejectOrdinaryUpdate: ((reason?: unknown) => void) | undefined
@@ -14135,10 +14239,11 @@ describe('App', () => {
     const userClient: UserManagementClient = {
       ...statefulUserClient,
       getUsersPage: async (...args) => {
-        if (deactivationRefresh) {
-          const pendingRefresh = deactivationRefresh
-          deactivationRefresh = null
-          await pendingRefresh
+        const pendingRefresh = pendingUserRefresh
+        if (pendingRefresh) {
+          pendingUserRefresh = null
+          pendingRefresh.started()
+          await pendingRefresh.wait
         }
 
         return statefulUserClient.getUsersPage(...args)
@@ -14170,9 +14275,6 @@ describe('App', () => {
 
         if (!request.isActive) {
           deactivationReason = request.deactivationReason ?? null
-          deactivationRefresh = new Promise((resolve) => {
-            releaseDeactivationRefresh = resolve
-          })
         }
 
         return statefulUserClient.updateUser(...args)
@@ -14238,14 +14340,18 @@ describe('App', () => {
     expect(screen.getAllByText('Не удалось сохранить пользователя.')).toHaveLength(1)
     expect(within(editDialog).getByLabelText('Имя пользователя')).toHaveValue('Старший оператор')
     expect(updateCalls).toBe(1)
+    const editRefresh = blockNextUserRefresh()
     await user.click(editSaveButton)
 
-    expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
+    await editRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Изменить пользователя' })).not.toBeInTheDocument()
+    expect((await screen.findByText('Пользователь изменен.')).closest('[role="status"]')).toBeInTheDocument()
     expect(updateCalls).toBe(2)
     expect(lastUpdateRequest?.newPassword).toBeNull()
     expect(lastUpdateRequest?.version).toBe('user-version')
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
-    expect((await screen.findByText('Пользователь изменен.')).closest('[role="status"]')).toBeInTheDocument()
+    await act(async () => editRefresh.release())
+    expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
     await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
@@ -14287,17 +14393,15 @@ describe('App', () => {
     await act(async () => rejectDelete?.(new Error('Не удалось отключить пользователя.')))
     expect(await within(reopenedDeleteDialog).findByRole('alert')).toHaveTextContent('Не удалось отключить пользователя.')
     expect(reopenedDeleteReasonInput).toHaveValue('Access no longer needed')
+    const deleteRefresh = blockNextUserRefresh()
     await user.click(reopenedDeleteButton)
-    await waitFor(() => expect(releaseDeactivationRefresh).toBeDefined())
-    expect(screen.queryByText('Пользователь отключен.')).not.toBeInTheDocument()
-    await act(async () => {
-      releaseDeactivationRefresh?.()
-      await Promise.resolve()
-    })
+    await deleteRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Удалить пользователя' })).not.toBeInTheDocument()
+    expect((await screen.findByText('Пользователь отключен.')).closest('[role="status"]')).toBeInTheDocument()
+    await act(async () => deleteRefresh.release())
 
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
     expect(deactivationReason).toBe('Access no longer needed')
-    expect((await screen.findByText('Пользователь отключен.')).closest('[role="status"]')).toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
     await user.click(await screen.findByRole('menuitem', { name: 'Вернуть' }))
@@ -14322,8 +14426,12 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'Вернуть пользователя?' })).toBeInTheDocument()
     await act(async () => rejectRestore?.(new Error('Не удалось восстановить пользователя.')))
     expect(await within(restoreDialog).findByRole('alert')).toHaveTextContent('Не удалось восстановить пользователя.')
+    const restoreRefresh = blockNextUserRefresh()
     await user.click(restoreConfirmButton)
+    await restoreRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Вернуть пользователя?' })).not.toBeInTheDocument()
     expect((await screen.findByText('Пользователь восстановлен.')).closest('[role="status"]')).toBeInTheDocument()
+    await act(async () => restoreRefresh.release())
     expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
@@ -14356,12 +14464,13 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'Отключить пользователя?' })).toBeInTheDocument()
     await act(async () => rejectDeactivation?.(new Error('Не удалось отключить пользователя из редактора.')))
     expect(await within(reopenedDeactivationConfirmation).findByRole('alert')).toHaveTextContent('Не удалось отключить пользователя из редактора.')
+    const deactivationRefresh = blockNextUserRefresh()
     await user.click(confirmDeactivationButton)
     await waitFor(() => expect(updateCalls).toBe(6))
-    await act(async () => {
-      releaseDeactivationRefresh?.()
-      await Promise.resolve()
-    })
+    await deactivationRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Отключить пользователя?' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Изменить пользователя' })).not.toBeInTheDocument()
+    await act(async () => deactivationRefresh.release())
 
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
     expect(deactivationReason).toBe('Доступ прекращен')
