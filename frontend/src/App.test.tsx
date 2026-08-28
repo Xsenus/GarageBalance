@@ -15484,6 +15484,34 @@ describe('App', () => {
     await waitFor(() => expect(incomeGarageId).toBe(foundGarage.id))
   })
 
+  it('cancels a pending income garage search when leaving payments', async () => {
+    const user = userEvent.setup()
+    let searchSignal: AbortSignal | undefined
+    const defaultGarage = createGarage({ id: 'garage-search-default', number: '12' })
+    const dictionaryClient = createDictionaryClient({
+      getGarages: (_token, search, _limit, _includeArchived, signal) => {
+        if (search === 'Петров') {
+          searchSignal = signal
+          return new Promise<GarageDto[]>(() => undefined)
+        }
+        return Promise.resolve([defaultGarage])
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.type(within(financePanel).getByLabelText('Поиск гаража для поступления'), 'Петров')
+    await user.click(within(financePanel).getByRole('button', { name: 'Найти гараж для поступления' }))
+    await waitFor(() => expect(searchSignal).toBeDefined())
+
+    await openSection(user, 'Отчеты')
+
+    expect(searchSignal?.aborted).toBe(true)
+  })
+
   it('edits income operation from payments table', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()

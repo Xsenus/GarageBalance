@@ -373,10 +373,9 @@ export function FinancePanel({
   const financeReferenceBundlePromiseRef = useRef<Promise<void> | null>(null)
   const financeReferenceBundleLoadedRef = useRef(false)
   const financeReferenceBundleGenerationRef = useRef(0)
-  const financeReferenceBundleControllerRef = useRef<AbortController | null>(null)
+  const financeReferencesControllerRef = useRef<AbortController | null>(null)
   const financeGarageReferencesPromiseRef = useRef<Promise<GarageDto[] | undefined> | null>(null)
   const financeGarageReferencesRef = useRef<GarageDto[] | null>(null)
-  const financeGarageReferencesControllerRef = useRef<AbortController | null>(null)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const [paymentsPrototypeRefreshRevision, setPaymentsPrototypeRefreshRevision] = useState(0)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -545,8 +544,7 @@ export function FinancePanel({
 
     if (!financeReferenceBundlePromiseRef.current) {
       const generation = financeReferenceBundleGenerationRef.current
-      const controller = new AbortController()
-      financeReferenceBundleControllerRef.current = controller
+      const controller = financeReferencesControllerRef.current!
       setFinanceReferenceLoading((value) => value | 1)
       setError(null)
       financeReferenceBundlePromiseRef.current = Promise.all([
@@ -601,7 +599,7 @@ export function FinancePanel({
     }
 
     const request = financeReferenceBundlePromiseRef.current
-    const requestController = financeReferenceBundleControllerRef.current
+    const requestController = financeReferencesControllerRef.current
     try {
       await request
       return financeReferenceBundleLoadedRef.current
@@ -613,7 +611,6 @@ export function FinancePanel({
     } finally {
       if (request === financeReferenceBundlePromiseRef.current) {
         financeReferenceBundlePromiseRef.current = null
-        financeReferenceBundleControllerRef.current = null
         if (!requestController?.signal.aborted) {
           setFinanceReferenceLoading((value) => value & ~1)
         }
@@ -629,8 +626,7 @@ export function FinancePanel({
       return financeGarageReferencesPromiseRef.current
     }
 
-    const controller = new AbortController()
-    financeGarageReferencesControllerRef.current = controller
+    const controller = financeReferencesControllerRef.current!
     setFinanceReferenceLoading((value) => value | 2)
     setError(null)
     const request = (async () => {
@@ -671,11 +667,10 @@ export function FinancePanel({
   useEffect(() => {
     financeReferenceBundleGenerationRef.current += 1
     const referenceBundleGeneration = financeReferenceBundleGenerationRef.current
-    financeReferenceBundleControllerRef.current?.abort()
-    financeReferenceBundleControllerRef.current = null
+    financeReferencesControllerRef.current?.abort()
+    financeReferencesControllerRef.current = new AbortController()
     financeReferenceBundleLoadedRef.current = false
     financeReferenceBundlePromiseRef.current = null
-    financeGarageReferencesControllerRef.current?.abort()
     financeGarageReferencesRef.current = null
     financeGarageReferencesPromiseRef.current = null
     queueMicrotask(() => {
@@ -688,8 +683,7 @@ export function FinancePanel({
     })
     return () => {
       financeReferenceBundleGenerationRef.current += 1
-      financeReferenceBundleControllerRef.current?.abort()
-      financeGarageReferencesControllerRef.current?.abort()
+      financeReferencesControllerRef.current?.abort()
     }
   }, [auth.accessToken, dictionaryClient])
 
@@ -828,8 +822,7 @@ export function FinancePanel({
           }
         })
       }
-      void missingMeterReadingsPromise.catch(() => undefined)
-      void summaryPromise.catch(() => undefined)
+      const secondaryResults = Promise.allSettled([missingMeterReadingsPromise, summaryPromise])
       const activePage = await activePagePromise
 
       if (!financeWorkbenchRequests.isLatest(requestId)) {
@@ -852,7 +845,7 @@ export function FinancePanel({
       }
       setWorkbenchLoading(false)
 
-      const [missingMeterReadingsResult, summaryResult] = await Promise.allSettled([missingMeterReadingsPromise, summaryPromise])
+      const [missingMeterReadingsResult, summaryResult] = await secondaryResults
       if (!financeWorkbenchRequests.isLatest(requestId)) {
         return
       }
@@ -904,7 +897,9 @@ export function FinancePanel({
   async function searchIncomeGarages() {
     const query = incomeGarageSearch.trim()
     await runSaving('income-garage-search', async () => {
-      const foundGarages = await dictionaryClient.getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit)
+      const controller = financeReferencesControllerRef.current!
+      const foundGarages = await dictionaryClient.getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit, false, controller.signal)
+      if (controller.signal.aborted) return
       setIncomeGarageOptions(foundGarages)
       setIncomeForm((value) => ({
         ...value,
