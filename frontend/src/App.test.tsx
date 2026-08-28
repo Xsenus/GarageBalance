@@ -15760,7 +15760,32 @@ describe('App', () => {
 
   it('creates income and expense operations from payments workspace', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockedOperationKind: 'income' | 'expense' | null = null
+    let releasePageRequest: (() => void) | null = null
+    let blockedPageRequestStarted: Promise<void> | null = null
+    let resolveBlockedPageRequestStarted: (() => void) | null = null
+    const holdNextPageRequest = (operationKind: 'income' | 'expense') => {
+      blockedOperationKind = operationKind
+      blockedPageRequestStarted = new Promise<void>((resolve) => { resolveBlockedPageRequestStarted = resolve })
+    }
+    const getOperationsPage = vi.fn(async (...args: Parameters<FinanceClient['getOperationsPage']>) => {
+      const operationKind = args[1]?.operationKind
+      if (blockedOperationKind === operationKind) {
+        resolveBlockedPageRequestStarted?.()
+        await new Promise<void>((resolve) => { releasePageRequest = resolve })
+        blockedOperationKind = null
+      }
+      return statefulFinanceClient.getOperationsPage(...args)
+    })
+    const releaseBlockedPageRequest = async () => {
+      releasePageRequest?.()
+      await Promise.resolve()
+      releasePageRequest = null
+      blockedPageRequestStarted = null
+      resolveBlockedPageRequestStarted = null
+    }
+    const financeClient = { ...statefulFinanceClient, getOperationsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -15768,21 +15793,37 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
-    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '2000')
+    const incomeAmount = within(financePanel).getByLabelText('Сумма поступления')
+    await user.clear(incomeAmount)
+    await user.type(incomeAmount, '2000')
     await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-1')
     await user.type(within(financePanel).getByLabelText('Комментарий поступления'), 'Оплата за июнь')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+    const createIncomeButton = within(financePanel).getAllByRole('button', { name: 'Провести' })[0]
+    holdNextPageRequest('income')
+    await user.click(createIncomeButton)
+
+    await blockedPageRequestStarted
+    expect(incomeAmount).toHaveValue('0.00')
+    expect(createIncomeButton).toBeEnabled()
+    await act(releaseBlockedPageRequest)
 
     expect(await within(financePanel).findByText('+2 000.00')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('2 000.00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('Оплата за июнь')).toBeInTheDocument()
 
-    await user.clear(within(financePanel).getByLabelText('Сумма выплаты'))
-    await user.type(within(financePanel).getByLabelText('Сумма выплаты'), '500')
+    const expenseAmount = within(financePanel).getByLabelText('Сумма выплаты')
+    await user.clear(expenseAmount)
+    await user.type(expenseAmount, '500')
     await user.type(within(financePanel).getByLabelText('Документ выплаты'), 'RKO-1')
     await user.type(within(financePanel).getByLabelText('Комментарий выплаты'), 'Оплата счета поставщика')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
+    const createExpenseButton = within(financePanel).getAllByRole('button', { name: 'Провести' })[1]
+    holdNextPageRequest('expense')
+    await user.click(createExpenseButton)
+
+    await blockedPageRequestStarted
+    expect(expenseAmount).toHaveValue('0.00')
+    expect(createExpenseButton).toBeEnabled()
+    await act(releaseBlockedPageRequest)
 
     expect(await within(financePanel).findByText('-500.00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 500.00')).toBeInTheDocument()
@@ -15969,7 +16010,21 @@ describe('App', () => {
 
   it('edits income operation from payments table', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockEditedIncomeRefresh = false
+    let resolveEditedIncomeRefreshStarted!: () => void
+    const editedIncomeRefreshStarted = new Promise<void>((resolve) => { resolveEditedIncomeRefreshStarted = resolve })
+    let releaseEditedIncomeRefresh!: () => void
+    const editedIncomeRefresh = new Promise<void>((resolve) => { releaseEditedIncomeRefresh = resolve })
+    const getOperationsPage = vi.fn(async (...args: Parameters<FinanceClient['getOperationsPage']>) => {
+      if (blockEditedIncomeRefresh && args[1]?.operationKind === 'income') {
+        resolveEditedIncomeRefreshStarted()
+        await editedIncomeRefresh
+        blockEditedIncomeRefresh = false
+      }
+      return statefulFinanceClient.getOperationsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getOperationsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -16010,9 +16065,13 @@ describe('App', () => {
     paymentChangeDialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
     await user.click(within(paymentChangeDialog).getByRole('button', { name: 'Сохранить' }))
     paymentChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    blockEditedIncomeRefresh = true
     await user.click(within(paymentChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
+    await editedIncomeRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument())
+    releaseEditedIncomeRefresh()
+    await editedIncomeRefresh
     expect(await within(financePanel).findByText('PKO-fixed')).toBeInTheDocument()
     expect(within(financePanel).getByText('После сверки')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('2 400.00').length).toBeGreaterThan(0)
@@ -16021,7 +16080,21 @@ describe('App', () => {
 
   it('edits expense operation from payments table with confirmation', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockEditedExpenseRefresh = false
+    let resolveEditedExpenseRefreshStarted!: () => void
+    const editedExpenseRefreshStarted = new Promise<void>((resolve) => { resolveEditedExpenseRefreshStarted = resolve })
+    let releaseEditedExpenseRefresh!: () => void
+    const editedExpenseRefresh = new Promise<void>((resolve) => { releaseEditedExpenseRefresh = resolve })
+    const getOperationsPage = vi.fn(async (...args: Parameters<FinanceClient['getOperationsPage']>) => {
+      if (blockEditedExpenseRefresh && args[1]?.operationKind === 'expense') {
+        resolveEditedExpenseRefreshStarted()
+        await editedExpenseRefresh
+        blockEditedExpenseRefresh = false
+      }
+      return statefulFinanceClient.getOperationsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getOperationsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -16073,9 +16146,13 @@ describe('App', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     expenseChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    blockEditedExpenseRefresh = true
     await user.click(within(expenseChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
+    await editedExpenseRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+    releaseEditedExpenseRefresh()
+    await editedExpenseRefresh
     expect(await within(financePanel).findByText('RKO-fixed')).toBeInTheDocument()
     expect(within(financePanel).getByText('После сверки выплаты')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('950.00').length).toBeGreaterThan(0)

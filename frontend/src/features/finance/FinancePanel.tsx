@@ -883,6 +883,10 @@ export function FinancePanel({
     }
   }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financeWorkbenchRequests, meterForm.accountingMonth])
 
+  function refreshFinanceWorkbenchAfterSave(section: FinanceSectionKey) {
+    void loadFinanceWorkbench(section, financePage.offset, financePage.limit, true)
+  }
+
   useEffect(() => {
     if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
       financeWorkbenchControllerRef.current?.abort()
@@ -1067,12 +1071,12 @@ export function FinancePanel({
     const saved = await runSaving(pending.kind, async () => {
       if (pending.kind === 'income') {
         await financeClient.updateIncome(auth.accessToken, pending.recordId, pending.request as CreateIncomeOperationRequest)
-        await loadFinanceWorkbench('income', financePage.offset, financePage.limit, true)
         setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+        refreshFinanceWorkbenchAfterSave('income')
       } else if (pending.kind === 'expense') {
         await financeClient.updateExpense(auth.accessToken, pending.recordId, pending.request as CreateExpenseOperationRequest)
-        await loadFinanceWorkbench('expense', financePage.offset, financePage.limit, true)
         setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+        refreshFinanceWorkbenchAfterSave('expense')
       } else if (pending.kind === 'accrual') {
         await financeClient.updateAccrual(auth.accessToken, pending.recordId, pending.request as CreateAccrualRequest)
         await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit, true)
@@ -1132,8 +1136,8 @@ export function FinancePanel({
 
     const saved = await runSaving('income', async () => {
       await financeClient.createIncome(auth.accessToken, request)
-      await loadFinanceWorkbench('income', financePage.offset, financePage.limit, true)
       setIncomeForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      refreshFinanceWorkbenchAfterSave('income')
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
@@ -1186,8 +1190,8 @@ export function FinancePanel({
 
     const saved = await runSaving('expense', async () => {
       await financeClient.createExpense(auth.accessToken, request)
-      await loadFinanceWorkbench('expense', financePage.offset, financePage.limit, true)
       setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      refreshFinanceWorkbenchAfterSave('expense')
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
