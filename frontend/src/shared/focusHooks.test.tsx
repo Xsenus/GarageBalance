@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
@@ -51,6 +51,14 @@ describe('focus shared hooks', () => {
     expect(screen.getByText('Открыто')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Снаружи' }))
+    expect(screen.getByText('Закрыто')).toBeInTheDocument()
+  })
+
+  it('closes on pointer input before a compatibility mouse event is emitted', () => {
+    render(<OutsidePointerProbe />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Снаружи' }))
+
     expect(screen.getByText('Закрыто')).toBeInTheDocument()
   })
 

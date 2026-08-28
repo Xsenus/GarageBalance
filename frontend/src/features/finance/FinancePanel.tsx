@@ -17,7 +17,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -2865,7 +2865,7 @@ function PaymentsPrototypePanel({
   const [garageSearchLoading, setGarageSearchLoading] = useState(false)
   const [garageSearchError, setGarageSearchError] = useState<string | null>(null)
   const [garageSearchOpen, setGarageSearchOpen] = useState(false)
-  const garageSearchWrapRef = useRef<HTMLDivElement | null>(null)
+  const garageSearchWrapRef = useCloseOnOutsidePointer<HTMLDivElement>(garageSearchOpen, setGarageSearchOpen)
   const garageSearchRequestSequenceRef = useRef(0)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
@@ -3079,21 +3079,6 @@ function PaymentsPrototypePanel({
       controller.abort()
     }
   }, [auth.accessToken, financeClient, overdueDebtRefresh, selectedGarageId, selectedGarageOverdueDebt])
-
-  useEffect(() => {
-    if (!garageSearchOpen) {
-      return undefined
-    }
-
-    const closeGarageSearchOnOutsidePointer = (event: PointerEvent) => {
-      if (!garageSearchWrapRef.current?.contains(event.target as Node)) {
-        setGarageSearchOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
-    return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
-  }, [garageSearchOpen])
 
   useEffect(() => {
     if (activeTab !== 'expense') {

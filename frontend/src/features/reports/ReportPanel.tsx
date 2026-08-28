@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { FileSpreadsheet, FileText, ListPlus, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -7,7 +7,7 @@ import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto,
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
+import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
 import { formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
@@ -92,9 +92,9 @@ function ReportCheckboxMultiSelect({
   const searchId = useId()
   const listId = useId()
   const statusId = useId()
-  const wrapRef = useRef<HTMLDivElement | null>(null)
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const wrapRef = useCloseOnOutsidePointer<HTMLDivElement>(searchOpen, setSearchOpen)
   const [remoteOptions, setRemoteOptions] = useState<ReportFilterOption[]>([])
   const [remoteLoading, setRemoteLoading] = useState(false)
   const [remoteError, setRemoteError] = useState<string | null>(null)
@@ -107,17 +107,6 @@ function ReportCheckboxMultiSelect({
     .map((value) => availableOptions.find((option) => option.value === value))
     .filter((option): option is ReportFilterOption => Boolean(option))
   const shouldShowResults = searchOpen && (openOnFocus || normalizedSearch.length > 0)
-
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
-        setSearchOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [])
 
   useEffect(() => {
     if (!loadOptions || !searchOpen || (!openOnFocus && normalizedSearch.length === 0)) {

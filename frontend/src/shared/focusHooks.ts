@@ -6,11 +6,11 @@ export function useCloseOnOutsidePointer<TElement extends HTMLElement>(enabled: 
 
   useEffect(() => {
     if (!enabled) return
-    const closeOnOutsidePointer = (event: MouseEvent) => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!ref.current?.contains(event.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', closeOnOutsidePointer, true)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer, true)
   }, [enabled, setOpen])
 
   return ref
