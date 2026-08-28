@@ -2048,14 +2048,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       } else if (restoreTarget.type === 'supplier') {
         if (isBackendDictionaryId(restoreTarget.item.id)) {
           const restoredSupplier = await dictionaryClient.restoreSupplier(auth.accessToken, restoreTarget.item.id)
-          const restoredContacts = await dictionaryClient.getSupplierContacts(auth.accessToken, restoredSupplier.id, undefined, contractorsDictionaryListLimit, true)
-          const nextSupplierContacts = [
-            ...supplierContactsRef.current.filter((contact) => contact.supplierId !== restoredSupplier.id),
-            ...restoredContacts,
-          ]
-          supplierContactsRef.current = nextSupplierContacts
-          loadedSupplierContactsRef.current.add(restoredSupplier.id)
-          setSupplierContacts(nextSupplierContacts)
+          const restoredContacts = supplierContactsRef.current.filter((contact) => contact.supplierId === restoredSupplier.id)
           const nextSupplier = createSupplierRowFromDto(restoredSupplier, restoredContacts)
           setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? nextSupplier : item)))
         } else {

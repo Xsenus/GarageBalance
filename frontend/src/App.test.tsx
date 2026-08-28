@@ -4673,6 +4673,66 @@ describe('App', () => {
     expect(getSupplierContacts).toHaveBeenCalledTimes(1)
   })
 
+  it('restores a supplier without loading contacts until its editor opens', async () => {
+    const user = userEvent.setup()
+    const group = createGroup({ id: 'group-restored-supplier-lazy-contacts', name: 'Коммунальные услуги' })
+    const archivedSupplier = createSupplier({
+      id: '22222222-2222-4222-8222-222222222227',
+      name: 'Поставщик с ленивыми контактами',
+      groupId: group.id,
+      groupName: group.name,
+      contactPerson: 'Петров Пётр Петрович',
+      isArchived: true,
+    })
+    const restoredSupplier = { ...archivedSupplier, isArchived: false }
+    let contactsSignal: AbortSignal | undefined
+    const getSupplierContacts = vi.fn((...args: Parameters<DictionaryClient['getSupplierContacts']>) => {
+      contactsSignal = args[5]
+      return new Promise<SupplierContactDto[]>(() => undefined)
+    })
+    const restoreSupplier = vi.fn(async () => restoredSupplier)
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [group],
+      getSuppliers: async () => [archivedSupplier],
+      getSupplierContacts,
+      restoreSupplier,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    const archivedRow = within(suppliersTable).getByText(archivedSupplier.name).closest('[role="row"]')
+    if (!archivedRow) {
+      throw new Error('Строка архивного поставщика не найдена.')
+    }
+
+    await user.click(within(archivedRow).getByRole('button', { name: `Восстановить поставщика ${archivedSupplier.name}` }))
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
+
+    await waitFor(() => expect(restoreSupplier).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть запись?' })).not.toBeInTheDocument())
+    expect(getSupplierContacts).not.toHaveBeenCalled()
+    const restoredRow = within(suppliersTable).getByText(restoredSupplier.name).closest('[role="row"]')
+    if (!restoredRow) {
+      throw new Error('Строка восстановленного поставщика не найдена.')
+    }
+    expect(within(restoredRow).queryByText('Удален')).not.toBeInTheDocument()
+
+    await user.click(within(restoredRow).getByRole('button', { name: `Изменить поставщика ${restoredSupplier.name}` }))
+    await waitFor(() => {
+      expect(getSupplierContacts).toHaveBeenCalledTimes(1)
+      expect(contactsSignal).toBeDefined()
+    })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Гаражи' }))
+    expect(contactsSignal?.aborted).toBe(true)
+  })
+
   it('cancels pending supplier-editor references when leaving the supplier tab', async () => {
     const user = userEvent.setup()
     const group = createGroup({ id: 'group-supplier-cancellation', name: 'Коммунальные услуги' })
