@@ -240,10 +240,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       loadFundsRequest(
         (signal) => fundsClient.getFunds(auth.accessToken, signal),
         'Сервер не ответил при загрузке фондов. Повторите загрузку.',
+        pageController.signal,
       ),
       loadFundsRequest(
         (signal) => getFundOperationsPage(fundsClient, auth.accessToken, currentPageNumber, operationPage.limit, signal),
         'Сервер не ответил при загрузке операций фондов. Повторите загрузку.',
+        pageController.signal,
       ),
     ])
     setRows(funds.map(mapFundDtoToPrototypeRow))

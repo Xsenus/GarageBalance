@@ -11755,6 +11755,90 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
   })
 
+  it('cancels both fund refresh requests when the user leaves after saving an operation', async () => {
+    const user = userEvent.setup()
+    const initialFunds = [createFund({ id: 'fund-target', name: 'Целевые взносы' })]
+    let fundRefreshSignal: AbortSignal | undefined
+    let operationRefreshSignal: AbortSignal | undefined
+    let resolveFundRefresh!: (funds: FundDto[]) => void
+    let resolveOperationRefresh!: (page: FundOperationPageDto) => void
+    let abortedRequestCount = 0
+    let resolveRefreshAbort!: () => void
+    const refreshAbort = new Promise<void>((resolve) => {
+      resolveRefreshAbort = resolve
+    })
+    function observeAbort(signal: AbortSignal | undefined, reject: (error: Error) => void) {
+      signal?.addEventListener('abort', () => {
+        reject(new Error('Отменённое обновление фондов не должно показывать ошибку.'))
+        abortedRequestCount += 1
+        if (abortedRequestCount === 2) {
+          queueMicrotask(resolveRefreshAbort)
+        }
+      }, { once: true })
+    }
+    const getFunds = vi.fn((_token: string, signal?: AbortSignal) => {
+      if (getFunds.mock.calls.length === 1) {
+        return Promise.resolve(initialFunds)
+      }
+
+      fundRefreshSignal = signal
+      return new Promise<FundDto[]>((resolve, reject) => {
+        resolveFundRefresh = resolve
+        observeAbort(signal, reject)
+      })
+    })
+    const getOperationsPage = vi.fn((_token: string, query?: { offset?: number; limit?: number }, signal?: AbortSignal) => {
+      const page = { items: [], totalCount: 0, offset: query?.offset ?? 0, limit: query?.limit ?? 25 }
+      if (getOperationsPage.mock.calls.length === 1) {
+        return Promise.resolve(page)
+      }
+
+      operationRefreshSignal = signal
+      return new Promise<FundOperationPageDto>((resolve, reject) => {
+        resolveOperationRefresh = resolve
+        observeAbort(signal, reject)
+      })
+    })
+    const fundsClient = createFundsClient({
+      getFunds,
+      getOperationsPage,
+      createOperation: async () => createFundOperation({ fundId: 'fund-target', fundName: 'Целевые взносы' }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Фонды')
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Пополнить фонд Целевые взносы' }))
+    const operationDialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
+    await user.type(within(operationDialog).getByLabelText('Сумма операции фонда'), '1500')
+    await user.type(within(operationDialog).getByLabelText('Комментарий к операции фонда'), 'Проверка отмены обновления')
+    await user.click(within(operationDialog).getByRole('button', { name: 'Подтвердить операцию' }))
+    await waitFor(() => {
+      expect(fundRefreshSignal).toBeInstanceOf(AbortSignal)
+      expect(operationRefreshSignal).toBeInstanceOf(AbortSignal)
+    })
+
+    await openSection(user, 'Контрагенты')
+
+    const bothAborted = Boolean(fundRefreshSignal?.aborted && operationRefreshSignal?.aborted)
+    if (!bothAborted) {
+      await act(async () => {
+        resolveFundRefresh(initialFunds)
+        resolveOperationRefresh({ items: [], totalCount: 0, offset: 0, limit: 25 })
+      })
+    } else {
+      await act(async () => {
+        await refreshAbort
+      })
+    }
+    expect(bothAborted).toBe(true)
+    expect(screen.queryByText('Отменённое обновление фондов не должно показывать ошибку.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
