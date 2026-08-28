@@ -6782,6 +6782,99 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('columnheader', { name: /Январьгал\./i })).toBeInTheDocument()
   })
 
+  it('keeps the confirmed meter reading page visible while the next page loads', async () => {
+    const user = userEvent.setup()
+    let resolveSecondPage!: (page: MeterReadingYearPageDto) => void
+    const secondPage = new Promise<MeterReadingYearPageDto>((resolve) => { resolveSecondPage = resolve })
+    let resolveWaterPage!: (page: MeterReadingYearPageDto) => void
+    const waterPage = new Promise<MeterReadingYearPageDto>((resolve) => { resolveWaterPage = resolve })
+    const getMeterReadingYearPage = vi.fn(async (_token, params) => {
+      if (params?.meterKind === 'water') {
+        return waterPage
+      }
+      if (params?.offset === 25) {
+        return secondPage
+      }
+
+      return {
+        garages: [{ id: 'garage-page-1', number: '101' }],
+        readings: [{ id: 'reading-page-1', garageId: 'garage-page-1', accountingMonth: '2026-06-01', currentValue: 100, version: 'reading-page-1-version' }],
+        totalCount: 30,
+        offset: 0,
+        limit: 25,
+      }
+    })
+    const electricityTariff = createTariff({ id: 'meter-page-electricity-tariff', calculationBase: 'meter_electricity' })
+    const waterTariff = createTariff({ id: 'meter-page-water-tariff', calculationBase: 'meter_water' })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getTariffs: async () => [electricityTariff, waterTariff],
+        getChargeServiceSettings: async () => [
+          createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity' }),
+          createChargeServiceSetting({ id: 'water-page-service', name: 'Вода', isRegular: true, isMetered: true, meterKind: 'water', tariffId: waterTariff.id, tariffCalculationBase: 'meter_water', unitName: 'м³' }),
+        ],
+      })}
+      financeClient={createFinanceClient({ getMeterReadingYearPage })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    const table = await within(readingsPanel).findByRole('table', { name: 'Показания счетчиков за 2026 год' })
+    const firstPageInput = await within(table).findByLabelText('Гараж 101, Июнь, показание')
+    const pagination = within(readingsPanel).getByRole('navigation', { name: 'Пагинация показаний' })
+    expect(pagination).toHaveTextContent('Показано 1-1 из 30')
+
+    await user.click(within(pagination).getByRole('button', { name: 'Следующая страница' }))
+    await waitFor(() => expect(getMeterReadingYearPage).toHaveBeenCalledTimes(2))
+
+    expect(table).toHaveAttribute('aria-busy', 'true')
+    expect(within(table).getByRole('status')).toHaveTextContent('Обновляем гаражи и показания')
+    expect(firstPageInput).toBeInTheDocument()
+    expect(firstPageInput).toBeDisabled()
+    expect(pagination).toHaveTextContent('Показано 1-1 из 30')
+    expect(within(pagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
+
+    resolveSecondPage({
+      garages: [{ id: 'garage-page-2', number: '126' }],
+      readings: [{ id: 'reading-page-2', garageId: 'garage-page-2', accountingMonth: '2026-06-01', currentValue: 200, version: 'reading-page-2-version' }],
+      totalCount: 30,
+      offset: 25,
+      limit: 25,
+    })
+
+    const secondPageInput = await within(table).findByLabelText('Гараж 126, Июнь, показание')
+    expect(table).toHaveAttribute('aria-busy', 'false')
+    expect(secondPageInput).toBeEnabled()
+    expect(within(table).queryByLabelText('Гараж 101, Июнь, показание')).not.toBeInTheDocument()
+    expect(pagination).toHaveTextContent('Показано 26-26 из 30')
+
+    const meterTypeSelect = within(readingsPanel).getByRole('combobox', { name: 'Тип показаний' })
+    await user.click(meterTypeSelect)
+    await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, м³' }))
+    await waitFor(() => expect(getMeterReadingYearPage).toHaveBeenCalledTimes(3))
+
+    expect(table).toHaveAttribute('aria-busy', 'true')
+    expect(within(table).getByText('Загружаем гаражи и показания')).toBeInTheDocument()
+    expect(within(table).queryByLabelText('Гараж 126, Июнь, показание')).not.toBeInTheDocument()
+    expect(pagination).not.toHaveTextContent('Показано 26-26 из 30')
+
+    resolveWaterPage({
+      garages: [{ id: 'garage-water', number: '201' }],
+      readings: [],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    })
+    expect(await within(table).findByLabelText('Гараж 201, Июнь, показание')).toBeEnabled()
+  })
+
   it('explains how to enable readings when there are no active metered services', async () => {
     const user = userEvent.setup()
     const getMeterReadingYearPage = vi.fn()
@@ -6853,10 +6946,20 @@ describe('App', () => {
 
   it('shows a meter configuration error without requesting an unrelated readings table', async () => {
     const user = userEvent.setup()
-    const getMeterReadingYearPage = vi.fn()
+    const electricityTariff = createTariff({ id: 'meter-configuration-retry-tariff', calculationBase: 'meter_electricity' })
+    const getChargeServiceSettings = vi.fn()
+      .mockRejectedValueOnce(new Error('Настройки счётчиков временно недоступны.'))
+      .mockResolvedValueOnce([createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity' })])
+    const getMeterReadingYearPage = vi.fn(async () => ({
+      garages: [{ id: 'garage-after-configuration-retry', number: '301' }],
+      readings: [],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
     render(<App
       authClient={createAuthClient()}
-      dictionaryClient={createDictionaryClient({ getChargeServiceSettings: async () => { throw new Error('Настройки счётчиков временно недоступны.') } })}
+      dictionaryClient={createDictionaryClient({ getChargeServiceSettings })}
       financeClient={createFinanceClient({ getMeterReadingYearPage })}
       importClient={createImportClient()}
       reportClient={createReportClient()}
@@ -6872,6 +6975,14 @@ describe('App', () => {
     expect(await within(readingsPanel).findByRole('alert')).toHaveTextContent('Настройки счётчиков временно недоступны.')
     expect(within(readingsPanel).queryByRole('table')).not.toBeInTheDocument()
     expect(getMeterReadingYearPage).not.toHaveBeenCalled()
+
+    const retryButton = within(readingsPanel).getByRole('button', { name: 'Повторить загрузку' })
+    expect(retryButton).toBeEnabled()
+    await user.click(retryButton)
+
+    expect(await within(readingsPanel).findByLabelText('Гараж 301, Июнь, показание')).toBeInTheDocument()
+    expect(getChargeServiceSettings).toHaveBeenCalledTimes(2)
+    expect(getMeterReadingYearPage).toHaveBeenCalledTimes(1)
   })
 
   it('shows a meter reading save error inside the confirmation dialog and allows retry', async () => {

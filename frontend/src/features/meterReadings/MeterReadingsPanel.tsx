@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import { LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
-import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -87,6 +87,7 @@ type MeterReadingsTableProps = {
   currentMonth: string
   draftReadings: Record<string, string>
   garages: MeterReadingYearGarageDto[]
+  hasLoadedPage: boolean
   loading: boolean
   meterType: MeterReadingTypeId
   onCommitReading: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
@@ -104,6 +105,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   currentMonth,
   draftReadings,
   garages,
+  hasLoadedPage,
   loading,
   meterType,
   onCommitReading,
@@ -116,7 +118,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
 }: MeterReadingsTableProps) {
   return (
     <div className="meter-readings-table-shell">
-      <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${appliedYear} год`}>
+      <div className="meter-readings-table" role="table" aria-label={`Показания счетчиков за ${appliedYear} год`} aria-busy={loading}>
         <div className="meter-readings-title-row" role="row">
           <span role="columnheader">Гараж</span>
           <span role="columnheader">Показания</span>
@@ -130,13 +132,15 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             </span>
           ))}
         </div>
-        {loading ? (
+        {loading && !hasLoadedPage ? (
           <div className="meter-readings-loading-row" role="row">
             <span role="cell">
               <TableLoadingState label="Загружаем гаражи и показания" />
             </span>
           </div>
-        ) : garages.length > 0 ? garages.map((garage) => (
+        ) : null}
+        {loading && hasLoadedPage ? <BackgroundRefreshStatus label="Обновляем гаражи и показания" /> : null}
+        {hasLoadedPage && garages.length > 0 ? garages.map((garage) => (
           <div className="meter-readings-data-row" role="row" key={garage.id}>
             <span role="rowheader">Гараж {garage.number}</span>
             {meterReadingMonths.map((month) => {
@@ -157,10 +161,10 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   ) : null}
                   <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
-                    disabled={!yearIsValid || (futureMonth && !canEditOutsideCurrentMonth) || savingReadingKey === cellKey}
+                    disabled={loading || !yearIsValid || (futureMonth && !canEditOutsideCurrentMonth) || savingReadingKey === cellKey}
                     value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                     onBlur={(event) => {
-                      if (shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
+                      if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
                     }}
                     onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
                     onKeyDown={(event) => handleEditableInputKeyDown(event, () => onCommitReading(garage, month))}
@@ -169,11 +173,12 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
               )
             })}
           </div>
-        )) : (
+        )) : null}
+        {!loading && hasLoadedPage && garages.length === 0 ? (
           <div className="meter-readings-empty-row" role="row">
             <span role="cell">В справочнике нет гаражей</span>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -187,6 +192,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [pageOffset, setPageOffset] = useState(0)
   const [pageSize, setPageSize] = useState(defaultMeterReadingPageSize)
   const [totalGarageCount, setTotalGarageCount] = useState(0)
+  const [confirmedPage, setConfirmedPage] = useState<[string, number, number] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savedReadings, setSavedReadings] = useState<Record<string, string>>({})
@@ -200,7 +206,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [availableMeterTypes, setAvailableMeterTypes] = useState<MeterReadingTypeOption[] | null>(null)
   const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
   const [reloadRevision, setReloadRevision] = useState(0)
-  const backgroundReloadRef = useRef(false)
+  const [configurationReloadRevision, setConfigurationReloadRevision] = useState(0)
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
 
   const selectedMeterType = availableMeterTypes?.find((item) => item.id === meterType)
@@ -209,6 +215,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const yearIsValid = isValidMeterReadingYear(yearDraft)
   const [currentMonth, setCurrentMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const pendingReadingSaving = Boolean(pendingReadingChange && savingReadingKey === pendingReadingChange.cellKey)
+  const hasLoadedCurrentDataset = confirmedPage?.[0] === auth.accessToken
 
   function cancelPendingReadingChange() {
     if (pendingReadingSaving) {
@@ -262,7 +269,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           expectedReadingVersion: pendingReadingChange.readingVersion,
         })
         setPendingReadingChange(null)
-        backgroundReloadRef.current = true
         setReloadRevision((revision) => revision + 1)
       } catch (caught) {
         setReadingChangeError(caught instanceof Error ? caught.message : 'Не удалось оформить замену счетчика.')
@@ -286,6 +292,10 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     setYearDraft(nextYear)
 
     if (isValidMeterReadingYear(nextYear)) {
+      if (nextYear !== appliedYear) {
+        setLoading(true)
+        setConfirmedPage(null)
+      }
       setPageOffset(0)
       setAppliedYear(nextYear)
     }
@@ -332,6 +342,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         }
 
         setAvailableMeterTypes([])
+        setLoading(false)
         setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить настройки счётчиков.')
       }
     }
@@ -341,7 +352,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       isMounted = false
       controller.abort()
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [auth.accessToken, configurationReloadRevision, dictionaryClient])
 
   useEffect(() => {
     if (!availableMeterTypes?.some((item) => item.id === meterType)) {
@@ -350,11 +361,9 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
     let isMounted = true
     const controller = new AbortController()
-    const background = backgroundReloadRef.current
-    backgroundReloadRef.current = false
 
     async function loadMeterReadings() {
-      setLoading(!background)
+      setLoading(true)
       setError(null)
       try {
         const yearPage = await financeClient.getMeterReadingYearPage(auth.accessToken, {
@@ -382,6 +391,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           }
         })
 
+        setConfirmedPage([auth.accessToken, yearPage.offset, yearPage.limit])
         setGarages(yearPage.garages)
         if (yearPage.currentAccountingMonth) {
           setCurrentMonth(yearPage.currentAccountingMonth.slice(0, 7))
@@ -398,10 +408,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         }
 
         setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить гаражи.')
-        if (!background) {
-          setGarages([])
-          setTotalGarageCount(0)
-        }
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -468,7 +474,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
       setPendingReadingChange(null)
       setReadingChangeError(null)
-      backgroundReloadRef.current = true
       setReloadRevision((revision) => revision + 1)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить показание.'
@@ -583,6 +588,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
               value={availableMeterTypes?.some((item) => item.id === meterType) ? meterType : ''}
               options={(availableMeterTypes ?? []).map((item) => ({ value: item.id, label: `${item.label}, ${item.unit}` }))}
               onChange={(value) => {
+                setLoading(true)
+                setConfirmedPage(null)
                 setMeterType(value as MeterReadingTypeId)
                 setPageOffset(0)
                 setPendingReadingChange(null)
@@ -594,7 +601,15 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       </div>
 
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
-      {error && !pendingReadingChange ? <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading} /> : null}
+      {error && !pendingReadingChange ? <AsyncErrorState message={error} onRetry={() => {
+        setLoading(true)
+        if (availableMeterTypes?.length === 0) {
+          setAvailableMeterTypes(null)
+          setConfigurationReloadRevision((value) => value + 1)
+        } else {
+          setReloadRevision((value) => value + 1)
+        }
+      }} retrying={loading} /> : null}
       <p className="form-hint">Для другого месяца нужно отдельное право; действие записывается в историю.</p>
 
       {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
@@ -605,7 +620,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         canEditOutsideCurrentMonth={canEditOutsideCurrentMonth}
         currentMonth={currentMonth}
         draftReadings={draftReadings}
-        garages={garages}
+        garages={hasLoadedCurrentDataset ? garages : []}
+        hasLoadedPage={hasLoadedCurrentDataset}
         loading={loading}
         meterType={meterType}
         onCommitReading={commitReading}
@@ -619,10 +635,10 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
       {availableMeterTypes && availableMeterTypes.length > 0 ? <TablePagination
         ariaLabel="Пагинация показаний"
-        totalCount={totalGarageCount}
-        offset={pageOffset}
-        limit={pageSize}
-        visibleCount={garages.length}
+        totalCount={hasLoadedCurrentDataset ? totalGarageCount : 0}
+        offset={hasLoadedCurrentDataset ? confirmedPage[1] : pageOffset}
+        limit={hasLoadedCurrentDataset ? confirmedPage[2] : pageSize}
+        visibleCount={hasLoadedCurrentDataset ? garages.length : 0}
         disabled={loading}
         pageSizeLabel="Количество гаражей с показаниями"
         onPageChange={(page) => setPageOffset((page - 1) * pageSize)}
