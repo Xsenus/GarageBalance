@@ -13,7 +13,7 @@ const loadingFeatures = [
   ['import/ImportPanel.tsx', 3],
   ['meterReadings/MeterReadingsPanel.tsx', 1],
   ['releases/ReleasePanel.tsx', 1],
-  ['reports/ReportPanel.tsx', 6],
+  ['reports/ReportPanel.tsx', 1],
   ['settings/PasswordPanel.tsx', 3],
   ['tariffs/TariffsAndFeesPanel.tsx', 3],
   ['users/UserManagementPanel.tsx', 1],
@@ -45,6 +45,14 @@ describe('shared loading-state coverage', () => {
       .join('\n')
 
     removedBareLoadingMessages.forEach((message) => expect(source).not.toContain(message))
+  })
+
+  it('keeps every report behind the shared primary and background loading states', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
+
+    expect(source.match(/renderReportLoadingState\(/g)).toHaveLength(9)
+    expect(source).toContain('<BackgroundRefreshStatus label="Обновляем отчёт" />')
+    expect(source).toContain('return primaryLoading ? <TableLoadingState label="Загружаем отчёт" /> : null')
   })
 
   it('keeps shared loading states accessible and motion-safe', () => {

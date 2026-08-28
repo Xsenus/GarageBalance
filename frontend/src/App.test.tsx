@@ -22273,7 +22273,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По гаражам')
 
-    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчет по гаражам...' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по гаражам' })).not.toBeInTheDocument()
 
     await act(async () => {
@@ -22282,7 +22282,7 @@ describe('App', () => {
     })
 
     expect(await within(reportsPanel).findByText('Отчет по гаражам временно недоступен')).toHaveAttribute('role', 'alert')
-    expect(within(reportsPanel).queryByText('Загружаем отчет по гаражам...')).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Загружаем отчёт')).not.toBeInTheDocument()
   })
 
   it('shows loading and error states for the complete payout report', async () => {
@@ -22305,7 +22305,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По выплатам')
 
-    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем выплаты...' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по выплатам' })).not.toBeInTheDocument()
 
     await act(async () => {
@@ -22314,7 +22314,7 @@ describe('App', () => {
     })
 
     expect(await within(reportsPanel).findByText('Отчет по выплатам временно недоступен')).toHaveAttribute('role', 'alert')
-    expect(within(reportsPanel).queryByText('Загружаем выплаты...')).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Загружаем отчёт')).not.toBeInTheDocument()
   })
 
   it('shows loading and error states for the complete income report', async () => {
@@ -22337,7 +22337,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Поступления')
 
-    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем поступления...' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
     const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
     expect(incomeGroupingButton).toBeDisabled()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по поступлениям' })).not.toBeInTheDocument()
@@ -22348,7 +22348,7 @@ describe('App', () => {
     })
 
     expect(await within(reportsPanel).findByText('Отчет по поступлениям временно недоступен')).toHaveAttribute('role', 'alert')
-    expect(within(reportsPanel).queryByText('Загружаем поступления...')).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Загружаем отчёт')).not.toBeInTheDocument()
     expect(incomeGroupingButton).toBeEnabled()
   })
 
@@ -22369,7 +22369,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
 
-    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем оплаты из кассы...' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })).not.toBeInTheDocument()
 
     await act(async () => {
@@ -22378,7 +22378,7 @@ describe('App', () => {
     })
 
     expect(await within(reportsPanel).findByText('Отчет по кассе временно недоступен')).toHaveAttribute('role', 'alert')
-    expect(within(reportsPanel).queryByText('Загружаем оплаты из кассы...')).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Загружаем отчёт')).not.toBeInTheDocument()
   })
 
   it('shows loading and error states for the complete bank deposit report', async () => {
@@ -22398,7 +22398,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
 
-    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем сдачу кассы в банк...' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })).not.toBeInTheDocument()
 
     await act(async () => {
@@ -22407,7 +22407,119 @@ describe('App', () => {
     })
 
     expect(await within(reportsPanel).findByText('Отчет по сдаче кассы временно недоступен')).toHaveAttribute('role', 'alert')
-    expect(within(reportsPanel).queryByText('Загружаем сдачу кассы в банк...')).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Загружаем отчёт')).not.toBeInTheDocument()
+  })
+
+  it('keeps confirmed rows visible while every report refreshes with the same query', async () => {
+    const user = userEvent.setup()
+    function keepSecondRequestPending<T>(result: T) {
+      let callCount = 0
+      const pending = new Promise<T>(() => {})
+      return vi.fn(() => {
+        callCount += 1
+        return callCount === 2 ? pending : Promise.resolve(result)
+      })
+    }
+
+    const reportClient = createReportClient({
+      getConsolidatedReport: keepSecondRequestPending(createConsolidatedReport()),
+      getGarageReport: keepSecondRequestPending(createGarageDetailReport()),
+      getExpenseReport: keepSecondRequestPending(createExpenseReport()),
+      getIncomeReport: keepSecondRequestPending(createIncomeReport({ rows: createIncomeReport().rows.filter((row) => row.rowType === 'payments'), rowCount: 1 })),
+      getCashPaymentReport: keepSecondRequestPending(createCashPaymentReport()),
+      getBankDepositReport: keepSecondRequestPending(createBankDepositReport()),
+      getFeeReport: keepSecondRequestPending(createFeeReport()),
+      getFundChangeReport: keepSecondRequestPending(createFundChangeReport()),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    const reports = [
+      { tab: 'Консолидированный', table: 'Консолидированный отчет', text: '06.2026' },
+      { tab: 'По гаражам', table: 'Отчет по гаражам', text: 'Членский взнос' },
+      { tab: 'По выплатам', table: 'Отчет по выплатам', text: 'Водоканал' },
+      { tab: 'Поступления', table: 'Отчет по поступлениям', text: 'Членский взнос' },
+      { tab: 'Оплаты из кассы', table: 'Отчет по оплатам из кассы', text: 'Оплата воды' },
+      { tab: 'Сдача кассы в банк', table: 'Отчет по сдаче кассы в банк', text: 'Сдача наличных в банк' },
+      { tab: 'Сборы', table: 'Отчет по сборам', text: 'Сбор на ворота' },
+      { tab: 'Изменение фондов', table: 'Отчет по изменению фондов', text: 'Распределение средств' },
+    ]
+
+    expect((await within(reportsPanel).findAllByText(reports[0].text)).length).toBeGreaterThan(0)
+    for (const report of reports.slice(1)) {
+      await openReportTab(user, reportsPanel, report.tab)
+      expect((await within(reportsPanel).findAllByText(report.text)).length).toBeGreaterThan(0)
+    }
+
+    for (const report of reports) {
+      await openReportTab(user, reportsPanel, report.tab)
+      expect(await within(reportsPanel).findByRole('status', { name: 'Обновляем отчёт' })).toBeInTheDocument()
+      expect(within(reportsPanel).getAllByText(report.text).length).toBeGreaterThan(0)
+      expect(within(reportsPanel).getByRole('table', { name: report.table })).toBeInTheDocument()
+    }
+  })
+
+  it('hides confirmed report rows immediately when the query changes', async () => {
+    const user = userEvent.setup()
+    const pending = new Promise<ConsolidatedReportDto>(() => {})
+    const reportClient = createReportClient({
+      getConsolidatedReport: vi.fn()
+        .mockResolvedValueOnce(createConsolidatedReport())
+        .mockImplementationOnce(() => pending),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    expect(await within(reportsPanel).findByText('06.2026')).toBeInTheDocument()
+
+    fireEvent.change(within(reportsPanel).getByLabelText('Месяц с'), { target: { value: '05.2026' } })
+
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('06.2026')).not.toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Данных за период нет')).not.toBeInTheDocument()
+  })
+
+  it('keeps confirmed report rows after a same-query refresh error and during retry', async () => {
+    const user = userEvent.setup()
+    let callCount = 0
+    let rejectRefresh: (reason?: unknown) => void = () => {}
+    const failedRefresh = new Promise<ConsolidatedReportDto>((_resolve, reject) => { rejectRefresh = reject })
+    const retry = new Promise<ConsolidatedReportDto>(() => {})
+    const reportClient = createReportClient({
+      getConsolidatedReport: vi.fn(() => {
+        callCount += 1
+        if (callCount === 1) return Promise.resolve(createConsolidatedReport())
+        return callCount === 2 ? failedRefresh : retry
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    expect(await within(reportsPanel).findByText('06.2026')).toBeInTheDocument()
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await within(reportsPanel).findByText('Членский взнос')
+    await openReportTab(user, reportsPanel, 'Консолидированный')
+
+    await act(async () => {
+      rejectRefresh(new Error('Не удалось обновить сводный отчёт'))
+      await failedRefresh.catch(() => undefined)
+    })
+
+    expect(await within(reportsPanel).findByText('Не удалось обновить сводный отчёт')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).getByText('06.2026')).toBeInTheDocument()
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Повторить загрузку' }))
+    expect(await within(reportsPanel).findByRole('status', { name: 'Обновляем отчёт' })).toBeInTheDocument()
+    expect(within(reportsPanel).getByText('06.2026')).toBeInTheDocument()
+    expect(callCount).toBe(3)
   })
 
   it('announces empty states for every report without showing them during loading', async () => {
@@ -22538,7 +22650,7 @@ describe('App', () => {
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
 
-    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем сводный отчёт' })).toBeInTheDocument()
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByText('Данных за период нет')).not.toBeInTheDocument()
     fireEvent.change(within(reportsPanel).getByLabelText('Месяц с'), { target: { value: '05.2026' } })
     expect(await within(reportsPanel).findByText('06.2026')).toBeInTheDocument()
