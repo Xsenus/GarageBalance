@@ -29,7 +29,7 @@ import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toS
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
-import { createGarageIncomeRowsFromWorksheet, getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -2913,10 +2913,6 @@ export function FinancePanel({
   )
 }
 
-function formatPaymentPrototypeValue(value: number | string) {
-  return formatPaymentMoney(value)
-}
-
 function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOperationDto[]): GaragePaymentHistoryPrototypeRow[] {
   return operations
     .filter((operation) => operation.operationKind === 'income' && operation.garageId)
@@ -2929,18 +2925,6 @@ function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOpera
       debtAfter: operation.garageDebtAfter ?? 0,
       operation,
     }))
-}
-
-function formatPaymentPrototypeMonthLabel(value: string) {
-  const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value)
-  if (!match) {
-    return value
-  }
-
-  const monthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
-  const monthIndex = Number(match[2]) - 1
-  const monthLabel = monthLabels[monthIndex] ?? match[2]
-  return `${monthLabel}.${match[1].slice(2)}`
 }
 
 function PaymentsPrototypePanel({
@@ -4657,11 +4641,11 @@ function PaymentsPrototypePanel({
                 <dl>
                   <div>
                     <dt>{selectedGarageBalance?.label}</dt>
-                    <dd className={selectedGarageBalance?.moneyClassName}>{formatPaymentPrototypeValue(selectedGarageBalance?.amount ?? 0)}</dd>
+                    <dd className={selectedGarageBalance?.moneyClassName}>{formatPaymentMoney(selectedGarageBalance?.amount ?? 0)}</dd>
                   </div>
                   <div>
                     <dt>Просроченная задолженность</dt>
-                    <dd className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</dd>
+                    <dd className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(selectedGarage.overdueDebt)}</dd>
                   </div>
                 </dl>
               </section>
@@ -4695,16 +4679,16 @@ function PaymentsPrototypePanel({
             <>
               <p className="payments-prototype-balance-explanation" role="note">
                 {selectedGarageBalance.overdueRelation === 'partly-overdue'
-                  ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(Math.abs(selectedGarageBalance.amount))}</strong>, из него просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>.</>
+                  ? <>Общий долг составляет <strong>{formatPaymentMoney(Math.abs(selectedGarageBalance.amount))}</strong>, из него просрочено <strong>{formatPaymentMoney(selectedGarage.overdueDebt)}</strong>.</>
                   : selectedGarageBalance.overdueRelation === 'fully-overdue'
-                    ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(Math.abs(selectedGarageBalance.amount))}</strong> уже просрочен.</>
-                    : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
+                    ? <>Весь общий долг <strong>{formatPaymentMoney(Math.abs(selectedGarageBalance.amount))}</strong> уже просрочен.</>
+                    : <>{selectedGarageBalance.label} <strong>{formatPaymentMoney(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentMoney(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
               </p>
               <section className={`payments-prototype-overdue-details${overdueDebtDetailsExpanded ? ' payments-prototype-overdue-details--expanded' : ''}`} aria-label="Расшифровка просроченной задолженности">
                 <div className="payments-prototype-overdue-heading">
                   <span className="payments-prototype-overdue-title">Расшифровка просроченной задолженности</span>
                   <span className="payments-prototype-overdue-controls">
-                    <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
+                    <strong>{formatPaymentMoney(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
                     <button
                       type="button"
                       className="icon-button"
@@ -4749,16 +4733,16 @@ function PaymentsPrototypePanel({
                             <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
                             <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
                             <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
-                            <td>{formatPaymentPrototypeValue(row.originalAmount)}</td>
-                            <td>{formatPaymentPrototypeValue(row.paidAmount)}</td>
-                            <td className="money-expense">{formatPaymentPrototypeValue(row.outstandingAmount)}</td>
+                            <td>{formatPaymentMoney(row.originalAmount)}</td>
+                            <td>{formatPaymentMoney(row.paidAmount)}</td>
+                            <td className="money-expense">{formatPaymentMoney(row.outstandingAmount)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr>
                           <th colSpan={6}>Итого на {formatDateOnly(overdueDebtDetails.asOfDate)}</th>
-                          <th>{formatPaymentPrototypeValue(overdueDebtDetails.total)}</th>
+                          <th>{formatPaymentMoney(overdueDebtDetails.total)}</th>
                         </tr>
                       </tfoot>
                     </table>
@@ -4802,7 +4786,7 @@ function PaymentsPrototypePanel({
                     <td>{row.time}</td>
                     <td>{formatPaymentMoney(row.amount)}</td>
                     <td>{row.purpose}</td>
-                    <td>{formatPaymentPrototypeValue(row.debtAfter)}</td>
+                    <td>{formatPaymentMoney(row.debtAfter)}</td>
                     <td>
                       {row.operation && canWritePayments ? (
                         <div className="table-action-row payments-prototype-history-actions">
@@ -4847,19 +4831,19 @@ function PaymentsPrototypePanel({
               <div className="payments-prototype-period-summary" aria-label="Итоги периода поступлений">
                 <div>
                   <span>Баланс на начало</span>
-                  <strong className={openingBalanceTotal < 0 ? 'money-expense' : openingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentPrototypeValue(openingBalanceTotal)}</strong>
+                  <strong className={openingBalanceTotal < 0 ? 'money-expense' : openingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(openingBalanceTotal)}</strong>
                 </div>
                 <div>
                   <span>Начислено</span>
-                  <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.accrualTotal)}</strong>
+                  <strong>{formatPaymentMoney(garageWorksheetSummary.accrualTotal)}</strong>
                 </div>
                 <div>
                   <span>Внесено</span>
-                  <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.incomeTotal)}</strong>
+                  <strong>{formatPaymentMoney(garageWorksheetSummary.incomeTotal)}</strong>
                 </div>
                 <div>
                   <span>Баланс на конец</span>
-                  <strong className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentPrototypeValue(closingBalanceTotal)}</strong>
+                  <strong className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalanceTotal)}</strong>
                 </div>
               </div>
             ) : null}
@@ -5191,15 +5175,15 @@ function PaymentsPrototypePanel({
           <div className="payments-prototype-footer" aria-label="Итоги кассы и банка">
             <div>
               <span>Сумма в банке</span>
-              <strong>{formatPaymentPrototypeValue(expenseBankAmount)}</strong>
+              <strong>{formatPaymentMoney(expenseBankAmount)}</strong>
             </div>
             <div>
               <span>Касса</span>
-              <strong>{formatPaymentPrototypeValue(expenseCashAmount)}</strong>
+              <strong>{formatPaymentMoney(expenseCashAmount)}</strong>
             </div>
             <div>
               <span>Касса + банк</span>
-              <strong>{formatPaymentPrototypeValue(expenseCashAndBankTotal)}</strong>
+              <strong>{formatPaymentMoney(expenseCashAndBankTotal)}</strong>
             </div>
             <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
               Сдать кассу в банк
@@ -5419,7 +5403,7 @@ function EarlyElectricityPaymentConfirmationDialog({
           <div>
             <p className="eyebrow">Проверка интервала оплаты</p>
             <h3 id="early-electricity-payment-title">Оплата электроэнергии раньше 30 дней</h3>
-            <p>{state.row.service} · {formatPaymentPrototypeValue(parsePaymentMoney(state.row.paymentDraft))}</p>
+            <p>{state.row.service} · {formatPaymentMoney(parsePaymentMoney(state.row.paymentDraft))}</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть предупреждение ранней оплаты" onClick={onClose}>
             <X size={18} aria-hidden="true" />
@@ -5609,7 +5593,7 @@ function GaragePaymentHistoryCancelDialog({
           <div>
             <p className="eyebrow">Отмена платежа</p>
             <h3 id="garage-payment-cancel-title">Отменить платеж?</h3>
-            <p>{state.row.purpose} · {formatPaymentPrototypeValue(state.row.amount)}</p>
+            <p>{state.row.purpose} · {formatPaymentMoney(state.row.amount)}</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть отмену платежа" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />
@@ -6571,7 +6555,7 @@ function GarageAccrualPrototypeDialog({
               }}
             />
             <datalist id={basisOptionsId}>
-              {irregularPayments.map((payment) => <option key={payment.id} value={payment.name}>{formatPaymentPrototypeValue(payment.amount)}</option>)}
+              {irregularPayments.map((payment) => <option key={payment.id} value={payment.name}>{formatPaymentMoney(payment.amount)}</option>)}
             </datalist>
           </FormField>
           <FormField label="Сумма">

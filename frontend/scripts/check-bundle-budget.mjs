@@ -13,6 +13,10 @@ function formatBytes(bytes) {
   return `${(bytes / 1024).toFixed(1)} KiB`
 }
 
+function formatExactBudget(bytes, limit) {
+  return `${formatBytes(bytes)} / ${formatBytes(limit)} (${bytes} / ${limit} bytes; remaining ${limit - bytes} bytes)`
+}
+
 function collectAssetFiles(directory) {
   return readdirSync(directory)
     .map((fileName) => join(directory, fileName))
@@ -91,7 +95,7 @@ if (!existsSync(assetsPath)) {
   console.log(`main JS gzip: ${formatBytes(largestJsAsset.gzipBytes)} / ${formatBytes(budget.mainJsGzipBytes)}`)
   console.log(`initial JS gzip: ${formatBytes(initialJsGzipBytes)} / ${formatBytes(budget.initialJsGzipBytes)}`)
   console.log(`main CSS gzip: ${formatBytes(largestCssAsset.gzipBytes)} / ${formatBytes(budget.mainCssGzipBytes)}`)
-  console.log(`total JS/CSS gzip: ${formatBytes(totalAssetsGzipBytes)} / ${formatBytes(budget.totalAssetsGzipBytes)}`)
+  console.log(`total JS/CSS gzip: ${formatExactBudget(totalAssetsGzipBytes, budget.totalAssetsGzipBytes)}`)
 
   if (largestJsAsset.gzipBytes > budget.mainJsGzipBytes) {
     fail(`Bundle budget check failed: main JS gzip exceeds ${formatBytes(budget.mainJsGzipBytes)}.`)

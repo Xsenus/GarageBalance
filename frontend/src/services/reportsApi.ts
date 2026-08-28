@@ -219,6 +219,18 @@ export type BankDepositReportDto = {
   rows: BankDepositReportRowDto[]
 }
 
+type DatedOperationReportQuery = {
+  dateFrom?: string
+  dateTo?: string
+  search?: string
+  offset?: number
+  limit?: number
+  sortBy?: string
+  sortDirection?: string
+}
+
+type DatedOperationReportExportQuery = Omit<DatedOperationReportQuery, 'offset' | 'limit'>
+
 export type FeeReportSummaryRowDto = {
   incomeTypeId: string
   name: string
@@ -349,102 +361,42 @@ export type ReportClient = {
   ): Promise<ExpenseReportDto>
   getFundChangeReport(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      offset?: number
-      limit?: number
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportQuery,
     signal?: AbortSignal,
   ): Promise<FundChangeReportDto>
   exportFundChangeReportXlsx(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportExportQuery,
   ): Promise<Blob>
   exportFundChangeReportPdf(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportExportQuery,
   ): Promise<Blob>
   getCashPaymentReport(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      offset?: number
-      limit?: number
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportQuery,
     signal?: AbortSignal,
   ): Promise<CashPaymentReportDto>
   exportCashPaymentReportXlsx(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportExportQuery,
   ): Promise<Blob>
   exportCashPaymentReportPdf(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportExportQuery,
   ): Promise<Blob>
   getBankDepositReport(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      offset?: number
-      limit?: number
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportQuery,
     signal?: AbortSignal,
   ): Promise<BankDepositReportDto>
   exportBankDepositReportXlsx(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportExportQuery,
   ): Promise<Blob>
   exportBankDepositReportPdf(
     accessToken: string,
-    params?: {
-      dateFrom?: string
-      dateTo?: string
-      search?: string
-      sortBy?: string
-      sortDirection?: string
-    },
+    params?: DatedOperationReportExportQuery,
   ): Promise<Blob>
   getFeeReport(
     accessToken: string,
@@ -658,49 +610,7 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
   return searchParams.toString()
 }
 
-function buildFundChangeReportQuery(params: Parameters<ReportClient['getFundChangeReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.dateFrom) {
-    searchParams.set('dateFrom', params.dateFrom)
-  }
-  if (params.dateTo) {
-    searchParams.set('dateTo', params.dateTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
-}
-
-function buildCashPaymentReportQuery(params: Parameters<ReportClient['getCashPaymentReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.dateFrom) {
-    searchParams.set('dateFrom', params.dateFrom)
-  }
-  if (params.dateTo) {
-    searchParams.set('dateTo', params.dateTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
-}
-
-function buildBankDepositReportQuery(params: Parameters<ReportClient['getBankDepositReport']>[1] = {}) {
+function buildDatedOperationReportQuery(params: DatedOperationReportQuery = {}) {
   const searchParams = new URLSearchParams()
   if (params.dateFrom) {
     searchParams.set('dateFrom', params.dateFrom)
@@ -791,39 +701,39 @@ export const reportsApi: ReportClient = {
     return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`, { signal })
   },
   getFundChangeReport(accessToken, params = {}, signal) {
-    const query = buildFundChangeReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestJson(accessToken, `/api/reports/fund-changes${query ? `?${query}` : ''}`, { signal })
   },
   exportFundChangeReportXlsx(accessToken, params = {}) {
-    const query = buildFundChangeReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestBlob(accessToken, `/api/reports/fund-changes/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportFundChangeReportPdf(accessToken, params = {}) {
-    const query = buildFundChangeReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestBlob(accessToken, `/api/reports/fund-changes/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getCashPaymentReport(accessToken, params = {}, signal) {
-    const query = buildCashPaymentReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestJson(accessToken, `/api/reports/cash-payments${query ? `?${query}` : ''}`, { signal })
   },
   exportCashPaymentReportXlsx(accessToken, params = {}) {
-    const query = buildCashPaymentReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestBlob(accessToken, `/api/reports/cash-payments/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportCashPaymentReportPdf(accessToken, params = {}) {
-    const query = buildCashPaymentReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestBlob(accessToken, `/api/reports/cash-payments/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getBankDepositReport(accessToken, params = {}, signal) {
-    const query = buildBankDepositReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestJson(accessToken, `/api/reports/bank-deposits${query ? `?${query}` : ''}`, { signal })
   },
   exportBankDepositReportXlsx(accessToken, params = {}) {
-    const query = buildBankDepositReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestBlob(accessToken, `/api/reports/bank-deposits/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportBankDepositReportPdf(accessToken, params = {}) {
-    const query = buildBankDepositReportQuery(params)
+    const query = buildDatedOperationReportQuery(params)
     return requestBlob(accessToken, `/api/reports/bank-deposits/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   getFeeReport(accessToken, params = {}, signal) {

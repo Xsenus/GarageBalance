@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
-import { getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
+import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
+
+describe('formatPaymentPrototypeMonthLabel', () => {
+  it('formats an accounting month and a date through the same compact label', () => {
+    expect(formatPaymentPrototypeMonthLabel('2026-08')).toBe('авг.26')
+    expect(formatPaymentPrototypeMonthLabel('2026-08-29')).toBe('авг.26')
+  })
+
+  it('keeps an invalid value unchanged', () => {
+    expect(formatPaymentPrototypeMonthLabel('август 2026')).toBe('август 2026')
+  })
+})
 
 describe('getAccrualCalculationSummary', () => {
   it('shows the tariff segment that produced the amount after an initial period without a tariff', () => {

@@ -1,6 +1,8 @@
 import type { GarageIncomeWorksheetDto } from '../../services/financeApi'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
 
+const paymentPrototypeMonthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+
 export type GarageIncomePrototypeRow = {
   id: string
   incomeTypeId: string | null
@@ -71,9 +73,8 @@ export function formatPaymentPrototypeMonthLabel(value: string) {
     return value
   }
 
-  const monthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
   const monthIndex = Number(match[2]) - 1
-  const monthLabel = monthLabels[monthIndex] ?? match[2]
+  const monthLabel = paymentPrototypeMonthLabels[monthIndex] ?? match[2]
   return `${monthLabel}.${match[1].slice(2)}`
 }
 

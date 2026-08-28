@@ -24,6 +24,7 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('totalAssetsGzipBytes: 265 * 1024')
     expect(budgetScript).toContain('gzipSync')
     expect(budgetScript).toContain('collectStaticJsGraph')
+    expect(budgetScript).toContain('remaining ${limit - bytes} bytes')
   })
 
   it('groups the compact release panel with reporting instead of creating a separate tiny chunk', () => {

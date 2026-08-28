@@ -217,10 +217,6 @@ function normalizeElectricityTierNames(rows: ContractorTariffRow[]) {
     : row)
 }
 
-function formatPrototypeAmount(value: number | null | undefined) {
-  return value == null ? '' : formatTariffDecimal(value)
-}
-
 function parsePrototypeAmount(value: string) {
   const normalized = value.replace(/[\s\u00a0]+/g, '').replace(',', '.').trim()
   if (!normalized) {
@@ -373,7 +369,7 @@ function createSalaryFundRows(items: StaffDepartmentSalaryFundDto[]): Contractor
     group: index === 0 ? salaryFundCategory : undefined,
     category: salaryFundCategory,
     title: item.departmentName,
-    amount: formatPrototypeAmount(item.totalRate),
+    amount: formatTariffNumber(item.totalRate),
     unit: 'руб.',
   }))
 }
@@ -472,7 +468,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
       group: setting.name,
       category: setting.name,
       title: getServiceTariffDisplayName(linkedTariff?.name, setting.name),
-      amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : '',
+      amount: linkedTariff ? formatTariffNumber(linkedTariff.rate) : '',
       unit: unitName,
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
@@ -594,7 +590,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
         group: setting.name,
         category: setting.name,
         title: getServiceTariffDisplayName(linkedTariff?.name, setting.name),
-        amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : row.amount,
+        amount: linkedTariff ? formatTariffNumber(linkedTariff.rate) : row.amount,
         unit: setting.unitName?.trim() || row.unit || (linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : undefined),
         calculationBase: linkedTariff?.calculationBase ?? row.calculationBase,
         backendTariffId: linkedTariff?.id,
@@ -623,7 +619,7 @@ function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], p
     return {
       ...row,
       backendPaymentId: payment.id,
-      amount: formatPrototypeAmount(payment.amount),
+      amount: formatTariffNumber(payment.amount),
       isActive: payment.isActive,
       isDeleted: payment.isArchived,
       isUsed: payment.isUsed,
@@ -636,7 +632,7 @@ function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], p
       id: `one-time-${payment.id}`,
       backendPaymentId: payment.id,
       name: payment.name,
-      amount: formatPrototypeAmount(payment.amount),
+      amount: formatTariffNumber(payment.amount),
       isActive: payment.isActive,
       isDeleted: payment.isArchived,
       isUsed: payment.isUsed,
@@ -1577,7 +1573,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           ? {
             ...currentRow,
             backendPaymentId: savedPayment.id,
-            amount: formatPrototypeAmount(savedPayment.amount),
+            amount: formatTariffNumber(savedPayment.amount),
             isActive: savedPayment.isActive,
             isDeleted: savedPayment.isArchived,
             isUsed: savedPayment.isUsed,
@@ -1617,7 +1613,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         currentRow.id === row.id
           ? {
             ...currentRow,
-            amount: formatPrototypeAmount(savedPayment.amount),
+            amount: formatTariffNumber(savedPayment.amount),
             isActive: savedPayment.isActive,
             isDeleted: savedPayment.isArchived,
             isUsed: savedPayment.isUsed,
@@ -1903,7 +1899,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           ? {
             ...currentRow,
             backendPaymentId: restoredPayment.id,
-            amount: formatPrototypeAmount(restoredPayment.amount),
+            amount: formatTariffNumber(restoredPayment.amount),
             isActive: restoredPayment.isActive,
             isDeleted: restoredPayment.isArchived,
             isUsed: restoredPayment.isUsed,
