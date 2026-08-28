@@ -802,6 +802,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffsLoading, setTariffsLoading] = useState(true)
   const [oneTimeLoading, setOneTimeLoading] = useState(true)
   const [feeCampaignsLoading, setFeeCampaignsLoading] = useState(true)
+  const [tariffsLoaded, setTariffsLoaded] = useState(false)
+  const [oneTimeLoaded, setOneTimeLoaded] = useState(false)
+  const [feeCampaignsLoaded, setFeeCampaignsLoaded] = useState(false)
   const [tariffReferencesLoading, setTariffReferencesLoading] = useState(false)
   const [feeCampaignGarageOptionsLoading, setFeeCampaignGarageOptionsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
@@ -837,6 +840,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           setBackendChargeServices(loadedChargeServices)
           setTariffRows(mergedRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
+          setTariffsLoaded(true)
         }
       } catch (caught) {
         if (!ignore) {
@@ -857,6 +861,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows([], loadedIrregularPayments, true)
           setOneTimeRows(mergedOneTimeRows)
           setOneTimeDrafts(createOneTimeEditableDrafts(mergedOneTimeRows))
+          setOneTimeLoaded(true)
         }
       } catch (caught) {
         if (!ignore) {
@@ -880,6 +885,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           } else {
             setFeeCampaigns((currentCampaigns) => mergeFeeCampaignSnapshots(currentCampaigns, loadedFeeCampaigns))
           }
+          setFeeCampaignsLoaded(true)
         }
       } catch (caught) {
         if (!ignore && feeCampaignMutationVersionRef.current === mutationVersionAtStart) {
@@ -2472,14 +2478,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <span role="columnheader">По счетчику</span>
               <span className="table-actions-column" role="columnheader">Действия</span>
             </div>
-            {tariffsLoading ? <TableLoadingState label="Загружаем тарифы и услуги" /> : null}
-            {!tariffsLoading ? tariffPage.items.map((row, pageIndex) => {
+            {tariffsLoading && !tariffsLoaded ? <TableLoadingState label="Загружаем тарифы и услуги" /> : null}
+            {tariffsLoading && tariffsLoaded ? <div className="form-hint" role="status" aria-label="Обновляем тарифы и услуги" aria-live="polite">Обновляем тарифы и услуги…</div> : null}
+            {tariffPage.items.map((row, pageIndex) => {
               const serviceSetting = row.backendServiceSettingId
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
               const isSalaryFundSummary = row.category === salaryFundCategory
-              const isRowDisabled = isSalaryFundSummary || row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
+              const isRowDisabled = tariffsLoading || isSalaryFundSummary || row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const thresholdRowsForTariff = getElectricityThresholdRows(tariffRows, row)
               const canDeleteThreshold = Boolean(row.threshold && thresholdRowsForTariff.length > 2)
               const isLastThresholdRow = thresholdRowsForTariff.at(-1)?.id === row.id
@@ -2764,7 +2771,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                           type="button"
                           aria-label={`Вернуть услугу ${serviceSetting.name}`}
                           title="Вернуть"
-                          disabled={!canManageTariffs || isServiceSaving}
+                          disabled={!canManageTariffs || tariffsLoading || isServiceSaving}
                           onClick={() => {
                             setTariffPersistenceError(null)
                             setChargeServiceRestoreTarget(serviceSetting)
@@ -2794,7 +2801,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 {isLastThresholdRow && Boolean(row.backendTariffId && tieredTariffIds.has(row.backendTariffId)) ? (
                   <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                     <span role="cell">
-                      <button className="link-button create-action-button create-action-button--subtle tariffs-add-threshold-button" type="button" onClick={() => addElectricityThreshold(row)} disabled={!canManageTariffs}>
+                      <button className="link-button create-action-button create-action-button--subtle tariffs-add-threshold-button" type="button" onClick={() => addElectricityThreshold(row)} disabled={!canManageTariffs || tariffsLoading}>
                         <FileSpreadsheet size={15} aria-hidden="true" />
                         <span>Добавить порог</span>
                       </button>
@@ -2811,8 +2818,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 ) : null}
               </Fragment>
               )
-            }) : null}
-            {visibleTariffRows.length === 0 && !tariffsLoading ? (
+            })}
+            {visibleTariffRows.length === 0 && tariffsLoaded && !tariffsLoading ? (
               <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                 <span className="contractors-table-empty" role="cell">
                   {chargeServiceView === 'deleted' ? 'Удалённых услуг нет.' : 'Тарифы и услуги пока не настроены.'}
@@ -2848,8 +2855,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <span>Основание</span>
                 <span>Сумма, руб.</span>
               </div>
-              {oneTimeLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
-              {!oneTimeLoading ? oneTimePage.items.map((row) => (
+              {oneTimeLoading && !oneTimeLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
+              {oneTimeLoading && oneTimeLoaded ? <div className="form-hint" role="status" aria-label="Обновляем нерегулярные платежи" aria-live="polite">Обновляем нерегулярные платежи…</div> : null}
+              {oneTimePage.items.map((row) => (
                 <div
                   aria-label={`Нерегулярный платеж ${row.name}`}
                   className={[
@@ -2858,7 +2866,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     !row.isActive ? 'contractors-mini-row--inactive' : '',
                   ].filter(Boolean).join(' ')}
                   key={row.id}
-                  onContextMenu={(event) => openOneTimeContextMenu(event, row)}
+                    onContextMenu={oneTimeLoading ? undefined : (event) => openOneTimeContextMenu(event, row)}
                 >
                   <span className="contractors-irregular-name-cell">
                     <span>{row.name}</span>
@@ -2868,7 +2876,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     {row.isDeleted ? (
                       <span className="contractors-mini-actions">
                         <span>{row.amount}</span>
-                        <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeSavingRowId === row.id} onClick={() => setOneTimeRestoreTarget(row)}>
+                        <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeLoading || oneTimeSavingRowId === row.id} onClick={() => setOneTimeRestoreTarget(row)}>
                           <RotateCcw size={16} />
                           <span>Вернуть</span>
                         </button>
@@ -2877,7 +2885,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       <MoneyTextInput
                         aria-label={`Сумма: ${row.name}`}
                         className="contractors-editable-input"
-                        disabled={!canManageTariffs || !row.isActive || oneTimeSavingRowId === row.id}
+                        disabled={!canManageTariffs || oneTimeLoading || !row.isActive || oneTimeSavingRowId === row.id}
                         value={oneTimeDrafts[row.id]?.amount ?? ''}
                         onValueChange={(amount) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
                         onBlur={(event) => {
@@ -2888,8 +2896,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     )}
                   </span>
                 </div>
-              )) : null}
-              {oneTimeRows.length === 0 && !oneTimeLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
+              ))}
+              {oneTimeRows.length === 0 && oneTimeLoaded && !oneTimeLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
               <TablePagination
                 ariaLabel="Пагинация нерегулярных платежей"
                 totalCount={oneTimePage.totalCount}
@@ -2935,8 +2943,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   <span className="fee-period">Период</span>
                   <span>Действия</span>
                 </div>
-                {feeCampaignsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
-                {!feeCampaignsLoading ? feeCampaignPage.items.map((campaign) => {
+                {feeCampaignsLoading && !feeCampaignsLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
+                {feeCampaignsLoading && feeCampaignsLoaded ? <div className="form-hint" role="status" aria-label="Обновляем объявленные сборы" aria-live="polite">Обновляем объявленные сборы…</div> : null}
+                {feeCampaignPage.items.map((campaign) => {
                   const isPeriodMuted = getFeeCampaignDisplayRank(campaign, currentBusinessDate) > 0
                   return (
                   <div
@@ -2968,16 +2977,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     </span>
                     <span className="contractors-mini-actions">
                     {campaign.isArchived ? (
-                      <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignRestoreTarget(campaign)}>
+                      <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignRestoreTarget(campaign)}>
                         <RotateCcw size={16} />
                         <span>Вернуть</span>
                       </button>
                     ) : campaign.closedAtUtc ? (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить закрытый сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить закрытый сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignArchiveTarget(campaign)
                           setFeeCampaignArchiveReason('')
                         }}>
@@ -2986,18 +2995,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       </>
                     ) : (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
                         {!campaign.endsOn || campaign.endsOn > currentBusinessDate ? (
-                          <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                            <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
                             setFeeCampaignCloseTarget(campaign)
                             setFeeCampaignClosureComment('')
                           }}>
                             <CircleCheck size={16} />
                           </button>
                         ) : null}
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignArchiveTarget(campaign)
                           setFeeCampaignArchiveReason('')
                         }}>
@@ -3008,8 +3017,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     </span>
                   </div>
                   )
-                }) : null}
-                {feeCampaigns.length === 0 && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
+                })}
+                {feeCampaigns.length === 0 && feeCampaignsLoaded && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
               </div>
               <TablePagination
                 ariaLabel="Пагинация объявленных сборов"
