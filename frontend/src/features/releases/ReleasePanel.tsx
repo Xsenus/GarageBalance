@@ -23,7 +23,6 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [editor, setEditor] = useState<ReleaseEditorState | null>(null)
   const canManageReleases = hasPermission(auth, permissions.appReleasesManage)
-  const loadingMoreRef = useRef(false)
   const loadMoreControllerRef = useRef<AbortController | null>(null)
   const listRevisionRef = useRef(0)
   const getReleasePage = useCallback((offset: number, signal?: AbortSignal) => canManageReleases
@@ -36,7 +35,6 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     const revision = ++listRevisionRef.current
     loadMoreControllerRef.current?.abort()
     loadMoreControllerRef.current = null
-    loadingMoreRef.current = false
 
     async function loadReleases() {
       setLoading(true)
@@ -72,19 +70,26 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     listRevisionRef.current += 1
     loadMoreControllerRef.current?.abort()
     loadMoreControllerRef.current = null
-    loadingMoreRef.current = false
   }, [])
 
   async function refreshReleases() {
-    listRevisionRef.current += 1
     loadMoreControllerRef.current?.abort()
-    loadMoreControllerRef.current = null
-    loadingMoreRef.current = false
+    const controller = new AbortController()
+    loadMoreControllerRef.current = controller
     setLoadingMore(false)
-    const page = await getReleasePage(0)
-    setReleases(page.items)
-    setTotalCount(page.totalCount)
-    setHasMore(page.hasMore)
+    try {
+      const page = await getReleasePage(0, controller.signal)
+      if (controller.signal.aborted) {
+        return
+      }
+      setReleases(page.items)
+      setTotalCount(page.totalCount)
+      setHasMore(page.hasMore)
+    } finally {
+      if (loadMoreControllerRef.current === controller) {
+        loadMoreControllerRef.current = null
+      }
+    }
   }
 
   async function retryInitialLoad() {
@@ -100,11 +105,10 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
   }
 
   const loadMoreReleases = useCallback(async () => {
-    if (!hasMore || loadingMoreRef.current) {
+    if (!hasMore || loadMoreControllerRef.current) {
       return
     }
 
-    loadingMoreRef.current = true
     const controller = new AbortController()
     const revision = listRevisionRef.current
     loadMoreControllerRef.current = controller
@@ -128,7 +132,6 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     } finally {
       if (loadMoreControllerRef.current === controller) {
         loadMoreControllerRef.current = null
-        loadingMoreRef.current = false
         if (!controller.signal.aborted) {
           setLoadingMore(false)
         }

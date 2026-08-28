@@ -20732,6 +20732,54 @@ describe('App', () => {
     expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
   })
 
+  it('cancels a pending release retry when the user leaves the section without showing an abort error', async () => {
+    const user = userEvent.setup()
+    let retrySignal: AbortSignal | undefined
+    let resolveRetry!: (page: AppReleasePageDto) => void
+    let resolveAbortObserved!: () => void
+    const abortObserved = new Promise<void>((resolve) => {
+      resolveAbortObserved = resolve
+    })
+    const getPage = vi.fn((_token: string, _offset?: number, _limit?: number, signal?: AbortSignal) => {
+      if (getPage.mock.calls.length === 1) {
+        return Promise.reject(new Error('История обновлений временно недоступна.'))
+      }
+
+      retrySignal = signal
+      return new Promise<AppReleasePageDto>((resolve, reject) => {
+        resolveRetry = resolve
+        signal?.addEventListener('abort', () => {
+          reject(new Error('Отменённый повтор истории не должен показывать ошибку.'))
+          queueMicrotask(resolveAbortObserved)
+        }, { once: true })
+      })
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getManageableReleases: getPage })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Что нового')
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    await user.click(await within(releasePanel).findByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(getPage).toHaveBeenCalledTimes(2))
+    await openSection(user, 'Контрагенты')
+
+    const retryAborted = retrySignal?.aborted === true
+    if (retryAborted) {
+      await act(async () => {
+        await abortObserved
+      })
+    } else {
+      await act(async () => {
+        resolveRetry(createReleasePage([]))
+      })
+    }
+    expect(retryAborted).toBe(true)
+    expect(screen.queryByText('Отменённый повтор истории не должен показывать ошибку.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+  })
+
   it('hides manual release editing controls while allowing draft publication', async () => {
     const user = userEvent.setup()
     let storedReleases = [
