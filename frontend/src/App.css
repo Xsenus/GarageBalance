@@ -3536,16 +3536,6 @@ h1 {
   gap: 10px;
 }
 
-.release-editor {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  padding: 14px;
-  background: #ffffff;
-}
-
 .tariffs-page {
   min-width: 0;
   gap: 12px;
@@ -3706,24 +3696,11 @@ h1 {
   margin-top: auto;
 }
 
-.release-editor__items {
-  display: grid;
-  gap: 10px;
-}
-
-.release-editor__items-heading,
 .release-entry__actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-}
-
-.release-editor__item {
-  display: grid;
-  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) max-content;
-  gap: 10px;
-  align-items: end;
 }
 
 .release-entry {

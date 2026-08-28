@@ -291,12 +291,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     }
   }
 
-  function applyYearDraft() {
-    if (isValidMeterReadingYear(yearDraft)) {
-      setAppliedYear(yearDraft)
-    }
-  }
-
   useRestoreFocusOnClose(Boolean(pendingReadingChange))
   const readingChangeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingReadingChange))
   const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingReadingChange))
@@ -579,12 +573,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
               maxLength={4}
               value={yearDraft}
               onChange={(event) => updateYearDraft(event.target.value)}
-              onBlur={applyYearDraft}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  applyYearDraft()
-                }
-              }}
             />
           </FormField>
           <FormField label="Тип">

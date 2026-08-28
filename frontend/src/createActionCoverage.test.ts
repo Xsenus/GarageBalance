@@ -9,7 +9,6 @@ const createActionFeatures = [
   ['dictionaries/DictionaryPanel.tsx', 1],
   ['finance/FinancePanel.tsx', 4],
   ['funds/FundsPanel.tsx', 1],
-  ['releases/ReleasePanel.tsx', 2],
   ['tariffs/TariffsAndFeesPanel.tsx', 4],
   ['users/UserManagementPanel.tsx', 1],
 ] as const
