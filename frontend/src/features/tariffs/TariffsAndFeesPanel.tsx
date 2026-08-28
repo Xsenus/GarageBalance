@@ -758,6 +758,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [feeCampaignActiveGarageCount, setFeeCampaignActiveGarageCount] = useState(0)
   const feeCampaignGarageOptionsLoadedRef = useRef(false)
   const feeCampaignGarageOptionsRequestRef = useRef<Promise<boolean> | null>(null)
+  const feeCampaignGarageOptionsControllerRef = useRef<AbortController | null>(null)
   const tariffReferencesLoadedRef = useRef(false)
   const tariffReferencesFailedRef = useRef(false)
   const tariffReferencesRequestRef = useRef<Promise<boolean> | null>(null)
@@ -902,6 +903,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       tariffReferencesControllerRef.current = null
       tariffReferencesRequestRef.current = null
       tariffReferencesController?.abort()
+      feeCampaignGarageOptionsControllerRef.current?.abort()
     }
   }, [auth.accessToken, dictionaryClient, fundsClient, tariffReloadRevision])
 
@@ -978,28 +980,35 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return feeCampaignGarageOptionsRequestRef.current
     }
 
+    const controller = new AbortController()
+    feeCampaignGarageOptionsControllerRef.current = controller
     setFeeCampaignGarageOptionsLoading(true)
     const garageCountRequest = dictionaryClient.getGaragesPage
-      ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, 1)
+      ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, 1, false, undefined, undefined, false, undefined, controller.signal)
       : Promise.resolve(null)
     const request = Promise
       .all([
-        dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
         garageCountRequest,
       ])
       .then(([loadedGarages, garagePage]) => {
+        if (controller.signal.aborted) return false
         setFeeCampaignGarageOptions(loadedGarages)
         setFeeCampaignActiveGarageCount(garagePage?.totalCount ?? loadedGarages.length)
         feeCampaignGarageOptionsLoadedRef.current = true
         return true
       })
       .catch((caught: unknown) => {
-        setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить гаражи для формы сбора.')
+        if (!controller.signal.aborted) {
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить гаражи для формы сбора.')
+        }
         return false
       })
       .finally(() => {
-        feeCampaignGarageOptionsRequestRef.current = null
-        setFeeCampaignGarageOptionsLoading(false)
+        if (!controller.signal.aborted) {
+          feeCampaignGarageOptionsRequestRef.current = null
+          setFeeCampaignGarageOptionsLoading(false)
+        }
       })
 
     feeCampaignGarageOptionsRequestRef.current = request

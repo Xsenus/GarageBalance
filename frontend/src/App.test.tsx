@@ -26,7 +26,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
@@ -6214,6 +6214,40 @@ describe('App', () => {
     await user.click(openFeeCampaignButton)
     expect(await screen.findByRole('dialog', { name: 'Добавить сбор' })).toBeInTheDocument()
     expect(getGarages).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels both fee campaign garage reference requests when leaving tariffs', async () => {
+    const user = userEvent.setup()
+    let garageListSignal: AbortSignal | undefined
+    let garageCountSignal: AbortSignal | undefined
+    const getGarages = vi.fn((_token: string, _search?: string, _limit?: number, _includeArchived?: boolean, signal?: AbortSignal) => {
+      garageListSignal = signal
+      return new Promise<GarageDto[]>(() => undefined)
+    })
+    const getGaragesPage = vi.fn((_token: string, _search?: string, _offset?: number, _limit?: number, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, _filters?: GarageColumnFilters, signal?: AbortSignal) => {
+      garageCountSignal = signal
+      return new Promise<PagedResult<GarageDto>>(() => undefined)
+    })
+    const dictionaryClient = createDictionaryClient({ getGarages, getGaragesPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const openFeeCampaignButton = within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })
+    await waitFor(() => expect(openFeeCampaignButton).toBeEnabled())
+    await user.click(openFeeCampaignButton)
+    await waitFor(() => {
+      expect(getGarages).toHaveBeenCalledTimes(1)
+      expect(getGaragesPage).toHaveBeenCalledTimes(1)
+    })
+
+    await openSection(user, 'Отчеты')
+
+    expect(garageListSignal?.aborted).toBe(true)
+    expect(garageCountSignal?.aborted).toBe(true)
   })
 
   it('allows retrying garage references after the fee campaign form failed to load', async () => {
