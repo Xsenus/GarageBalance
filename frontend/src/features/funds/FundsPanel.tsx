@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Landmark, Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -122,6 +122,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [savingOperation, setSavingOperation] = useState(false)
   const [savingStatusAction, setSavingStatusAction] = useState(false)
   const [pageController] = useState(() => new AbortController())
+  const mutationRefreshControllerRef = useRef<AbortController | null>(null)
   useRestoreFocusOnClose(Boolean(fundEditor))
   useRestoreFocusOnClose(Boolean(fundDelete))
   useRestoreFocusOnClose(Boolean(operation))
@@ -153,7 +154,10 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   useEscapeKey(Boolean(operationReverse) && !savingOperation, () => closeFundOperationReverse())
   useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
-  useEffect(() => () => pageController.abort(), [pageController])
+  useEffect(() => () => {
+    pageController.abort()
+    mutationRefreshControllerRef.current?.abort()
+  }, [pageController])
 
   useEffect(() => {
     let cancelled = false
@@ -234,23 +238,38 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     }
   }
 
-  async function refreshFundsPanel() {
+  async function refreshFundsPanel(signal: AbortSignal) {
     const currentPageNumber = Math.floor(operationPage.offset / operationPage.limit) + 1
     const [funds, operations] = await Promise.all([
       loadFundsRequest(
         (signal) => fundsClient.getFunds(auth.accessToken, signal),
         'Сервер не ответил при загрузке фондов. Повторите загрузку.',
-        pageController.signal,
+        signal,
       ),
       loadFundsRequest(
         (signal) => getFundOperationsPage(fundsClient, auth.accessToken, currentPageNumber, operationPage.limit, signal),
         'Сервер не ответил при загрузке операций фондов. Повторите загрузку.',
-        pageController.signal,
+        signal,
       ),
     ])
+    if (signal.aborted) {
+      return
+    }
+
     setRows(funds.map(mapFundDtoToPrototypeRow))
     setOperationPage(operations)
     setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
+  }
+
+  function refreshFundsPanelAfterMutation() {
+    mutationRefreshControllerRef.current?.abort()
+    const controller = new AbortController()
+    mutationRefreshControllerRef.current = controller
+    void refreshFundsPanel(controller.signal).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        setLoadError(error instanceof Error ? error.message : 'Операция сохранена, но не удалось обновить данные фондов.')
+      }
+    })
   }
 
   function openFundCreate() {
@@ -469,7 +488,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         amount,
         reason: reason || undefined,
       })
-      await refreshFundsPanel()
+      refreshFundsPanelAfterMutation()
       setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${savedOperation.fundName}" сохранено и записано в историю изменений.`)
       closeFundOperation()
     } catch (error: unknown) {
@@ -497,7 +516,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       } else {
         await fundsClient.restoreOperation(auth.accessToken, statusAction.operation.id)
       }
-      await refreshFundsPanel()
+      refreshFundsPanelAfterMutation()
       setOperationMessage(`${statusAction.action === 'cancel' ? 'Операция отменена' : 'Операция восстановлена'} и записана в историю изменений.`)
       closeFundStatusAction()
     } catch (error: unknown) {
@@ -545,7 +564,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         amount: operationEditConfirmation.amount,
         reason: operationEditConfirmation.reason,
       })
-      await refreshFundsPanel()
+      refreshFundsPanelAfterMutation()
       setOperationMessage(`Операция фонда "${savedOperation.fundName}" изменена и записана в историю изменений.`)
       setOperationEditConfirmation(null)
       closeFundOperationEdit()
@@ -576,7 +595,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         amount: operationReverse.operation.amount,
         reason,
       })
-      await refreshFundsPanel()
+      refreshFundsPanelAfterMutation()
       setOperationMessage(`Обратная операция фонда "${savedOperation.fundName}" создана и записана в историю изменений.`)
       closeFundOperationReverse()
     } catch (error: unknown) {

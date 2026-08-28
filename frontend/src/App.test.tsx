@@ -11711,7 +11711,26 @@ describe('App', () => {
 
   it('shows funds management prototype from dashboard tile', async () => {
     const user = userEvent.setup()
-    const fundsClient = createFundsClient()
+    const statefulFundsClient = createFundsClient()
+    let pendingFundsRefreshGate: { markStarted: () => void; wait: Promise<void> } | null = null
+    function blockNextFundsRefresh() {
+      let markStarted!: () => void
+      const started = new Promise<void>((resolve) => { markStarted = resolve })
+      let release!: () => void
+      const wait = new Promise<void>((resolve) => { release = resolve })
+      pendingFundsRefreshGate = { markStarted, wait }
+      return { started, release }
+    }
+    const getFunds = vi.fn(async (...args: Parameters<FundsClient['getFunds']>) => {
+      const gate = pendingFundsRefreshGate
+      if (gate) {
+        pendingFundsRefreshGate = null
+        gate.markStarted()
+        await gate.wait
+      }
+      return statefulFundsClient.getFunds(...args)
+    })
+    const fundsClient = { ...statefulFundsClient, getFunds }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -11789,8 +11808,13 @@ describe('App', () => {
     await user.clear(within(reopenedDepositDialog).getByLabelText('Комментарий к операции фонда'))
     await user.type(within(reopenedDepositDialog).getByLabelText('Комментарий к операции фонда'), 'Распределение средств')
     expect(within(reopenedDepositDialog).getByText(/1 500\.00 руб\./)).toBeInTheDocument()
+    const depositRefresh = blockNextFundsRefresh()
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
 
+    await depositRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Пополнить фонд' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
+    depositRefresh.release()
     expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getAllByText(/1 500\.00 руб\./).length).toBeGreaterThanOrEqual(1)
     expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('98 500.00 руб.')
@@ -11844,7 +11868,13 @@ describe('App', () => {
 
     await user.click(editSaveButton)
     editConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение операции фонда?' })
+    const editRefresh = blockNextFundsRefresh()
     await user.click(within(editConfirmationDialog).getByRole('button', { name: 'Сохранить' }))
+    await editRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение операции фонда?' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Изменить операцию фонда?' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByText(/Операция фонда "Целевые взносы" изменена и записана в историю изменений\./)).toHaveAttribute('role', 'status')
+    editRefresh.release()
     expect(await within(fundsPanel).findByText(/Операция фонда "Целевые взносы" изменена и записана в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundOperationsTable).getAllByText(/1 750\.00 руб\./).length).toBeGreaterThanOrEqual(1)
 
@@ -11856,7 +11886,12 @@ describe('App', () => {
     await user.click(within(cancelFundOperationDialog).getByRole('button', { name: 'Отменить операцию' }))
     expect(within(cancelFundOperationDialog).getByRole('alert')).toHaveTextContent('Укажите причину отмены операции фонда.')
     await user.type(within(cancelFundOperationDialog).getByLabelText('Причина отмены операции фонда'), 'Ошибочное распределение')
+    const cancelRefresh = blockNextFundsRefresh()
     await user.click(within(cancelFundOperationDialog).getByRole('button', { name: 'Отменить операцию' }))
+    await cancelRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Отменить операцию фонда?' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByText('Операция отменена и записана в историю изменений.')).toHaveAttribute('role', 'status')
+    cancelRefresh.release()
     expect(await within(fundsPanel).findByText('Отменена')).toBeInTheDocument()
     expect(within(fundsPanel).getByText('Операция отменена и записана в историю изменений.')).toHaveAttribute('role', 'status')
 
@@ -11868,7 +11903,12 @@ describe('App', () => {
     const restoreConfirmButton = within(restoreFundOperationDialog).getByRole('button', { name: 'Вернуть операцию' })
     expect(Boolean(restoreCancelButton.compareDocumentPosition(restoreConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     await waitFor(() => expect(restoreCancelButton).toHaveFocus())
+    const restoreRefresh = blockNextFundsRefresh()
     await user.click(restoreConfirmButton)
+    await restoreRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Вернуть операцию фонда?' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByText('Операция восстановлена и записана в историю изменений.')).toHaveAttribute('role', 'status')
+    restoreRefresh.release()
     expect(await within(fundsPanel).findByText('Операция восстановлена и записана в историю изменений.')).toHaveAttribute('role', 'status')
     expect(within(fundOperationsTable).getByText('Активна')).toBeInTheDocument()
 
@@ -11883,7 +11923,12 @@ describe('App', () => {
     await user.click(reverseConfirmButton)
     expect(within(reverseFundOperationDialog).getByRole('alert')).toHaveTextContent('Укажите причину обратной операции фонда.')
     await user.type(within(reverseFundOperationDialog).getByLabelText('Причина обратной операции фонда'), 'Сторнирование распределения')
+    const reverseRefresh = blockNextFundsRefresh()
     await user.click(reverseConfirmButton)
+    await reverseRefresh.started
+    expect(screen.queryByRole('dialog', { name: 'Создать обратную операцию фонда?' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByText(/Обратная операция фонда "Целевые взносы" создана и записана в историю изменений\./)).toHaveAttribute('role', 'status')
+    reverseRefresh.release()
     expect(await within(fundsPanel).findByText(/Обратная операция фонда "Целевые взносы" создана и записана в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundOperationsTable).getByText('Изъятие')).toBeInTheDocument()
   })
@@ -12257,6 +12302,8 @@ describe('App', () => {
       expect(fundRefreshSignal).toBeInstanceOf(AbortSignal)
       expect(operationRefreshSignal).toBeInstanceOf(AbortSignal)
     })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Пополнить фонд' })).not.toBeInTheDocument())
+    expect(within(fundsPanel).getByText('Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений.')).toHaveAttribute('role', 'status')
 
     await openSection(user, 'Контрагенты')
 
@@ -12274,6 +12321,98 @@ describe('App', () => {
     expect(bothAborted).toBe(true)
     expect(screen.queryByText('Отменённое обновление фондов не должно показывать ошибку.')).not.toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+  })
+
+  it('keeps a saved fund operation closed and reports a background refresh failure', async () => {
+    const user = userEvent.setup()
+    const initialFunds = [createFund({ id: 'fund-target', name: 'Целевые взносы' })]
+    const getFunds = vi.fn()
+      .mockResolvedValueOnce(initialFunds)
+      .mockRejectedValueOnce(new Error('Не удалось обновить фонды после сохранения.'))
+    const fundsClient = createFundsClient({
+      getFunds,
+      createOperation: async () => createFundOperation({ fundId: 'fund-target', fundName: 'Целевые взносы' }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Фонды')
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Пополнить фонд Целевые взносы' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
+    await user.type(within(dialog).getByLabelText('Сумма операции фонда'), '500')
+    await user.type(within(dialog).getByLabelText('Комментарий к операции фонда'), 'Проверка фонового обновления')
+    await user.click(within(dialog).getByRole('button', { name: 'Подтвердить операцию' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Пополнить фонд' })).not.toBeInTheDocument())
+    expect(within(fundsPanel).getByText('Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений.')).toHaveAttribute('role', 'status')
+    expect(await within(fundsPanel).findByRole('alert')).toHaveTextContent('Не удалось обновить фонды после сохранения.')
+    expect(getFunds).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels an older fund refresh so it cannot replace newer balances', async () => {
+    const user = userEvent.setup()
+    const initialFunds = [createFund({ id: 'fund-target', name: 'Целевые взносы', balance: 0, availableToDistribute: 1000 })]
+    const firstSnapshot = [createFund({ id: 'fund-target', name: 'Целевые взносы', balance: 100, availableToDistribute: 900 })]
+    const secondSnapshot = [createFund({ id: 'fund-target', name: 'Целевые взносы', balance: 300, availableToDistribute: 700 })]
+    let firstRefreshSignal: AbortSignal | undefined
+    let resolveFirstRefresh!: (funds: FundDto[]) => void
+    let resolveSecondRefresh!: (funds: FundDto[]) => void
+    const getFunds = vi.fn((_token: string, signal?: AbortSignal) => {
+      if (getFunds.mock.calls.length === 1) {
+        return Promise.resolve(initialFunds)
+      }
+
+      if (getFunds.mock.calls.length === 2) {
+        firstRefreshSignal = signal
+        return new Promise<FundDto[]>((resolve) => {
+          resolveFirstRefresh = resolve
+        })
+      }
+
+      return new Promise<FundDto[]>((resolve) => {
+        resolveSecondRefresh = resolve
+      })
+    })
+    const fundsClient = createFundsClient({
+      getFunds,
+      createOperation: async (_token, request) => createFundOperation({
+        id: `operation-${getFunds.mock.calls.length}`,
+        fundId: request.fundId,
+        fundName: 'Целевые взносы',
+        amount: request.amount,
+        balanceAfter: request.amount === 100 ? 100 : 300,
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Фонды')
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const depositButton = await within(fundsPanel).findByRole('button', { name: 'Пополнить фонд Целевые взносы' })
+    await user.click(depositButton)
+    let dialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
+    await user.type(within(dialog).getByLabelText('Сумма операции фонда'), '100')
+    await user.click(within(dialog).getByRole('button', { name: 'Подтвердить операцию' }))
+    await waitFor(() => expect(firstRefreshSignal).toBeInstanceOf(AbortSignal))
+
+    await user.click(depositButton)
+    dialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
+    await user.type(within(dialog).getByLabelText('Сумма операции фонда'), '200')
+    await user.click(within(dialog).getByRole('button', { name: 'Подтвердить операцию' }))
+    await waitFor(() => expect(getFunds).toHaveBeenCalledTimes(3))
+    expect(firstRefreshSignal?.aborted).toBe(true)
+
+    await act(async () => resolveSecondRefresh(secondSnapshot))
+    const fundsTable = within(fundsPanel).getByRole('table', { name: 'Фонды и собранные суммы' })
+    await waitFor(() => expect(within(fundsTable).getByText('300.00 руб.')).toBeInTheDocument())
+    await act(async () => resolveFirstRefresh(firstSnapshot))
+    expect(within(fundsTable).getByText('300.00 руб.')).toBeInTheDocument()
+    expect(within(fundsTable).queryByText('100.00 руб.')).not.toBeInTheDocument()
   })
 
   it('lets administrator expand the sidebar and remembers the choice', async () => {
