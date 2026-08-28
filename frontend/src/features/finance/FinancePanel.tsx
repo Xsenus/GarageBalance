@@ -3671,14 +3671,7 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + balanceDelta) }
         : currentGarage)
       closeHistoryEditDialog()
-      const [overdueDebtRefreshed] = await Promise.all([
-        refreshGarageOverdueDebt(selectedGarage),
-        loadGaragePaymentHistory(selectedGarage),
-        loadGarageIncomeWorksheet(selectedGarage),
-      ])
-      if (!overdueDebtRefreshed) {
-        setPaymentError('Платеж изменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
-      }
+      refreshGarageAfterIncomeSave(selectedGarage, 'Платеж изменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
     } catch (error) {
       setHistoryEdit((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось изменить платеж.' } : state)
     } finally {
@@ -3706,14 +3699,7 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + canceledAmount) }
         : currentGarage)
       closeHistoryCancelDialog()
-      const [overdueDebtRefreshed] = await Promise.all([
-        refreshGarageOverdueDebt(selectedGarage),
-        loadGaragePaymentHistory(selectedGarage),
-        loadGarageIncomeWorksheet(selectedGarage),
-      ])
-      if (!overdueDebtRefreshed) {
-        setPaymentError('Платеж отменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
-      }
+      refreshGarageAfterIncomeSave(selectedGarage, 'Платеж отменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
     } catch (error) {
       setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось отменить платеж.' } : state)
     } finally {
@@ -3865,7 +3851,7 @@ function PaymentsPrototypePanel({
           }
         : currentRow))
       setHistoricalMeterReadingSave(null)
-      await loadGarageIncomeWorksheet(selectedGarage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo)
+      void loadGarageIncomeWorksheet(selectedGarage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo)
     } catch (error) {
       if (selectedGarageIdRef.current !== selectedGarage.id) {
         return

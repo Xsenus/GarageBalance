@@ -8765,7 +8765,13 @@ describe('App', () => {
       }],
     })
     const getGarageIncomeWorksheet = vi.fn(async () => worksheet())
-    const calculateGarageIncomeWorksheet = vi.fn(async () => worksheet())
+    let resolveWorksheetRefresh!: (value: GarageIncomeWorksheetDto) => void
+    const worksheetRefresh = new Promise<GarageIncomeWorksheetDto>((resolve) => { resolveWorksheetRefresh = resolve })
+    let worksheetCalculationCount = 0
+    const calculateGarageIncomeWorksheet = vi.fn(() => {
+      worksheetCalculationCount += 1
+      return worksheetCalculationCount === 1 ? Promise.resolve(worksheet()) : worksheetRefresh
+    })
     const savePaymentFormMeterReading = vi.fn(async (_token: string, request) => {
       savedValue = request.currentValue
       return createMeterReading({
@@ -8829,7 +8835,16 @@ describe('App', () => {
       periodOverrideReason: undefined,
     })))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сохранить показание Вода историческая за фев.24' })).not.toBeInTheDocument())
-    expect(await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })).toHaveValue('115')
+    const savedMeterInput = await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })
+    expect(savedMeterInput).toHaveValue('115')
+    expect(savedMeterInput).toBeEnabled()
+    expect(within(prototype).getByRole('button', { name: 'Сохранить показание Вода историческая фев.24' })).toBeEnabled()
+    expect(calculateGarageIncomeWorksheet).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      resolveWorksheetRefresh(worksheet())
+      await worksheetRefresh
+    })
   })
 
   it('shows an error when the garage financial period is unavailable without requesting a partial worksheet', async () => {
@@ -10622,6 +10637,27 @@ describe('App', () => {
       isCanceled: true,
       comment: `Отменено: ${request.reason}`,
     }))
+    const worksheet = createGarageIncomeWorksheet({
+      garageId: garageFromDictionary.id,
+      garageNumber: garageFromDictionary.number,
+      ownerName: garageFromDictionary.ownerName,
+      rows: [],
+    })
+    let pendingWorksheetRefresh: Promise<GarageIncomeWorksheetDto> | null = null
+    let resolveWorksheetRefresh: ((value: GarageIncomeWorksheetDto) => void) | null = null
+    const holdWorksheetRefresh = () => {
+      pendingWorksheetRefresh = new Promise<GarageIncomeWorksheetDto>((resolve) => { resolveWorksheetRefresh = resolve })
+    }
+    const releaseWorksheetRefresh = async () => {
+      const request = pendingWorksheetRefresh
+      const resolve = resolveWorksheetRefresh
+      if (!request || !resolve) return
+      resolve(worksheet)
+      await request
+      pendingWorksheetRefresh = null
+      resolveWorksheetRefresh = null
+    }
+    const calculateGarageIncomeWorksheet = vi.fn(() => pendingWorksheetRefresh ?? Promise.resolve(worksheet))
     const registerReceiptPrintingAction = vi.fn(async (_token: string, operationId: string, request: ReceiptPrintingActionRequest) => createReceiptPrintingAction({
       financialOperationId: operationId,
       action: request.action,
@@ -10629,7 +10665,7 @@ describe('App', () => {
       copyMark: request.action === 'reprint' ? 'КОПИЯ' : null,
       statusMessage: `Квитанция: ${request.action}`,
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage, updateIncome, cancelOperation })} importClient={createImportClient()} integrationClient={createIntegrationClient({ registerReceiptPrintingAction })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getOperationsPage, updateIncome, cancelOperation, calculateGarageIncomeWorksheet })} importClient={createImportClient()} integrationClient={createIntegrationClient({ registerReceiptPrintingAction })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -10696,6 +10732,7 @@ describe('App', () => {
     expect(updateIncome).not.toHaveBeenCalled()
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
     const confirmedPaymentChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    holdWorksheetRefresh()
     await user.click(within(confirmedPaymentChangeDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(updateIncome).toHaveBeenCalledWith('token', 'operation-garage-77', expect.objectContaining({
       garageId: 'garage-77',
@@ -10705,6 +10742,12 @@ describe('App', () => {
       amount: 1500,
       comment: 'Исправление суммы',
     })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить платеж' })).not.toBeInTheDocument())
+    await user.click(within(historyTable).getByRole('button', { name: 'Изменить платеж Серверная оплата' }))
+    const immediatelyReopenedEditDialog = await screen.findByRole('dialog', { name: 'Изменить платеж' })
+    expect(within(immediatelyReopenedEditDialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
+    await user.keyboard('{Escape}')
+    await act(releaseWorksheetRefresh)
 
     const cancelPaymentButton = within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' })
     await user.click(cancelPaymentButton)
@@ -10720,8 +10763,15 @@ describe('App', () => {
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
     expect(await within(cancelDialog).findByText('Укажите причину отмены платежа.')).toBeInTheDocument()
     await user.type(within(cancelDialog).getByLabelText('Причина отмены платежа'), 'Ошибочный платеж')
+    holdWorksheetRefresh()
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить платеж?' })).not.toBeInTheDocument())
+    await user.click(within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' }))
+    const immediatelyReopenedCancelDialog = await screen.findByRole('dialog', { name: 'Отменить платеж?' })
+    expect(within(immediatelyReopenedCancelDialog).getByRole('button', { name: 'Отменить платеж' })).toBeEnabled()
+    await user.keyboard('{Escape}')
+    await act(releaseWorksheetRefresh)
     const finances = within(prototype).getByRole('region', { name: 'Финансы' })
     await waitFor(() => expect(finances).toHaveTextContent('Баланс6 232.00'))
   })
