@@ -66,6 +66,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const loadedCreatedRecordsKeyRef = useRef<string | null>(null)
   const loadedCreatedRecordsRunIdRef = useRef<string | null>(null)
   const loadedQuarantineRevisionRef = useRef(-1)
+  const loadedQuarantineTokenRef = useRef<string | null>(null)
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
   const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
@@ -93,6 +94,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const quarantinePage = createClientPage(quarantineItems, quarantinePageNumber, quarantinePageSize)
   const logLoadedForCurrentRun = Boolean(currentRun && loadedLogRunIdRef.current === currentRun.id)
   const createdRecordsLoadedForCurrentRun = Boolean(currentRun && loadedCreatedRecordsRunIdRef.current === currentRun.id)
+  const quarantineLoadedForCurrentSession = loadedQuarantineTokenRef.current === auth.accessToken
   const importTabs: Array<{ key: ImportTab; label: string; meta: string }> = [
     { key: 'checks', label: 'Проверки', meta: currentRun ? formatImportRunCheckSummary(currentRun) : 'ожидают запуска' },
     { key: 'log', label: 'Лог', meta: loadingLog ? 'загрузка' : `${runLogEntries.length} строк` },
@@ -112,6 +114,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     loadedCreatedRecordsKeyRef.current = null
     loadedCreatedRecordsRunIdRef.current = null
     loadedQuarantineRevisionRef.current = -1
+    loadedQuarantineTokenRef.current = null
   }, [auth.accessToken, importClient])
 
   useEffect(() => {
@@ -304,6 +307,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         if (!ignore) {
           setQuarantineItems(items)
           loadedQuarantineRevisionRef.current = quarantineReloadRevision
+          loadedQuarantineTokenRef.current = auth.accessToken
         }
       })
       .catch((caught: unknown) => {
@@ -809,15 +813,16 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
 
         {activeImportTab === 'quarantine' ? (
         <>
-          <div className="operation-list import-table import-table--quarantine" role="table" aria-label="Карантин импорта Access">
+          <div className="operation-list import-table import-table--quarantine" role="table" aria-label="Карантин импорта Access" aria-busy={loadingQuarantine}>
             <div className="operation-row header" role="row">
               <span role="columnheader">Строка</span>
               <span role="columnheader">Причина</span>
               <span role="columnheader">Действие</span>
             </div>
-            {loadingQuarantine ? <TableLoadingState label="Загружаем карантин импорта" /> : null}
-            {!loadingQuarantine && quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
-            {quarantinePage.items.map((item) => (
+            {loadingQuarantine && !quarantineLoadedForCurrentSession ? <TableLoadingState label="Загружаем карантин импорта" /> : null}
+            {loadingQuarantine && quarantineLoadedForCurrentSession ? <div className="form-hint" role="status" aria-label="Обновляем карантин импорта" aria-live="polite">Обновляем карантин импорта…</div> : null}
+            {!loadingQuarantine && quarantineLoadedForCurrentSession && quarantineItems.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Открытых строк карантина нет</p> : null}
+            {quarantineLoadedForCurrentSession ? quarantinePage.items.map((item) => (
               <div className="operation-row" role="row" key={item.id}>
                 <span role="cell">
                   <strong>{item.entityType}{item.externalId ? ` #${item.externalId}` : ''}</strong>
@@ -828,15 +833,15 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   <small>{item.reasonMessage}</small>
                 </span>
                 <span role="cell">
-                  <button className="secondary-button" type="button" title={`Закрыть строку карантина ${item.entityType}${item.externalId ? ` #${item.externalId}` : ''}`} data-tooltip="Закрыть" disabled={resolvingQuarantineId === item.id} onClick={() => openQuarantineResolveDialog(item)}>
+                  <button className="secondary-button" type="button" title={`Закрыть строку карантина ${item.entityType}${item.externalId ? ` #${item.externalId}` : ''}`} data-tooltip="Закрыть" disabled={loadingQuarantine || resolvingQuarantineId === item.id} onClick={() => openQuarantineResolveDialog(item)}>
                     <Save size={16} />
                     <span>Закрыть</span>
                   </button>
                 </span>
               </div>
-            ))}
+            )) : null}
           </div>
-          <TablePagination ariaLabel="Пагинация карантина импорта" totalCount={quarantinePage.totalCount} offset={quarantinePage.offset} limit={quarantinePage.limit} visibleCount={quarantinePage.items.length} pageSizeLabel="Количество строк карантина импорта" onPageChange={setQuarantinePageNumber} onPageSizeChange={(limit) => { setQuarantinePageSize(limit); setQuarantinePageNumber(1) }} />
+          <TablePagination ariaLabel="Пагинация карантина импорта" totalCount={quarantinePage.totalCount} offset={quarantinePage.offset} limit={quarantinePage.limit} visibleCount={quarantinePage.items.length} disabled={loadingQuarantine} pageSizeLabel="Количество строк карантина импорта" onPageChange={setQuarantinePageNumber} onPageSizeChange={(limit) => { setQuarantinePageSize(limit); setQuarantinePageNumber(1) }} />
         </>
         ) : null}
       </div>

@@ -19176,6 +19176,51 @@ describe('App', () => {
     expect(within(importPanel).getByRole('status', { name: 'Загружаем созданные импортом записи' })).toBeInTheDocument()
   })
 
+  it('keeps quarantine rows visible and read-only during a background refresh', async () => {
+    const user = userEvent.setup()
+    const initialRun = createAccessImportRun({ id: 'quarantine-initial-run' })
+    const refreshedRun = createAccessImportRun({ id: 'quarantine-refreshed-run', originalFileName: 'Новая база.accdb' })
+    const knownItem = createAccessImportQuarantineItem({ id: 'known-quarantine-row', externalId: '77' })
+    let quarantineRequests = 0
+    let refreshSignal: AbortSignal | undefined
+    const importClient = createImportClient({
+      getAccessRuns: async () => [initialRun],
+      getOpenQuarantineItems: (_token, _runId, _limit, signal) => {
+        quarantineRequests += 1
+        if (quarantineRequests === 1) {
+          return Promise.resolve([knownItem])
+        }
+        refreshSignal = signal
+        return new Promise<never>(() => undefined)
+      },
+      dryRunAccess: async () => refreshedRun,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    await user.click(within(importPanel).getByRole('tab', { name: /Карантин/ }))
+    const quarantineTable = within(importPanel).getByRole('table', { name: 'Карантин импорта Access' })
+    expect(await within(quarantineTable).findByText('Garage #77')).toBeInTheDocument()
+
+    const file = new File(['new garage owner'], 'Новая база.accdb', { type: 'application/octet-stream' })
+    await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
+    await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл Access Новая база.accdb' }))
+    await waitFor(() => expect(refreshSignal).toBeDefined())
+
+    expect(within(quarantineTable).getByText('Garage #77')).toBeInTheDocument()
+    expect(within(quarantineTable).queryByRole('status', { name: 'Загружаем карантин импорта' })).not.toBeInTheDocument()
+    expect(within(quarantineTable).getByRole('status', { name: 'Обновляем карантин импорта' })).toBeInTheDocument()
+    expect(quarantineTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(quarantineTable).getByRole('button', { name: 'Закрыть' })).toBeDisabled()
+    expect(within(importPanel).getByRole('navigation', { name: 'Пагинация карантина импорта' })).toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
+    expect(refreshSignal?.aborted).toBe(true)
+  })
+
   it('requests Access import rollback through confirmation with reason', async () => {
     const user = userEvent.setup()
     let rollbackReason: string | undefined
