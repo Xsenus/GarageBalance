@@ -19504,6 +19504,44 @@ describe('App', () => {
     expect(filteredRequests).toHaveLength(1)
   })
 
+  it('keeps loaded audit events visible while the next page is pending and aborts it on leave', async () => {
+    const user = userEvent.setup()
+    const firstEvent = createAuditEvent({ id: 'audit-page-one', summary: 'Подтверждённое событие первой страницы.' })
+    let paginationSignal: AbortSignal | undefined
+    const getEventsPage = vi.fn((_token: string, params?: { offset?: number; limit?: number }, signal?: AbortSignal) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      if (offset === 25) {
+        paginationSignal = signal
+        return new Promise<never>(() => undefined)
+      }
+
+      return Promise.resolve({ items: [firstEvent], totalCount: 26, offset, limit })
+    })
+    render(<App authClient={createAuthClient()} auditClient={createAuditClient({ getEventsPage })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
+    expect(await within(auditTable).findByText('Подтверждённое событие первой страницы.')).toBeInTheDocument()
+
+    const pagination = within(auditPanel).getByRole('navigation', { name: 'Пагинация истории изменений' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(paginationSignal).toBeDefined())
+
+    expect(within(auditTable).getByText('Подтверждённое событие первой страницы.')).toBeInTheDocument()
+    expect(within(auditPanel).getByText('26 событий')).toBeInTheDocument()
+    expect(within(auditPanel).getByRole('status', { name: 'Обновляем историю изменений' })).toBeInTheDocument()
+    expect(auditTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(auditTable).getByRole('button', { name: 'Открыть карточку события Вход' })).toBeDisabled()
+
+    await openSection(user, 'Платежи')
+    expect(paginationSignal?.aborted).toBe(true)
+    expect(screen.queryByText('Не удалось загрузить историю изменений.')).not.toBeInTheDocument()
+  })
+
   it('shows tariff changes in central audit and opens tariffs workspace', async () => {
     const user = userEvent.setup()
     const tariffEvent = createAuditEvent({

@@ -287,11 +287,19 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
     relatedDocument: '',
   }))
   const [loading, setLoading] = useState(true)
+  const [loadedPageState, setLoadedPageState] = useState(() => ({
+    accessToken: auth.accessToken,
+    client: auditClient,
+    loaded: false,
+  }))
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<AuditPanelError | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [detailState, setDetailState] = useState<{ event: AuditEventDto; loading: boolean; error: string | null } | null>(null)
+  const hasLoadedPage = loadedPageState.accessToken === auth.accessToken
+    && loadedPageState.client === auditClient
+    && loadedPageState.loaded
   const detailRequestIdRef = useRef(0)
   const detailRequestControllerRef = useRef<AbortController | null>(null)
   useRestoreFocusOnClose(Boolean(detailState))
@@ -419,6 +427,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
         const loadedPage = await auditClient.getEventsPage(auth.accessToken, auditQuery, controller.signal)
         if (!ignore) {
           setPage(loadedPage)
+          setLoadedPageState({ accessToken: auth.accessToken, client: auditClient, loaded: true })
         }
       } catch (caught) {
         if (!ignore) {
@@ -519,7 +528,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <h2>История изменений объектов и действий системы</h2>
         </div>
         <div className="section-actions">
-          {!loading ? <span>{page.totalCount} событий</span> : null}
+          {hasLoadedPage ? <span>{page.totalCount} событий</span> : null}
           <button className="secondary-button" type="button" disabled={exporting || auditHasValidationErrors} onClick={exportCurrentEventsCsv}>
             <FileSpreadsheet size={16} />
             Скачать CSV
@@ -582,7 +591,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
         </FormField>
       </form>
 
-      <div className="operation-list audit-event-table" role="table" aria-label="События истории изменений">
+      <div className="operation-list audit-event-table" role="table" aria-label="События истории изменений" aria-busy={loading}>
         <div className="audit-event-row header" role="row">
           <span role="columnheader">Время</span>
           <span role="columnheader">Кто</span>
@@ -595,9 +604,10 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <span role="columnheader">Причина</span>
           <span role="columnheader">Карточка</span>
         </div>
-        {loading ? <TableLoadingState label="Загружаем историю изменений" /> : null}
-        {!loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
-        {!loading ? page.items.map((auditEvent) => {
+        {loading && !hasLoadedPage ? <TableLoadingState label="Загружаем историю изменений" /> : null}
+        {loading && hasLoadedPage ? <div className="form-hint" role="status" aria-label="Обновляем историю изменений" aria-live="polite">Обновляем историю изменений…</div> : null}
+        {hasLoadedPage && !loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
+        {hasLoadedPage ? page.items.map((auditEvent) => {
           const beforeAfter = getAuditBeforeAfter(auditEvent)
           return (
             <div className="audit-event-row" role="row" key={auditEvent.id}>
@@ -622,7 +632,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
               <span role="cell">{beforeAfter.after}</span>
               <span role="cell">{auditEvent.reason ?? 'не указано'}</span>
               <span role="cell">
-                <button className="icon-button audit-detail-button" type="button" aria-label={`Открыть карточку события ${getAuditEventActionKindLabel(auditEvent)}`} title="Карточка события" onClick={() => void openAuditEventDetail(auditEvent)}>
+                <button className="icon-button audit-detail-button" type="button" aria-label={`Открыть карточку события ${getAuditEventActionKindLabel(auditEvent)}`} title="Карточка события" disabled={loading} onClick={() => void openAuditEventDetail(auditEvent)}>
                   <FileText size={15} aria-hidden="true" />
                 </button>
               </span>
