@@ -18050,7 +18050,21 @@ describe('App', () => {
 
   it('creates meter reading and shows calculated consumption', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockMeterRefresh = false
+    let resolveMeterRefreshStarted!: () => void
+    const meterRefreshStarted = new Promise<void>((resolve) => { resolveMeterRefreshStarted = resolve })
+    let releaseMeterRefresh!: () => void
+    const meterRefreshGate = new Promise<void>((resolve) => { releaseMeterRefresh = resolve })
+    const getMeterReadingsPage = vi.fn(async (...args: Parameters<FinanceClient['getMeterReadingsPage']>) => {
+      if (blockMeterRefresh) {
+        resolveMeterRefreshStarted()
+        await meterRefreshGate
+        blockMeterRefresh = false
+      }
+      return statefulFinanceClient.getMeterReadingsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getMeterReadingsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -18061,10 +18075,87 @@ describe('App', () => {
     expect(within(financePanel).getByRole('combobox', { name: 'Тип счетчика' })).toHaveTextContent('Вода')
     await user.clear(within(financePanel).getByLabelText('Новое показание'))
     await user.type(within(financePanel).getByLabelText('Новое показание'), '15.5')
+    blockMeterRefresh = true
     await user.click(within(financePanel).getByRole('button', { name: 'Внести' }))
 
+    await meterRefreshStarted
+    expect(within(financePanel).getByLabelText('Новое показание')).toHaveValue(0)
+    expect(within(financePanel).getByRole('button', { name: 'Внести' })).toBeEnabled()
+    releaseMeterRefresh()
     expect(await within(financePanel).findByText('5.5')).toBeInTheDocument()
     expect(within(financePanel).getByRole('table', { name: 'Последние показания' })).toBeInTheDocument()
+  })
+
+  it('closes meter reading editor before its refreshed page is returned', async () => {
+    const user = userEvent.setup()
+    const initialReading = createMeterReading({
+      id: 'meter-reading-edit-background',
+      garageId: 'garage-1',
+      garageNumber: '12',
+      meterKind: 'water',
+      accountingMonth: '2026-06-01',
+      readingDate: '2026-06-20',
+      previousValue: 10,
+      currentValue: 15.5,
+      consumption: 5.5,
+      comment: 'Исходное показание',
+    })
+    let pageItems = [initialReading]
+    let blockMeterRefresh = false
+    let resolveMeterRefreshStarted!: () => void
+    const meterRefreshStarted = new Promise<void>((resolve) => { resolveMeterRefreshStarted = resolve })
+    let releaseMeterRefresh!: () => void
+    const meterRefreshGate = new Promise<void>((resolve) => { releaseMeterRefresh = resolve })
+    const getMeterReadingsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getMeterReadingsPage']>[1]) => {
+      if (blockMeterRefresh) {
+        resolveMeterRefreshStarted()
+        await meterRefreshGate
+        blockMeterRefresh = false
+      }
+      return {
+        items: pageItems,
+        totalCount: pageItems.length,
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      }
+    })
+    const updateMeterReading = vi.fn(async (_token: string, meterReadingId: string, request: CreateMeterReadingRequest) => {
+      const updated = {
+        ...initialReading,
+        id: meterReadingId,
+        accountingMonth: request.accountingMonth,
+        readingDate: request.readingDate,
+        currentValue: request.currentValue,
+        consumption: request.currentValue - initialReading.previousValue,
+        comment: request.comment ?? null,
+      }
+      pageItems = [updated]
+      return updated
+    })
+    const financeClient = createFinanceClient({ getMeterReadingsPage, updateMeterReading })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalled())
+    const menu = await openFinanceContextMenuByCellText(financePanel, '15.5')
+    await user.click(within(menu).getByRole('menuitem', { name: 'Изменить' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Показание счетчика' })
+    const currentValue = within(dialog).getByLabelText('Текущее показание')
+    await user.clear(currentValue)
+    await user.type(currentValue, '16.75')
+    blockMeterRefresh = true
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateMeterReading).toHaveBeenCalledWith('token', 'meter-reading-edit-background', expect.objectContaining({ currentValue: 16.75 })))
+    await meterRefreshStarted
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Показание счетчика' })).not.toBeInTheDocument())
+    releaseMeterRefresh()
+    await waitFor(() => expect(within(financePanel).getAllByText('6.75').some((node) => node.tagName === 'TD')).toBe(true))
   })
 
   it('shows electricity gap warning returned by API', async () => {

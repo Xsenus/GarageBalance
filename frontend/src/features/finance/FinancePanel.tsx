@@ -1373,8 +1373,8 @@ export function FinancePanel({
       } else {
         await financeClient.createMeterReading(auth.accessToken, request)
       }
-      await loadFinanceWorkbench('meterReadings', financePage.offset, financePage.limit, true)
       setMeterForm((value) => ({ ...value, currentValue: 0, comment: '' }))
+      refreshFinanceWorkbenchAfterSave('meterReadings')
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
