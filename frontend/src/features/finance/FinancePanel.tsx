@@ -883,8 +883,8 @@ export function FinancePanel({
     }
   }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financeWorkbenchRequests, meterForm.accountingMonth])
 
-  function refreshFinanceWorkbenchAfterSave(section: FinanceSectionKey) {
-    void loadFinanceWorkbench(section, financePage.offset, financePage.limit, true)
+  function refreshFinanceWorkbenchAfterSave(section: FinanceSectionKey, offset = financePage.offset) {
+    void loadFinanceWorkbench(section, offset, financePage.limit, true)
   }
 
   useEffect(() => {
@@ -1079,12 +1079,12 @@ export function FinancePanel({
         refreshFinanceWorkbenchAfterSave('expense')
       } else if (pending.kind === 'accrual') {
         await financeClient.updateAccrual(auth.accessToken, pending.recordId, pending.request as CreateAccrualRequest)
-        await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit, true)
         setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
+        refreshFinanceWorkbenchAfterSave('accruals')
       } else {
         await financeClient.updateSupplierAccrual(auth.accessToken, pending.recordId, pending.request as CreateSupplierAccrualRequest)
-        await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit, true)
         setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+        refreshFinanceWorkbenchAfterSave('supplierAccruals')
       }
     })
     if (saved) {
@@ -1240,8 +1240,8 @@ export function FinancePanel({
 
     const saved = await runSaving('accrual', async () => {
       await financeClient.createAccrual(auth.accessToken, request)
-      await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit, true)
       setAccrualForm((value) => ({ ...value, amount: 0, comment: '' }))
+      refreshFinanceWorkbenchAfterSave('accruals')
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
@@ -1291,8 +1291,8 @@ export function FinancePanel({
 
     const saved = await runSaving('supplier-accrual', async () => {
       await financeClient.createSupplierAccrual(auth.accessToken, request)
-      await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit, true)
       setSupplierAccrualForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      refreshFinanceWorkbenchAfterSave('supplierAccruals')
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
@@ -1336,7 +1336,7 @@ export function FinancePanel({
       setSupplierAccruals((items) => [...result.createdAccruals, ...items])
       setSalaryStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
       setSalaryForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
-      await loadFinanceWorkbench('supplierAccruals', 0, financePage.limit, true)
+      refreshFinanceWorkbenchAfterSave('supplierAccruals', 0)
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
@@ -1489,16 +1489,16 @@ export function FinancePanel({
       if (target.section === 'income' || target.section === 'expense') {
         const operation = target.record as FinancialOperationDto
         await financeClient.restoreOperation(auth.accessToken, operation.id)
-        await loadFinanceWorkbench(operation.operationKind === 'income' ? 'income' : 'expense', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave(operation.operationKind === 'income' ? 'income' : 'expense')
       } else if (target.section === 'accruals') {
         await financeClient.restoreAccrual(auth.accessToken, target.record.id)
-        await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave('accruals')
       } else if (target.section === 'supplierAccruals') {
         await financeClient.restoreSupplierAccrual(auth.accessToken, target.record.id)
-        await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave('supplierAccruals')
       } else {
         await financeClient.restoreMeterReading(auth.accessToken, target.record.id)
-        await loadFinanceWorkbench('meterReadings', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave('meterReadings')
       }
     })
 
@@ -1523,16 +1523,16 @@ export function FinancePanel({
       if (target.section === 'income' || target.section === 'expense') {
         const operation = target.record as FinancialOperationDto
         await financeClient.cancelOperation(auth.accessToken, operation.id, { reason })
-        await loadFinanceWorkbench(operation.operationKind === 'income' ? 'income' : 'expense', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave(operation.operationKind === 'income' ? 'income' : 'expense')
       } else if (target.section === 'accruals') {
         await financeClient.cancelAccrual(auth.accessToken, target.record.id, { reason })
-        await loadFinanceWorkbench('accruals', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave('accruals')
       } else if (target.section === 'supplierAccruals') {
         await financeClient.cancelSupplierAccrual(auth.accessToken, target.record.id, { reason })
-        await loadFinanceWorkbench('supplierAccruals', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave('supplierAccruals')
       } else {
         await financeClient.cancelMeterReading(auth.accessToken, target.record.id, { reason })
-        await loadFinanceWorkbench('meterReadings', financePage.offset, financePage.limit, true)
+        refreshFinanceWorkbenchAfterSave('meterReadings')
       }
     })
 

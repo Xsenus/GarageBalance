@@ -16161,7 +16161,21 @@ describe('App', () => {
 
   it('edits owner accrual from payments table with confirmation', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockEditedAccrualRefresh = false
+    let resolveEditedAccrualRefreshStarted!: () => void
+    const editedAccrualRefreshStarted = new Promise<void>((resolve) => { resolveEditedAccrualRefreshStarted = resolve })
+    let releaseEditedAccrualRefresh!: () => void
+    const editedAccrualRefresh = new Promise<void>((resolve) => { releaseEditedAccrualRefresh = resolve })
+    const getAccrualsPage = vi.fn(async (...args: Parameters<FinanceClient['getAccrualsPage']>) => {
+      if (blockEditedAccrualRefresh) {
+        resolveEditedAccrualRefreshStarted()
+        await editedAccrualRefresh
+        blockEditedAccrualRefresh = false
+      }
+      return statefulFinanceClient.getAccrualsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getAccrualsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -16204,9 +16218,13 @@ describe('App', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     accrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    blockEditedAccrualRefresh = true
     await user.click(within(accrualChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
+    await editedAccrualRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ручное начисление' })).not.toBeInTheDocument())
+    releaseEditedAccrualRefresh()
+    await editedAccrualRefresh
     expect(await within(financePanel).findByText('Начисление после сверки')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('1 350.00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('Начисление edit')).not.toBeInTheDocument()
@@ -16214,7 +16232,21 @@ describe('App', () => {
 
   it('edits supplier accrual from payments table with confirmation', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockEditedSupplierAccrualRefresh = false
+    let resolveEditedSupplierAccrualRefreshStarted!: () => void
+    const editedSupplierAccrualRefreshStarted = new Promise<void>((resolve) => { resolveEditedSupplierAccrualRefreshStarted = resolve })
+    let releaseEditedSupplierAccrualRefresh!: () => void
+    const editedSupplierAccrualRefresh = new Promise<void>((resolve) => { releaseEditedSupplierAccrualRefresh = resolve })
+    const getSupplierAccrualsPage = vi.fn(async (...args: Parameters<FinanceClient['getSupplierAccrualsPage']>) => {
+      if (blockEditedSupplierAccrualRefresh) {
+        resolveEditedSupplierAccrualRefreshStarted()
+        await editedSupplierAccrualRefresh
+        blockEditedSupplierAccrualRefresh = false
+      }
+      return statefulFinanceClient.getSupplierAccrualsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getSupplierAccrualsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -16260,9 +16292,13 @@ describe('App', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     supplierAccrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    blockEditedSupplierAccrualRefresh = true
     await user.click(within(supplierAccrualChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
+    await editedSupplierAccrualRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
+    releaseEditedSupplierAccrualRefresh()
+    await editedSupplierAccrualRefresh
     expect(await within(financePanel).findByText('BILL-fixed')).toBeInTheDocument()
     expect(within(financePanel).getByText('Начисление поставщику после сверки')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('820.00').length).toBeGreaterThan(0)
@@ -16495,12 +16531,24 @@ describe('App', () => {
     })
     const activeReading = { ...canceledReading, isCanceled: false, comment: null }
     let pageItems: MeterReadingDto[] = [canceledReading]
-    const getMeterReadingsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getMeterReadingsPage']>[1]) => ({
-      items: pageItems,
-      totalCount: pageItems.length,
-      offset: params?.offset ?? 0,
-      limit: params?.limit ?? 25,
-    }))
+    let blockMeterRefresh = false
+    let resolveMeterRefreshStarted!: () => void
+    const meterRefreshStarted = new Promise<void>((resolve) => { resolveMeterRefreshStarted = resolve })
+    let releaseMeterRefresh!: () => void
+    const meterRefreshGate = new Promise<void>((resolve) => { releaseMeterRefresh = resolve })
+    const getMeterReadingsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getMeterReadingsPage']>[1]) => {
+      if (blockMeterRefresh) {
+        resolveMeterRefreshStarted()
+        await meterRefreshGate
+        blockMeterRefresh = false
+      }
+      return {
+        items: pageItems,
+        totalCount: pageItems.length,
+        offset: params?.offset ?? 0,
+        limit: params?.limit ?? 25,
+      }
+    })
     const restoreMeterReading = vi.fn(async (_token: string, meterReadingId: string) => {
       pageItems = [activeReading]
       return { ...activeReading, id: meterReadingId }
@@ -16530,9 +16578,12 @@ describe('App', () => {
     const reopenedMenu = await openFinanceContextMenuByCellText(financePanel, '28')
     await user.click(within(reopenedMenu).getByRole('menuitem', { name: 'Вернуть' }))
     restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть показание счетчика?' })
+    blockMeterRefresh = true
     await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
     await waitFor(() => expect(restoreMeterReading).toHaveBeenCalledWith('token', 'meter-reading-canceled'))
+    await meterRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть показание счетчика?' })).not.toBeInTheDocument())
+    releaseMeterRefresh()
     await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(2))
   })
 
@@ -17499,7 +17550,21 @@ describe('App', () => {
 
   it('cancels income operation with required reason from payments workspace', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockOperationRefresh = false
+    let resolveOperationRefreshStarted!: () => void
+    const operationRefreshStarted = new Promise<void>((resolve) => { resolveOperationRefreshStarted = resolve })
+    let releaseOperationRefresh!: () => void
+    const operationRefreshGate = new Promise<void>((resolve) => { releaseOperationRefresh = resolve })
+    const getOperationsPage = vi.fn(async (...args: Parameters<FinanceClient['getOperationsPage']>) => {
+      if (blockOperationRefresh) {
+        resolveOperationRefreshStarted()
+        await operationRefreshGate
+        blockOperationRefresh = false
+      }
+      return statefulFinanceClient.getOperationsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getOperationsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -17537,7 +17602,11 @@ describe('App', () => {
     await user.click(within(reopenedCancelDialog).getByRole('button', { name: 'Отменить запись' }))
     expect(within(reopenedCancelDialog).getByRole('alert')).toHaveTextContent('Укажите причину отмены.')
     await user.type(within(reopenedCancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный документ')
+    blockOperationRefresh = true
     await user.click(within(reopenedCancelDialog).getByRole('button', { name: 'Отменить запись' }))
+    await operationRefreshStarted
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить поступление?' })).not.toBeInTheDocument())
+    releaseOperationRefresh()
     await waitFor(() => expect(within(financePanel).queryByText('+700.00')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
     expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
@@ -17698,7 +17767,21 @@ describe('App', () => {
 
   it('creates manual accrual and updates debt from payments workspace', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockCreatedAccrualRefresh = false
+    let resolveCreatedAccrualRefreshStarted!: () => void
+    const createdAccrualRefreshStarted = new Promise<void>((resolve) => { resolveCreatedAccrualRefreshStarted = resolve })
+    let releaseCreatedAccrualRefresh!: () => void
+    const createdAccrualRefresh = new Promise<void>((resolve) => { releaseCreatedAccrualRefresh = resolve })
+    const getAccrualsPage = vi.fn(async (...args: Parameters<FinanceClient['getAccrualsPage']>) => {
+      if (blockCreatedAccrualRefresh) {
+        resolveCreatedAccrualRefreshStarted()
+        await createdAccrualRefresh
+        blockCreatedAccrualRefresh = false
+      }
+      return statefulFinanceClient.getAccrualsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getAccrualsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -17708,13 +17791,20 @@ describe('App', () => {
 
     await waitFor(() => expect(within(financePanel).getByRole('combobox', { name: 'Гараж для начисления' })).toHaveTextContent('Гараж 1'))
     await waitFor(() => expect(within(financePanel).getByRole('combobox', { name: 'Вид начисления' })).toHaveTextContent('Членский взнос'))
-    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
-    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
+    const accrualAmount = within(financePanel).getByLabelText('Сумма начисления')
+    await user.clear(accrualAmount)
+    await user.type(accrualAmount, '900')
     await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
     const createAccrualButton = within(financePanel).getAllByRole('button', { name: 'Начислить' })[0]
     await waitFor(() => expect(createAccrualButton).toBeEnabled())
+    blockCreatedAccrualRefresh = true
     await user.click(createAccrualButton)
 
+    await createdAccrualRefreshStarted
+    expect(accrualAmount).toHaveValue('0.00')
+    expect(createAccrualButton).toBeEnabled()
+    releaseCreatedAccrualRefresh()
+    await createdAccrualRefresh
     expect((await within(financePanel).findAllByText('900.00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(accrualTable).toBeInTheDocument()
@@ -17765,7 +17855,21 @@ describe('App', () => {
 
   it('creates supplier accrual from payments workspace', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockCreatedSupplierAccrualRefresh = false
+    let resolveCreatedSupplierAccrualRefreshStarted!: () => void
+    const createdSupplierAccrualRefreshStarted = new Promise<void>((resolve) => { resolveCreatedSupplierAccrualRefreshStarted = resolve })
+    let releaseCreatedSupplierAccrualRefresh!: () => void
+    const createdSupplierAccrualRefresh = new Promise<void>((resolve) => { releaseCreatedSupplierAccrualRefresh = resolve })
+    const getSupplierAccrualsPage = vi.fn(async (...args: Parameters<FinanceClient['getSupplierAccrualsPage']>) => {
+      if (blockCreatedSupplierAccrualRefresh) {
+        resolveCreatedSupplierAccrualRefreshStarted()
+        await createdSupplierAccrualRefresh
+        blockCreatedSupplierAccrualRefresh = false
+      }
+      return statefulFinanceClient.getSupplierAccrualsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getSupplierAccrualsPage }
     const electricityExpenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
     const wasteExpenseType = createAccountingType({ id: 'expense-type-waste', name: 'Вывоз мусора', code: 'trash_removal' })
     const waterSupplier = createSupplier({
@@ -17810,14 +17914,21 @@ describe('App', () => {
     await user.click(supplierControl)
     await user.click(within(financePanel).getByRole('option', { name: waterSupplier.name }))
     expect(supplierAccrualService).toHaveTextContent(electricityExpenseType.name)
-    await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
-    await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
+    const supplierAccrualAmount = within(financePanel).getByLabelText('Сумма начисления поставщику')
+    await user.clear(supplierAccrualAmount)
+    await user.type(supplierAccrualAmount, '650')
     await user.type(within(financePanel).getByLabelText('Документ начисления поставщику'), 'INV-1')
     await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
     const createSupplierAccrualButton = within(financePanel).getAllByRole('button', { name: 'Начислить' })[1]
     await waitFor(() => expect(createSupplierAccrualButton).toBeEnabled())
+    blockCreatedSupplierAccrualRefresh = true
     await user.click(createSupplierAccrualButton)
 
+    await createdSupplierAccrualRefreshStarted
+    expect(supplierAccrualAmount).toHaveValue('0.00')
+    expect(createSupplierAccrualButton).toBeEnabled()
+    releaseCreatedSupplierAccrualRefresh()
+    await createdSupplierAccrualRefresh
     expect((await within(financePanel).findAllByText('650.00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
     expect(supplierAccrualTable).toBeInTheDocument()
@@ -17842,7 +17953,21 @@ describe('App', () => {
 
   it('generates supplier group salary accruals from payments workspace', async () => {
     const user = userEvent.setup()
-    const financeClient = createStatefulFinanceClient()
+    const statefulFinanceClient = createStatefulFinanceClient()
+    let blockSalaryRefresh = false
+    let resolveSalaryRefreshStarted!: () => void
+    const salaryRefreshStarted = new Promise<void>((resolve) => { resolveSalaryRefreshStarted = resolve })
+    let releaseSalaryRefresh!: () => void
+    const salaryRefresh = new Promise<void>((resolve) => { releaseSalaryRefresh = resolve })
+    const getSupplierAccrualsPage = vi.fn(async (...args: Parameters<FinanceClient['getSupplierAccrualsPage']>) => {
+      if (blockSalaryRefresh) {
+        resolveSalaryRefreshStarted()
+        await salaryRefresh
+        blockSalaryRefresh = false
+      }
+      return statefulFinanceClient.getSupplierAccrualsPage(...args)
+    })
+    const financeClient = { ...statefulFinanceClient, getSupplierAccrualsPage }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -17866,9 +17991,13 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Сумма зарплаты'), '7000')
     await user.type(within(dialog).getByLabelText('Документ зарплаты'), 'PAY-06')
     await user.type(within(dialog).getByLabelText('Комментарий зарплаты'), 'Июнь')
+    blockSalaryRefresh = true
     await user.click(within(dialog).getByRole('button', { name: 'Начислить зарплату' }))
 
+    await salaryRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Зарплата группы' })).not.toBeInTheDocument())
+    releaseSalaryRefresh()
+    await salaryRefresh
     expect((await within(financePanel).findAllByText('Зарплата')).length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('PAY-06')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('Авто').length).toBeGreaterThan(0)
