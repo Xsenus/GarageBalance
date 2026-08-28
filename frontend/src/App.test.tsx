@@ -18019,6 +18019,146 @@ describe('App', () => {
     expect(financeTableArea).toHaveAttribute('aria-busy', 'false')
   })
 
+  it('does not replace the latest payment preview with another workbench page', async () => {
+    const user = userEvent.setup()
+    const latestOperation = createFinancialOperation({
+      id: 'latest-preview-operation',
+      documentNumber: 'PKO-LATEST-PREVIEW',
+      incomeTypeName: 'Последнее подтверждённое поступление',
+    })
+    const firstPageOperation = createFinancialOperation({
+      id: 'workbench-page-one-operation',
+      documentNumber: 'PKO-WORKBENCH-PAGE-ONE',
+      incomeTypeName: 'Рабочая первая страница',
+    })
+    const secondPageOperation = createFinancialOperation({
+      id: 'workbench-page-two-operation',
+      documentNumber: 'PKO-WORKBENCH-PAGE-TWO',
+      incomeTypeName: 'Рабочая вторая страница',
+    })
+    const getOperations = vi.fn(async () => [latestOperation])
+    const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      return {
+        items: [offset === 25 ? secondPageOperation : firstPageOperation],
+        totalCount: 26,
+        offset,
+        limit,
+      }
+    })
+    const financeClient = createFinanceClient({ getOperations, getOperationsPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const previewTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
+    expect(await within(previewTable).findByText('Последнее подтверждённое поступление')).toBeInTheDocument()
+
+    const pagination = within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
+    expect(await within(financeTableArea).findByText('PKO-WORKBENCH-PAGE-TWO')).toBeInTheDocument()
+
+    expect(within(previewTable).getByText('Последнее подтверждённое поступление')).toBeInTheDocument()
+    expect(within(previewTable).queryByText('Рабочая вторая страница')).not.toBeInTheDocument()
+    expect(getOperations).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps every confirmed finance preview visible while a save refreshes it', async () => {
+    const user = userEvent.setup()
+    const initialOperation = createFinancialOperation({ id: 'preview-operation-before-save', incomeTypeName: 'Последняя операция до сохранения' })
+    const initialAccrual = createAccrual({ id: 'preview-accrual-before-save', incomeTypeName: 'Последнее начисление до сохранения' })
+    const initialSupplierAccrual = createSupplierAccrual({ id: 'preview-supplier-accrual-before-save', supplierName: 'Поставщик до сохранения' })
+    const initialMeterReading = createMeterReading({ id: 'preview-meter-before-save', garageNumber: 'PREVIEW-BEFORE' })
+    const refreshedOperation = createFinancialOperation({ id: 'preview-operation-after-save', incomeTypeName: 'Последняя операция после сохранения' })
+    const refreshedAccrual = createAccrual({ id: 'preview-accrual-after-save', incomeTypeName: 'Последнее начисление после сохранения' })
+    const refreshedSupplierAccrual = createSupplierAccrual({ id: 'preview-supplier-accrual-after-save', supplierName: 'Поставщик после сохранения' })
+    const refreshedMeterReading = createMeterReading({ id: 'preview-meter-after-save', garageNumber: 'PREVIEW-AFTER' })
+    let resolveOperations!: (items: FinancialOperationDto[]) => void
+    let resolveAccruals!: (items: AccrualDto[]) => void
+    let resolveSupplierAccruals!: (items: SupplierAccrualDto[]) => void
+    let resolveMeterReadings!: (items: MeterReadingDto[]) => void
+    const operationsRefresh = new Promise<FinancialOperationDto[]>((resolve) => { resolveOperations = resolve })
+    const accrualsRefresh = new Promise<AccrualDto[]>((resolve) => { resolveAccruals = resolve })
+    const supplierAccrualsRefresh = new Promise<SupplierAccrualDto[]>((resolve) => { resolveSupplierAccruals = resolve })
+    const meterReadingsRefresh = new Promise<MeterReadingDto[]>((resolve) => { resolveMeterReadings = resolve })
+    const getOperations = vi.fn(() => getOperations.mock.calls.length === 1 ? Promise.resolve([initialOperation]) : operationsRefresh)
+    const getAccruals = vi.fn(() => getAccruals.mock.calls.length === 1 ? Promise.resolve([initialAccrual]) : accrualsRefresh)
+    const getSupplierAccruals = vi.fn(() => getSupplierAccruals.mock.calls.length === 1 ? Promise.resolve([initialSupplierAccrual]) : supplierAccrualsRefresh)
+    const getMeterReadings = vi.fn(() => getMeterReadings.mock.calls.length === 1 ? Promise.resolve([initialMeterReading]) : meterReadingsRefresh)
+    let created = false
+    const savedOperation = createFinancialOperation({ id: 'saved-operation-preview-refresh', documentNumber: 'PKO-PREVIEW-REFRESH', amount: 740 })
+    const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => ({
+      items: created && params?.operationKind === 'income' ? [savedOperation] : [],
+      totalCount: created && params?.operationKind === 'income' ? 1 : 0,
+      offset: params?.offset ?? 0,
+      limit: params?.limit ?? 25,
+    }))
+    const createIncome = vi.fn(async () => {
+      created = true
+      return savedOperation
+    })
+    const financeClient = createFinanceClient({ getOperations, getAccruals, getSupplierAccruals, getMeterReadings, getOperationsPage, createIncome })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const operationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
+    const accrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
+    const supplierAccrualsTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
+    const meterReadingsTable = within(financePanel).getByRole('table', { name: 'Последние показания' })
+    expect(await within(operationsTable).findByText('Последняя операция до сохранения')).toBeInTheDocument()
+    expect(await within(accrualsTable).findByText('Последнее начисление до сохранения')).toBeInTheDocument()
+    expect(await within(supplierAccrualsTable).findByText('Поставщик до сохранения')).toBeInTheDocument()
+    expect(await within(meterReadingsTable).findByText(/PREVIEW-BEFORE/)).toBeInTheDocument()
+
+    const amount = within(financePanel).getByLabelText('Сумма поступления')
+    const incomeForm = amount.closest('form')!
+    await user.clear(amount)
+    await user.type(amount, '740')
+    await user.type(within(incomeForm).getByLabelText('Документ поступления'), 'PKO-PREVIEW-REFRESH')
+    await user.click(within(incomeForm).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(getOperations).toHaveBeenCalledTimes(2))
+    expect(getAccruals).toHaveBeenCalledTimes(2)
+    expect(getSupplierAccruals).toHaveBeenCalledTimes(2)
+    expect(getMeterReadings).toHaveBeenCalledTimes(2)
+
+    const previewStates = [
+      [operationsTable, 'Последняя операция до сохранения', 'Обновляем последние операции'],
+      [accrualsTable, 'Последнее начисление до сохранения', 'Обновляем последние начисления'],
+      [supplierAccrualsTable, 'Поставщик до сохранения', 'Обновляем последние начисления поставщикам'],
+      [meterReadingsTable, /PREVIEW-BEFORE/, 'Обновляем последние показания'],
+    ] as const
+    for (const [table, confirmedText, statusName] of previewStates) {
+      expect(within(table).getByText(confirmedText)).toBeVisible()
+      expect(within(table).getByRole('status', { name: statusName })).toBeInTheDocument()
+      expect(table).toHaveAttribute('aria-busy', 'true')
+    }
+
+    await act(async () => {
+      resolveOperations([refreshedOperation])
+      resolveAccruals([refreshedAccrual])
+      resolveSupplierAccruals([refreshedSupplierAccrual])
+      resolveMeterReadings([refreshedMeterReading])
+    })
+
+    expect(await within(operationsTable).findByText('Последняя операция после сохранения')).toBeInTheDocument()
+    expect(await within(accrualsTable).findByText('Последнее начисление после сохранения')).toBeInTheDocument()
+    expect(await within(supplierAccrualsTable).findByText('Поставщик после сохранения')).toBeInTheDocument()
+    expect(await within(meterReadingsTable).findByText(/PREVIEW-AFTER/)).toBeInTheDocument()
+    for (const [table, , statusName] of previewStates) {
+      expect(within(table).queryByRole('status', { name: statusName })).not.toBeInTheDocument()
+      expect(table).toHaveAttribute('aria-busy', 'false')
+    }
+  })
+
   it('keeps a loaded payment page available when the summary fails', async () => {
     const user = userEvent.setup()
     const operation = createFinancialOperation({ id: 'summary-error-operation', documentNumber: 'PKO-SUMMARY-ERROR' })
@@ -18341,7 +18481,7 @@ describe('App', () => {
     releaseOperationRefresh()
     await waitFor(() => expect(within(financePanel).queryByText('+700.00')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
-    expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
+    expect(await within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).findByText('Операций пока нет')).toHaveAttribute('role', 'status')
   })
 
   it('cancels expense operation with required reason from payments table context menu', async () => {
@@ -18384,7 +18524,7 @@ describe('App', () => {
     await user.click(within(reopenedCancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(financePanel).queryByText('RKO-cancel')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
-    expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
+    expect(await within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).findByText('Операций пока нет')).toHaveAttribute('role', 'status')
   })
 
   it('cancels garage accruals with required reasons from payments workspace', async () => {
