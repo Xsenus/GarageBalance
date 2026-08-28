@@ -9566,6 +9566,88 @@ describe('App', () => {
     expect(paymentInput).toHaveValue('')
   })
 
+  it('unlocks a saved garage payment while its background refresh is still pending', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-payment-background-refresh', number: '103', ownerName: 'Тестовый владелец', balance: 100, overdueDebt: 0 })
+    let worksheetRequestCount = 0
+    let worksheetRefreshSignal: AbortSignal | undefined
+    let overdueRefreshSignal: AbortSignal | undefined
+    const getGarageIncomeWorksheet = vi.fn((_token: string, _garageId: string, _request, signal?: AbortSignal) => {
+      worksheetRequestCount += 1
+      if (worksheetRequestCount === 1) {
+        return Promise.resolve(createGarageIncomeWorksheet({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          accrualTotal: 100,
+          debtTotal: 100,
+          closingDebt: 100,
+          rows: [{
+            accountingMonth: '2026-06-01',
+            incomeTypeId: 'income-water-background-refresh',
+            incomeTypeName: 'Вода',
+            meterKind: 'water',
+            meterValue: null,
+            meterConsumption: null,
+            accrualAmount: 100,
+            incomeAmount: 0,
+            debt: 100,
+          }],
+        }))
+      }
+
+      worksheetRefreshSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getGarageIncomeWorksheet']>>>(() => undefined)
+    })
+    const getGarageOverdueDebt = vi.fn((_token: string, _garageId: string, signal?: AbortSignal) => {
+      overdueRefreshSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>(() => undefined)
+    })
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => createFinancialOperation({
+      id: 'payment-background-refresh',
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      incomeTypeId: request.incomeTypeId,
+      incomeTypeName: 'Вода',
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      garageDebtBefore: 100,
+      garageDebtAfter: 0,
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, getGarageOverdueDebt, createIncome })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*103\s*Тестовый владелец/ }))
+    const paymentInput = await within(prototype).findByLabelText('Платеж Вода июн.26')
+    await user.type(paymentInput, '100')
+    await user.click(within(prototype).getByRole('button', { name: 'Сохранить платеж Вода июн.26' }))
+
+    await waitFor(() => expect(createIncome).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(worksheetRefreshSignal).toBeDefined())
+    await waitFor(() => expect(overdueRefreshSignal).toBeDefined())
+    expect(paymentInput).toHaveValue('')
+    expect(within(prototype).getByRole('button', { name: 'Сохранить платеж Вода июн.26' })).toBeInTheDocument()
+    expect(worksheetRefreshSignal?.aborted).toBe(false)
+    expect(overdueRefreshSignal?.aborted).toBe(false)
+
+    await openSection(user, 'Тарифы и сборы')
+    expect(worksheetRefreshSignal?.aborted).toBe(true)
+    expect(overdueRefreshSignal?.aborted).toBe(true)
+  })
+
   it('does not duplicate an annual obligation in full payment and hides its future row after payoff', async () => {
     const user = userEvent.setup()
     const currentMonth = getTestCurrentMonthInputValue()
@@ -10321,6 +10403,104 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument()
     await user.click(unlockedButton)
     expect(within(await screen.findByRole('dialog', { name: 'Полная оплата' })).getByLabelText('Сумма полной оплаты')).toHaveValue('300.00')
+  })
+
+  it('closes a successful full payment before its background refresh finishes', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-full-payment-background-refresh', number: '105', ownerName: 'Орлов Илья', balance: 600, overdueDebt: 0 })
+    let worksheetRequestCount = 0
+    let worksheetRefreshSignal: AbortSignal | undefined
+    let overdueRefreshSignal: AbortSignal | undefined
+    const getGarageIncomeWorksheet = vi.fn((_token: string, _garageId: string, _request, signal?: AbortSignal) => {
+      worksheetRequestCount += 1
+      if (worksheetRequestCount === 1) {
+        return Promise.resolve(createGarageIncomeWorksheet({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          accrualTotal: 600,
+          debtTotal: 600,
+          closingDebt: 600,
+          rows: [{
+            accountingMonth: '2026-06-01',
+            incomeTypeId: 'income-water-full-background-refresh',
+            incomeTypeName: 'Вода',
+            meterKind: 'water',
+            meterValue: null,
+            meterConsumption: null,
+            accrualAmount: 600,
+            incomeAmount: 0,
+            debt: 600,
+          }],
+        }))
+      }
+
+      worksheetRefreshSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getGarageIncomeWorksheet']>>>(() => undefined)
+    })
+    const getGarageOverdueDebt = vi.fn((_token: string, _garageId: string, signal?: AbortSignal) => {
+      overdueRefreshSignal = signal
+      return new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>(() => undefined)
+    })
+    const getGarageFullPaymentQuote = vi.fn(async () => ({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      totalAmount: 600,
+      lines: [{
+        incomeTypeId: 'income-water-full-background-refresh',
+        incomeTypeName: 'Вода',
+        accountingMonth: '2026-06-01',
+        outstandingAmount: 600,
+        isOpeningDebt: false,
+      }],
+    }))
+    const createFullGaragePayment = vi.fn(async (_token: string, request: CreateFullGaragePaymentRequest) => ({
+      receiptBatchId: request.receiptBatchId ?? 'full-payment-background-refresh',
+      totalAmount: 600,
+      operations: [createFinancialOperation({
+        id: 'full-payment-background-refresh',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: 'income-water-full-background-refresh',
+        incomeTypeName: 'Вода',
+        accountingMonth: '2026-06-01',
+        amount: 600,
+        garageDebtBefore: 600,
+        garageDebtAfter: 0,
+      })],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, getGarageOverdueDebt, getGarageFullPaymentQuote, createFullGaragePayment })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*105\s*Орлов Илья/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
+    await waitFor(() => expect(worksheetRefreshSignal).toBeDefined())
+    await waitFor(() => expect(overdueRefreshSignal).toBeDefined())
+    expect(worksheetRefreshSignal?.aborted).toBe(false)
+    expect(overdueRefreshSignal?.aborted).toBe(false)
+
+    await openSection(user, 'Тарифы и сборы')
+    expect(worksheetRefreshSignal?.aborted).toBe(true)
+    expect(overdueRefreshSignal?.aborted).toBe(true)
   })
 
   it('keeps the full payment dialog unchanged when the atomic request fails', async () => {

@@ -3543,7 +3543,7 @@ function PaymentsPrototypePanel({
     const controller = overdueDebtRefreshControllerRef.current = new AbortController()
     try {
       const details = await financeClient.getGarageOverdueDebt(auth.accessToken, garage.id, controller.signal)
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && selectedGarageIdRef.current === garage.id) {
         setSelectedGarage((currentGarage) => currentGarage?.id === garage.id
           ? { ...currentGarage, overdueDebt: details.total }
           : currentGarage)
@@ -3554,6 +3554,18 @@ function PaymentsPrototypePanel({
     } catch {
       return controller.signal.aborted
     }
+  }
+
+  function refreshGarageAfterIncomeSave(garage: PaymentsPrototypeGarage, overdueDebtErrorMessage: string) {
+    void Promise.all([
+      refreshGarageOverdueDebt(garage),
+      loadGarageIncomeWorksheet(garage),
+      paymentHistoryOpen ? loadGaragePaymentHistory(garage) : Promise.resolve(),
+    ]).then(([overdueDebtRefreshed]) => {
+      if (!overdueDebtRefreshed && selectedGarageIdRef.current === garage.id) {
+        setPaymentError(overdueDebtErrorMessage)
+      }
+    })
   }
 
   function togglePaymentHistory() {
@@ -4000,14 +4012,7 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: optimisticGarageDebtAfter }
         : currentGarage)
 
-      const [overdueDebtRefreshed] = await Promise.all([
-        refreshGarageOverdueDebt(selectedGarage),
-        loadGarageIncomeWorksheet(selectedGarage),
-        paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
-      ])
-      if (!overdueDebtRefreshed) {
-        setPaymentError('Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')
-      }
+      refreshGarageAfterIncomeSave(selectedGarage, 'Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')
     } catch (error) {
       if (warningController?.signal.aborted) return
       setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж.')
@@ -4216,14 +4221,7 @@ function PaymentsPrototypePanel({
       ? { ...currentGarage, balance: optimisticGarageDebtAfter }
       : currentGarage)
 
-    const [overdueDebtRefreshed] = await Promise.all([
-      refreshGarageOverdueDebt(selectedGarage),
-      loadGarageIncomeWorksheet(selectedGarage),
-      paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
-    ])
-    if (!overdueDebtRefreshed) {
-      setPaymentError('Полная оплата сохранена, но не удалось обновить просроченную задолженность. Обновите страницу.')
-    }
+    refreshGarageAfterIncomeSave(selectedGarage, 'Полная оплата сохранена, но не удалось обновить просроченную задолженность. Обновите страницу.')
 
     return null
   }
