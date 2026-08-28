@@ -17955,6 +17955,70 @@ describe('App', () => {
     expect(await within(financePanel).findAllByText('321.00')).not.toHaveLength(0)
   })
 
+  it('keeps the loaded payment page visible while the next page is pending', async () => {
+    const user = userEvent.setup()
+    const firstPageOperation = createFinancialOperation({
+      id: 'finance-page-one',
+      documentNumber: 'PKO-PAGE-ONE',
+      incomeTypeName: 'Подтверждённое поступление первой страницы',
+    })
+    const secondPageOperation = createFinancialOperation({
+      id: 'finance-page-two',
+      documentNumber: 'PKO-PAGE-TWO',
+      incomeTypeName: 'Поступление второй страницы',
+    })
+    let resolveSecondPage!: (page: FinancePagedResult<FinancialOperationDto>) => void
+    const secondPage = new Promise<FinancePagedResult<FinancialOperationDto>>((resolve) => {
+      resolveSecondPage = resolve
+    })
+    const getOperationsPage = vi.fn((_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 25
+      return offset === 25
+        ? secondPage
+        : Promise.resolve({ items: [firstPageOperation], totalCount: 26, offset, limit })
+    })
+    const financeClient = createFinanceClient({ getOperationsPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
+    const firstPageRow = (await within(financeTableArea).findByText('PKO-PAGE-ONE')).closest('tr')
+    expect(firstPageRow).not.toBeNull()
+
+    const pagination = within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ offset: 25, limit: 25 }), expect.any(AbortSignal)))
+
+    expect(within(financeTableArea).getByText('PKO-PAGE-ONE')).toBeVisible()
+    expect(within(financeTableArea).getByRole('status', { name: 'Обновляем таблицу платежей' })).toBeInTheDocument()
+    expect(within(financeTableArea).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
+    expect(financeTableArea).toHaveAttribute('aria-busy', 'true')
+    expect(firstPageRow).toHaveAttribute('aria-disabled', 'true')
+    expect(firstPageRow).toHaveAttribute('tabindex', '-1')
+    await user.click(firstPageRow!)
+    fireEvent.contextMenu(firstPageRow!)
+    fireEvent.keyDown(firstPageRow!, { key: 'Enter' })
+    fireEvent.keyDown(financeTableArea, { key: 'ContextMenu' })
+    expect(screen.queryByRole('dialog', { name: 'Изменить поступление' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+
+    await act(async () => resolveSecondPage({ items: [secondPageOperation], totalCount: 26, offset: 25, limit: 25 }))
+
+    const secondPageRow = (await within(financeTableArea).findByText('PKO-PAGE-TWO')).closest('tr')
+    expect(secondPageRow).not.toBeNull()
+    expect(secondPageRow).toBeVisible()
+    expect(secondPageRow).toHaveAttribute('aria-disabled', 'false')
+    expect(secondPageRow).toHaveAttribute('tabindex', '0')
+    expect(within(financeTableArea).queryByText('PKO-PAGE-ONE')).not.toBeInTheDocument()
+    expect(within(financeTableArea).queryByRole('status', { name: 'Обновляем таблицу платежей' })).not.toBeInTheDocument()
+    expect(financeTableArea).toHaveAttribute('aria-busy', 'false')
+  })
+
   it('keeps a loaded payment page available when the summary fails', async () => {
     const user = userEvent.setup()
     const operation = createFinancialOperation({ id: 'summary-error-operation', documentNumber: 'PKO-SUMMARY-ERROR' })

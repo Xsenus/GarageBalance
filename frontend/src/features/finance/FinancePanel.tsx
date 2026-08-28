@@ -8,7 +8,7 @@ import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -1702,6 +1702,10 @@ export function FinancePanel({
   function openFinanceContextMenu(event: MouseEvent<HTMLElement>, section: FinanceSectionKey, record?: FinanceRecord) {
     event.preventDefault()
     event.stopPropagation()
+    if (loading) {
+      return
+    }
+
     financeContextMenuTriggerRef.current = record ? event.currentTarget : null
     setFinanceContextMenu({ section, record, x: event.clientX, y: event.clientY })
   }
@@ -1719,6 +1723,10 @@ export function FinancePanel({
   }
 
   function editFinanceRecord(section: FinanceSectionKey, record: FinanceRecord, trigger?: HTMLElement | null) {
+    if (loading) {
+      return
+    }
+
     setFinanceContextMenu(null)
     financeContextMenuTriggerRef.current = null
     void openFinanceEditor(section, record, trigger)
@@ -1751,6 +1759,10 @@ export function FinancePanel({
   }
 
   function handleFinanceRowKeyDown(event: KeyboardEvent<HTMLElement>, section: FinanceSectionKey, record: FinanceRecord) {
+    if (loading) {
+      return
+    }
+
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       editFinanceRecord(section, record, event.currentTarget)
@@ -1768,7 +1780,7 @@ export function FinancePanel({
   }
 
   function handleFinanceTableAreaKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.target !== event.currentTarget || (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))) {
+    if (loading || event.target !== event.currentTarget || (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10'))) {
       return
     }
 
@@ -1838,7 +1850,7 @@ export function FinancePanel({
           {renderFinanceTableHead('income')}
           <tbody>
             {filteredIncomeOperations.map((operation) => (
-              <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'income', operation)} onClick={(event) => editFinanceRecord('income', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'income', operation)}>
+              <tr aria-disabled={loading} className="finance-table-row--interactive" key={operation.id} tabIndex={loading ? -1 : 0} onContextMenu={(event) => openFinanceContextMenu(event, 'income', operation)} onClick={(event) => editFinanceRecord('income', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'income', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
                 <td>{formatFinanceGarageLabel(operation.garageNumber)}</td>
@@ -1861,7 +1873,7 @@ export function FinancePanel({
           {renderFinanceTableHead('expense')}
           <tbody>
             {filteredExpenseOperations.map((operation) => (
-              <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={(event) => editFinanceRecord('expense', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
+              <tr aria-disabled={loading} className="finance-table-row--interactive" key={operation.id} tabIndex={loading ? -1 : 0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={(event) => editFinanceRecord('expense', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
                 <td>{getFinanceOptionalText(operation.supplierName ?? operation.counterpartyName)}</td>
@@ -1884,7 +1896,7 @@ export function FinancePanel({
           {renderFinanceTableHead('accruals')}
           <tbody>
             {filteredAccruals.map((accrual) => (
-              <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={(event) => editFinanceRecord('accruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
+              <tr aria-disabled={loading} className="finance-table-row--interactive" key={accrual.id} tabIndex={loading ? -1 : 0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={(event) => editFinanceRecord('accruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
                 <td>{formatMonth(accrual.accountingMonth)}</td>
                 <td>{accrual.accountingYear ?? '—'}</td>
                 <td>{formatFinanceGarageLabel(accrual.garageNumber)}</td>
@@ -1906,7 +1918,7 @@ export function FinancePanel({
           {renderFinanceTableHead('supplierAccruals')}
           <tbody>
             {filteredSupplierAccruals.map((accrual) => (
-              <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'supplierAccruals', accrual)} onClick={(event) => editFinanceRecord('supplierAccruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'supplierAccruals', accrual)}>
+              <tr aria-disabled={loading} className="finance-table-row--interactive" key={accrual.id} tabIndex={loading ? -1 : 0} onContextMenu={(event) => openFinanceContextMenu(event, 'supplierAccruals', accrual)} onClick={(event) => editFinanceRecord('supplierAccruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'supplierAccruals', accrual)}>
                 <td>{formatMonth(accrual.accountingMonth)}</td>
                 <td>{accrual.supplierName}</td>
                 <td>{accrual.expenseTypeName}</td>
@@ -1932,7 +1944,7 @@ export function FinancePanel({
           {renderFinanceTableHead('meterReadings')}
           <tbody>
             {filteredMeterReadings.map((reading) => (
-              <tr className="finance-table-row--interactive" key={reading.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={(event) => editFinanceRecord('meterReadings', reading, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
+              <tr aria-disabled={loading} className="finance-table-row--interactive" key={reading.id} tabIndex={loading ? -1 : 0} onContextMenu={(event) => openFinanceContextMenu(event, 'meterReadings', reading)} onClick={(event) => editFinanceRecord('meterReadings', reading, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'meterReadings', reading)}>
                 <td>{formatMonth(reading.accountingMonth)}</td>
                 <td>{formatDateOnly(reading.readingDate)}</td>
                 <td>{formatFinanceGarageLabel(reading.garageNumber)}</td>
@@ -2306,15 +2318,17 @@ export function FinancePanel({
 
         <div className="dictionary-table-shell">
           <div
-            className={`dictionary-table-scroll${loading ? ' dictionary-table-scroll--loading' : ''}`}
+            className={`dictionary-table-scroll${loading && getActiveFinanceRowsCount() === 0 ? ' dictionary-table-scroll--loading' : ''}`}
             role="group"
             aria-label={getFinanceToolbarLabel('tableArea')}
+            aria-busy={loading}
             tabIndex={getActiveFinanceRowsCount() === 0 ? 0 : -1}
             onContextMenu={(event) => openFinanceContextMenu(event, activeFinanceSection)}
             onKeyDown={handleFinanceTableAreaKeyDown}
           >
             {renderFinanceTable()}
-            {loading ? <TableLoadingState label="Загружаем таблицу платежей" /> : null}
+            {loading && getActiveFinanceRowsCount() === 0 ? <TableLoadingState label="Загружаем таблицу платежей" /> : null}
+            {loading && getActiveFinanceRowsCount() > 0 ? <BackgroundRefreshStatus label="Обновляем таблицу платежей" /> : null}
             {!loading && getActiveFinanceRowsCount() === 0 ? <StatusMessage>{getFinanceToolbarLabel('emptyState')}</StatusMessage> : null}
           </div>
           <TablePagination
