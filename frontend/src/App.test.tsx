@@ -14151,13 +14151,17 @@ describe('App', () => {
     const user = userEvent.setup()
     let resolveOldSearch!: (page: PagedResult<OwnerDto>) => void
     let resolveNewSearch!: (page: PagedResult<OwnerDto>) => void
+    let oldSearchSignal: AbortSignal | undefined
+    let newSearchSignal: AbortSignal | undefined
     const oldSearchPromise = new Promise<PagedResult<OwnerDto>>((resolve) => { resolveOldSearch = resolve })
     const newSearchPromise = new Promise<PagedResult<OwnerDto>>((resolve) => { resolveNewSearch = resolve })
-    const getOwnersPage = vi.fn((_token: string, query?: string) => {
+    const getOwnersPage = vi.fn((_token: string, query?: string, _offset?: number, _limit?: number, _includeArchived?: boolean, signal?: AbortSignal) => {
       if (query === 'старый') {
+        oldSearchSignal = signal
         return oldSearchPromise
       }
       if (query === 'новый') {
+        newSearchSignal = signal
         return newSearchPromise
       }
       return Promise.resolve({
@@ -14184,6 +14188,8 @@ describe('App', () => {
     await user.clear(searchInput)
     await user.type(searchInput, 'новый')
     await waitFor(() => expect(getOwnersPage).toHaveBeenCalledWith(expect.any(String), 'новый', 0, 25, false, expect.any(AbortSignal)))
+    expect(oldSearchSignal?.aborted).toBe(true)
+    expect(newSearchSignal?.aborted).toBe(false)
 
     await act(async () => resolveNewSearch({
       items: [createOwner({ id: 'owner-new', lastName: 'Новый', firstName: 'Результат' })],
@@ -14228,10 +14234,43 @@ describe('App', () => {
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
 
-    await waitFor(() => expect(getOwnersPage).toHaveBeenCalledWith(expect.any(String), undefined, 25, 25, false, undefined))
+    await waitFor(() => expect(getOwnersPage).toHaveBeenCalledWith(expect.any(String), undefined, 25, 25, false, expect.any(AbortSignal)))
     expect((await screen.findAllByText('Не удалось загрузить вторую страницу.')).length).toBeGreaterThan(0)
     expect(within(dictionaryPanel).getByRole('button', { name: 'Повторить загрузку' })).toBeEnabled()
     expect(within(dictionaryPanel).getByText('Владелец1 Тест')).toBeInTheDocument()
+  })
+
+  it('cancels a pending dictionary pagination request when the workspace unmounts', async () => {
+    const user = userEvent.setup()
+    const firstPageOwners = Array.from({ length: 25 }, (_, index) => createOwner({
+      id: `owner-unmount-page-${index + 1}`,
+      lastName: `Владелец${index + 1}`,
+      firstName: 'Тест',
+    }))
+    let paginationSignal: AbortSignal | undefined
+    const getOwnersPage = vi.fn((_token: string, _query?: string, offset = 0, limit = 25, _includeArchived?: boolean, signal?: AbortSignal) => {
+      if (offset === 25) {
+        paginationSignal = signal
+        return new Promise<PagedResult<OwnerDto>>(() => undefined)
+      }
+      return Promise.resolve({ items: firstPageOwners, totalCount: 26, offset, limit })
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getOwnersPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(paginationSignal).toBeDefined())
+    await openSection(user, 'Платежи')
+
+    expect(paginationSignal?.aborted).toBe(true)
+    expect(screen.queryByRole('region', { name: 'Справочники' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Не удалось загрузить таблицу справочника.')).not.toBeInTheDocument()
   })
 
 

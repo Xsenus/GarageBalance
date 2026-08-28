@@ -69,6 +69,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const pendingEditorOpenRef = useRef<DictionaryEditorState | null>(null)
   const editorOpenSequenceRef = useRef(0)
   const pageRequestSequence = useRef(0)
+  const pageRequestControllerRef = useRef<AbortController | null>(null)
   const [editorReferencesLoading, setEditorReferencesLoading] = useState(false)
   const [pages, setPages] = useState<Record<DictionarySectionKey, PagedResult<DictionaryRecord>>>({
     owners: createEmptyPage<DictionaryRecord>(),
@@ -204,31 +205,31 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }, [auth.accessToken, financeClient])
 
   useEffect(() => {
-    let ignore = false
-    const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
       const page = pages[activeSection]
       setError(null)
-      loadPage(activeSection, 0, page.limit, controller.signal)
+      loadPage(activeSection, 0, page.limit)
         .catch((caught) => {
-          if (!ignore) {
-            const message = caught instanceof Error ? caught.message : 'Не удалось загрузить таблицу справочника.'
-            setError(message)
-            showToast(message, 'error')
-          }
+          const message = caught instanceof Error ? caught.message : 'Не удалось загрузить таблицу справочника.'
+          setError(message)
+          showToast(message, 'error')
         })
     }, supportsSearch && search.trim() ? 250 : 0)
 
     return () => {
-      ignore = true
       window.clearTimeout(timeoutId)
-      controller.abort()
+      pageRequestSequence.current += 1
+      pageRequestControllerRef.current?.abort()
     }
     // The loader intentionally captures the current page settings for the active dictionary section.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, auth.accessToken, dictionaryClient, search, showArchived])
 
-  async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit, signal?: AbortSignal) {
+  async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit) {
+    pageRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    pageRequestControllerRef.current = controller
+    const signal = controller.signal
     const requestSequence = ++pageRequestSequence.current
     const query = supportsDictionarySearch(section) ? search.trim() || undefined : undefined
     setLoading(true)
