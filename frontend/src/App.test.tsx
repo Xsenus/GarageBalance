@@ -15485,7 +15485,20 @@ describe('App', () => {
     const user = userEvent.setup()
     let archivedOwnerId: string | null = null
     let archiveReason: string | null = null
+    const baseDictionaryClient = createDictionaryClient()
+    let releaseRefresh!: () => void
+    const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve })
+    let markRefreshStarted!: () => void
+    const refreshStarted = new Promise<void>((resolve) => { markRefreshStarted = resolve })
+    const getOwners = vi.fn(async (...args: Parameters<DictionaryClient['getOwners']>) => {
+      if (getOwners.mock.calls.length > 1) {
+        markRefreshStarted()
+        await refreshGate
+      }
+      return baseDictionaryClient.getOwners(...args)
+    })
     const dictionaryClient = createDictionaryClient({
+      getOwners,
       archiveOwner: async (_token, id, reason) => {
         archivedOwnerId = id
         archiveReason = reason
@@ -15539,7 +15552,73 @@ describe('App', () => {
     await user.click(confirmButton)
     expect(archivedOwnerId).toBe('owner-1')
     expect(archiveReason).toBe('Дубликат владельца')
+    await refreshStarted
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите удаление' })).not.toBeInTheDocument()
     expect(await screen.findByText('Запись удалена из рабочего списка.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Владельцы' })).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Иванов Иван')).toBeInTheDocument()
+    await act(async () => releaseRefresh())
+  })
+
+  it('keeps a created dictionary form closed when its background refresh fails', async () => {
+    const user = userEvent.setup()
+    const statefulDictionaryClient = createStatefulDictionaryClient()
+    const getOwners = vi.fn()
+      .mockImplementationOnce(statefulDictionaryClient.getOwners)
+      .mockRejectedValueOnce(new Error('Справочник не обновился после сохранения.'))
+    const dictionaryClient = { ...statefulDictionaryClient, getOwners }
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const editorDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(editorDialog).getByLabelText('Фамилия владельца'), 'Фонов')
+    await user.type(within(editorDialog).getByLabelText('Имя владельца'), 'Петр')
+    await user.click(within(editorDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument())
+    expect((await screen.findByText('Запись добавлена.')).closest('[role="status"]')).toBeInTheDocument()
+    expect((await within(dictionaryPanel).findAllByText('Справочник не обновился после сохранения.')).length).toBeGreaterThan(0)
+    expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Владельцы' })).toBeInTheDocument()
+    expect(getOwners).toHaveBeenCalledTimes(2)
+  })
+
+  it('cancels a dictionary background refresh when leaving after archiving', async () => {
+    const user = userEvent.setup()
+    const baseDictionaryClient = createDictionaryClient()
+    let refreshSignal: AbortSignal | undefined
+    const getOwners = vi.fn((...args: Parameters<DictionaryClient['getOwners']>) => {
+      if (getOwners.mock.calls.length === 1) {
+        return baseDictionaryClient.getOwners(...args)
+      }
+
+      refreshSignal = args[4]
+      return new Promise<OwnerDto[]>((resolve) => {
+        refreshSignal?.addEventListener('abort', () => resolve([]), { once: true })
+      })
+    })
+    const dictionaryClient = createDictionaryClient({ getOwners })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    fireEvent.contextMenu((await within(dictionaryPanel).findByText('Иванов Иван')).closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления'), 'Проверка отмены обновления')
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
+
+    await waitFor(() => expect(refreshSignal).toBeInstanceOf(AbortSignal))
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите удаление' })).not.toBeInTheDocument()
+    expect((await screen.findByText('Запись удалена из рабочего списка.')).closest('[role="status"]')).toBeInTheDocument()
+    await openSection(user, 'Платежи')
+    expect(refreshSignal?.aborted).toBe(true)
+    expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
+    expect(screen.queryByText('Не удалось загрузить таблицу справочника.')).not.toBeInTheDocument()
   })
 
   it('returns to the previous dictionary page after archiving its only row', async () => {
@@ -15673,8 +15752,19 @@ describe('App', () => {
     const archivedOwner = createOwner({ id: 'owner-archived', lastName: 'Петров', firstName: 'Петр', isArchived: true })
     let owners = [activeOwner, archivedOwner]
     let restoredOwnerId: string | null = null
+    let releaseRefresh!: () => void
+    const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve })
+    let markRefreshStarted!: () => void
+    const refreshStarted = new Promise<void>((resolve) => { markRefreshStarted = resolve })
+    const getOwners = vi.fn(async (_token: string, _search?: string, _limit?: number, includeArchived?: boolean) => {
+      if (getOwners.mock.calls.length > 2) {
+        markRefreshStarted()
+        await refreshGate
+      }
+      return owners.filter((owner) => includeArchived || !owner.isArchived)
+    })
     const dictionaryClient = createDictionaryClient({
-      getOwners: async (_token, _search, _limit, includeArchived) => owners.filter((owner) => includeArchived || !owner.isArchived),
+      getOwners,
       restoreOwner: async (_token, id) => {
         restoredOwnerId = id
         owners = owners.map((owner) => owner.id === id ? { ...owner, isArchived: false } : owner)
@@ -15724,9 +15814,12 @@ describe('App', () => {
     await user.click(within(reopenedRestoreDialog).getByRole('button', { name: 'Вернуть запись' }))
 
     expect(restoredOwnerId).toBe('owner-archived')
+    await refreshStarted
+    expect(screen.queryByRole('dialog', { name: 'Вернуть запись из архива?' })).not.toBeInTheDocument()
     expect(await screen.findByText('Запись восстановлена и снова доступна в рабочих списках.')).toBeInTheDocument()
-    const restoredRow = within(dictionaryPanel).getByText('Петров Петр').closest('tr')!
-    expect(within(restoredRow).getByText('Активна')).toBeInTheDocument()
+    expect(within(within(dictionaryPanel).getByText('Петров Петр').closest('tr')!).getByText('Архив')).toBeInTheDocument()
+    await act(async () => releaseRefresh())
+    await waitFor(() => expect(within(within(dictionaryPanel).getByText('Петров Петр').closest('tr')!).getByText('Активна')).toBeInTheDocument())
   })
 
   it('shows a clear conflict message when archived garage restore collides with an active number', async () => {
@@ -15849,7 +15942,17 @@ describe('App', () => {
       })
       return owner
     })
-    const getOwners = vi.fn(async () => [owner])
+    let releaseRefresh!: () => void
+    const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve })
+    let markRefreshStarted!: () => void
+    const refreshStarted = new Promise<void>((resolve) => { markRefreshStarted = resolve })
+    const getOwners = vi.fn(async () => {
+      if (getOwners.mock.calls.length > 1) {
+        markRefreshStarted()
+        await refreshGate
+      }
+      return [owner]
+    })
     const getGarages = vi.fn(async () => [] as GarageDto[])
     const dictionaryClient = createDictionaryClient({
       getOwners,
@@ -15936,7 +16039,12 @@ describe('App', () => {
     expect(updateOwner.mock.calls[0][1]).toBe('owner-1')
     expect(updateOwner.mock.calls[0][2].phone).toBe('+7 (901) 111-22-33')
     expect(updateOwner.mock.calls[0][2].address).toBe('630000, г Новосибирск, ул Советская, д 2')
+    await refreshStarted
+    expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument()
     expect(await screen.findByText('Изменения сохранены.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('table', { name: 'Таблица: Владельцы' })).toBeInTheDocument()
+    await act(async () => releaseRefresh())
     expect(getOwners).toHaveBeenCalledTimes(2)
     expect(getGarages).toHaveBeenCalledTimes(1)
 

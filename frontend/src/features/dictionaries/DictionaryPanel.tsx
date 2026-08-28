@@ -225,14 +225,16 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, auth.accessToken, dictionaryClient, search, showArchived])
 
-  async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit) {
+  async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit, background = false) {
     pageRequestControllerRef.current?.abort()
     const controller = new AbortController()
     pageRequestControllerRef.current = controller
     const signal = controller.signal
     const requestSequence = ++pageRequestSequence.current
     const query = supportsDictionarySearch(section) ? search.trim() || undefined : undefined
-    setLoading(true)
+    if (!background) {
+      setLoading(true)
+    }
     try {
       let page: PagedResult<DictionaryRecord>
       if (section === 'owners') {
@@ -260,7 +262,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       }
 
       if (offset > 0 && page.items.length === 0 && offset >= page.totalCount) {
-        return loadPage(section, getLastPageOffset(page.totalCount, limit), limit)
+        return loadPage(section, getLastPageOffset(page.totalCount, limit), limit, background)
       }
 
       if (section === 'owners') setOwners(page.items as OwnerDto[])
@@ -277,7 +279,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
       throw caught
     } finally {
-      if (requestSequence === pageRequestSequence.current) {
+      if (requestSequence === pageRequestSequence.current && !background) {
         setLoading(false)
       }
     }
@@ -287,6 +289,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     const message = caught instanceof Error ? caught.message : 'Не удалось загрузить таблицу справочника.'
     setError(message)
     showToast(message, 'error')
+  }
+
+  function reportBackgroundPageLoadError(caught: unknown) {
+    const message = caught instanceof Error ? caught.message : 'Не удалось обновить таблицу справочника.'
+    setError(message)
   }
 
   function openContextMenu(event: MouseEvent, section: DictionarySectionKey, item: DictionaryRecord) {
@@ -600,7 +607,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       }
 
       closeEditor()
-      await refreshAfterMutation(currentEditor.section)
+      refreshAfterMutation(currentEditor.section)
       showToast(currentEditor.mode === 'create' ? 'Запись добавлена.' : 'Изменения сохранены.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить запись.'
@@ -738,12 +745,17 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }
   }
 
-  async function refreshAfterMutation(section: DictionarySectionKey, visibleCountDelta = 0) {
+  function refreshAfterMutation(section: DictionarySectionKey, visibleCountDelta = 0) {
     if (section === 'owners' || section === 'garages') {
       loadedEditorReferences.current = { owners: false, garages: false }
     }
     const page = pages[section]
-    await loadPage(section, Math.min(page.offset, getLastPageOffset(page.totalCount + visibleCountDelta, page.limit)), page.limit)
+    void loadPage(
+      section,
+      Math.min(page.offset, getLastPageOffset(page.totalCount + visibleCountDelta, page.limit)),
+      page.limit,
+      true,
+    ).catch(reportBackgroundPageLoadError)
   }
 
   async function confirmArchive() {
@@ -780,7 +792,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
       const section = archiveTarget.section
       closeArchiveTarget()
-      await refreshAfterMutation(section, showArchived ? 0 : -1)
+      refreshAfterMutation(section, showArchived ? 0 : -1)
       showToast('Запись удалена из рабочего списка.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось удалить запись.'
@@ -817,7 +829,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
       const section = restoreTarget.section
       closeRestoreTarget()
-      await refreshAfterMutation(section)
+      refreshAfterMutation(section)
       showToast('Запись восстановлена и снова доступна в рабочих списках.')
     } catch (caught) {
       const message = getDictionaryRestoreErrorMessage(caught)
