@@ -310,6 +310,31 @@ describe('financeApi', () => {
     })
   })
 
+  it('forwards cancellation while previewing an electricity payment warning', async () => {
+    let requestSignal: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init.signal ?? undefined
+      requestSignal?.addEventListener('abort', () => reject(requestSignal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const request = financeApi.getIncomePaymentWarning('token', {
+      garageId: 'garage-88',
+      incomeTypeId: 'income-electricity',
+      operationDate: '2026-06-30',
+    }, controller.signal)
+    await vi.waitFor(() => expect(requestSignal).toBeInstanceOf(AbortSignal))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(requestSignal?.aborted).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/finance/income/payment-warning',
+      expect.objectContaining({ signal: requestSignal }),
+    )
+  })
+
   it('saves a versioned meter reading through the payment form endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'meter-reading-1',

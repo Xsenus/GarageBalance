@@ -3265,7 +3265,7 @@ describe('App', () => {
     await openSection(user, 'Контрагенты')
     const contractorPanel = await screen.findByRole('region', { name: 'Контрагенты' })
     const garageTable = await within(contractorPanel).findByRole('table', { name: 'Гаражи' })
-    const garageRow = within(garageTable).getByRole('row', { name: /105/ })
+    const garageRow = await within(garageTable).findByRole('row', { name: /105/ })
     await user.click(within(garageRow).getByRole('button', { name: 'Открыть финансовый отчет гаража 105' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 105' })
@@ -7596,7 +7596,7 @@ describe('App', () => {
       garageId: garage.id,
       incomeTypeId: incomeType.id,
       operationDate: '2026-06-30',
-    }))
+    }, expect.any(AbortSignal)))
     expect(savedIncomeRequests).toHaveLength(0)
     const firstEarlyPaymentDialog = await screen.findByRole('dialog', { name: 'Оплата электроэнергии раньше 30 дней' })
     expect(firstEarlyPaymentDialog).toHaveTextContent('Предыдущая оплата была 01.06.2026 — прошло 29 календ. дн.')
@@ -8762,6 +8762,167 @@ describe('App', () => {
     await act(async () => { await firstWorksheetRequest })
 
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
+  })
+
+  it('cancels an early-payment warning when another garage is selected', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-warning-first', number: '81', ownerName: 'Первый владелец' })
+    const secondGarage = createGarage({ id: 'garage-warning-second', number: '82', ownerName: 'Второй владелец' })
+    const electricityType = createAccountingType({ id: 'income-warning-electricity', name: 'Электроэнергия', code: 'electricity' })
+    let resolveWarning!: (value: Awaited<ReturnType<FinanceClient['getIncomePaymentWarning']>>) => void
+    const warningRequest = new Promise<Awaited<ReturnType<FinanceClient['getIncomePaymentWarning']>>>((resolve) => { resolveWarning = resolve })
+    let warningSignal: AbortSignal | undefined
+    const getIncomePaymentWarning = vi.fn((_token: string, _request: Parameters<FinanceClient['getIncomePaymentWarning']>[1], signal?: AbortSignal) => {
+      warningSignal = signal
+      return warningRequest
+    })
+    const createIncome = vi.fn()
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: garageId === firstGarage.id ? firstGarage.number : secondGarage.number,
+      ownerName: garageId === firstGarage.id ? firstGarage.ownerName : secondGarage.ownerName,
+      rows: garageId === firstGarage.id ? [{
+        accountingMonth: '2026-06-01',
+        incomeTypeId: electricityType.id,
+        incomeTypeName: electricityType.name,
+        meterKind: null,
+        meterValue: null,
+        meterConsumption: null,
+        accrualAmount: 500,
+        incomeAmount: 0,
+        debt: 500,
+      }] : [],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [firstGarage, secondGarage],
+        getIncomeTypes: async () => [electricityType],
+      })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({
+          monthFrom: '2026-06-01',
+          monthTo: '2026-06-01',
+          defaultMonthFrom: '2026-06-01',
+          defaultMonthTo: '2026-06-01',
+        }),
+        getGarageIncomeWorksheet,
+        getIncomePaymentWarning,
+        createIncome,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '81')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*81\s*Первый владелец/ }))
+    const payment = await within(prototype).findByRole('textbox', { name: /Платеж Электроэнергия/ })
+    await user.type(payment, '500{Enter}')
+    await waitFor(() => expect(warningSignal).toBeInstanceOf(AbortSignal))
+
+    await user.clear(search)
+    await user.type(search, '82')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*82\s*Второй владелец/ }))
+
+    expect(warningSignal?.aborted).toBe(true)
+    resolveWarning({
+      isElectricityPayment: true,
+      previousPaymentDate: '2026-05-20',
+      daysSincePreviousPayment: 12,
+      requiresConfirmation: true,
+    })
+    await act(async () => { await warningRequest })
+
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
+    expect(screen.queryByRole('dialog', { name: 'Оплата электроэнергии раньше 30 дней' })).not.toBeInTheDocument()
+    expect(createIncome).not.toHaveBeenCalled()
+  })
+
+  it('cancels the post-payment overdue refresh when another garage is selected', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-refresh-first', number: '83', ownerName: 'Первый владелец' })
+    const secondGarage = createGarage({ id: 'garage-refresh-second', number: '84', ownerName: 'Второй владелец' })
+    const waterType = createAccountingType({ id: 'income-refresh-water', name: 'Водоснабжение', code: 'water' })
+    let resolveOverdue!: (value: Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>) => void
+    const overdueRequest = new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>((resolve) => { resolveOverdue = resolve })
+    let overdueSignal: AbortSignal | undefined
+    const getGarageOverdueDebt = vi.fn((_token: string, _garageId: string, signal?: AbortSignal) => {
+      overdueSignal = signal
+      return overdueRequest
+    })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: garageId === firstGarage.id ? firstGarage.number : secondGarage.number,
+      ownerName: garageId === firstGarage.id ? firstGarage.ownerName : secondGarage.ownerName,
+      rows: garageId === firstGarage.id ? [{
+        accountingMonth: '2026-06-01',
+        incomeTypeId: waterType.id,
+        incomeTypeName: waterType.name,
+        meterKind: null,
+        meterValue: null,
+        meterConsumption: null,
+        accrualAmount: 500,
+        incomeAmount: 0,
+        debt: 500,
+      }] : [],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [firstGarage, secondGarage], getIncomeTypes: async () => [waterType] })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({ monthFrom: '2026-06-01', monthTo: '2026-06-01', defaultMonthFrom: '2026-06-01', defaultMonthTo: '2026-06-01' }),
+        getGarageIncomeWorksheet,
+        getGarageOverdueDebt,
+        createIncome: async (_token, request) => createFinancialOperation({
+          id: 'income-refresh',
+          garageId: request.garageId,
+          incomeTypeId: request.incomeTypeId,
+          operationDate: request.operationDate,
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          garageDebtAfter: 0,
+        }),
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '83')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*83\s*Первый владелец/ }))
+    await user.type(await within(prototype).findByRole('textbox', { name: /Платеж Водоснабжение/ }), '500{Enter}')
+    await waitFor(() => expect(overdueSignal).toBeInstanceOf(AbortSignal))
+
+    await user.clear(search)
+    await user.type(search, '84')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*84\s*Второй владелец/ }))
+    expect(overdueSignal?.aborted).toBe(true)
+
+    resolveOverdue({
+      garageId: firstGarage.id,
+      garageNumber: firstGarage.number,
+      ownerName: firstGarage.ownerName,
+      asOfDate: '2026-06-30',
+      total: 500,
+      rows: [{ rowKind: 'accrual', incomeTypeId: waterType.id, incomeTypeName: 'Устаревшая задолженность', accountingMonth: '2026-06-01', dueDate: '2026-06-20', overdueFromDate: '2026-06-21', originalAmount: 500, paidAmount: 0, outstandingAmount: 500 }],
+    })
+    await act(async () => { await overdueRequest })
+
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
+    expect(within(prototype).queryByText('Устаревшая задолженность')).not.toBeInTheDocument()
   })
 
   it('caps a garage row payment and shows the excess as advance', async () => {

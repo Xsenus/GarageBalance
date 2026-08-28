@@ -3009,6 +3009,8 @@ function PaymentsPrototypePanel({
   const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
   const paymentHistoryRequestControllerRef = useRef<AbortController | null>(null)
+  const incomePaymentWarningControllerRef = useRef<AbortController | null>(null)
+  const overdueDebtRefreshControllerRef = useRef<AbortController | null>(null)
   const paymentHistoryId = useId()
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
@@ -3076,6 +3078,8 @@ function PaymentsPrototypePanel({
     paymentHistoryRequests.invalidate()
     paymentHistoryRequestControllerRef.current?.abort()
     fullPaymentQuoteRequestControllerRef.current?.abort()
+    incomePaymentWarningControllerRef.current?.abort()
+    overdueDebtRefreshControllerRef.current?.abort()
   }, [incomeWorksheetRequests, paymentHistoryRequests])
   const selectedGarageBalance = selectedGarage
     ? getGarageBalancePresentation(selectedGarage.balance, selectedGarage.overdueDebt)
@@ -3526,6 +3530,24 @@ function PaymentsPrototypePanel({
     }
   }
 
+  async function refreshGarageOverdueDebt(garage: PaymentsPrototypeGarage) {
+    overdueDebtRefreshControllerRef.current?.abort()
+    const controller = overdueDebtRefreshControllerRef.current = new AbortController()
+    try {
+      const details = await financeClient.getGarageOverdueDebt(auth.accessToken, garage.id, controller.signal)
+      if (!controller.signal.aborted) {
+        setSelectedGarage((currentGarage) => currentGarage?.id === garage.id
+          ? { ...currentGarage, overdueDebt: details.total }
+          : currentGarage)
+        setOverdueDebtDetails(details.total > 0 ? details : null)
+        setOverdueDebtError(null)
+      }
+      return true
+    } catch {
+      return controller.signal.aborted
+    }
+  }
+
   function togglePaymentHistory() {
     if (!selectedGarage) {
       return
@@ -3629,28 +3651,12 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + balanceDelta) }
         : currentGarage)
       closeHistoryEditDialog()
-      let overdueRefreshFailed = false
-      const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
-        .then((details) => {
-          if (selectedGarageIdRef.current !== selectedGarage.id) {
-            return
-          }
-
-          setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
-            ? { ...currentGarage, overdueDebt: details.total }
-            : currentGarage)
-          setOverdueDebtDetails(details.total > 0 ? details : null)
-          setOverdueDebtError(null)
-        })
-        .catch(() => {
-          overdueRefreshFailed = true
-        })
-      await Promise.all([
-        overdueRefresh,
+      const [overdueDebtRefreshed] = await Promise.all([
+        refreshGarageOverdueDebt(selectedGarage),
         loadGaragePaymentHistory(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
       ])
-      if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+      if (!overdueDebtRefreshed) {
         setPaymentError('Платеж изменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
       }
     } catch (error) {
@@ -3680,28 +3686,12 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + canceledAmount) }
         : currentGarage)
       closeHistoryCancelDialog()
-      let overdueRefreshFailed = false
-      const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
-        .then((details) => {
-          if (selectedGarageIdRef.current !== selectedGarage.id) {
-            return
-          }
-
-          setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
-            ? { ...currentGarage, overdueDebt: details.total }
-            : currentGarage)
-          setOverdueDebtDetails(details.total > 0 ? details : null)
-          setOverdueDebtError(null)
-        })
-        .catch(() => {
-          overdueRefreshFailed = true
-        })
-      await Promise.all([
-        overdueRefresh,
+      const [overdueDebtRefreshed] = await Promise.all([
+        refreshGarageOverdueDebt(selectedGarage),
         loadGaragePaymentHistory(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
       ])
-      if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+      if (!overdueDebtRefreshed) {
         setPaymentError('Платеж отменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
       }
     } catch (error) {
@@ -3719,6 +3709,8 @@ function PaymentsPrototypePanel({
     paymentHistoryRequests.invalidate()
     paymentHistoryRequestControllerRef.current?.abort()
     fullPaymentQuoteRequestControllerRef.current?.abort()
+    incomePaymentWarningControllerRef.current?.abort()
+    overdueDebtRefreshControllerRef.current?.abort()
     setSelectedGarageId(garage.id)
     setSelectedGarage(garage)
     setGarageRows([])
@@ -3944,15 +3936,19 @@ function PaymentsPrototypePanel({
     const accountingMonth = row.month.length === 7 ? `${row.month}-01` : row.month
     setSavingPaymentRowId(row.id)
     setPaymentError(null)
+    let warningController: AbortController | null = null
 
     try {
       if (!warningConfirmed && incomeType.code?.trim().toLowerCase() === 'electricity') {
         const warningTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        incomePaymentWarningControllerRef.current?.abort()
+        warningController = incomePaymentWarningControllerRef.current = new AbortController()
         const warning = await financeClient.getIncomePaymentWarning(auth.accessToken, {
           garageId: selectedGarage.id,
           incomeTypeId: incomeType.id,
           operationDate: getLocalDateInputValue(),
-        })
+        }, warningController.signal)
+        if (warningController.signal.aborted) return
         if (warning.requiresConfirmation && warning.previousPaymentDate && warning.daysSincePreviousPayment !== null) {
           earlyElectricityPaymentTriggerRef.current = warningTrigger
           setEarlyElectricityPaymentConfirmation({
@@ -3996,33 +3992,17 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: optimisticGarageDebtAfter }
         : currentGarage)
 
-      let overdueRefreshFailed = false
-      const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
-        .then((details) => {
-          if (selectedGarageIdRef.current !== selectedGarage.id) {
-            return
-          }
-
-          setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
-            ? { ...currentGarage, balance: optimisticGarageDebtAfter, overdueDebt: details.total }
-            : currentGarage)
-          setOverdueDebtDetails(details.total > 0 ? details : null)
-          setOverdueDebtError(null)
-        })
-        .catch(() => {
-          overdueRefreshFailed = true
-        })
-
-      await Promise.all([
-        overdueRefresh,
+      const [overdueDebtRefreshed] = await Promise.all([
+        refreshGarageOverdueDebt(selectedGarage),
         loadGarageIncomeWorksheet(selectedGarage),
         paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
       ])
-      if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+      if (!overdueDebtRefreshed) {
         setPaymentError('Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')
       }
     } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж. Повторите попытку позже.')
+      if (warningController?.signal.aborted) return
+      setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж.')
     } finally {
       setSavingPaymentRowId(null)
     }
@@ -4228,29 +4208,12 @@ function PaymentsPrototypePanel({
       ? { ...currentGarage, balance: optimisticGarageDebtAfter }
       : currentGarage)
 
-    let overdueRefreshFailed = false
-    const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
-      .then((details) => {
-        if (selectedGarageIdRef.current !== selectedGarage.id) {
-          return
-        }
-
-        setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
-          ? { ...currentGarage, balance: optimisticGarageDebtAfter, overdueDebt: details.total }
-          : currentGarage)
-        setOverdueDebtDetails(details.total > 0 ? details : null)
-        setOverdueDebtError(null)
-      })
-      .catch(() => {
-        overdueRefreshFailed = true
-      })
-
-    await Promise.all([
-      overdueRefresh,
+    const [overdueDebtRefreshed] = await Promise.all([
+      refreshGarageOverdueDebt(selectedGarage),
       loadGarageIncomeWorksheet(selectedGarage),
       paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
     ])
-    if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+    if (!overdueDebtRefreshed) {
       setPaymentError('Полная оплата сохранена, но не удалось обновить просроченную задолженность. Обновите страницу.')
     }
 

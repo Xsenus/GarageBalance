@@ -694,7 +694,7 @@ export type FinanceClient = {
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
-  getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest): Promise<IncomePaymentWarningDto>
+  getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest, signal?: AbortSignal): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createFullGaragePayment(accessToken: string, request: CreateFullGaragePaymentRequest): Promise<FullGaragePaymentDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -900,8 +900,8 @@ export const financeApi: FinanceClient = {
   getFinancialReportPeriod(accessToken, params, signal) {
     return requestJson(accessToken, withQuery('/api/finance/financial-report-period', params), { signal })
   },
-  getIncomePaymentWarning(accessToken, request) {
-    return requestJson(accessToken, '/api/finance/income/payment-warning', { method: 'POST', body: JSON.stringify(request) })
+  getIncomePaymentWarning(accessToken, request, signal) {
+    return requestJson(accessToken, '/api/finance/income/payment-warning', { method: 'POST', body: JSON.stringify(request), signal })
   },
   createIncome(accessToken, request) {
     return requestJson(accessToken, '/api/finance/income', { method: 'POST', body: JSON.stringify(request) })
