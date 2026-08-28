@@ -11711,6 +11711,50 @@ describe('App', () => {
     expect(getOperationsPage).toHaveBeenCalledTimes(2)
   })
 
+  it('cancels a pending fund operations page when the user leaves funds without showing an abort error', async () => {
+    const user = userEvent.setup()
+    let pendingPageSignal: AbortSignal | undefined
+    let resolveAbortObserved!: () => void
+    const abortObserved = new Promise<void>((resolve) => {
+      resolveAbortObserved = resolve
+    })
+    const getOperationsPage = vi.fn((_token: string, query?: { offset?: number; limit?: number }, signal?: AbortSignal) => {
+      const offset = query?.offset ?? 0
+      const limit = query?.limit ?? 25
+      if (offset === 0) {
+        return Promise.resolve({ items: [], totalCount: 60, offset, limit })
+      }
+
+      pendingPageSignal = signal
+      return new Promise<FundOperationPageDto>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new Error('Отменённая страница фондов не должна показывать ошибку.'))
+          queueMicrotask(resolveAbortObserved)
+        }, { once: true })
+      })
+    })
+    const fundsClient = createFundsClient({ getOperationsPage })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Фонды')
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const pagination = await within(fundsPanel).findByRole('navigation', { name: 'Пагинация операций фондов' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(pendingPageSignal).toBeInstanceOf(AbortSignal))
+
+    await openSection(user, 'Контрагенты')
+
+    expect(pendingPageSignal?.aborted).toBe(true)
+    await act(async () => {
+      await abortObserved
+    })
+    expect(screen.queryByText('Отменённая страница фондов не должна показывать ошибку.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

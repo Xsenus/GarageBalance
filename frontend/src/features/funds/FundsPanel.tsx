@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Landmark, Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -87,6 +87,16 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   }
 }
 
+async function getFundOperationsPage(fundsClient: FundsClient, accessToken: string, pageNumber: number, limit: number, signal?: AbortSignal) {
+  const offset = (pageNumber - 1) * limit
+  if (fundsClient.getOperationsPage) {
+    return fundsClient.getOperationsPage(accessToken, { offset, limit, includeCanceled: true }, signal)
+  }
+
+  const operations = await fundsClient.getOperations(accessToken, { limit: 100, includeCanceled: true }, signal)
+  return createFallbackPage(operations, offset, limit)
+}
+
 export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
   const [operationPage, setOperationPage] = useState(() => createEmptyPage<FundOperationDto>(25))
@@ -111,6 +121,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [deletingFund, setDeletingFund] = useState(false)
   const [savingOperation, setSavingOperation] = useState(false)
   const [savingStatusAction, setSavingStatusAction] = useState(false)
+  const [pageController] = useState(() => new AbortController())
   useRestoreFocusOnClose(Boolean(fundEditor))
   useRestoreFocusOnClose(Boolean(fundDelete))
   useRestoreFocusOnClose(Boolean(operation))
@@ -142,15 +153,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   useEscapeKey(Boolean(operationReverse) && !savingOperation, () => closeFundOperationReverse())
   useEscapeKey(Boolean(statusAction) && !savingStatusAction, () => closeFundStatusAction())
 
-  const getOperationsPage = useCallback(async (pageNumber: number, limit: number, signal?: AbortSignal) => {
-    const offset = (pageNumber - 1) * limit
-    if (fundsClient.getOperationsPage) {
-      return fundsClient.getOperationsPage(auth.accessToken, { offset, limit, includeCanceled: true }, signal)
-    }
-
-    const operations = await fundsClient.getOperations(auth.accessToken, { limit: 100, includeCanceled: true }, signal)
-    return createFallbackPage(operations, offset, limit)
-  }, [auth.accessToken, fundsClient])
+  useEffect(() => () => pageController.abort(), [pageController])
 
   useEffect(() => {
     let cancelled = false
@@ -184,7 +187,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       setOperationsLoading(true)
       try {
         const operations = await loadFundsRequest(
-          (signal) => getOperationsPage(1, 25, signal),
+          (signal) => getFundOperationsPage(fundsClient, auth.accessToken, 1, 25, signal),
           'Сервер не ответил при загрузке операций фондов. Повторите загрузку.',
           loadController.signal,
         )
@@ -209,18 +212,23 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       cancelled = true
       loadController.abort()
     }
-  }, [auth.accessToken, fundsClient, getOperationsPage, reloadToken])
+  }, [auth.accessToken, fundsClient, reloadToken])
 
   async function changeOperationsPage(pageNumber: number, limit = operationPage.limit) {
+    const signal = pageController.signal
     setOperationsLoading(true)
     setLoadError(null)
     try {
-      setOperationPage(await loadFundsRequest(
-        (signal) => getOperationsPage(pageNumber, limit, signal),
+      const page = await loadFundsRequest(
+        (signal) => getFundOperationsPage(fundsClient, auth.accessToken, pageNumber, limit, signal),
         'Сервер не ответил при загрузке операций фондов. Повторите загрузку.',
-      ))
+        signal,
+      )
+      setOperationPage(page)
     } catch (error: unknown) {
-      setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить операции фондов.')
+      if (!signal.aborted) {
+        setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить операции фондов.')
+      }
     } finally {
       setOperationsLoading(false)
     }
@@ -234,7 +242,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         'Сервер не ответил при загрузке фондов. Повторите загрузку.',
       ),
       loadFundsRequest(
-        (signal) => getOperationsPage(currentPageNumber, operationPage.limit, signal),
+        (signal) => getFundOperationsPage(fundsClient, auth.accessToken, currentPageNumber, operationPage.limit, signal),
         'Сервер не ответил при загрузке операций фондов. Повторите загрузку.',
       ),
     ])
