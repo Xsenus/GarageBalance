@@ -5,6 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
+import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { FormError } from '../../shared/formFeedback'
@@ -1086,18 +1087,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </button>
             </div>
             <p className="confirmation-text" id="fund-operation-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend пересчитает остаток фонда и запишет корректировку в историю изменений.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля операции фонда">
-              {operationEditConfirmation.changes.map((change) => (
-                <li key={change.field}>
-                  <span className="dictionary-change-field">{change.field}</span>
-                  <span className="dictionary-change-values">
-                    <span className="dictionary-change-value">{change.before}</span>
-                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ChangePreviewList ariaLabel="Изменяемые поля операции фонда" changes={operationEditConfirmation.changes} />
             {operationError ? <FormError>{operationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={operationEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setOperationEditConfirmation(null)} disabled={savingOperation}>Отмена</button>

@@ -13,6 +13,7 @@ import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWo
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
+import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
@@ -2679,18 +2680,7 @@ export function FinancePanel({
               </button>
             </div>
             <p className="confirmation-text" id="finance-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend запишет корректировку в историю платежей.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля платежа">
-              {pendingFinanceEditConfirmation.changes.map((change) => (
-                <li key={change.field}>
-                  <span className="dictionary-change-field">{change.field}</span>
-                  <span className="dictionary-change-values">
-                    <span className="dictionary-change-value">{change.before}</span>
-                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingFinanceEditConfirmation.changes} />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={financeEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingFinanceEditConfirmation(null)}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingFinanceEdit} disabled={saving === pendingFinanceEditConfirmation.kind}>
@@ -5447,18 +5437,7 @@ function GaragePaymentHistoryEditDialog({
             </button>
           </div>
           <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend запишет корректировку в историю платежей.</p>
-          <ul className="dictionary-change-list" aria-label="Изменяемые поля платежа">
-            {pendingChanges.map((change) => (
-              <li key={change.field}>
-                <span className="dictionary-change-field">{change.field}</span>
-                <span className="dictionary-change-values">
-                  <span className="dictionary-change-value">{change.before}</span>
-                  <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                  <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingChanges} />
           <div className="detail-dialog-actions contractors-dialog-actions">
             <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingChanges(null)} disabled={saving}>Отмена</button>
             <button className="secondary-button" type="button" onClick={confirmSubmit} disabled={saving}>

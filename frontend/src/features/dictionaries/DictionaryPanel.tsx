@@ -15,6 +15,7 @@ import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey }
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createGarageFormFromDto, createOwnerFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from '../../shared/dictionaryWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
+import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
@@ -1412,18 +1413,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </button>
             </div>
             <p className="confirmation-text" id="dictionary-edit-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля">
-              {pendingEditorConfirmation.changes.map((change) => (
-                <li key={`${change.field}-${change.before}-${change.after}`}>
-                  <span className="dictionary-change-field">{change.field}</span>
-                  <span className="dictionary-change-values">
-                    <span className="dictionary-change-value">{change.before}</span>
-                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ChangePreviewList ariaLabel="Изменяемые поля" changes={pendingEditorConfirmation.changes} />
             <div className="detail-dialog-actions">
               <button ref={editorConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingEditorConfirmation(null)} disabled={saving === 'dictionary-editor'}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmEditorChanges()} disabled={saving === 'dictionary-editor'}>

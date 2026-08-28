@@ -11,6 +11,7 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
+import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { EditableCombobox } from '../../shared/EditableCombobox'
@@ -4456,18 +4457,7 @@ function AddFeePrototypeDialog({
               </button>
             </div>
             <p className="confirmation-text" id="fee-campaign-edit-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля сбора">
-              {pendingConfirmation.changes.map((change) => (
-                <li key={`${change.field}-${change.before}-${change.after}`}>
-                  <span className="dictionary-change-field">{change.field}</span>
-                  <span className="dictionary-change-values">
-                    <span className="dictionary-change-value">{change.before}</span>
-                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ChangePreviewList ariaLabel="Изменяемые поля сбора" changes={pendingConfirmation.changes} />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingConfirmation(null)} disabled={isSaving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmFeeChanges()} disabled={isSaving}>
