@@ -13450,7 +13450,7 @@ describe('App', () => {
 
   it('shows diagnostic status and lets an administrator download a bounded package', async () => {
     const user = userEvent.setup()
-    const getDiagnosticLogStatus = vi.fn(async () => ({
+    const diagnosticStatus = {
       enabled: true,
       retentionDays: 14,
       packageDays: 7,
@@ -13459,7 +13459,18 @@ describe('App', () => {
       totalSizeBytes: 2048,
       lastEntryAtUtc: '2026-07-15T05:00:00Z',
       lastWriteError: null,
-    }))
+    }
+    let statusRequestCount = 0
+    let refreshSignal: AbortSignal | undefined
+    const getDiagnosticLogStatus = vi.fn((_token: string, signal?: AbortSignal) => {
+      statusRequestCount += 1
+      if (statusRequestCount === 1) {
+        return Promise.resolve(diagnosticStatus)
+      }
+
+      refreshSignal = signal
+      return new Promise<typeof diagnosticStatus>(() => undefined)
+    })
     const createDiagnosticPackage = vi.fn(async () => new Blob(['diagnostics'], { type: 'application/zip' }))
     const createObjectUrl = vi.fn(() => 'blob:diagnostics')
     const revokeObjectUrl = vi.fn()
@@ -13486,7 +13497,54 @@ describe('App', () => {
     await waitFor(() => expect(createDiagnosticPackage).toHaveBeenCalledWith('token'))
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:diagnostics')
-    expect(await within(panel).findByRole('status')).toHaveTextContent('Диагностический пакет подготовлен.')
+    expect(await within(panel).findByText('Диагностический пакет подготовлен. Перед передачей проверьте, кому отправляется файл.')).toHaveAttribute('role', 'status')
+    await waitFor(() => expect(getDiagnosticLogStatus).toHaveBeenCalledTimes(2))
+    expect(diagnosticSummary).toBeInTheDocument()
+    expect(within(panel).getByRole('status', { name: 'Обновляем состояние журнала ошибок' })).toBeInTheDocument()
+    linkClick.mockRestore()
+
+    await openSection(user, 'Отчеты')
+    expect(refreshSignal?.aborted).toBe(true)
+  })
+
+  it('keeps diagnostic status visible when the refresh after package export fails', async () => {
+    const user = userEvent.setup()
+    const diagnosticStatus = {
+      enabled: true,
+      retentionDays: 14,
+      packageDays: 7,
+      packageMaxSizeMb: 20,
+      fileCount: 3,
+      totalSizeBytes: 4096,
+      lastEntryAtUtc: '2026-08-28T04:50:00Z',
+      lastWriteError: null,
+    }
+    const getDiagnosticLogStatus = vi.fn()
+      .mockResolvedValueOnce(diagnosticStatus)
+      .mockRejectedValueOnce(new Error('Не удалось сверить состояние журнала после выгрузки.'))
+    const createObjectUrl = vi.fn(() => 'blob:diagnostics-refresh-error')
+    const revokeObjectUrl = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl })
+    const linkClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const settingsClient = createSettingsClient({
+      getDiagnosticLogStatus,
+      createDiagnosticPackage: async () => new Blob(['diagnostics'], { type: 'application/zip' }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Диагностика' }))
+    const panel = await within(settings).findByRole('region', { name: 'Диагностика ошибок приложения' })
+    const diagnosticSummary = await within(panel).findByLabelText('Состояние журнала ошибок')
+    await user.click(within(panel).getByRole('button', { name: 'Скачать диагностический пакет' }))
+
+    expect(await within(panel).findByText('Не удалось сверить состояние журнала после выгрузки.')).toBeInTheDocument()
+    expect(diagnosticSummary).toBeInTheDocument()
+    expect(within(panel).getByText('3 / 4.0 КБ')).toBeInTheDocument()
     linkClick.mockRestore()
   })
 

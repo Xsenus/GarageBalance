@@ -277,7 +277,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       })
       .catch((caught: unknown) => {
         if (!ignore) {
-          setDiagnosticStatus(null)
           setDiagnosticError(caught instanceof Error ? caught.message : 'Не удалось загрузить состояние журнала ошибок.')
         }
       })
@@ -1269,7 +1268,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <p>Система сохраняет технические ошибки сервера и браузера с кодом для поиска. Пароли, токены, телефоны и адреса электронной почты маскируются; база данных и резервные копии в пакет не входят.</p>
         </div>
         <div className="settings-card-body">
-        {diagnosticLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние журнала ошибок" rows={3} columns={4} /> : null}
+        {diagnosticLoading && !diagnosticStatus ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние журнала ошибок" rows={3} columns={4} /> : null}
+        {diagnosticLoading && diagnosticStatus ? <div className="form-hint" role="status" aria-label="Обновляем состояние журнала ошибок" aria-live="polite">Обновляем состояние журнала ошибок…</div> : null}
         {diagnosticError ? (
           <div className="settings-backup-error">
             <FormError>{diagnosticError}</FormError>
@@ -1280,7 +1280,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           </div>
         ) : null}
         {diagnosticMessage ? <div className="form-success" role="status" aria-live="polite">{diagnosticMessage}</div> : null}
-        {diagnosticStatus && !diagnosticLoading ? (
+        {diagnosticStatus ? (
           <>
             <div className="summary-strip" aria-label="Состояние журнала ошибок">
               <div>
