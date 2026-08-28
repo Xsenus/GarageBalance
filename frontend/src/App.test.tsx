@@ -14574,6 +14574,83 @@ describe('App', () => {
     expect(await screen.findByText('Запись удалена из рабочего списка.')).toBeInTheDocument()
   })
 
+  it('returns to the previous dictionary page after archiving its only row', async () => {
+    const user = userEvent.setup()
+    let owners = Array.from({ length: 26 }, (_, index) => createOwner({
+      id: `owner-last-page-${index + 1}`,
+      lastName: `Владелец${index + 1}`,
+      firstName: 'Тест',
+    }))
+    const getOwnersPage = vi.fn(async (_token: string, _query?: string, offset = 0, limit = 25, includeArchived = false) => {
+      const visibleOwners = owners.filter((owner) => includeArchived || !owner.isArchived)
+      return {
+        items: visibleOwners.slice(offset, offset + limit),
+        totalCount: visibleOwners.length,
+        offset,
+        limit,
+      }
+    })
+    const archiveOwner = vi.fn(async (_token: string, ownerId: string) => {
+      owners = owners.map((owner) => owner.id === ownerId ? { ...owner, isArchived: true } : owner)
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getOwnersPage, archiveOwner })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
+    const lastOwnerRow = (await within(dictionaryPanel).findByText('Владелец26 Тест')).closest('tr')!
+    fireEvent.contextMenu(lastOwnerRow)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления'), 'Проверка последней страницы')
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
+
+    expect(archiveOwner).toHaveBeenCalledWith('token', 'owner-last-page-26', 'Проверка последней страницы')
+    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+    await waitFor(() => expect(getOwnersPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, false, expect.any(AbortSignal)))
+  })
+
+  it('returns to the first dictionary page when a mutation empties the result set', async () => {
+    const user = userEvent.setup()
+    let owners = Array.from({ length: 26 }, (_, index) => createOwner({
+      id: `owner-empty-page-${index + 1}`,
+      lastName: `Владелец${index + 1}`,
+      firstName: 'Тест',
+    }))
+    const getOwnersPage = vi.fn(async (_token: string, _query?: string, offset = 0, limit = 25) => ({
+      items: owners.slice(offset, offset + limit),
+      totalCount: owners.length,
+      offset,
+      limit,
+    }))
+    const archiveOwner = vi.fn(async () => {
+      owners = []
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getOwnersPage, archiveOwner })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
+    fireEvent.contextMenu((await within(dictionaryPanel).findByText('Владелец26 Тест')).closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления'), 'Одновременное изменение списка')
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить запись' }))
+
+    expect(await within(dictionaryPanel).findByText('В этом справочнике пока нет записей')).toBeInTheDocument()
+    await waitFor(() => expect(getOwnersPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, false, expect.any(AbortSignal)))
+  })
+
 
   it('shows archived dictionary records and restores them after confirmation', async () => {
     const user = userEvent.setup()

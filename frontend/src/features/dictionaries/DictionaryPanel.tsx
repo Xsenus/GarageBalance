@@ -259,6 +259,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         return
       }
 
+      if (offset > 0 && page.items.length === 0 && offset >= page.totalCount) {
+        const lastOffset = page.totalCount > 0
+          ? Math.floor((page.totalCount - 1) / limit) * limit
+          : 0
+        return loadPage(section, lastOffset, limit)
+      }
+
       if (section === 'owners') setOwners(page.items as OwnerDto[])
       else if (section === 'garages') setGarages(page.items as GarageDto[])
       else if (section === 'incomeTypes') setIncomeTypes(page.items as AccountingTypeDto[])
