@@ -12719,6 +12719,45 @@ describe('App', () => {
     expect(requestedPage).toEqual({ offset: 0, limit: 25 })
   })
 
+  it('keeps the current user page visible while the next server page is loading', async () => {
+    const user = userEvent.setup()
+    const users = Array.from({ length: 26 }, (_item, index) => createManagedUser({
+      id: `visible-user-${index + 1}`,
+      email: `visible-${index + 1}@example.com`,
+      displayName: `Видимый сотрудник ${index + 1}`,
+    }))
+    let nextPageSignal: AbortSignal | undefined
+    const getUsersPage = vi.fn((_token: string, _search?: string, offset = 0, limit = 25, signal?: AbortSignal) => {
+      if (offset === 0) {
+        return Promise.resolve({ items: users.slice(0, limit), totalCount: users.length, offset, limit })
+      }
+
+      nextPageSignal = signal
+      return new Promise<never>(() => undefined)
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getUsersPage })} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
+    expect(await within(usersTable).findByText('Видимый сотрудник 1')).toBeInTheDocument()
+
+    await user.click(within(usersPanel).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(nextPageSignal).toBeInstanceOf(AbortSignal))
+
+    expect(within(usersTable).getByText('Видимый сотрудник 1')).toBeInTheDocument()
+    expect(within(usersPanel).getByRole('status', { name: 'Обновляем список пользователей' })).toBeInTheDocument()
+    expect(within(usersPanel).getByText('26 пользователей')).toBeInTheDocument()
+    expect(usersTable).toHaveAttribute('aria-busy', 'true')
+    expect(within(usersPanel).getByRole('button', { name: 'Добавить' })).toBeDisabled()
+    expect(within(usersTable).getByRole('button', { name: 'Изменить пользователя Видимый сотрудник 1' })).toBeDisabled()
+
+    await openSection(user, 'Отчеты')
+    expect(nextPageSignal?.aborted).toBe(true)
+  })
+
   it('returns to the first user page after creation without reloading the stale page', async () => {
     const user = userEvent.setup()
     let users = Array.from({ length: 26 }, (_item, index) => createManagedUser({

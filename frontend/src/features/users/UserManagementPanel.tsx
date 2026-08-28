@@ -29,6 +29,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [offset, setOffset] = useState(0)
   const [pageSize, setPageSize] = useState(25)
   const [loading, setLoading] = useState(true)
+  const [hasLoadedPage, setHasLoadedPage] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
@@ -113,6 +114,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       const loadedPage = await promise
       if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
         setPage(loadedPage)
+        setHasLoadedPage(true)
       }
     } catch (caught) {
       if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
@@ -144,6 +146,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         const loadedPage = await promise
         if (!ignore && usersPageControllerRef.current === controller) {
           setPage(loadedPage)
+          setHasLoadedPage(true)
         }
       } catch (caught) {
         if (!ignore && usersPageControllerRef.current === controller && !controller.signal.aborted) {
@@ -303,6 +306,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ])
       if (usersPageControllerRef.current === controller && !controller.signal.aborted) {
         setPage(loadedPage)
+        setHasLoadedPage(true)
         setRoles(loadedRoles)
       }
     } catch (caught) {
@@ -495,7 +499,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           <p className="eyebrow">Пользователи</p>
           <h2>Доступ в систему и роли сотрудников</h2>
         </div>
-        {!loading ? <span>{page.totalCount} пользователей</span> : null}
+        {hasLoadedPage ? <span>{page.totalCount} пользователей</span> : null}
       </div>
 
       {error && !dialogOpen ? (
@@ -513,14 +517,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           </form>
 
           <div className="dictionary-toolbar users-toolbar-actions">
-            <button className="secondary-button create-action-button" type="button" onClick={() => openEditor('create')} disabled={roles.length === 0}>
+            <button className="secondary-button create-action-button" type="button" onClick={() => openEditor('create')} disabled={loading || roles.length === 0}>
               <UserPlus size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </div>
 
           <div className="dictionary-table-scroll">
-            <table className="dictionary-data-table users-data-table" aria-label="Список пользователей" onContextMenu={(event) => event.preventDefault()}>
+            <table className="dictionary-data-table users-data-table" aria-label="Список пользователей" aria-busy={loading} onContextMenu={(event) => event.preventDefault()}>
               <thead>
                 <tr>
                   <th>Сотрудник</th>
@@ -532,11 +536,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 </tr>
               </thead>
               <tbody>
-                {!loading ? page.items.map((managedUser) => (
+                {hasLoadedPage ? page.items.map((managedUser) => (
                   <tr
                     key={managedUser.id}
                     tabIndex={0}
-                    onContextMenu={(event) => {
+                    onContextMenu={loading ? undefined : (event) => {
                       event.preventDefault()
                       event.stopPropagation()
                       setContextMenu({ user: managedUser, x: event.clientX, y: event.clientY })
@@ -549,15 +553,15 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     <td>{managedUser.lastLoginAtUtc ? formatDateTime(managedUser.lastLoginAtUtc) : 'Не входил'}</td>
                     <td className="dictionary-actions-column users-actions-column table-actions-column">
                       <span className="dictionary-row-actions users-row-actions">
-                        <button className="icon-button dictionary-row-action" type="button" aria-label={`Изменить пользователя ${managedUser.displayName}`} title="Изменить" onClick={() => openEditor('edit', managedUser)}>
+                        <button className="icon-button dictionary-row-action" type="button" aria-label={`Изменить пользователя ${managedUser.displayName}`} title="Изменить" disabled={loading} onClick={() => openEditor('edit', managedUser)}>
                           <Pencil size={16} aria-hidden="true" />
                         </button>
                         {managedUser.isActive ? (
-                          <button className="icon-button danger-icon-button dictionary-row-action" type="button" aria-label={`Удалить пользователя ${managedUser.displayName}`} title="Удалить" onClick={() => openDeleteDialog(managedUser)}>
+                          <button className="icon-button danger-icon-button dictionary-row-action" type="button" aria-label={`Удалить пользователя ${managedUser.displayName}`} title="Удалить" disabled={loading} onClick={() => openDeleteDialog(managedUser)}>
                             <Trash2 size={16} aria-hidden="true" />
                           </button>
                         ) : (
-                          <button className="icon-button dictionary-row-action" type="button" aria-label={`Восстановить пользователя ${managedUser.displayName}`} title="Восстановить" onClick={() => setRestoreTarget(managedUser)}>
+                          <button className="icon-button dictionary-row-action" type="button" aria-label={`Восстановить пользователя ${managedUser.displayName}`} title="Восстановить" disabled={loading} onClick={() => setRestoreTarget(managedUser)}>
                             <RotateCcw size={16} aria-hidden="true" />
                           </button>
                         )}
@@ -565,7 +569,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     </td>
                   </tr>
                 )) : null}
-                {!loading && page.items.length === 0 ? (
+                {hasLoadedPage && !loading && page.items.length === 0 ? (
                   <tr>
                     <td colSpan={6}>
                       <EmptyState>Пользователей пока нет</EmptyState>
@@ -574,7 +578,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 ) : null}
               </tbody>
             </table>
-            {loading ? <TableLoadingState label="Загружаем пользователей" /> : null}
+            {loading && !hasLoadedPage ? <TableLoadingState label="Загружаем пользователей" /> : null}
+            {loading && hasLoadedPage ? <div className="form-hint" role="status" aria-label="Обновляем список пользователей" aria-live="polite">Обновляем список пользователей…</div> : null}
           </div>
 
           <TablePagination
@@ -593,7 +598,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
       <RolePermissionMatrix roles={roles} onEditRole={openRoleEditor} />
 
-      {contextMenu ? (
+      {contextMenu && !loading ? (
         <div className="context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
           <div className="context-menu-group" role="group">
             <button type="button" role="menuitem" onClick={() => openEditor('edit', contextMenu.user)}>
