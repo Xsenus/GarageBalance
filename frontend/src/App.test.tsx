@@ -6495,6 +6495,10 @@ describe('App', () => {
     let persistedJanuaryValue: number | null = null
     let persistedJanuaryVersion = 'meter-reading-version-created'
     let resolveMeterReadingYearPage!: (page: MeterReadingYearPageDto) => void
+    let releaseBackgroundRefresh!: () => void
+    const backgroundRefreshGate = new Promise<void>((resolve) => { releaseBackgroundRefresh = resolve })
+    let markBackgroundRefreshStarted!: () => void
+    const backgroundRefreshStarted = new Promise<void>((resolve) => { markBackgroundRefreshStarted = resolve })
     const meterReadingYearPageRequests: Array<Parameters<FinanceClient['getMeterReadingYearPage']>[1]> = []
     const getGarages = vi.fn(async () => [createGarage({ id: 'unused-garage', number: '99' })])
     const electricityTariff = createTariff({ id: 'meter-electricity-tariff', calculationBase: 'meter_electricity' })
@@ -6522,6 +6526,10 @@ describe('App', () => {
           }
         }
         if (meterReadingYearPageRequests.length > 1) {
+          if (meterReadingYearPageRequests.length === 2) {
+            markBackgroundRefreshStarted()
+            await backgroundRefreshGate
+          }
           return {
             garages: [
               { id: 'garage-12', number: '12' },
@@ -6599,7 +6607,7 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
     expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByText('Другой месяц требует отдельного права; действие автоматически фиксируется в истории.')).toBeInTheDocument()
+    expect(within(readingsPanel).getByText('Для другого месяца нужно отдельное право; действие записывается в историю.')).toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     await act(async () => resolveMeterReadingYearPage({
       garages: [
@@ -6664,6 +6672,11 @@ describe('App', () => {
       accountingMonth: '2026-01-01',
       periodOverrideReason: undefined,
     })
+    await backgroundRefreshStarted
+    expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
+    expect(within(readingsPanel).queryByText('Загружаем гаражи и показания')).not.toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')).toHaveValue('4654')
+    await act(async () => releaseBackgroundRefresh())
     await waitFor(() => {
       januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
       expect(januaryInput).toHaveValue('4654')
@@ -6745,8 +6758,8 @@ describe('App', () => {
     await openSection(user, 'Показания')
 
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
-    await within(readingsPanel).findByText(/Нет действующих регулярных услуг по счётчику\./)
-    expect(within(readingsPanel).getByRole('status')).toHaveTextContent('Нет действующих регулярных услуг по счётчику.')
+    await within(readingsPanel).findByText(/Нет действующих услуг по счётчику\./)
+    expect(within(readingsPanel).getByRole('status')).toHaveTextContent('Нет действующих услуг по счётчику.')
     expect(within(readingsPanel).queryByRole('table')).not.toBeInTheDocument()
     expect(getMeterReadingYearPage).not.toHaveBeenCalled()
     expect(getChargeServiceSettings).toHaveBeenCalledWith(
@@ -6839,20 +6852,27 @@ describe('App', () => {
         consumption: 150,
         version: 'meter-reading-june-version-updated',
       })
+    let yearPageRequestCount = 0
     const financeClient = createFinanceClient({
-      getMeterReadingYearPage: async () => ({
-        garages: [{ id: 'garage-101', number: '101' }],
-        readings: [{
-          id: existingReading.id,
-          garageId: existingReading.garageId,
-          accountingMonth: existingReading.accountingMonth,
-          currentValue: existingReading.currentValue,
-          version: existingReading.version,
-        }],
-        totalCount: 1,
-        offset: 0,
-        limit: 25,
-      }),
+      getMeterReadingYearPage: async () => {
+        yearPageRequestCount += 1
+        if (yearPageRequestCount > 1) {
+          throw new Error('Таблица показаний не обновилась после сохранения.')
+        }
+        return {
+          garages: [{ id: 'garage-101', number: '101' }],
+          readings: [{
+            id: existingReading.id,
+            garageId: existingReading.garageId,
+            accountingMonth: existingReading.accountingMonth,
+            currentValue: existingReading.currentValue,
+            version: existingReading.version,
+          }],
+          totalCount: 1,
+          offset: 0,
+          limit: 25,
+        }
+      },
       updateMeterReading,
     })
 
@@ -6891,6 +6911,10 @@ describe('App', () => {
     await user.click(within(retryDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument())
     expect(updateMeterReading).toHaveBeenCalledTimes(2)
+    expect(await within(readingsPanel).findByText('Таблица показаний не обновилась после сохранения.')).toBeInTheDocument()
+    expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 101, Июнь, показание')).toHaveValue('17250')
+    expect(within(readingsPanel).queryByText('Загружаем гаражи и показания')).not.toBeInTheDocument()
   })
 
   it('offers and saves a physical meter replacement when a reading becomes lower', async () => {
@@ -6923,13 +6947,23 @@ describe('App', () => {
       }),
       })
     })
-    const getMeterReadingYearPage = vi.fn(async () => ({
-      garages: [{ id: 'garage-101', number: '101' }],
-      readings: [{ id: 'reading-may', garageId: 'garage-101', accountingMonth: '2026-05-01', currentValue: 17201, version: 'reading-may-version' }],
-      totalCount: 1,
-      offset: 0,
-      limit: 25,
-    }))
+    let backgroundRefreshSignal: AbortSignal | undefined
+    let markBackgroundRefreshStarted!: () => void
+    const backgroundRefreshStarted = new Promise<void>((resolve) => { markBackgroundRefreshStarted = resolve })
+    const getMeterReadingYearPage = vi.fn(async (_token, _params, signal?: AbortSignal) => {
+      if (getMeterReadingYearPage.mock.calls.length > 1) {
+        backgroundRefreshSignal = signal
+        markBackgroundRefreshStarted()
+        await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }))
+      }
+      return {
+        garages: [{ id: 'garage-101', number: '101' }],
+        readings: [{ id: 'reading-may', garageId: 'garage-101', accountingMonth: '2026-05-01', currentValue: 17201, version: 'reading-may-version' }],
+        totalCount: 1,
+        offset: 0,
+        limit: 25,
+      }
+    })
     const electricityTariff = createTariff({ id: 'replacement-electricity-tariff', calculationBase: 'meter_electricity' })
     render(<App
       authClient={createAuthClient({ login: async () => currentMonthOperator })}
@@ -6983,8 +7017,14 @@ describe('App', () => {
       garageId: 'garage-101', meterKind: 'electricity', accountingMonth: '2026-06-01', replacementDate: '2026-06-01', newSerialNumber: 'ЭЛ-2026-001',
       newInitialValue: 0, currentValue: 5, removedDeviceFinalValue: 17201, reason: 'Плановая замена',
     })))
+    await backgroundRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Оформить замену счетчика?' })).not.toBeInTheDocument())
-    await waitFor(() => expect(getMeterReadingYearPage).toHaveBeenCalledTimes(2))
+    expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
+    expect(within(readingsPanel).queryByText('Загружаем гаражи и показания')).not.toBeInTheDocument()
+    await openSection(user, 'Платежи')
+    expect(backgroundRefreshSignal?.aborted).toBe(true)
+    expect(await screen.findByRole('region', { name: 'Платежи' })).toBeInTheDocument()
+    expect(getMeterReadingYearPage).toHaveBeenCalledTimes(2)
   })
 
   it('blocks meter reading work outside the current month without the dedicated permission', async () => {

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
@@ -171,7 +171,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
           </div>
         )) : (
           <div className="meter-readings-empty-row" role="row">
-            <span role="cell">В справочнике пока нет гаражей</span>
+            <span role="cell">В справочнике нет гаражей</span>
           </div>
         )}
       </div>
@@ -200,6 +200,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [availableMeterTypes, setAvailableMeterTypes] = useState<MeterReadingTypeOption[] | null>(null)
   const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
   const [reloadRevision, setReloadRevision] = useState(0)
+  const backgroundReloadRef = useRef(false)
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
 
   const selectedMeterType = availableMeterTypes?.find((item) => item.id === meterType)
@@ -261,6 +262,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           expectedReadingVersion: pendingReadingChange.readingVersion,
         })
         setPendingReadingChange(null)
+        backgroundReloadRef.current = true
         setReloadRevision((revision) => revision + 1)
       } catch (caught) {
         setReadingChangeError(caught instanceof Error ? caught.message : 'Не удалось оформить замену счетчика.')
@@ -336,7 +338,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         }
 
         setAvailableMeterTypes([])
-        setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить настройки услуг по счётчикам.')
+        setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить настройки счётчиков.')
       }
     }
 
@@ -354,9 +356,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
     let isMounted = true
     const controller = new AbortController()
+    const background = backgroundReloadRef.current
+    backgroundReloadRef.current = false
 
     async function loadMeterReadings() {
-      setLoading(true)
+      setLoading(!background)
       setError(null)
       try {
         const yearPage = await financeClient.getMeterReadingYearPage(auth.accessToken, {
@@ -394,16 +398,18 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         setSavedReadingIds(nextSavedReadingIds)
         setSavedReadingVersions(nextSavedReadingVersions)
         setSavedReadingReplacements(nextSavedReadingReplacements)
-        setLoading(false)
       } catch (loadError) {
         if (!isMounted) {
           return
         }
 
         setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить гаражи.')
-        setGarages([])
-        setTotalGarageCount(0)
-        setLoading(false)
+        if (!background) {
+          setGarages([])
+          setTotalGarageCount(0)
+        }
+      } finally {
+        if (isMounted) setLoading(false)
       }
     }
 
@@ -468,6 +474,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
       setPendingReadingChange(null)
       setReadingChangeError(null)
+      backgroundReloadRef.current = true
       setReloadRevision((revision) => revision + 1)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить показание.'
@@ -600,11 +607,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
       {error && !pendingReadingChange ? <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading} /> : null}
-      <p className="form-hint">Другой месяц требует отдельного права; действие автоматически фиксируется в истории.</p>
+      <p className="form-hint">Для другого месяца нужно отдельное право; действие записывается в историю.</p>
 
       {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
       {availableMeterTypes?.length === 0 && !error ? (
-        <EmptyState>Нет действующих регулярных услуг по счётчику. В разделе «Тарифы и сборы» назначьте услуге счётчиковый тариф.</EmptyState>
+        <EmptyState>Нет действующих услуг по счётчику. Назначьте счётчиковый тариф в разделе «Тарифы и сборы».</EmptyState>
       ) : availableMeterTypes && availableMeterTypes.length > 0 ? <MeterReadingsTable
         appliedYear={appliedYear}
         canEditOutsideCurrentMonth={canEditOutsideCurrentMonth}
@@ -647,7 +654,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="meter-reading-change-description">Проверьте новое показание счетчика. После сохранения backend запишет изменение в историю по гаражу, месяцу и типу счетчика.</p>
+            <p className="confirmation-text" id="meter-reading-change-description">Проверьте показание. После сохранения изменение появится в истории гаража.</p>
             <ul className="dictionary-change-list" aria-label="Изменяемые поля показания">
               <li>
                 <span className="dictionary-change-field">Показание</span>
