@@ -5948,6 +5948,78 @@ describe('App', () => {
     expect(getFundOptions).toHaveBeenCalledTimes(1)
   })
 
+  it('closes a created service immediately and refreshes form references on the next open', async () => {
+    const user = userEvent.setup()
+    const initialIncomeType = createAccountingType({
+      id: 'income-before-service-create',
+      name: 'Прочие доходы',
+      destinationFundId: 'fund-other',
+      destinationFundName: 'Прочее',
+    })
+    const createdIncomeType = createAccountingType({
+      id: 'income-created-with-service',
+      name: 'Охрана',
+      destinationFundId: 'fund-other',
+      destinationFundName: 'Прочее',
+    })
+    let resolveRefreshedIncomeTypes: ((incomeTypes: AccountingTypeDto[]) => void) | undefined
+    const refreshedIncomeTypes = new Promise<AccountingTypeDto[]>((resolve) => {
+      resolveRefreshedIncomeTypes = resolve
+    })
+    const getIncomeTypes = vi.fn()
+      .mockResolvedValueOnce([initialIncomeType])
+      .mockReturnValueOnce(refreshedIncomeTypes)
+    const createChargeServiceWithTariff = vi.fn(async (_token: string, request: CreateChargeServiceWithTariffRequest) => {
+      const tariff = createTariff({
+        id: 'tariff-created-with-service',
+        name: 'Охрана — тариф',
+        calculationBase: 'fixed',
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+      })
+      return {
+        service: createChargeServiceSetting({
+          id: 'service-created-with-references',
+          name: request.service.name,
+          isRegular: true,
+          incomeTypeId: createdIncomeType.id,
+          tariffId: tariff.id,
+        }),
+        tariff,
+      }
+    })
+    const dictionaryClient = createDictionaryClient({ getIncomeTypes, createChargeServiceWithTariff })
+    const fundsClient = createFundsClient({
+      getFundOptions: async () => [{ id: 'fund-other', name: 'Прочее', allowOperations: true }],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Загружаем тарифы и услуги')).not.toBeInTheDocument())
+
+    const addServiceButton = within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' })
+    await user.click(addServiceButton)
+    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Охрана')
+    await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
+    await user.type(within(serviceDialog).getByLabelText('Тариф регулярной услуги'), '1200')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createChargeServiceWithTariff).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
+    expect(getIncomeTypes).toHaveBeenCalledTimes(1)
+
+    await user.click(addServiceButton)
+    await waitFor(() => expect(getIncomeTypes).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument()
+    resolveRefreshedIncomeTypes?.([initialIncomeType, createdIncomeType])
+    expect(await screen.findByRole('dialog', { name: 'Добавить услугу' })).toBeInTheDocument()
+  })
+
   it('keeps tariff tables visible and retries an on-demand form-reference failure', async () => {
     const user = userEvent.setup()
     const getIncomeTypes = vi.fn()

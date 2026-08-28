@@ -1929,12 +1929,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       const created = await dictionaryClient.createChargeServiceWithTariff(auth.accessToken, request)
       applySavedServiceTariff(created)
       // The backend creates an internal income type together with a new service.
-      // Refresh references so the edit dialog resolves the selected fund at once.
-      try {
-        setBackendIncomeTypes(await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit))
-      } catch {
-        // The service is already saved; a later panel reload will retry references.
-      }
+      // Reload all form references on the next open through the shared abortable request.
+      tariffReferencesLoadedRef.current = false
       setModal(null)
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось добавить услугу.')
