@@ -13289,10 +13289,59 @@ describe('App', () => {
     await user.type(within(confirmation).getByLabelText('Причина создания резервной копии'), 'Перед обновлением')
     await user.click(within(confirmation).getByRole('button', { name: 'Создать копию' }))
     await waitFor(() => expect(getDatabaseBackups).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('dialog', { name: 'Создать резервную копию базы?' })).not.toBeInTheDocument()
+    expect(await within(backupsPanel).findByText(`Резервная копия ${createdBackup.fileName} создана и проверена.`)).toBeInTheDocument()
+    expect(within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })).toHaveTextContent(createdBackup.fileName)
+    expect(within(backupsPanel).getByRole('status', { name: 'Обновляем состояние резервного копирования' })).toBeInTheDocument()
 
     await openSection(user, 'Отчеты')
 
     expect(refreshSignal?.aborted).toBe(true)
+  })
+
+  it('keeps a newly created backup visible when its background verification refresh fails', async () => {
+    const user = userEvent.setup()
+    const createdBackup = {
+      fileName: 'garagebalance_manual_20260828_114500_000.pgdump',
+      sizeBytes: 8192,
+      createdAtUtc: '2026-08-28T04:45:00Z',
+      kind: 'manual' as const,
+    }
+    const initialStatus = {
+      enabled: true,
+      automaticEnabled: true,
+      intervalHours: 24,
+      retentionCount: 30,
+      directory: '/backups',
+      isRunning: false,
+      lastSuccessfulBackupAtUtc: null,
+      lastError: null,
+      backups: [],
+    }
+    const getDatabaseBackups = vi.fn()
+      .mockResolvedValueOnce(initialStatus)
+      .mockRejectedValueOnce(new Error('Не удалось сверить каталог после создания копии.'))
+    const settingsClient = createSettingsClient({
+      getDatabaseBackups,
+      createDatabaseBackup: async () => createdBackup,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+    await within(backupsPanel).findByText('Резервные копии еще не создавались.')
+    await user.click(within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
+    await user.type(within(confirmation).getByLabelText('Причина создания резервной копии'), 'Перед проверкой обновления')
+    await user.click(within(confirmation).getByRole('button', { name: 'Создать копию' }))
+
+    expect(await within(backupsPanel).findByText('Не удалось сверить каталог после создания копии.')).toBeInTheDocument()
+    expect(within(backupsPanel).getByText(`Резервная копия ${createdBackup.fileName} создана и проверена.`)).toBeInTheDocument()
+    expect(within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })).toHaveTextContent(createdBackup.fileName)
   })
 
   it('downloads and deletes a selected backup from the backup table with an audited reason', async () => {

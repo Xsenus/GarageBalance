@@ -325,6 +325,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     setBackupMessage(null)
     try {
       const created = await settingsClient.createDatabaseBackup(auth.accessToken, { reason })
+      setBackupStatus((current) => current ? {
+        ...current,
+        isRunning: false,
+        lastSuccessfulBackupAtUtc: created.createdAtUtc,
+        backups: [created, ...current.backups.filter((backup) => backup.fileName !== created.fileName)],
+      } : current)
       setBackupMessage(`Резервная копия ${created.fileName} создана и проверена.`)
       setBackupConfirmation(null)
       setBackupReloadToken((value) => value + 1)
@@ -1149,7 +1155,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <p>Резервные копии работают как при обычном запуске, так и в Docker. Файлы сохраняются в постоянной папке компьютера и не зависят от обновления приложения.</p>
         </div>
         <div className="settings-card-body">
-        {backupLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
+        {backupLoading && !backupStatus ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
+        {backupLoading && backupStatus ? <div className="form-hint" role="status" aria-label="Обновляем состояние резервного копирования" aria-live="polite">Обновляем состояние резервного копирования…</div> : null}
         {backupError ? (
           <div className="settings-backup-error">
             <FormError>{backupError}</FormError>
@@ -1160,7 +1167,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           </div>
         ) : null}
         {backupMessage ? <div className="form-success" role="status" aria-live="polite">{backupMessage}</div> : null}
-        {backupStatus && !backupLoading ? (
+        {backupStatus ? (
           <>
             <div className="summary-strip" aria-label="Состояние резервного копирования">
               <div>
