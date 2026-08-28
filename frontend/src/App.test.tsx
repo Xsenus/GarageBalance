@@ -22032,6 +22032,97 @@ describe('App', () => {
     expect(within(releasePanel).getByText(/v0\.484\.0/)).toBeInTheDocument()
   })
 
+  it('finishes draft publication before the release list refresh and cancels that refresh on leave', async () => {
+    const user = userEvent.setup()
+    const draft = createAppRelease({
+      releaseId: 'draft-release-with-slow-refresh',
+      version: '0.485.0',
+      title: 'Черновик с медленной сверкой',
+      summary: 'Публикация уже подтверждена сервером.',
+      isPublished: false,
+    })
+    let manageableRequestCount = 0
+    let refreshSignal: AbortSignal | undefined
+    let resolveAbortObserved!: () => void
+    const abortObserved = new Promise<void>((resolve) => {
+      resolveAbortObserved = resolve
+    })
+    const getManageableReleases = vi.fn((_token: string, _offset?: number, _limit?: number, signal?: AbortSignal) => {
+      manageableRequestCount += 1
+      if (manageableRequestCount === 1) {
+        return Promise.resolve(createReleasePage([draft]))
+      }
+
+      refreshSignal = signal
+      return new Promise<AppReleasePageDto>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new Error('Отменённая сверка опубликованного черновика не должна показывать ошибку.'))
+          queueMicrotask(resolveAbortObserved)
+        }, { once: true })
+      })
+    })
+    const releaseClient = createReleaseClient({
+      getManageableReleases,
+      publishRelease: async () => ({ ...draft, isPublished: true }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={releaseClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Что нового')
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    await user.click(await within(releasePanel).findByRole('button', { name: 'Опубликовать' }))
+
+    expect(await within(releasePanel).findByText(/Запись 0\.485\.0 опубликована\./)).toBeInTheDocument()
+    expect(within(releasePanel).queryByRole('button', { name: 'Опубликовать' })).not.toBeInTheDocument()
+    await waitFor(() => expect(getManageableReleases).toHaveBeenCalledTimes(2))
+
+    await openSection(user, 'Контрагенты')
+    await act(async () => {
+      await abortObserved
+    })
+
+    expect(refreshSignal?.aborted).toBe(true)
+    expect(screen.queryByText('Отменённая сверка опубликованного черновика не должна показывать ошибку.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+  })
+
+  it('keeps the published release visible when its background list refresh fails', async () => {
+    const user = userEvent.setup()
+    const draft = createAppRelease({
+      releaseId: 'published-release-with-refresh-error',
+      version: '0.486.0',
+      title: 'Опубликованная запись',
+      summary: 'Подтверждённый результат остаётся на экране.',
+      isPublished: false,
+    })
+    let manageableRequestCount = 0
+    const getManageableReleases = vi.fn(() => {
+      manageableRequestCount += 1
+      return manageableRequestCount === 1
+        ? Promise.resolve(createReleasePage([draft]))
+        : Promise.reject(new Error('Не удалось сверить список после публикации.'))
+    })
+    const releaseClient = createReleaseClient({
+      getManageableReleases,
+      publishRelease: async () => ({ ...draft, isPublished: true }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={releaseClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Что нового')
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    await user.click(await within(releasePanel).findByRole('button', { name: 'Опубликовать' }))
+
+    expect(await within(releasePanel).findByText(/Запись 0\.486\.0 опубликована\./)).toBeInTheDocument()
+    expect(await within(releasePanel).findByText('Не удалось сверить список после публикации.')).toBeInTheDocument()
+    expect(within(releasePanel).getByText('Опубликованная запись')).toBeInTheDocument()
+    expect(within(releasePanel).queryByRole('button', { name: 'Опубликовать' })).not.toBeInTheDocument()
+  })
+
   it('loads release notes by nine when the scroll sentinel becomes visible', async () => {
     const user = userEvent.setup()
     const releases = Array.from({ length: 12 }, (_, index) => createAppRelease({

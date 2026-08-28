@@ -81,6 +81,11 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
       setReleases(page.items)
       setTotalCount(page.totalCount)
       setHasMore(page.hasMore)
+    } catch (caught) {
+      if (controller.signal.aborted) {
+        return
+      }
+      throw caught
     } finally {
       if (loadMoreControllerRef.current === controller) {
         loadMoreControllerRef.current = null
@@ -154,9 +159,13 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     setError(null)
     setSuccessMessage(null)
     try {
-      await releaseClient.publishRelease(auth.accessToken, release.releaseId)
+      const publishedRelease = await releaseClient.publishRelease(auth.accessToken, release.releaseId)
+      setReleases((current) => current.map((item) => item.releaseId === publishedRelease.releaseId ? publishedRelease : item))
       setSuccessMessage(`Запись ${release.version} опубликована.`)
-      await refreshReleases()
+      setSaving(false)
+      void refreshReleases().catch((caught) => {
+        setError(caught instanceof Error ? caught.message : 'Запись опубликована, но список не удалось обновить.')
+      })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось опубликовать запись.')
     } finally {
@@ -181,7 +190,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
       {successMessage ? <p className="success-text" role="status" aria-live="polite">{successMessage}</p> : null}
       {!loading && !error && releases.length === 0 ? <EmptyState>Пока нет опубликованных изменений.</EmptyState> : null}
 
-      {!loading && !error && releases.length > 0 ? (
+      {!loading && releases.length > 0 ? (
         <div className="release-list">
           {releases.map((release) => (
             <article className="release-entry" key={release.releaseId}>
