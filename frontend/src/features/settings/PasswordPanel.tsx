@@ -327,14 +327,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       const created = await settingsClient.createDatabaseBackup(auth.accessToken, { reason })
       setBackupMessage(`Резервная копия ${created.fileName} создана и проверена.`)
       setBackupConfirmation(null)
-      try {
-        const status = await settingsClient.getDatabaseBackups(auth.accessToken)
-        setBackupStatus(status)
-      } catch (caught) {
-        setBackupError(caught instanceof Error
-          ? `Копия создана, но список не обновился: ${caught.message}`
-          : 'Копия создана, но список резервных копий не обновился.')
-      }
+      setBackupReloadToken((value) => value + 1)
     } catch (caught) {
       setBackupConfirmation((current) => current ? {
         ...current,

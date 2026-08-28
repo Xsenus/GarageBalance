@@ -12640,6 +12640,58 @@ describe('App', () => {
     expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
   })
 
+  it('cancels the backup list refresh after creation when leaving settings', async () => {
+    const user = userEvent.setup()
+    const createdBackup = {
+      fileName: 'garagebalance_manual_20260828_113500_000.pgdump',
+      sizeBytes: 4096,
+      createdAtUtc: '2026-08-28T04:35:00Z',
+      kind: 'manual' as const,
+    }
+    let requestCount = 0
+    let refreshSignal: AbortSignal | undefined
+    const getDatabaseBackups = vi.fn((_token: string, signal?: AbortSignal) => {
+      requestCount += 1
+      if (requestCount > 1) {
+        refreshSignal = signal
+        return new Promise<Awaited<ReturnType<ApplicationSettingsClient['getDatabaseBackups']>>>(() => undefined)
+      }
+      return Promise.resolve({
+        enabled: true,
+        automaticEnabled: true,
+        intervalHours: 24,
+        retentionCount: 30,
+        directory: '/backups',
+        isRunning: false,
+        lastSuccessfulBackupAtUtc: null,
+        lastError: null,
+        backups: [],
+      })
+    })
+    const settingsClient = createSettingsClient({
+      getDatabaseBackups,
+      createDatabaseBackup: async () => createdBackup,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+    await within(backupsPanel).findByText('Резервные копии еще не создавались.')
+    await user.click(within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
+    await user.type(within(confirmation).getByLabelText('Причина создания резервной копии'), 'Перед обновлением')
+    await user.click(within(confirmation).getByRole('button', { name: 'Создать копию' }))
+    await waitFor(() => expect(getDatabaseBackups).toHaveBeenCalledTimes(2))
+
+    await openSection(user, 'Отчеты')
+
+    expect(refreshSignal?.aborted).toBe(true)
+  })
+
   it('downloads and deletes a selected backup from the backup table with an audited reason', async () => {
     const user = userEvent.setup()
     const backup = {
