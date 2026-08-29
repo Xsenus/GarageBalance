@@ -19,9 +19,19 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             .Where(item => includeArchived || !item.IsArchived);
         if (normalizedSearch is not null)
         {
-            query = query.Where(item =>
-                item.Name.ToLower().Contains(normalizedSearch) ||
-                (item.Goal != null && item.Goal.ToLower().Contains(normalizedSearch)));
+            if (dbContext.Database.IsNpgsql())
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+                query = query.Where(item =>
+                    EF.Functions.ILike(item.Name, pattern, @"\") ||
+                    (item.Goal != null && EF.Functions.ILike(item.Goal, pattern, @"\")));
+            }
+            else
+            {
+                query = query.Where(item =>
+                    item.Name.ToLower().Contains(normalizedSearch) ||
+                    (item.Goal != null && item.Goal.ToLower().Contains(normalizedSearch)));
+            }
         }
 
         return await query
