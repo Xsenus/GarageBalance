@@ -50,47 +50,57 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
-            WITH income_totals AS (
-                SELECT "GarageId" AS garage_id, SUM("Amount") AS amount
-                FROM financial_operations
-                WHERE "IsCanceled" = FALSE
-                  AND "OperationKind" = 'income'
-                  AND "GarageId" IS NOT NULL
-                  AND "AccountingMonth" >= @period_from::date
-                  AND "AccountingMonth" <= @period_to::date
-                GROUP BY "GarageId"
-            ), accrual_totals AS (
-                SELECT "GarageId" AS garage_id, SUM("Amount") AS amount
-                FROM accruals
-                WHERE "IsCanceled" = FALSE
-                  AND "AccountingMonth" >= @period_from::date
-                  AND "AccountingMonth" <= @period_to::date
-                GROUP BY "GarageId"
-            ), reading_totals AS (
-                SELECT "GarageId" AS garage_id, COUNT(*)::int AS row_count
-                FROM meter_readings
-                WHERE "IsCanceled" = FALSE
-                  AND "AccountingMonth" >= @period_from::date
-                  AND "AccountingMonth" <= @period_to::date
-                GROUP BY "GarageId"
-            ), filtered_rows AS (
+            WITH candidate_garages AS MATERIALIZED (
                 SELECT garage."Id" AS garage_id,
                        garage."Number" AS garage_number,
+                       garage."StartingBalance" AS starting_balance,
                        owner."LastName" AS owner_last_name,
                        owner."FirstName" AS owner_first_name,
-                       owner."MiddleName" AS owner_middle_name,
-                       COALESCE(income_totals.amount, 0) AS income_total,
-                       garage."StartingBalance" + COALESCE(accrual_totals.amount, 0) AS accrual_total,
-                       COALESCE(reading_totals.row_count, 0)::int AS meter_reading_count
+                       owner."MiddleName" AS owner_middle_name
                 FROM garages garage
                 LEFT JOIN owners owner ON owner."Id" = garage."OwnerId"
-                LEFT JOIN income_totals ON income_totals.garage_id = garage."Id"
-                LEFT JOIN accrual_totals ON accrual_totals.garage_id = garage."Id"
-                LEFT JOIN reading_totals ON reading_totals.garage_id = garage."Id"
                 WHERE garage."IsArchived" = FALSE
                   {{searchClause}}
-                  AND (COALESCE(income_totals.amount, 0) <> 0
-                       OR garage."StartingBalance" + COALESCE(accrual_totals.amount, 0) <> 0
+            ), income_totals AS (
+                SELECT operation."GarageId" AS garage_id, SUM(operation."Amount") AS amount
+                FROM financial_operations operation
+                INNER JOIN candidate_garages candidate ON candidate.garage_id = operation."GarageId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'income'
+                  AND operation."AccountingMonth" >= @period_from::date
+                  AND operation."AccountingMonth" <= @period_to::date
+                GROUP BY operation."GarageId"
+            ), accrual_totals AS (
+                SELECT accrual."GarageId" AS garage_id, SUM(accrual."Amount") AS amount
+                FROM accruals accrual
+                INNER JOIN candidate_garages candidate ON candidate.garage_id = accrual."GarageId"
+                WHERE accrual."IsCanceled" = FALSE
+                  AND accrual."AccountingMonth" >= @period_from::date
+                  AND accrual."AccountingMonth" <= @period_to::date
+                GROUP BY accrual."GarageId"
+            ), reading_totals AS (
+                SELECT reading."GarageId" AS garage_id, COUNT(*)::int AS row_count
+                FROM meter_readings reading
+                INNER JOIN candidate_garages candidate ON candidate.garage_id = reading."GarageId"
+                WHERE reading."IsCanceled" = FALSE
+                  AND reading."AccountingMonth" >= @period_from::date
+                  AND reading."AccountingMonth" <= @period_to::date
+                GROUP BY reading."GarageId"
+            ), filtered_rows AS (
+                SELECT garage.garage_id,
+                       garage.garage_number,
+                       garage.owner_last_name,
+                       garage.owner_first_name,
+                       garage.owner_middle_name,
+                       COALESCE(income_totals.amount, 0) AS income_total,
+                       garage.starting_balance + COALESCE(accrual_totals.amount, 0) AS accrual_total,
+                       COALESCE(reading_totals.row_count, 0)::int AS meter_reading_count
+                FROM candidate_garages garage
+                LEFT JOIN income_totals ON income_totals.garage_id = garage.garage_id
+                LEFT JOIN accrual_totals ON accrual_totals.garage_id = garage.garage_id
+                LEFT JOIN reading_totals ON reading_totals.garage_id = garage.garage_id
+                WHERE (COALESCE(income_totals.amount, 0) <> 0
+                       OR garage.starting_balance + COALESCE(accrual_totals.amount, 0) <> 0
                        OR COALESCE(reading_totals.row_count, 0) <> 0)
             ), page_rows AS (
                 SELECT filtered_rows.*,

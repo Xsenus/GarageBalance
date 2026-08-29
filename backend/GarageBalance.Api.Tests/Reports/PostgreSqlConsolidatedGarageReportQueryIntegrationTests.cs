@@ -76,6 +76,13 @@ public sealed class PostgreSqlConsolidatedGarageReportQueryIntegrationTests
         Assert.Equal(1, CountOccurrences(command, "FROM accruals"));
         Assert.Equal(1, CountOccurrences(command, "FROM meter_readings"));
         Assert.Equal(1, CountOccurrences(command, "FROM garages"));
+        Assert.Contains("candidate_garages AS MATERIALIZED", command, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(command, "INNER JOIN candidate_garages candidate"));
+        Assert.True(
+            command.IndexOf("candidate_garages AS MATERIALIZED", StringComparison.Ordinal) <
+            command.IndexOf("FROM financial_operations", StringComparison.Ordinal),
+            "Garage and owner filters must be evaluated before the three financial aggregates.");
+        Assert.Contains("FROM candidate_garages garage", command, StringComparison.Ordinal);
         Assert.Contains("FROM page_rows", command, StringComparison.Ordinal);
         Assert.Contains("COUNT(*)::int", command, StringComparison.Ordinal);
     }

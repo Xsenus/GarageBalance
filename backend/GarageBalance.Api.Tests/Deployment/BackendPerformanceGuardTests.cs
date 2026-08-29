@@ -696,6 +696,9 @@ public sealed class BackendPerformanceGuardTests
         var postgresGarageSource = garageSource[postgresGarageStart..fallbackGarageStart];
         Assert.Contains("owner.\"LastName\" ILIKE @search", postgresGarageSource, StringComparison.Ordinal);
         Assert.DoesNotContain("STRPOS", postgresGarageSource, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("candidate_garages AS MATERIALIZED", postgresGarageSource, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(postgresGarageSource, "INNER JOIN candidate_garages candidate"));
+        Assert.Contains("FROM candidate_garages garage", postgresGarageSource, StringComparison.Ordinal);
         Assert.Contains("LIMIT @limit", postgresGarageSource, StringComparison.Ordinal);
         Assert.Contains("FROM page_rows", postgresGarageSource, StringComparison.Ordinal);
         Assert.Contains("COUNT(*)::int", postgresGarageSource, StringComparison.Ordinal);
