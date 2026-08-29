@@ -5396,7 +5396,7 @@ public sealed class DictionaryServiceTests
         var selected = Assert.Single(result);
         Assert.Equal(1, commandCounter.Count);
         Assert.Equal(julyTariff.Id, selected.TariffId);
-        Assert.Equal(2, selected.TariffVersions.Count);
+        Assert.Equal(julyTariff.Id, Assert.Single(selected.TariffVersions).TariffId);
         Assert.Empty(database.Context.ChangeTracker.Entries());
     }
 
@@ -5413,6 +5413,13 @@ public sealed class DictionaryServiceTests
             Rate = 50m,
             EffectiveFrom = new DateOnly(2026, 1, 1)
         };
+        var futureTariff = new Tariff
+        {
+            Name = "Вода со следующего месяца",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 60m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
         var setting = new ChargeServiceSetting
         {
             Name = "Водоснабжение",
@@ -5423,10 +5430,24 @@ public sealed class DictionaryServiceTests
             PaymentDueDay = 30,
             OverdueGraceDays = 30,
             IncomeType = incomeType,
-            Tariff = tariff,
+            Tariff = futureTariff,
             UnitName = "м³"
         };
-        database.Context.AddRange(incomeType, tariff, setting);
+        database.Context.AddRange(incomeType, tariff, futureTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = tariff.Id,
+                EffectiveFrom = tariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2026, 7, 31)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = futureTariff.Id,
+                EffectiveFrom = futureTariff.EffectiveFrom
+            });
         await database.Context.SaveChangesAsync();
         database.Context.ChangeTracker.Clear();
         commandCounter.Reset();
@@ -5437,7 +5458,10 @@ public sealed class DictionaryServiceTests
             50,
             CancellationToken.None);
 
-        Assert.Equal(setting.Id, Assert.Single(result).Id);
+        var selected = Assert.Single(result);
+        Assert.Equal(setting.Id, selected.Id);
+        Assert.Equal(tariff.Id, selected.TariffId);
+        Assert.Equal(tariff.Id, Assert.Single(selected.TariffVersions).TariffId);
         Assert.Equal(1, commandCounter.Count);
     }
 

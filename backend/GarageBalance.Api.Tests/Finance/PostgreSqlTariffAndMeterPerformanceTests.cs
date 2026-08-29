@@ -45,6 +45,12 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                 TariffId = activeTariff.Id,
                 EffectiveFrom = activeTariff.EffectiveFrom
             });
+            seedContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = activeService.Id,
+                TariffId = futureTariff.Id,
+                EffectiveFrom = futureTariff.EffectiveFrom
+            });
             for (var index = 0; index < 250; index++)
             {
                 var tariff = CreateTariff(
@@ -72,6 +78,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
 
             var service = Assert.Single(services, item => item.Id == activeService.Id);
             Assert.Equal(activeTariff.Id, service.TariffId);
+            Assert.Equal(activeTariff.Id, Assert.Single(service.TariffVersions).TariffId);
             Assert.DoesNotContain(services, item => item.Id == futureService.Id);
             Assert.DoesNotContain(services, item => item.Id == archivedTariffService.Id);
             Assert.DoesNotContain(services, item => item.Id == disabledMeterService.Id);
