@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
+import { vi } from 'vitest'
+import { useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
 
 function OutsidePointerProbe() {
   const [open, setOpen] = useState(true)
@@ -20,6 +21,20 @@ function OutsidePointerProbe() {
 function EscapeProbe({ enabled, onEscape }: { enabled: boolean; onEscape: () => void }) {
   useEscapeKey(enabled, onEscape)
   return <button type="button">Probe</button>
+}
+
+function WindowClickDismissProbe() {
+  const [menu, setMenu] = useState<{ id: string } | null>({ id: 'menu' })
+  useDismissOnWindowClick(Boolean(menu), setMenu)
+  return (
+    <>
+      <div onClick={(event) => event.stopPropagation()}>
+        <button type="button">Внутри меню</button>
+      </div>
+      <button type="button">Вне меню</button>
+      <span>{menu ? 'Меню открыто' : 'Меню закрыто'}</span>
+    </>
+  )
 }
 
 function FocusOnOpenProbe({ enabled }: { enabled: boolean }) {
@@ -60,6 +75,24 @@ describe('focus shared hooks', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Снаружи' }))
 
     expect(screen.getByText('Закрыто')).toBeInTheDocument()
+  })
+
+  it('listens for window clicks only while a dismissible surface is open', async () => {
+    const user = userEvent.setup()
+    const addListener = vi.spyOn(window, 'addEventListener')
+    const removeListener = vi.spyOn(window, 'removeEventListener')
+    render(<WindowClickDismissProbe />)
+
+    expect(addListener.mock.calls.filter(([type]) => type === 'click')).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Внутри меню' }))
+    expect(screen.getByText('Меню открыто')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Вне меню' }))
+    expect(screen.getByText('Меню закрыто')).toBeInTheDocument()
+    expect(removeListener.mock.calls.filter(([type]) => type === 'click')).toHaveLength(1)
+
+    addListener.mockRestore()
+    removeListener.mockRestore()
   })
 
   it('calls escape handler only while enabled', async () => {

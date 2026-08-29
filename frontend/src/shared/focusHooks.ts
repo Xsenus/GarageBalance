@@ -16,6 +16,15 @@ export function useCloseOnOutsidePointer<TElement extends HTMLElement>(enabled: 
   return ref
 }
 
+export function useDismissOnWindowClick<TValue>(enabled: boolean, setValue: Dispatch<SetStateAction<TValue | null>>) {
+  useEffect(() => {
+    if (!enabled) return
+    const dismiss = () => setValue(null)
+    window.addEventListener('click', dismiss)
+    return () => window.removeEventListener('click', dismiss)
+  }, [enabled, setValue])
+}
+
 export function useEscapeKey(enabled: boolean, onEscape: () => void) {
   useEffect(() => {
     if (!enabled) {

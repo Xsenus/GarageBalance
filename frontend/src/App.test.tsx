@@ -17261,7 +17261,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
-    const paymentRow = within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!
+    const paymentRow = (await within(financePanel).findAllByText('Членский взнос'))[0].closest('tr')!
 
     paymentRow.focus()
     expect(paymentRow).toHaveFocus()

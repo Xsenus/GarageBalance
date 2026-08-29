@@ -19,7 +19,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
@@ -145,6 +145,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const mutationDialogOpen = Boolean(editor || archiveTarget || restoreTarget)
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
+  useDismissOnWindowClick(Boolean(contextMenu), setContextMenu)
   useEscapeKey(Boolean(editor) && !pendingEditorConfirmation && saving !== 'dictionary-editor', () => closeEditor())
   useEscapeKey(Boolean(pendingEditorConfirmation) && saving !== 'dictionary-editor', () => setPendingEditorConfirmation(null))
   useEscapeKey(Boolean(archiveTarget) && saving !== 'dictionary-archive', () => closeArchiveTarget())
@@ -186,15 +187,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       controller.abort()
     }
   }, [auth.accessToken, editor?.section, integrationClient, ownerForm.address])
-
-  useEffect(() => {
-    function closeMenu() {
-      setContextMenu(null)
-    }
-
-    window.addEventListener('click', closeMenu)
-    return () => window.removeEventListener('click', closeMenu)
-  }, [])
 
   useEffect(() => {
     loadedEditorReferences.current = { owners: false, garages: false }

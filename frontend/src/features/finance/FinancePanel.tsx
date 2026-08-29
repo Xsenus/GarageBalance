@@ -17,7 +17,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
-import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -522,6 +522,7 @@ export function FinancePanel({
   useEscapeKey(Boolean(cancelFinanceTarget) && !saving?.startsWith('cancel'), () => closeCancelFinanceDialog())
   useEscapeKey(Boolean(restoreFinanceTarget) && !saving?.startsWith('restore-finance'), () => closeRestoreFinanceDialog())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
+  useDismissOnWindowClick(Boolean(financeContextMenu), setFinanceContextMenu)
   useEscapeKey(Boolean(paymentsPrototypeDialog), () => closePaymentsPrototypeDialog())
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
   const visibleOperations = operations.slice(0, 8)
@@ -771,12 +772,6 @@ export function FinancePanel({
       window.clearTimeout(handle)
     }
   }, [auth.accessToken, financeClient, financePreviewReloadRevision, paymentDisplaySettingsLoaded, showAllGarageOperations])
-
-  useEffect(() => {
-    const handleWindowClick = () => setFinanceContextMenu(null)
-    window.addEventListener('click', handleWindowClick)
-    return () => window.removeEventListener('click', handleWindowClick)
-  }, [])
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
