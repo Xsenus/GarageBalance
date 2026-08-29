@@ -18394,7 +18394,7 @@ describe('App', () => {
   it('keeps the main payment table available when recent previews fail', async () => {
     const user = userEvent.setup()
     const financeClient = createFinanceClient({
-      getOperations: async () => {
+      getOperations: () => {
         throw new Error('preview unavailable')
       },
       getAccruals: async () => [createAccrual({ id: 'available-preview-accrual', incomeTypeName: 'Доступное фоновое начисление' })],

@@ -708,46 +708,43 @@ export function FinancePanel({
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const handle = window.setTimeout(() => {
-      setFinancePreviewLoading({ operations: true, accruals: true, supplierAccruals: true, meterReadings: true })
-      setFinancePreviewFailures({ operations: false, accruals: false, supplierAccruals: false, meterReadings: false })
+    return scheduleDebouncedRequest({
+      delay: 500,
+      onStart: () => {
+        setFinancePreviewLoading({ operations: true, accruals: true, supplierAccruals: true, meterReadings: true })
+        setFinancePreviewFailures({ operations: false, accruals: false, supplierAccruals: false, meterReadings: false })
+      },
+      request: (signal) => {
+        function loadPreview<T>(
+          key: keyof FinancePreviewStatuses,
+          load: () => Promise<T>,
+          applyResult: (result: T) => void,
+        ) {
+          return Promise.resolve().then(load)
+            .then((result) => {
+              if (!signal.aborted) applyResult(result)
+            })
+            .catch(() => {
+              if (!signal.aborted) setFinancePreviewFailures((current) => ({ ...current, [key]: true }))
+            })
+            .finally(() => {
+              if (!signal.aborted) setFinancePreviewLoading((current) => ({ ...current, [key]: false }))
+            })
+        }
 
-      function loadPreview<T>(
-        key: keyof FinancePreviewStatuses,
-        request: Promise<T>,
-        applyResult: (result: T) => void,
-      ) {
-        void request
-          .then((result) => {
-            if (!ignore) {
-              applyResult(result)
-            }
-          })
-          .catch(() => {
-            if (!ignore) {
-              setFinancePreviewFailures((current) => ({ ...current, [key]: true }))
-            }
-          })
-          .finally(() => {
-            if (!ignore) {
-              setFinancePreviewLoading((current) => ({ ...current, [key]: false }))
-            }
-          })
-      }
-
-      loadPreview('operations', financeClient.getOperations(auth.accessToken, financePreviewRequestLimit, controller.signal), setOperations)
-      loadPreview('accruals', financeClient.getAccruals(auth.accessToken, financePreviewRequestLimit, controller.signal), setAccruals)
-      loadPreview('supplierAccruals', financeClient.getSupplierAccruals(auth.accessToken, financePreviewRequestLimit, controller.signal), setSupplierAccruals)
-      loadPreview('meterReadings', financeClient.getMeterReadings(auth.accessToken, financePreviewRequestLimit, controller.signal), setMeterReadings)
-    }, 500)
-
-    return () => {
-      ignore = true
-      controller.abort()
-      window.clearTimeout(handle)
-    }
+        return Promise.all([
+          loadPreview('operations', () => financeClient.getOperations(auth.accessToken, financePreviewRequestLimit, signal), setOperations),
+          loadPreview('accruals', () => financeClient.getAccruals(auth.accessToken, financePreviewRequestLimit, signal), setAccruals),
+          loadPreview('supplierAccruals', () => financeClient.getSupplierAccruals(auth.accessToken, financePreviewRequestLimit, signal), setSupplierAccruals),
+          loadPreview('meterReadings', () => financeClient.getMeterReadings(auth.accessToken, financePreviewRequestLimit, signal), setMeterReadings),
+        ])
+      },
+      onSuccess: () => undefined,
+      onError: () => {
+        setFinancePreviewFailures({ operations: true, accruals: true, supplierAccruals: true, meterReadings: true })
+        setFinancePreviewLoading({ operations: false, accruals: false, supplierAccruals: false, meterReadings: false })
+      },
+    })
   }, [auth.accessToken, financeClient, financePreviewReloadRevision, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   useEffect(() => {
