@@ -1161,6 +1161,8 @@ public sealed class BackendPerformanceGuardTests
         var releaseSource = ReadApiSource("Application/Releases/AppReleaseService.cs");
         var releaseSynchronizerSource = ReadApiSource("Application/Releases/AppReleaseCatalogSynchronizer.cs");
         var releaseRepositorySource = ReadApiSource("Infrastructure/Data/EfAppReleaseRepository.cs");
+        var releaseVersionMigrationSource = ReadApiSource(
+            "Infrastructure/Data/Migrations/20260829181340_OptimizeAppReleaseVersionLookup.cs");
 
         Assert.Contains(
             "var boundedLimit = QueryLimits.NormalizePageSize(limit, defaultSize: 1, maximumSize: 100)",
@@ -1175,6 +1177,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", releaseRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("item.Version.ToLower() == normalizedVersion", releaseRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("IX_app_releases_Version_ci", releaseVersionMigrationSource, StringComparison.Ordinal);
+        Assert.Contains("CREATE UNIQUE INDEX", releaseVersionMigrationSource, StringComparison.Ordinal);
+        Assert.Contains("LOWER(\"Version\")", releaseVersionMigrationSource, StringComparison.Ordinal);
         Assert.Contains("FileOptions.Asynchronous | FileOptions.SequentialScan", releaseSource, StringComparison.Ordinal);
         Assert.Contains("FileOptions.Asynchronous | FileOptions.SequentialScan", releaseSynchronizerSource, StringComparison.Ordinal);
         Assert.DoesNotContain("File.OpenRead(", releaseSource, StringComparison.Ordinal);

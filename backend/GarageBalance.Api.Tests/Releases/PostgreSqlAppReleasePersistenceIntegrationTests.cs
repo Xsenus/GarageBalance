@@ -6,6 +6,7 @@ using GarageBalance.Api.Tests.Common;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
+using Npgsql;
 
 namespace GarageBalance.Api.Tests.Releases;
 
@@ -20,13 +21,97 @@ public sealed class PostgreSqlAppReleasePersistenceIntegrationTests
         var version = $"concurrent-{Guid.NewGuid():N}";
         var publishedAt = DateTimeOffset.Parse("2026-08-04T10:00:00+07:00");
         var first = new AppReleaseDto("concurrent-1", version, publishedAt, "Первая запись", "Описание.", [new AppReleaseItemDto("fixed", "Пункт.")], true);
-        var second = first with { ReleaseId = "concurrent-2", Title = "Вторая запись" };
+        var second = first with
+        {
+            ReleaseId = "concurrent-2",
+            Version = version.ToUpperInvariant(),
+            Title = "Вторая запись"
+        };
         await new EfAppReleaseRepository(firstContext).StageUpsertAsync(first, CancellationToken.None);
         await new EfAppReleaseRepository(secondContext).StageUpsertAsync(second, CancellationToken.None);
 
         await new EfApplicationUnitOfWork(firstContext).SaveChangesAsync(CancellationToken.None);
         await Assert.ThrowsAsync<ApplicationPersistenceConflictException>(() =>
             new EfApplicationUnitOfWork(secondContext).SaveChangesAsync(CancellationToken.None));
+    }
+
+    [PostgreSqlFact]
+    public async Task VersionLookup_UsesCaseInsensitiveUniqueIndexAndRejectsCaseVariant()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await connection.OpenAsync();
+
+        await using (var seedCommand = connection.CreateCommand())
+        {
+            seedCommand.CommandText =
+                """
+                INSERT INTO app_releases
+                    ("ReleaseId", "Version", "PublishedAt", "Title", "Summary", "ItemsJson", "IsPublished")
+                SELECT 'plan-' || i,
+                       'version-' || i,
+                       TIMESTAMPTZ '2026-01-01' + i * INTERVAL '1 minute',
+                       'Release ' || i,
+                       'Summary',
+                       '[]'::jsonb,
+                       true
+                FROM generate_series(1, 500) i;
+
+                ANALYZE app_releases;
+                """;
+            await seedCommand.ExecuteNonQueryAsync();
+        }
+
+        await using (var indexCommand = connection.CreateCommand())
+        {
+            indexCommand.CommandText =
+                """
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND tablename = 'app_releases'
+                  AND indexname = 'IX_app_releases_Version_ci';
+                """;
+            var indexDefinition = Assert.IsType<string>(await indexCommand.ExecuteScalarAsync());
+            Assert.Contains("CREATE UNIQUE INDEX", indexDefinition, StringComparison.Ordinal);
+            Assert.Contains("lower((\"Version\")::text)", indexDefinition, StringComparison.OrdinalIgnoreCase);
+        }
+
+        await using (var explainCommand = connection.CreateCommand())
+        {
+            explainCommand.CommandText =
+                """
+                SET enable_seqscan = off;
+                EXPLAIN (FORMAT TEXT)
+                SELECT "ReleaseId"
+                FROM app_releases
+                WHERE LOWER("Version") = 'version-349'
+                LIMIT 1;
+                """;
+            var planLines = new List<string>();
+            await using var reader = await explainCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                planLines.Add(reader.GetString(0));
+            }
+
+            Assert.Contains(
+                "IX_app_releases_Version_ci",
+                string.Join(Environment.NewLine, planLines),
+                StringComparison.Ordinal);
+        }
+
+        await using var duplicateCommand = connection.CreateCommand();
+        duplicateCommand.CommandText =
+            """
+            INSERT INTO app_releases
+                ("ReleaseId", "Version", "PublishedAt", "Title", "Summary", "ItemsJson", "IsPublished")
+            VALUES
+                ('case-variant', 'VERSION-349', TIMESTAMPTZ '2026-08-30', 'Duplicate', 'Summary', '[]'::jsonb, true);
+            """;
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() => duplicateCommand.ExecuteNonQueryAsync());
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, duplicate.SqlState);
+        Assert.Equal("IX_app_releases_Version_ci", duplicate.ConstraintName);
     }
 
     [PostgreSqlFact]
