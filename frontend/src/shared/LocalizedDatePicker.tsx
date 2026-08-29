@@ -1,6 +1,6 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useCloseOnOutsidePointer } from './focusHooks'
+import { useMemo, useRef, useState } from 'react'
+import { useCloseOnOutsidePointer, useEscapeKey } from './focusHooks'
 
 const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const weekDayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -45,18 +45,10 @@ export function LocalizedDatePicker({
   const expectedDraftLength = mode === 'date' ? 10 : 7
   const draftIsInvalid = draft.length >= expectedDraftLength && parseLocalizedValue(draft, mode) === null
   const rootRef = useCloseOnOutsidePointer<HTMLDivElement>(effectiveOpen, setOpen)
-
-  useEffect(() => {
-    if (!effectiveOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      setOpen(false)
-      triggerRef.current?.focus()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [effectiveOpen])
+  useEscapeKey(effectiveOpen, () => {
+    setOpen(false)
+    triggerRef.current?.focus()
+  })
 
   const days = useMemo(() => {
     if (mode === 'month') return []

@@ -95,18 +95,27 @@ describe('focus shared hooks', () => {
     removeListener.mockRestore()
   })
 
-  it('calls escape handler only while enabled', async () => {
-    const user = userEvent.setup()
+  it('keeps one escape listener while using the latest handler', () => {
     const calls: string[] = []
-    const { rerender } = render(<EscapeProbe enabled={false} onEscape={() => calls.push('escape')} />)
+    const addListener = vi.spyOn(window, 'addEventListener')
+    const removeListener = vi.spyOn(window, 'removeEventListener')
+    const { rerender } = render(<EscapeProbe enabled={false} onEscape={() => calls.push('disabled')} />)
 
-    await user.keyboard('{Escape}')
+    fireEvent.keyDown(window, { key: 'Escape' })
     expect(calls).toEqual([])
+    expect(addListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(0)
 
-    rerender(<EscapeProbe enabled={true} onEscape={() => calls.push('escape')} />)
-    await user.keyboard('{Escape}')
+    rerender(<EscapeProbe enabled={true} onEscape={() => calls.push('old')} />)
+    rerender(<EscapeProbe enabled={true} onEscape={() => calls.push('latest')} />)
+    expect(addListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1)
+    fireEvent.keyDown(window, { key: 'Escape' })
 
-    expect(calls).toEqual(['escape'])
+    expect(calls).toEqual(['latest'])
+    rerender(<EscapeProbe enabled={false} onEscape={() => calls.push('disabled')} />)
+    expect(removeListener.mock.calls.filter(([type]) => type === 'keydown')).toHaveLength(1)
+
+    addListener.mockRestore()
+    removeListener.mockRestore()
   })
 
   it('focuses target when opened', () => {

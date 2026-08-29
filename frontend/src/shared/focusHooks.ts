@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useEffectEvent, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
 export function useCloseOnOutsidePointer<TElement extends HTMLElement>(enabled: boolean, setOpen: Dispatch<SetStateAction<boolean>>) {
@@ -26,6 +26,8 @@ export function useDismissOnWindowClick<TValue>(enabled: boolean, setValue: Disp
 }
 
 export function useEscapeKey(enabled: boolean, onEscape: () => void) {
+  const handleEscape = useEffectEvent(onEscape)
+
   useEffect(() => {
     if (!enabled) {
       return undefined
@@ -34,13 +36,13 @@ export function useEscapeKey(enabled: boolean, onEscape: () => void) {
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onEscape()
+        handleEscape()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [enabled, onEscape])
+  }, [enabled])
 }
 
 export function useFocusOnOpen<TElement extends HTMLElement>(enabled: boolean) {
