@@ -15,7 +15,7 @@ import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { formatDateOnly, formatDateTime, formatMoney, formatOperationTime, getLocalDateInputValue } from '../../shared/formatters'
 import { downloadBlob } from '../../shared/fileExports'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { restoreFocusAfterClose, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
@@ -674,14 +674,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   }
 
   function closeOneCFreshSyncConfirmation() {
-    const trigger = oneCFreshSyncTriggerRef.current
     setOneCFreshSyncConfirmation(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      oneCFreshSyncTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(oneCFreshSyncTriggerRef)
   }
 
   async function confirmOneCFreshSync() {

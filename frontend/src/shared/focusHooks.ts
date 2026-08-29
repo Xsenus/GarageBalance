@@ -57,6 +57,14 @@ export function useFocusOnOpen<TElement extends HTMLElement>(enabled: boolean) {
   return ref
 }
 
+export function restoreFocusAfterClose<TElement extends HTMLElement>(triggerRef: { current: TElement | null }) {
+  const trigger = triggerRef.current
+  window.setTimeout(() => {
+    if (trigger?.isConnected) trigger.focus()
+    triggerRef.current = null
+  }, 0)
+}
+
 export function useRestoreFocusOnClose(enabled: boolean) {
   const previousFocusRef = useRef<HTMLElement | null>(null)
 

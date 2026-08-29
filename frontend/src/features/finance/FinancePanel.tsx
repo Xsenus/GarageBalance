@@ -17,7 +17,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
-import { useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -408,25 +408,13 @@ export function FinancePanel({
   const loading = workbenchLoading || !paymentDisplaySettingsLoaded || (showAllGarageOperations && !workbenchLoaded)
   const paymentsPrototypeLoading = referencesLoading
   const closeCancelFinanceDialog = useCallback(() => {
-    const trigger = cancelFinanceTriggerRef.current
     setCancelFinanceTarget(null)
     setCancelFinanceReasonError(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      cancelFinanceTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(cancelFinanceTriggerRef)
   }, [setCancelFinanceReasonError, setCancelFinanceTarget])
   const closeRestoreFinanceDialog = useCallback(() => {
-    const trigger = restoreFinanceTriggerRef.current
     setRestoreFinanceTarget(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      restoreFinanceTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(restoreFinanceTriggerRef)
   }, [])
   useRestoreFocusOnClose(Boolean(accrualBreakdown))
   useRestoreFocusOnClose(Boolean(financeEditor))
@@ -485,14 +473,8 @@ export function FinancePanel({
     setFinanceEditorCloseConfirmation(false)
     setPendingFinanceEditConfirmation(null)
     setFinanceEditorInitialSnapshot('')
-    const trigger = financeEditorTriggerRef.current
     setFinanceEditor(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      financeEditorTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(financeEditorTriggerRef)
   }
 
   function confirmCloseFinanceEditor() {
@@ -505,14 +487,8 @@ export function FinancePanel({
   }
 
   function closePaymentsPrototypeDialog() {
-    const trigger = paymentsPrototypeTriggerRef.current
     setPaymentsPrototypeDialog(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      paymentsPrototypeTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(paymentsPrototypeTriggerRef)
   }
 
   useEscapeKey(Boolean(accrualBreakdown), () => setAccrualBreakdown(null))
@@ -3204,17 +3180,11 @@ function PaymentsPrototypePanel({
   }
 
   function closeFullPaymentDialog() {
-    const trigger = fullPaymentTriggerRef.current
     fullPaymentQuoteRequestControllerRef.current?.abort()
     setFullPaymentDialogOpen(false)
     setFullPaymentQuote(null)
     fullPaymentReceiptBatchIdRef.current = null
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      fullPaymentTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(fullPaymentTriggerRef)
   }
 
   async function openGarageAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
@@ -3226,14 +3196,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeGarageAccrualDialog() {
-    const trigger = garageAccrualTriggerRef.current
     setGarageAccrualDialogOpen(false)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      garageAccrualTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(garageAccrualTriggerRef)
   }
 
   async function openSupplierAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
@@ -3245,14 +3209,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeSupplierAccrualDialog() {
-    const trigger = supplierAccrualTriggerRef.current
     setSupplierAccrualDialogOpen(false)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      supplierAccrualTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(supplierAccrualTriggerRef)
   }
 
   async function openExpenseDialog(event: MouseEvent<HTMLButtonElement>, preset: ExpensePrototypeDialogPreset) {
@@ -3264,14 +3222,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeExpenseDialog() {
-    const trigger = expenseTriggerRef.current
     setExpenseDialogPreset(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      expenseTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(expenseTriggerRef)
   }
 
   async function openStaffPaymentDialog(event: MouseEvent<HTMLButtonElement>, preset?: StaffPaymentPrototypeDialogPreset) {
@@ -3283,14 +3235,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeStaffPaymentDialog() {
-    const trigger = staffPaymentTriggerRef.current
     setStaffPaymentDialogPreset(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      staffPaymentTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(staffPaymentTriggerRef)
   }
 
   async function loadGarageIncomeWorksheet(
@@ -3379,14 +3325,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeStaffSalaryAdjustmentDialog() {
-    const trigger = staffSalaryAdjustmentTriggerRef.current
     setStaffSalaryAdjustmentDialogPreset(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      staffSalaryAdjustmentTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(staffSalaryAdjustmentTriggerRef)
   }
 
   async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
@@ -3483,14 +3423,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeHistoryEditDialog() {
-    const trigger = historyEditTriggerRef.current
     setHistoryEdit(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      historyEditTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(historyEditTriggerRef)
   }
 
   function openHistoryCancel(row: GaragePaymentHistoryPrototypeRow, trigger?: HTMLButtonElement | null) {
@@ -3504,14 +3438,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeHistoryCancelDialog() {
-    const trigger = historyCancelTriggerRef.current
     setHistoryCancel(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      historyCancelTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(historyCancelTriggerRef)
   }
 
   async function saveHistoryEdit() {
@@ -3885,14 +3813,8 @@ function PaymentsPrototypePanel({
   }
 
   function closeEarlyElectricityPaymentConfirmation() {
-    const trigger = earlyElectricityPaymentTriggerRef.current
     setEarlyElectricityPaymentConfirmation(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      earlyElectricityPaymentTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(earlyElectricityPaymentTriggerRef)
   }
 
   async function openPenaltyAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
@@ -3904,14 +3826,8 @@ function PaymentsPrototypePanel({
   }
 
   function closePenaltyAccrualDialog() {
-    const trigger = penaltyAccrualTriggerRef.current
     setPenaltyAccrualDialogOpen(false)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      penaltyAccrualTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(penaltyAccrualTriggerRef)
   }
 
   function confirmEarlyElectricityPayment(pendingPayment: EarlyElectricityPaymentConfirmationState) {

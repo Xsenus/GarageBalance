@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { vi } from 'vitest'
-import { useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
+import { restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
 
 function OutsidePointerProbe() {
   const [open, setOpen] = useState(true)
@@ -122,6 +122,41 @@ describe('focus shared hooks', () => {
     render(<FocusOnOpenProbe enabled={true} />)
 
     expect(screen.getByRole('button', { name: 'Target' })).toHaveFocus()
+  })
+
+  it('restores an explicit trigger after close and clears its reference', () => {
+    vi.useFakeTimers()
+    const trigger = document.createElement('button')
+    const current = document.createElement('button')
+    document.body.append(trigger, current)
+    current.focus()
+    const triggerRef: { current: HTMLButtonElement | null } = { current: trigger }
+
+    restoreFocusAfterClose(triggerRef)
+    expect(current).toHaveFocus()
+    vi.runAllTimers()
+
+    expect(trigger).toHaveFocus()
+    expect(triggerRef.current).toBeNull()
+    trigger.remove()
+    current.remove()
+    vi.useRealTimers()
+  })
+
+  it('clears a disconnected trigger without moving focus', () => {
+    vi.useFakeTimers()
+    const current = document.createElement('button')
+    document.body.append(current)
+    current.focus()
+    const triggerRef: { current: HTMLButtonElement | null } = { current: document.createElement('button') }
+
+    restoreFocusAfterClose(triggerRef)
+    vi.runAllTimers()
+
+    expect(current).toHaveFocus()
+    expect(triggerRef.current).toBeNull()
+    current.remove()
+    vi.useRealTimers()
   })
 
   it('traps tab navigation inside the active container', async () => {
