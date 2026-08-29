@@ -93,6 +93,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const createdPage = createClientPage(createdRecords, createdPageNumber, createdPageSize)
   const historyPage = createClientPage(runs, historyPageNumber, historyPageSize)
   const quarantinePage = createClientPage(quarantineItems, quarantinePageNumber, quarantinePageSize)
+  const currentRunId = currentRun?.id
+  const currentRunStatus = currentRun?.status
   const logLoadedForCurrentRun = Boolean(currentRun && loadedLogRunIdRef.current === currentRun.id)
   const createdRecordsLoadedForCurrentRun = Boolean(currentRun && loadedCreatedRecordsRunIdRef.current === currentRun.id)
   const quarantineLoadedForCurrentSession = loadedQuarantineTokenRef.current === auth.accessToken
@@ -206,7 +208,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   }, [activeImportTab, auth.accessToken, currentRun, importClient, reloadRevision])
 
   useEffect(() => {
-    if (!currentRun || (currentRun.status !== 'queued' && currentRun.status !== 'processing')) {
+    if (!currentRunId || (currentRunStatus !== 'queued' && currentRunStatus !== 'processing')) {
       return
     }
 
@@ -220,7 +222,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         }
 
         setRuns(loadedRuns)
-        const updatedRun = loadedRuns.find((run) => run.id === currentRun.id)
+        const updatedRun = loadedRuns.find((run) => run.id === currentRunId)
         if (updatedRun) {
           setCurrentRun(updatedRun)
         }
@@ -239,7 +241,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       controller.abort()
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [auth.accessToken, currentRun, importClient])
+  }, [auth.accessToken, currentRunId, currentRunStatus, importClient])
 
   useEffect(() => {
     if (activeImportTab !== 'created') {

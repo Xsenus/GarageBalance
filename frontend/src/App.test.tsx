@@ -19329,10 +19329,15 @@ describe('App', () => {
       summary: 'Dry-run завершен с предупреждениями.',
     })
     let runListRequests = 0
+    const pollSignals: Array<AbortSignal | undefined> = []
     const importClient = createImportClient({
-      getAccessRuns: async () => {
+      getAccessRuns: async (_accessToken, _limit, signal) => {
         runListRequests += 1
-        return runListRequests === 1 ? [] : [completedRun]
+        if (runListRequests === 1) return []
+        pollSignals.push(signal)
+        return runListRequests === 2
+          ? [{ ...queuedRun, summary: 'Фоновая проверка продолжается.' }]
+          : [completedRun]
       },
       dryRunAccess: async () => queuedRun,
     })
@@ -19348,8 +19353,10 @@ describe('App', () => {
 
     expect(await within(importPanel).findByText(/Проверка выполняется в фоне/)).toHaveAttribute('role', 'status')
     expect(within(importPanel).getByRole('tab', { name: /История/ })).toBeEnabled()
-    expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.', {}, { timeout: 2500 })).toBeInTheDocument()
-    expect(runListRequests).toBeGreaterThanOrEqual(2)
+    expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.', {}, { timeout: 3500 })).toBeInTheDocument()
+    expect(runListRequests).toBe(3)
+    expect(pollSignals).toHaveLength(2)
+    expect(pollSignals[1]).toBe(pollSignals[0])
   })
 
   it('keeps the loaded import log visible while the same background run refreshes', async () => {
