@@ -40,9 +40,10 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Equal(2, result.SourceRowFingerprintCount);
         Assert.Equal(["financial_operation", "garage"], result.TargetEntityTypes);
         Assert.Equal([new string('a', 64), new string('b', 64)], result.SourceRowFingerprints);
-        Assert.Equal(3, commandCapture.Commands.Count);
+        Assert.Equal(2, commandCapture.Commands.Count);
         Assert.Contains("COUNT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DISTINCT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
         Assert.All(commandCapture.Commands, command => Assert.Contains("AccessImportRunId", command, StringComparison.Ordinal));
         Assert.Empty(context.ChangeTracker.Entries());
     }
@@ -89,15 +90,16 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Equal(
             Enumerable.Range(0, 5).Select(index => new string((char)('a' + index), 64)),
             result.SourceRowFingerprints);
-        Assert.Equal(3, commandCapture.Commands.Count);
-        Assert.Contains("DISTINCT", commandCapture.Commands[2], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ORDER BY", commandCapture.Commands[2], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("LIMIT", commandCapture.Commands[2], StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TargetEntityId", commandCapture.Commands[2], StringComparison.Ordinal);
+        Assert.Equal(2, commandCapture.Commands.Count);
+        Assert.Contains("UNION ALL", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DISTINCT", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ORDER BY", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TargetEntityId", commandCapture.Commands[1], StringComparison.Ordinal);
     }
 
     [PostgreSqlFact]
-    public async Task ImportAuditReturnsEmptyResultInThreeSelects()
+    public async Task ImportAuditReturnsEmptyResultInTwoSelects()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var commandCapture = new SelectCommandCapture();
@@ -114,7 +116,7 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Equal(0, result.SourceRowFingerprintCount);
         Assert.Empty(result.TargetEntityTypes);
         Assert.Empty(result.SourceRowFingerprints);
-        Assert.Equal(3, commandCapture.Commands.Count);
+        Assert.Equal(2, commandCapture.Commands.Count);
         Assert.Empty(context.ChangeTracker.Entries());
     }
 

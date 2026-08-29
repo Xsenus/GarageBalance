@@ -130,19 +130,32 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
                     .Count()
             })
             .SingleOrDefaultAsync(cancellationToken);
-        var targetEntityTypes = await query.Select(record => record.TargetEntityType)
+        var targetEntityTypeSamples = query.Select(record => record.TargetEntityType)
             .Where(targetEntityType => targetEntityType != string.Empty)
             .Distinct()
             .OrderBy(targetEntityType => targetEntityType)
             .Take(10)
-            .ToListAsync(cancellationToken);
-        var sourceRowFingerprints = await query
+            .Select(value => new { Kind = 0, Value = value });
+        var sourceRowFingerprintSamples = query
             .Select(record => record.SourceRowHash)
             .Where(rowHash => rowHash != string.Empty)
             .Distinct()
             .OrderBy(rowHash => rowHash)
             .Take(5)
+            .Select(value => new { Kind = 1, Value = value });
+        var samples = await targetEntityTypeSamples
+            .Concat(sourceRowFingerprintSamples)
             .ToListAsync(cancellationToken);
+        var targetEntityTypes = samples
+            .Where(sample => sample.Kind == 0)
+            .Select(sample => sample.Value)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToList();
+        var sourceRowFingerprints = samples
+            .Where(sample => sample.Kind == 1)
+            .Select(sample => sample.Value)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToList();
         return new AccessImportAuditData(
             counts?.CreatedRecordCount ?? 0,
             counts?.PendingRollbackRecordCount ?? 0,

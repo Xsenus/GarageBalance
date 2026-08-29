@@ -1103,7 +1103,7 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void ImportAuditQuery_CombinesCountersAndKeepsOnlyThreeDatabaseReads()
+    public void ImportAuditQuery_CombinesCountersAndKeepsOnlyTwoDatabaseReads()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
         var methodStart = source.IndexOf("GetAuditDataAsync", StringComparison.Ordinal);
@@ -1114,13 +1114,16 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PendingRollbackRecordCount = group.Count", methodSource, StringComparison.Ordinal);
         Assert.Contains(".Distinct()", methodSource, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(methodSource, ".SingleOrDefaultAsync(cancellationToken)"));
-        Assert.Equal(2, CountOccurrences(methodSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(methodSource, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("await query.CountAsync", methodSource, StringComparison.Ordinal);
         Assert.Matches(
             BoundedQueryRegex(@"Select\(record => record\.SourceRowHash\)[\s\S]*?\.Distinct\(\)[\s\S]*?\.OrderBy\(rowHash => rowHash\)[\s\S]*?\.Take\(5\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             methodSource);
         Assert.DoesNotContain(".Take(20)", methodSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Distinct(StringComparer.Ordinal)", methodSource, StringComparison.Ordinal);
+        Assert.Contains("targetEntityTypeSamples", methodSource, StringComparison.Ordinal);
+        Assert.Contains("sourceRowFingerprintSamples", methodSource, StringComparison.Ordinal);
+        Assert.Contains(".Concat(sourceRowFingerprintSamples)", methodSource, StringComparison.Ordinal);
     }
 
     [Fact]
