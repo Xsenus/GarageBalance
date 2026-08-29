@@ -9,7 +9,7 @@ import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
-import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
+import { scheduleDebouncedRequest, scheduleDelayedAction } from '../../shared/debouncedRequest'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -748,11 +748,9 @@ export function FinancePanel({
   }, [auth.accessToken, financeClient, financePreviewReloadRevision, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   useEffect(() => {
-    const handle = window.setTimeout(() => {
+    return scheduleDelayedAction(() => {
       setFinanceFilter((value) => (value.search === financeSearchInput ? value : { ...value, search: financeSearchInput }))
     }, 350)
-
-    return () => window.clearTimeout(handle)
   }, [financeSearchInput])
 
   const loadFinanceWorkbench = useCallback(async (section: FinanceSectionKey, offset: number, limit: number, refreshSummary = false) => {

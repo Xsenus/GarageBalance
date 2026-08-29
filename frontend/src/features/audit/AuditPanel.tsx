@@ -3,6 +3,7 @@ import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
 import { AsyncErrorState, BackgroundRefreshStatus, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
+import { scheduleDelayedAction } from '../../shared/debouncedRequest'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -327,11 +328,10 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
     ) {
       return undefined
     }
-    const handle = window.setTimeout(() => {
+    return scheduleDelayedAction(() => {
       setAppliedTextFilters({ search, actorUserId, relatedGarage, relatedCounterparty, relatedDocument })
       resetAuditPageOffset()
     }, 350)
-    return () => window.clearTimeout(handle)
   }, [actorUserId, appliedTextFilters, relatedCounterparty, relatedDocument, relatedGarage, resetAuditPageOffset, search])
   const auditQuery = useMemo(() => ({
     search: appliedTextFilters.search.trim() || undefined,

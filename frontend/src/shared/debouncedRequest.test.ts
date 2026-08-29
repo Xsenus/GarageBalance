@@ -1,5 +1,30 @@
 import { vi } from 'vitest'
-import { scheduleDebouncedRequest } from './debouncedRequest'
+import { scheduleDebouncedRequest, scheduleDelayedAction } from './debouncedRequest'
+
+describe('scheduleDelayedAction', () => {
+  it('runs an action after the default delay', async () => {
+    vi.useFakeTimers()
+    const action = vi.fn()
+    scheduleDelayedAction(action)
+
+    await vi.advanceTimersByTimeAsync(349)
+    expect(action).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(action).toHaveBeenCalledOnce()
+    vi.useRealTimers()
+  })
+
+  it('cancels a pending action', async () => {
+    vi.useFakeTimers()
+    const action = vi.fn()
+    const cancel = scheduleDelayedAction(action, 100)
+
+    cancel()
+    await vi.runAllTimersAsync()
+    expect(action).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+})
 
 describe('scheduleDebouncedRequest', () => {
   it('starts after the delay and delivers the successful result', async () => {

@@ -8,6 +8,11 @@ type DebouncedRequestOptions<TResult> = {
   onError: (error: unknown) => void
 }
 
+export function scheduleDelayedAction(action: () => void, delay = 350) {
+  const timeoutId = window.setTimeout(action, delay)
+  return () => window.clearTimeout(timeoutId)
+}
+
 export function scheduleDebouncedRequest<TResult>({ delay = 350, requestTimeout, timeoutError, request, onStart, onSuccess, onError }: DebouncedRequestOptions<TResult>) {
   const controller = new AbortController()
   let requestTimeoutId = 0
