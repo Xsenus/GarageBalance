@@ -1868,6 +1868,8 @@ h1 {
   border: 0;
   background: transparent;
   cursor: col-resize;
+  touch-action: none;
+  user-select: none;
   padding: 0;
 }
 

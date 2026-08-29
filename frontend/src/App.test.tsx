@@ -2777,9 +2777,9 @@ describe('App', () => {
     expect(within(garageRow as HTMLElement).getByRole('button', { name: 'Изменить гараж 1' })).toBeInTheDocument()
 
     const numberResizeHandle = within(garagesTable).getByRole('button', { name: 'Изменить ширину столбца Номер' })
-    fireEvent.mouseDown(numberResizeHandle, { clientX: 100 })
-    fireEvent.mouseMove(document, { clientX: 140 })
-    fireEvent.mouseUp(document)
+    fireEvent.pointerDown(numberResizeHandle, { button: 0, pointerId: 1, clientX: 100 })
+    fireEvent.pointerMove(numberResizeHandle, { pointerId: 1, clientX: 140 })
+    fireEvent.pointerUp(numberResizeHandle, { pointerId: 1, clientX: 140 })
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.garageColumnWidths') ?? '{}').number).toBe(136))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
@@ -2921,9 +2921,9 @@ describe('App', () => {
 
     const suppliersTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
     const supplierResizeHandle = within(suppliersTable).getByRole('button', { name: 'Изменить ширину столбца Поставщик' })
-    fireEvent.mouseDown(supplierResizeHandle, { clientX: 100 })
-    fireEvent.mouseMove(document, { clientX: 135 })
-    fireEvent.mouseUp(document)
+    fireEvent.pointerDown(supplierResizeHandle, { button: 0, pointerId: 2, clientX: 100 })
+    fireEvent.pointerMove(supplierResizeHandle, { pointerId: 2, clientX: 135 })
+    fireEvent.pointerUp(supplierResizeHandle, { pointerId: 2, clientX: 135 })
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.supplierColumnWidths') ?? '{}').name).toBe(255))
 
     let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
@@ -3216,9 +3216,9 @@ describe('App', () => {
 
     const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
     const staffResizeHandle = within(staffTable).getByRole('button', { name: 'Изменить ширину столбца Ставка' })
-    fireEvent.mouseDown(staffResizeHandle, { clientX: 100 })
-    fireEvent.mouseMove(document, { clientX: 130 })
-    fireEvent.mouseUp(document)
+    fireEvent.pointerDown(staffResizeHandle, { button: 0, pointerId: 3, clientX: 100 })
+    fireEvent.pointerMove(staffResizeHandle, { pointerId: 3, clientX: 130 })
+    fireEvent.pointerUp(staffResizeHandle, { pointerId: 3, clientX: 130 })
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.staffColumnWidths') ?? '{}').rate).toBe(180))
 
     const employeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!

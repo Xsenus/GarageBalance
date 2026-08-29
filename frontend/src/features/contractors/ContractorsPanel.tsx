@@ -24,6 +24,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
 import { createRetryableLazyLoader } from '../../shared/retryableLazyLoader'
+import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
 
 const AddServicePrototypeDialog = lazy(createRetryableLazyLoader(() =>
@@ -750,35 +751,6 @@ function loadGarageColumnWidths() {
   return loadContractorColumnWidths(contractorGarageColumnStorageKey, contractorGarageColumnDefinitions)
 }
 
-function startContractorColumnResize<TKey extends string>(
-  definitions: Array<ContractorColumnDefinition<TKey>>,
-  widths: Record<TKey, number>,
-  setWidths: (updater: (currentWidths: Record<TKey, number>) => Record<TKey, number>) => void,
-  columnKey: TKey,
-  event: MouseEvent<HTMLButtonElement>,
-) {
-  event.preventDefault()
-  event.stopPropagation()
-  const column = definitions.find((item) => item.key === columnKey)
-  if (!column) {
-    return
-  }
-
-  const startX = event.clientX
-  const startWidth = widths[columnKey]
-  const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-    const nextWidth = Math.max(column.minWidth, startWidth + moveEvent.clientX - startX)
-    setWidths((currentWidths) => ({ ...currentWidths, [columnKey]: nextWidth }))
-  }
-  const handleMouseUp = () => {
-    document.removeEventListener('mousemove', handleMouseMove)
-    document.removeEventListener('mouseup', handleMouseUp)
-  }
-
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
-}
-
 function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   if (target.type === 'garage') {
     return `Гараж ${target.item.number || 'без номера'}`
@@ -1368,17 +1340,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const resizeGarageColumn = (columnKey: ContractorGarageColumnKey, event: MouseEvent<HTMLButtonElement>) => {
-    startContractorColumnResize(contractorGarageColumnDefinitions, garageColumnWidths, setGarageColumnWidths, columnKey, event)
-  }
-
-  const resizeSupplierColumn = (columnKey: ContractorSupplierColumnKey, event: MouseEvent<HTMLButtonElement>) => {
-    startContractorColumnResize(contractorSupplierColumnDefinitions, supplierColumnWidths, setSupplierColumnWidths, columnKey, event)
-  }
-
-  const resizeStaffColumn = (columnKey: ContractorStaffColumnKey, event: MouseEvent<HTMLButtonElement>) => {
-    startContractorColumnResize(contractorStaffColumnDefinitions, staffColumnWidths, setStaffColumnWidths, columnKey, event)
-  }
+  const garageColumnResize = useColumnResize(contractorGarageColumnDefinitions, garageColumnWidths, setGarageColumnWidths)
+  const supplierColumnResize = useColumnResize(contractorSupplierColumnDefinitions, supplierColumnWidths, setSupplierColumnWidths)
+  const staffColumnResize = useColumnResize(contractorStaffColumnDefinitions, staffColumnWidths, setStaffColumnWidths)
 
   const saveGarage = async (garage: ContractorGarageRow) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
@@ -2350,7 +2314,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                       className="icon-button contractors-column-resizer"
                       type="button"
                       aria-label={`Изменить ширину столбца ${column.label}`}
-                      onMouseDown={(event) => resizeGarageColumn(column.key, event)}
+                      onPointerDown={(event) => garageColumnResize.startResize(column.key, event)}
+                      onPointerMove={garageColumnResize.continueResize}
+                      onPointerUp={garageColumnResize.finishResize}
+                      onPointerCancel={garageColumnResize.cancelResize}
+                      onKeyDown={(event) => garageColumnResize.resizeWithKeyboard(column.key, event)}
                     />
                   ) : null}
                 </span>
@@ -2423,7 +2391,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                       className="icon-button contractors-column-resizer"
                       type="button"
                       aria-label={`Изменить ширину столбца ${column.label}`}
-                      onMouseDown={(event) => resizeSupplierColumn(column.key, event)}
+                      onPointerDown={(event) => supplierColumnResize.startResize(column.key, event)}
+                      onPointerMove={supplierColumnResize.continueResize}
+                      onPointerUp={supplierColumnResize.finishResize}
+                      onPointerCancel={supplierColumnResize.cancelResize}
+                      onKeyDown={(event) => supplierColumnResize.resizeWithKeyboard(column.key, event)}
                     />
                   ) : null}
                 </span>
@@ -2501,7 +2473,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                         className="icon-button contractors-column-resizer"
                         type="button"
                         aria-label={`Изменить ширину столбца ${column.label}`}
-                        onMouseDown={(event) => resizeStaffColumn(column.key, event)}
+                        onPointerDown={(event) => staffColumnResize.startResize(column.key, event)}
+                        onPointerMove={staffColumnResize.continueResize}
+                        onPointerUp={staffColumnResize.finishResize}
+                        onPointerCancel={staffColumnResize.cancelResize}
+                        onKeyDown={(event) => staffColumnResize.resizeWithKeyboard(column.key, event)}
                       />
                     ) : null}
                   </span>
