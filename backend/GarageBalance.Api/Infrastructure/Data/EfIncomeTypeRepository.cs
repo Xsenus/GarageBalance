@@ -108,10 +108,25 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
             .Include(item => item.DestinationFund)
             .Where(item => includeArchived || !item.IsArchived);
 
-    private static IQueryable<IncomeType> ApplySearch(IQueryable<IncomeType> query, string? normalizedSearch) =>
-        normalizedSearch is null
-            ? query
-            : query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+    private IQueryable<IncomeType> ApplySearch(IQueryable<IncomeType> query, string? normalizedSearch)
+    {
+        if (normalizedSearch is null)
+        {
+            return query;
+        }
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+            return query.Where(item =>
+                EF.Functions.ILike(item.Name, pattern, @"\") ||
+                (item.Code != null && EF.Functions.ILike(item.Code, pattern, @"\")));
+        }
+
+        return query.Where(item =>
+            item.Name.ToLower().Contains(normalizedSearch) ||
+            (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+    }
 
     private static bool MatchesSearch(IncomeType item, string normalizedSearch) =>
         item.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||

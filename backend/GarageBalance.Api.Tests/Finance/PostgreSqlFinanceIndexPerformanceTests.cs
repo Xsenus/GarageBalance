@@ -54,6 +54,9 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
 
         await new EfExpenseTypeRepository(context).GetListAsync("expense_code_needle", false, 25, CancellationToken.None);
         AssertCapturedSearchUsesIlike(capture.TakeSingle(), expectedPredicateCount: 2);
+
+        await new EfIncomeTypeRepository(context).GetListAsync("income_code_needle", false, 25, CancellationToken.None);
+        AssertCapturedSearchUsesIlike(capture.TakeSingle(), expectedPredicateCount: 2);
     }
 
     [PostgreSqlFact]
@@ -161,6 +164,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             new ExpenseType { Name = "Статья 100%_готово", Code = "literal_wildcard_name" },
             new ExpenseType { Name = "Статья без шаблона", Code = "expense_code_needle" },
             new ExpenseType { Name = "Статья 100 процентов готово", Code = "plain_expense_code" });
+        context.IncomeTypes.AddRange(
+            new IncomeType { Name = "Поступление 100%_готово", Code = "literal_income_name" },
+            new IncomeType { Name = "Поступление без шаблона", Code = "income_code_needle" },
+            new IncomeType { Name = "Поступление 100 процентов готово", Code = "plain_income_code" });
         await context.SaveChangesAsync();
 
         var irregularPayments = await new EfIrregularPaymentRepository(context)
@@ -175,6 +182,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             .GetListAsync("%_", false, 25, CancellationToken.None);
         var expenseTypesByCode = await new EfExpenseTypeRepository(context)
             .GetListAsync("code_needle", false, 25, CancellationToken.None);
+        var incomeTypesByLiteralWildcard = await new EfIncomeTypeRepository(context)
+            .GetListAsync("%_", false, 25, CancellationToken.None);
+        var incomeTypesByCode = await new EfIncomeTypeRepository(context)
+            .GetListAsync("code_needle", false, 25, CancellationToken.None);
 
         Assert.Collection(irregularPayments, item => Assert.Equal("Разовый 100%_готово", item.Name));
         Assert.Collection(chargeServices, item => Assert.Equal("Услуга 100%_готово", item.Name));
@@ -182,6 +193,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         Assert.Equal(["Тариф без шаблона", "Тариф 100%_готово"], tariffs.Select(item => item.Name).ToArray());
         Assert.Collection(expenseTypesByLiteralWildcard, item => Assert.Equal("Статья 100%_готово", item.Name));
         Assert.Collection(expenseTypesByCode, item => Assert.Equal("expense_code_needle", item.Code));
+        Assert.Collection(incomeTypesByLiteralWildcard, item => Assert.Equal("Поступление 100%_готово", item.Name));
+        Assert.Collection(incomeTypesByCode, item => Assert.Equal("income_code_needle", item.Code));
     }
 
     [PostgreSqlFact]
@@ -345,6 +358,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_expense_types_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_expense_types_Code_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_income_types_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_income_types_Code_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_supplier_accruals_DocumentNumber_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_financial_operations_DocumentNumber_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_financial_operations_Comment_trgm", "gin_trgm_ops");
@@ -504,6 +518,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             """SELECT "Id" FROM income_types WHERE "Name" ILIKE '%членский взнос%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
             connection,
+            "IX_income_types_Code_trgm",
+            """SELECT "Id" FROM income_types WHERE "Code" ILIKE '%income\_code\_needle%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
             "IX_supplier_accruals_DocumentNumber_trgm",
             """SELECT "Id" FROM supplier_accruals WHERE "DocumentNumber" ILIKE '%счет-2026%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
@@ -620,6 +638,11 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         var supplier = new Supplier { Name = "Поставщик производительности", Group = supplierGroup };
         context.Funds.AddRange(funds);
         context.AddRange(garage, incomeType, expenseType, supplierGroup, supplier);
+        context.IncomeTypes.AddRange(Enumerable.Range(0, 300).Select(index => new IncomeType
+        {
+            Name = index == 157 ? "Членский взнос для поиска" : $"Поступление производительности {index:D3}",
+            Code = index == 183 ? "income_code_needle" : $"performance_income_{index:D3}"
+        }));
         context.IrregularPayments.AddRange(Enumerable.Range(0, 300).Select(index => new IrregularPayment
         {
             Name = index == 173 ? "Разовый платёж для поиска" : $"Разовый платёж {index:D3}",
