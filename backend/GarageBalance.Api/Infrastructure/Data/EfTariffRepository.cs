@@ -67,9 +67,19 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
         var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         if (normalizedSearch is not null)
         {
-            query = query.Where(item =>
-                item.Name.ToLower().Contains(normalizedSearch) ||
-                item.CalculationBase.ToLower().Contains(normalizedSearch));
+            if (dbContext.Database.IsNpgsql())
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+                query = query.Where(item =>
+                    EF.Functions.ILike(item.Name, pattern, @"\") ||
+                    EF.Functions.ILike(item.CalculationBase, pattern, @"\"));
+            }
+            else
+            {
+                query = query.Where(item =>
+                    item.Name.ToLower().Contains(normalizedSearch) ||
+                    item.CalculationBase.ToLower().Contains(normalizedSearch));
+            }
         }
 
         return query;

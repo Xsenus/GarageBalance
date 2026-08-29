@@ -48,6 +48,9 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
 
         await new EfFeeCampaignRepository(context).GetListAsync("цель объявленного сбора", false, 25, CancellationToken.None);
         AssertCapturedSearchUsesIlike(capture.TakeSingle(), expectedPredicateCount: 2);
+
+        await new EfTariffRepository(context).GetListAsync("база тарифа для поиска", false, 25, CancellationToken.None);
+        AssertCapturedSearchUsesIlike(capture.TakeSingle(), expectedPredicateCount: 2);
     }
 
     [PostgreSqlFact]
@@ -129,6 +132,28 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 TargetAmount = 3000m,
                 StartsOn = new DateOnly(2026, 8, 3)
             });
+        context.Tariffs.AddRange(
+            new Tariff
+            {
+                Name = "Тариф 100%_готово",
+                CalculationBase = "Фиксированная",
+                Rate = 100m,
+                EffectiveFrom = new DateOnly(2026, 8, 1)
+            },
+            new Tariff
+            {
+                Name = "Тариф без шаблона",
+                CalculationBase = "База 100%_готово",
+                Rate = 200m,
+                EffectiveFrom = new DateOnly(2026, 8, 2)
+            },
+            new Tariff
+            {
+                Name = "Тариф 100 процентов готово",
+                CalculationBase = "База 100 процентов готово",
+                Rate = 300m,
+                EffectiveFrom = new DateOnly(2026, 8, 3)
+            });
         await context.SaveChangesAsync();
 
         var irregularPayments = await new EfIrregularPaymentRepository(context)
@@ -137,10 +162,13 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             .GetListAsync("%_", false, null, null, 25, new DateOnly(2026, 8, 29), CancellationToken.None);
         var feeCampaigns = await new EfFeeCampaignRepository(context)
             .GetListAsync("%_", false, 25, CancellationToken.None);
+        var tariffs = await new EfTariffRepository(context)
+            .GetListAsync("%_", false, 25, CancellationToken.None);
 
         Assert.Collection(irregularPayments, item => Assert.Equal("Разовый 100%_готово", item.Name));
         Assert.Collection(chargeServices, item => Assert.Equal("Услуга 100%_готово", item.Name));
         Assert.Equal(["Сбор без шаблона", "Сбор 100%_готово"], feeCampaigns.Select(item => item.Name).ToArray());
+        Assert.Equal(["Тариф без шаблона", "Тариф 100%_готово"], tariffs.Select(item => item.Name).ToArray());
     }
 
     [PostgreSqlFact]
@@ -313,6 +341,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_charge_service_settings_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_fee_campaigns_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_fee_campaigns_Goal_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_tariffs_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_tariffs_CalculationBase_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_meter_readings_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_supplier_accruals_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_cash_bank_transfers_Comment_trgm", "gin_trgm_ops");
@@ -502,6 +532,14 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             """SELECT "Id" FROM fee_campaigns WHERE "Goal" ILIKE '%цель объявленного сбора%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
             connection,
+            "IX_tariffs_Name_trgm",
+            """SELECT "Id" FROM tariffs WHERE "Name" ILIKE '%тариф для поиска%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_tariffs_CalculationBase_trgm",
+            """SELECT "Id" FROM tariffs WHERE "CalculationBase" ILIKE '%база тарифа%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
             "IX_meter_readings_Comment_trgm",
             """SELECT "Id" FROM meter_readings WHERE "Comment" ILIKE '%показание%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
@@ -581,6 +619,13 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             ContributionAmount = 1m,
             TargetAmount = 300m,
             StartsOn = new DateOnly(2026, 1, 1).AddDays(index)
+        }));
+        context.Tariffs.AddRange(Enumerable.Range(0, 300).Select(index => new Tariff
+        {
+            Name = index == 213 ? "Тариф для поиска" : $"Тариф производительности {index:D3}",
+            CalculationBase = index == 214 ? "База тарифа для поиска" : $"База тарифа {index:D3}",
+            Rate = 1m,
+            EffectiveFrom = new DateOnly(2026, 1, 1).AddDays(index)
         }));
         context.FundOperations.AddRange(Enumerable.Range(0, 500).Select(index => new FundOperation
         {
@@ -666,6 +711,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 'irregular_payments',
                 'charge_service_settings',
                 'fee_campaigns',
+                'tariffs',
                 'accrual_payment_allocations',
                 'supplier_accruals',
                 'fund_operations',

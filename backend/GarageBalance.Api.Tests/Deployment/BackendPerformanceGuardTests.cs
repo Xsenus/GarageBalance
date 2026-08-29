@@ -549,6 +549,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
         Assert.Contains("MinAsync", source, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(source, "EF.Functions.ILike("));
     }
 
     [Fact]
