@@ -613,8 +613,26 @@ public sealed class BackendPerformanceGuardTests
     public void ChargeServiceSettingRepository_UsesDatabaseLimitBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfChargeServiceSettingRepository.cs");
+        var financeSource = ReadApiSource("Application/Finance/FinanceService.cs");
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "GetActiveRegularMeteredCoreAsync(calculationBase, accountingMonth, limit, cancellationToken)",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "(await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken))",
+            source,
+            StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"setting\.Tariff\.CalculationBase == calculationBase[\s\S]*?OrderBy\(setting => setting\.Name\)[\s\S]*?Take\(limit\)"),
+            source);
+        Assert.Contains("MeterKinds.Water => TariffCalculationBases.MeterWater", financeSource, StringComparison.Ordinal);
+        Assert.Contains("MeterKinds.Electricity => TariffCalculationBases.MeterElectricity", financeSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "GetActiveRegularMeteredAsync(\n                calculationBase,",
+            financeSource,
+            StringComparison.Ordinal);
         Assert.Matches(
             BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Where\(setting => !setting\.IsArchived && setting\.IsRegular\)[\s\S]*?OrderBy\(setting => setting\.Name\)[\s\S]*?ToListAsync\(cancellationToken\)"),
             source);

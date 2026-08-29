@@ -21,11 +21,24 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
         var archivedTariffService = CreateService("Вода performance архивная", incomeType, archivedTariff);
         var disabledMeterService = CreateService("Вода performance отключена", incomeType, activeTariff);
         disabledMeterService.IsMetered = false;
+        var electricityIncomeType = new IncomeType { Name = "Электроэнергия performance", Code = "electricity_performance" };
+        var electricityTariff = CreateTariff(
+            "Электроэнергия performance",
+            TariffCalculationBases.MeterElectricity,
+            new DateOnly(2026, 1, 1));
+        var firstWaterService = CreateService("A — вода перед лимитом", incomeType, activeTariff);
+        var electricityService = CreateService("Z — электроэнергия после воды", electricityIncomeType, electricityTariff);
 
         await using (var seedContext = database.CreateContext())
         {
-            seedContext.AddRange(incomeType, activeTariff, futureTariff, archivedTariff);
-            seedContext.AddRange(activeService, futureService, archivedTariffService, disabledMeterService);
+            seedContext.AddRange(incomeType, electricityIncomeType, activeTariff, futureTariff, archivedTariff, electricityTariff);
+            seedContext.AddRange(
+                activeService,
+                futureService,
+                archivedTariffService,
+                disabledMeterService,
+                firstWaterService,
+                electricityService);
             seedContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
             {
                 ChargeServiceSettingId = activeService.Id,
@@ -62,6 +75,15 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             Assert.DoesNotContain(services, item => item.Id == futureService.Id);
             Assert.DoesNotContain(services, item => item.Id == archivedTariffService.Id);
             Assert.DoesNotContain(services, item => item.Id == disabledMeterService.Id);
+
+            var electricityServices = await repository.GetActiveRegularMeteredAsync(
+                TariffCalculationBases.MeterElectricity,
+                new DateOnly(2026, 7, 1),
+                1,
+                CancellationToken.None);
+            var selectedElectricityService = Assert.Single(electricityServices);
+            Assert.Equal(electricityService.Id, selectedElectricityService.Id);
+            Assert.Equal(electricityTariff.Id, selectedElectricityService.TariffId);
         }
 
         await using var connection = new NpgsqlConnection(database.ConnectionString);

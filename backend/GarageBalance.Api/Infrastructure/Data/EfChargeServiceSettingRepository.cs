@@ -69,18 +69,17 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         DateOnly accountingMonth,
         int limit,
         CancellationToken cancellationToken) =>
-        await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken);
+        await GetActiveRegularMeteredCoreAsync(null, accountingMonth, limit, cancellationToken);
 
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
         string calculationBase,
         DateOnly accountingMonth,
         int limit,
         CancellationToken cancellationToken) =>
-        (await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken))
-            .Where(setting => setting.Tariff?.CalculationBase == calculationBase)
-            .ToList();
+        await GetActiveRegularMeteredCoreAsync(calculationBase, accountingMonth, limit, cancellationToken);
 
     private async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredCoreAsync(
+        string? calculationBase,
         DateOnly accountingMonth,
         int limit,
         CancellationToken cancellationToken)
@@ -105,14 +104,16 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                     .OrderByDescending(version => version.EffectiveFrom)
                     .Select(version => version.Tariff.CalculationBase)
                     .Take(1)
-                    .Any(calculationBase =>
-                        calculationBase == TariffCalculationBases.MeterWater ||
-                        calculationBase == TariffCalculationBases.MeterElectricity) ||
+                    .Any(activeCalculationBase => calculationBase == null
+                        ? activeCalculationBase == TariffCalculationBases.MeterWater ||
+                          activeCalculationBase == TariffCalculationBases.MeterElectricity
+                        : activeCalculationBase == calculationBase) ||
                  !dbContext.ChargeServiceTariffVersions.Any(version => version.ChargeServiceSettingId == setting.Id) &&
                  setting.IsMetered &&
                  setting.Tariff != null &&
                  !setting.Tariff.IsArchived &&
-                 setting.Tariff.EffectiveFrom <= accountingMonth))
+                 setting.Tariff.EffectiveFrom <= accountingMonth &&
+                 (calculationBase == null || setting.Tariff.CalculationBase == calculationBase)))
             .OrderBy(setting => setting.Name)
             .Take(limit)
             .ToListAsync(cancellationToken);

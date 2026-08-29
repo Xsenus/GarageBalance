@@ -6298,10 +6298,22 @@ public sealed class FinanceService(
         DateOnly accountingMonth,
         CancellationToken cancellationToken)
     {
-        var settings = await chargeServiceSettingRepository.GetActiveRegularMeteredAsync(
-            accountingMonth,
-            MaxAutomaticMeteredServices,
-            cancellationToken);
+        var calculationBase = meterKind switch
+        {
+            MeterKinds.Water => TariffCalculationBases.MeterWater,
+            MeterKinds.Electricity => TariffCalculationBases.MeterElectricity,
+            _ => null
+        };
+        var settings = calculationBase is null
+            ? await chargeServiceSettingRepository.GetActiveRegularMeteredAsync(
+                accountingMonth,
+                MaxAutomaticMeteredServices,
+                cancellationToken)
+            : await chargeServiceSettingRepository.GetActiveRegularMeteredAsync(
+                calculationBase,
+                accountingMonth,
+                MaxAutomaticMeteredServices,
+                cancellationToken);
         return settings
             .Where(setting => string.Equals(setting.MeterKind, meterKind, StringComparison.Ordinal) &&
                 IsChargeServiceDueForMonth(setting, accountingMonth))
