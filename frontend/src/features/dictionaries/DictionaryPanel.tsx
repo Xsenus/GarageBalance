@@ -16,7 +16,7 @@ import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmpty
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
-import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
+import { scheduleDebouncedRequest, scheduleDelayedAction } from '../../shared/debouncedRequest'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
@@ -197,7 +197,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }, [auth.accessToken, financeClient])
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    const cancelLoad = scheduleDelayedAction(() => {
       const page = pages[activeSection]
       setError(null)
       loadPage(activeSection, 0, page.limit)
@@ -209,7 +209,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }, supportsSearch && search.trim() ? 250 : 0)
 
     return () => {
-      window.clearTimeout(timeoutId)
+      cancelLoad()
       pageRequestSequence.current += 1
       pageRequestControllerRef.current?.abort()
     }

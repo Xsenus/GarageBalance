@@ -8,7 +8,7 @@ import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
-import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
+import { scheduleDebouncedRequest, scheduleDelayedAction } from '../../shared/debouncedRequest'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -1152,7 +1152,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
 
     openedInitialTargetRef.current = targetKey
-    const handle = window.setTimeout(() => {
+    return scheduleDelayedAction(() => {
       setActiveSection(nextSection)
       closeContextMenu()
       if (nextModal.type === 'supplier' && nextModal.item) {
@@ -1171,7 +1171,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
     }, 0)
 
-    return () => window.clearTimeout(handle)
   }, [ensureContractorReferences, garages, initialTarget, openSupplierEditor, staff, suppliers])
 
   useEffect(() => {
