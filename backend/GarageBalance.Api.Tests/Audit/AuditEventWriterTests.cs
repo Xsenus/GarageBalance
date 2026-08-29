@@ -172,7 +172,7 @@ public sealed class AuditEventWriterTests
     }
 
     [Fact]
-    public void Add_UsesExplicitActionKindInsteadOfInferringFromAction()
+    public void Add_NormalizesExplicitSectionAndActionKindInsteadOfInferringFromAction()
     {
         using var database = TestDatabase.Create();
         var writer = new AuditEventWriter(database.Context);
@@ -183,9 +183,11 @@ public sealed class AuditEventWriterTests
             "report",
             Guid.NewGuid().ToString(),
             Summary: "Audit action kind override.",
-            ActionKind: "export"));
+            Section: " RePoRtS ",
+            ActionKind: " ExPoRt "));
 
         Assert.NotNull(auditEvent);
+        Assert.Equal("reports", auditEvent.Section);
         Assert.Equal("export", auditEvent.ActionKind);
     }
 

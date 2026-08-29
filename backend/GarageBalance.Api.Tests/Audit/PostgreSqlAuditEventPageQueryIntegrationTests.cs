@@ -96,8 +96,8 @@ public sealed class PostgreSqlAuditEventPageQueryIntegrationTests
                 null,
                 "target payment",
                 10,
-                testSection,
-                "create",
+                testSection.ToUpperInvariant(),
+                "CREATE",
                 "financial_operation",
                 actor.Id,
                 null,
@@ -112,10 +112,13 @@ public sealed class PostgreSqlAuditEventPageQueryIntegrationTests
         Assert.Equal(1, filtered.TotalCount);
         Assert.Equal("finance.payment_2", filteredEvent.Action);
         Assert.Equal("amount", filteredEvent.FieldName);
-        AssertSingleCombinedCommand(capture);
+        var filteredCommand = AssertSingleCombinedCommand(capture);
+        Assert.DoesNotMatch("""(?i)lower\([^)]*"Section"[^)]*\)""", filteredCommand);
+        Assert.DoesNotMatch("""(?i)lower\([^)]*"ActionKind"[^)]*\)""", filteredCommand);
+        Assert.DoesNotMatch("""(?i)lower\([^)]*"RelatedAccountingMonth"[^)]*\)""", filteredCommand);
     }
 
-    private static void AssertSingleCombinedCommand(ReaderCommandCapture capture)
+    private static string AssertSingleCombinedCommand(ReaderCommandCapture capture)
     {
         var command = Assert.Single(capture.Commands);
         Assert.Contains("COUNT(*)", command, StringComparison.OrdinalIgnoreCase);
@@ -124,6 +127,7 @@ public sealed class PostgreSqlAuditEventPageQueryIntegrationTests
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OFFSET", command, StringComparison.OrdinalIgnoreCase);
+        return command;
     }
 
     private sealed class ReaderCommandCapture : DbCommandInterceptor

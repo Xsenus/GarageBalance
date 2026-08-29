@@ -371,7 +371,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             var accountingMonth = request.RelatedAccountingMonth.Trim().ToLowerInvariant();
             query = query.Where(auditEvent =>
                 auditEvent.RelatedAccountingMonth != null &&
-                auditEvent.RelatedAccountingMonth.ToLower() == accountingMonth);
+                auditEvent.RelatedAccountingMonth == accountingMonth);
         }
 
         if (!string.IsNullOrWhiteSpace(request.RelatedCounterparty))
@@ -423,7 +423,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         var normalizedSection = section.Trim().ToLowerInvariant();
         var sectionPrefix = normalizedSection + ".";
         return query.Where(auditEvent =>
-            (auditEvent.Section != null && auditEvent.Section.ToLower() == normalizedSection) ||
+            (auditEvent.Section != null && auditEvent.Section == normalizedSection) ||
             (auditEvent.Section == null && auditEvent.Action.ToLower().StartsWith(sectionPrefix)));
     }
 
@@ -434,13 +434,13 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         return needles.Count switch
         {
             1 => query.Where(auditEvent =>
-                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
+                (auditEvent.ActionKind != null && auditEvent.ActionKind == normalizedActionKind) ||
                 (auditEvent.ActionKind == null && auditEvent.Action.ToLower().Contains(needles[0]))),
             2 => query.Where(auditEvent =>
-                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
+                (auditEvent.ActionKind != null && auditEvent.ActionKind == normalizedActionKind) ||
                 (auditEvent.ActionKind == null && (auditEvent.Action.ToLower().Contains(needles[0]) || auditEvent.Action.ToLower().Contains(needles[1])))),
             3 => query.Where(auditEvent =>
-                (auditEvent.ActionKind != null && auditEvent.ActionKind.ToLower() == normalizedActionKind) ||
+                (auditEvent.ActionKind != null && auditEvent.ActionKind == normalizedActionKind) ||
                 (auditEvent.ActionKind == null && (
                     auditEvent.Action.ToLower().Contains(needles[0]) ||
                     auditEvent.Action.ToLower().Contains(needles[1]) ||

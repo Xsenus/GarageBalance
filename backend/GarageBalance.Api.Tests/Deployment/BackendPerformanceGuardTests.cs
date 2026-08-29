@@ -1315,6 +1315,8 @@ public sealed class BackendPerformanceGuardTests
         var audit = ReadApiSource("Infrastructure/Data/EfAuditEventRepository.cs");
         var migration = ReadApiSource(
             "Infrastructure/Data/Migrations/20260729234018_OptimizeUsersAndAuditSearch.cs");
+        var normalizedCodesMigration = ReadApiSource(
+            "Infrastructure/Data/Migrations/20260829172142_NormalizeAuditFilterCodes.cs");
 
         Assert.Contains(".Skip(offset)", users, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", users, StringComparison.Ordinal);
@@ -1322,12 +1324,22 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("ThenBy(user => user.Id)", users, StringComparison.Ordinal);
         Assert.Contains("GetPostgresEventsPageAsync", audit, StringComparison.Ordinal);
         Assert.Contains("EF.Functions.ILike(auditEvent.SearchText", audit, StringComparison.Ordinal);
+        Assert.Contains("auditEvent.Section == normalizedSection", audit, StringComparison.Ordinal);
+        Assert.Contains("auditEvent.ActionKind == normalizedActionKind", audit, StringComparison.Ordinal);
+        Assert.Contains("auditEvent.RelatedAccountingMonth == accountingMonth", audit, StringComparison.Ordinal);
+        Assert.DoesNotContain("auditEvent.Section.ToLower() == normalizedSection", audit, StringComparison.Ordinal);
+        Assert.DoesNotContain("auditEvent.ActionKind.ToLower() == normalizedActionKind", audit, StringComparison.Ordinal);
+        Assert.DoesNotContain("auditEvent.RelatedAccountingMonth.ToLower() == accountingMonth", audit, StringComparison.Ordinal);
         Assert.Contains("IX_app_users_DisplayName_trgm", migration, StringComparison.Ordinal);
         Assert.Contains("IX_app_users_NormalizedEmail_trgm", migration, StringComparison.Ordinal);
         Assert.Contains("IX_audit_events_SearchText_trgm", migration, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(migration, "gin_trgm_ops") >= 9,
             "Users and audit contains-search must keep its PostgreSQL trigram indexes.");
+        Assert.Contains("SET \"Section\" = LOWER(\"Section\")", normalizedCodesMigration, StringComparison.Ordinal);
+        Assert.Contains("SET \"ActionKind\" = LOWER(\"ActionKind\")", normalizedCodesMigration, StringComparison.Ordinal);
+        Assert.Contains("CK_audit_events_Section_lowercase", normalizedCodesMigration, StringComparison.Ordinal);
+        Assert.Contains("CK_audit_events_ActionKind_lowercase", normalizedCodesMigration, StringComparison.Ordinal);
     }
 
     [Fact]

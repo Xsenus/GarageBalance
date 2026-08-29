@@ -14,8 +14,8 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
 
         var action = RequireTrimmed(request.Action, nameof(request.Action), 120);
         var entityType = RequireTrimmed(request.EntityType, nameof(request.EntityType), 120);
-        var section = NormalizeOptional(request.Section, 80) ?? InferSection(action);
-        var actionKind = NormalizeOptional(request.ActionKind, 40) ?? InferActionKind(action);
+        var section = (NormalizeOptional(request.Section, 80) ?? InferSection(action)).ToLowerInvariant();
+        var actionKind = (NormalizeOptional(request.ActionKind, 40) ?? InferActionKind(action)).ToLowerInvariant();
         var reason = NormalizeOptional(request.Reason, 500);
         EnsureReasonForDangerousAction(actionKind, reason);
 

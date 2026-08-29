@@ -31,8 +31,8 @@ public sealed class PostgreSqlUsersAuditSearchIntegrationTests
                 Enumerable.Range(0, 500).Select(index => new AuditEvent
                 {
                     Action = "settings.updated",
-                    Section = "settings",
-                    ActionKind = "update",
+                    Section = index == 349 ? "settings" : "other",
+                    ActionKind = index == 349 ? "update" : "create",
                     EntityType = "application_setting",
                     EntityId = $"setting-{index}",
                     RelatedGarageNumber = $"G-{index}",
@@ -72,6 +72,9 @@ public sealed class PostgreSqlUsersAuditSearchIntegrationTests
         Assert.Contains("IX_audit_events_RelatedGarageNumber_trgm", indexNames);
         Assert.Contains("IX_audit_events_RelatedCounterpartyName_trgm", indexNames);
         Assert.Contains("IX_audit_events_RelatedDocumentNumber_trgm", indexNames);
+        var constraintNames = await ReadConstraintNamesAsync(connection);
+        Assert.Contains("CK_audit_events_Section_lowercase", constraintNames);
+        Assert.Contains("CK_audit_events_ActionKind_lowercase", constraintNames);
 
         Assert.Contains(
             "IX_app_users_DisplayName_trgm",
@@ -84,6 +87,12 @@ public sealed class PostgreSqlUsersAuditSearchIntegrationTests
             await ExplainAsync(
                 connection,
                 """SELECT "Id" FROM "audit_events" WHERE "SearchText" ILIKE '%needle audit%' ESCAPE '\';"""),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "IX_audit_events_Section",
+            await ExplainAsync(
+                connection,
+                """SELECT "Id" FROM "audit_events" WHERE "Section" = 'settings' AND "ActionKind" = 'update' ORDER BY "CreatedAtUtc" DESC LIMIT 25;"""),
             StringComparison.Ordinal);
     }
 
@@ -117,6 +126,25 @@ public sealed class PostgreSqlUsersAuditSearchIntegrationTests
             FROM pg_indexes
             WHERE schemaname = 'public'
               AND tablename IN ('app_users', 'audit_events');
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        while (await reader.ReadAsync())
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
+    }
+
+    private static async Task<HashSet<string>> ReadConstraintNamesAsync(NpgsqlConnection connection)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'audit_events'::regclass;
             """;
         await using var reader = await command.ExecuteReaderAsync();
         var names = new HashSet<string>(StringComparer.Ordinal);
