@@ -256,12 +256,19 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         CancellationToken cancellationToken,
         DateOnly? effectiveTo = null)
     {
-        var adjacent = await dbContext.ChargeServiceTariffVersions
-            .Where(item => item.ChargeServiceSettingId == serviceId && !item.IsArchived && item.EffectiveFrom != effectiveFrom)
-            .OrderBy(item => item.EffectiveFrom)
+        var activeVersions = dbContext.ChargeServiceTariffVersions
+            .Where(item => item.ChargeServiceSettingId == serviceId && !item.IsArchived);
+        var adjacent = await activeVersions
+            .Where(item => item.EffectiveFrom < effectiveFrom)
+            .OrderByDescending(item => item.EffectiveFrom)
+            .Take(1)
+            .Concat(activeVersions
+                .Where(item => item.EffectiveFrom > effectiveFrom)
+                .OrderBy(item => item.EffectiveFrom)
+                .Take(1))
             .ToListAsync(cancellationToken);
-        var previous = adjacent.LastOrDefault(item => item.EffectiveFrom < effectiveFrom);
-        var next = adjacent.FirstOrDefault(item => item.EffectiveFrom > effectiveFrom);
+        var previous = adjacent.SingleOrDefault(item => item.EffectiveFrom < effectiveFrom);
+        var next = adjacent.SingleOrDefault(item => item.EffectiveFrom > effectiveFrom);
         if (previous is not null)
         {
             previous.EffectiveTo = effectiveFrom.AddDays(-1);

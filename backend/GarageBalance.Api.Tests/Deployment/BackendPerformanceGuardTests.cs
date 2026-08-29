@@ -652,6 +652,9 @@ public sealed class BackendPerformanceGuardTests
             "settings\n            .SelectMany(setting => setting.TariffVersions)",
             source,
             StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"SetTariffVersionAsync[\s\S]*?OrderByDescending\(item => item\.EffectiveFrom\)[\s\S]*?Take\(1\)[\s\S]*?Concat\(activeVersions[\s\S]*?OrderBy\(item => item\.EffectiveFrom\)[\s\S]*?Take\(1\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            source);
     }
 
     [Fact]

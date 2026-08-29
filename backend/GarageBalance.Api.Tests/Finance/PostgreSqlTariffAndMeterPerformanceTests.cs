@@ -28,6 +28,8 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             new DateOnly(2026, 1, 1));
         var firstWaterService = CreateService("A — вода перед лимитом", incomeType, activeTariff);
         var electricityService = CreateService("Z — электроэнергия после воды", electricityIncomeType, electricityTariff);
+        var longHistoryService = CreateService("История из 240 периодов", incomeType, activeTariff);
+        longHistoryService.IsRegular = false;
 
         await using (var seedContext = database.CreateContext())
         {
@@ -38,7 +40,8 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                 archivedTariffService,
                 disabledMeterService,
                 firstWaterService,
-                electricityService);
+                electricityService,
+                longHistoryService);
             seedContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
             {
                 ChargeServiceSettingId = activeService.Id,
@@ -51,6 +54,18 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                 TariffId = futureTariff.Id,
                 EffectiveFrom = futureTariff.EffectiveFrom
             });
+            var firstHistoryMonth = new DateOnly(2010, 1, 1);
+            for (var index = 0; index < 240; index++)
+            {
+                var month = firstHistoryMonth.AddMonths(index);
+                seedContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = longHistoryService.Id,
+                    TariffId = activeTariff.Id,
+                    EffectiveFrom = month,
+                    EffectiveTo = month.AddMonths(1).AddDays(-1)
+                });
+            }
             for (var index = 0; index < 250; index++)
             {
                 var tariff = CreateTariff(
@@ -111,6 +126,23 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                 CancellationToken.None);
             var dueDateService = Assert.Single(dueDateServices, item => item.Id == activeService.Id);
             Assert.Equal(activeTariff.Id, Assert.Single(dueDateService.TariffVersions).TariffId);
+
+            context.ChangeTracker.Clear();
+            await repository.SetTariffVersionAsync(
+                longHistoryService.Id,
+                activeTariff.Id,
+                new DateOnly(2020, 6, 15),
+                CancellationToken.None);
+            var trackedAdjacentVersions = context.ChangeTracker.Entries<ChargeServiceTariffVersion>()
+                .Select(entry => entry.Entity)
+                .OrderBy(version => version.EffectiveFrom)
+                .ToList();
+            Assert.Equal(3, trackedAdjacentVersions.Count);
+            Assert.Equal(new DateOnly(2020, 6, 1), trackedAdjacentVersions[0].EffectiveFrom);
+            Assert.Equal(new DateOnly(2020, 6, 14), trackedAdjacentVersions[0].EffectiveTo);
+            Assert.Equal(new DateOnly(2020, 6, 15), trackedAdjacentVersions[1].EffectiveFrom);
+            Assert.Equal(new DateOnly(2020, 6, 30), trackedAdjacentVersions[1].EffectiveTo);
+            Assert.Equal(new DateOnly(2020, 7, 1), trackedAdjacentVersions[2].EffectiveFrom);
         }
 
         await using var connection = new NpgsqlConnection(database.ConnectionString);
