@@ -84,10 +84,25 @@ public sealed class EfExpenseTypeRepository(GarageBalanceDbContext dbContext) : 
     private IQueryable<ExpenseType> ApplyArchiveFilter(bool includeArchived) =>
         dbContext.ExpenseTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
 
-    private static IQueryable<ExpenseType> ApplySearch(IQueryable<ExpenseType> query, string? normalizedSearch) =>
-        normalizedSearch is null
-            ? query
-            : query.Where(item => item.Name.ToLower().Contains(normalizedSearch) || (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+    private IQueryable<ExpenseType> ApplySearch(IQueryable<ExpenseType> query, string? normalizedSearch)
+    {
+        if (normalizedSearch is null)
+        {
+            return query;
+        }
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+            return query.Where(item =>
+                EF.Functions.ILike(item.Name, pattern, @"\") ||
+                (item.Code != null && EF.Functions.ILike(item.Code, pattern, @"\")));
+        }
+
+        return query.Where(item =>
+            item.Name.ToLower().Contains(normalizedSearch) ||
+            (item.Code != null && item.Code.ToLower().Contains(normalizedSearch)));
+    }
 
     private static bool MatchesSearch(ExpenseType item, string normalizedSearch) =>
         item.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||

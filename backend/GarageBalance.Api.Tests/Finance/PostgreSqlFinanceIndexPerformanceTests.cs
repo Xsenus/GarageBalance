@@ -51,6 +51,9 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
 
         await new EfTariffRepository(context).GetListAsync("база тарифа для поиска", false, 25, CancellationToken.None);
         AssertCapturedSearchUsesIlike(capture.TakeSingle(), expectedPredicateCount: 2);
+
+        await new EfExpenseTypeRepository(context).GetListAsync("expense_code_needle", false, 25, CancellationToken.None);
+        AssertCapturedSearchUsesIlike(capture.TakeSingle(), expectedPredicateCount: 2);
     }
 
     [PostgreSqlFact]
@@ -154,6 +157,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 Rate = 300m,
                 EffectiveFrom = new DateOnly(2026, 8, 3)
             });
+        context.ExpenseTypes.AddRange(
+            new ExpenseType { Name = "Статья 100%_готово", Code = "literal_wildcard_name" },
+            new ExpenseType { Name = "Статья без шаблона", Code = "expense_code_needle" },
+            new ExpenseType { Name = "Статья 100 процентов готово", Code = "plain_expense_code" });
         await context.SaveChangesAsync();
 
         var irregularPayments = await new EfIrregularPaymentRepository(context)
@@ -164,11 +171,17 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             .GetListAsync("%_", false, 25, CancellationToken.None);
         var tariffs = await new EfTariffRepository(context)
             .GetListAsync("%_", false, 25, CancellationToken.None);
+        var expenseTypesByLiteralWildcard = await new EfExpenseTypeRepository(context)
+            .GetListAsync("%_", false, 25, CancellationToken.None);
+        var expenseTypesByCode = await new EfExpenseTypeRepository(context)
+            .GetListAsync("code_needle", false, 25, CancellationToken.None);
 
         Assert.Collection(irregularPayments, item => Assert.Equal("Разовый 100%_готово", item.Name));
         Assert.Collection(chargeServices, item => Assert.Equal("Услуга 100%_готово", item.Name));
         Assert.Equal(["Сбор без шаблона", "Сбор 100%_готово"], feeCampaigns.Select(item => item.Name).ToArray());
         Assert.Equal(["Тариф без шаблона", "Тариф 100%_готово"], tariffs.Select(item => item.Name).ToArray());
+        Assert.Collection(expenseTypesByLiteralWildcard, item => Assert.Equal("Статья 100%_готово", item.Name));
+        Assert.Collection(expenseTypesByCode, item => Assert.Equal("expense_code_needle", item.Code));
     }
 
     [PostgreSqlFact]
@@ -330,6 +343,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_fund_operations_OperationKind_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_fund_operations_Reason_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_expense_types_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_expense_types_Code_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_income_types_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_supplier_accruals_DocumentNumber_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_financial_operations_DocumentNumber_trgm", "gin_trgm_ops");
@@ -480,6 +494,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             connection,
             "IX_expense_types_Name_trgm",
             """SELECT "Id" FROM expense_types WHERE "Name" ILIKE '%электроэнергия%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_expense_types_Code_trgm",
+            """SELECT "Id" FROM expense_types WHERE "Code" ILIKE '%expense\_code\_needle%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
             connection,
             "IX_income_types_Name_trgm",
@@ -638,7 +656,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         }));
         context.ExpenseTypes.AddRange(Enumerable.Range(0, 300).Select(index => new ExpenseType
         {
-            Name = index == 147 ? "Электроэнергия для поиска" : $"Статья производительности {index:D3}"
+            Name = index == 147 ? "Электроэнергия для поиска" : $"Статья производительности {index:D3}",
+            Code = index == 173 ? "expense_code_needle" : $"performance_expense_{index:D3}"
         }));
         context.FinancialOperations.AddRange(Enumerable.Range(0, 500).Select(index => new FinancialOperation
         {

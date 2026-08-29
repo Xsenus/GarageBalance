@@ -527,6 +527,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 4);
+
+        var migration = ReadApiSource(
+            "Infrastructure/Data/Migrations/20260829115326_OptimizeExpenseTypeSearch.cs");
+        Assert.Contains("CREATE EXTENSION IF NOT EXISTS pg_trgm", migration, StringComparison.Ordinal);
+        Assert.Contains("IX_expense_types_Code_trgm", migration, StringComparison.Ordinal);
+        Assert.Contains("gin_trgm_ops", migration, StringComparison.Ordinal);
+        Assert.Contains("DROP INDEX IF EXISTS", migration, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -534,6 +541,9 @@ public sealed class BackendPerformanceGuardTests
     {
         var source = ReadApiSource("Infrastructure/Data/EfExpenseTypeRepository.cs");
         Assert.Contains("IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(source, "EF.Functions.ILike("));
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
