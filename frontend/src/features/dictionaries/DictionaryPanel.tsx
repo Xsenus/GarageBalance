@@ -19,7 +19,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
-import { useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { restoreFocusAfterClose, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
@@ -383,19 +383,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   function closeBalanceHistory() {
-    const trigger = balanceHistoryTriggerRef.current
     balanceHistoryRequestSequenceRef.current += 1
     balanceHistoryRequestControllerRef.current?.abort()
     balanceHistoryRequestControllerRef.current = null
     setBalanceHistoryGarage(null)
     setBalanceHistory(null)
     setBalanceHistoryError(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      balanceHistoryTriggerRef.current = null
-    }, 0)
+    restoreFocusAfterClose(balanceHistoryTriggerRef)
   }
 
   function beginBalanceHistoryRequest() {

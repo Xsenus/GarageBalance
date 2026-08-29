@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { vi } from 'vitest'
-import { restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
+import { focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
 
 function OutsidePointerProbe() {
   const [open, setOpen] = useState(true)
@@ -133,6 +133,7 @@ describe('focus shared hooks', () => {
     const triggerRef: { current: HTMLButtonElement | null } = { current: trigger }
 
     restoreFocusAfterClose(triggerRef)
+    expect(triggerRef.current).toBeNull()
     expect(current).toHaveFocus()
     vi.runAllTimers()
 
@@ -140,6 +141,38 @@ describe('focus shared hooks', () => {
     expect(triggerRef.current).toBeNull()
     trigger.remove()
     current.remove()
+    vi.useRealTimers()
+  })
+
+  it('does not clear a trigger captured by a reopened dialog', () => {
+    vi.useFakeTimers()
+    const previousTrigger = document.createElement('button')
+    const nextTrigger = document.createElement('button')
+    document.body.append(previousTrigger, nextTrigger)
+    const triggerRef: { current: HTMLButtonElement | null } = { current: previousTrigger }
+
+    restoreFocusAfterClose(triggerRef)
+    triggerRef.current = nextTrigger
+    vi.runAllTimers()
+
+    expect(previousTrigger).toHaveFocus()
+    expect(triggerRef.current).toBe(nextTrigger)
+    previousTrigger.remove()
+    nextTrigger.remove()
+    vi.useRealTimers()
+  })
+
+  it('focuses a connected element after the current DOM update', () => {
+    vi.useFakeTimers()
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+
+    focusAfterDomUpdate(trigger)
+    expect(trigger).not.toHaveFocus()
+    vi.runAllTimers()
+
+    expect(trigger).toHaveFocus()
+    trigger.remove()
     vi.useRealTimers()
   })
 

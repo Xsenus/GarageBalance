@@ -17,7 +17,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
-import { restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -3835,11 +3835,7 @@ function PaymentsPrototypePanel({
     setEarlyElectricityPaymentConfirmation(null)
     earlyElectricityPaymentTriggerRef.current = null
     void commitGaragePayment(pendingPayment.row, true).finally(() => {
-      window.setTimeout(() => {
-        if (trigger?.isConnected) {
-          trigger.focus()
-        }
-      }, 0)
+      focusAfterDomUpdate(trigger)
     })
   }
 
