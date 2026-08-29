@@ -29,6 +29,9 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains("financialOperationRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(financialOperationRepositorySource, ".Take(limit)") >= 4);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", financialOperationRepositorySource, StringComparison.Ordinal);
+        Assert.Equal(6, CountOccurrences(financialOperationRepositorySource, "EF.Functions.ILike("));
+        Assert.DoesNotContain(".ToLower().Contains(normalizedSearch)", financialOperationRepositorySource, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(meterReadingRepositorySource, ".Take(limit)") >= 4);
         Assert.Contains("accrualRepository.GetListAsync", source, StringComparison.Ordinal);

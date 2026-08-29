@@ -3756,10 +3756,21 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "DOC-12", "Оплата по квитанции"), null, CancellationToken.None);
         await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "DOC-20", "Компенсация поставщику"), null, CancellationToken.None);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 6, 21),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 100m,
+            CounterpartyName = "Разовый исполнитель %_"
+        });
+        await database.Context.SaveChangesAsync();
 
         var garageResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "12"), CancellationToken.None);
         var supplierResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "vodokanal"), CancellationToken.None);
         var commentResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "квитанции"), CancellationToken.None);
+        var counterpartyResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "разовый исполнитель"), CancellationToken.None);
+        var literalWildcardResult = await service.GetOperationsAsync(new FinancialOperationListRequest(null, null, null, "%_"), CancellationToken.None);
 
         Assert.Single(garageResult);
         Assert.Equal("income", garageResult[0].OperationKind);
@@ -3767,6 +3778,8 @@ public sealed class FinanceServiceTests
         Assert.Equal("expense", supplierResult[0].OperationKind);
         Assert.Single(commentResult);
         Assert.Equal("Оплата по квитанции", commentResult[0].Comment);
+        Assert.Equal(counterpartyResult, literalWildcardResult);
+        Assert.Equal("Разовый исполнитель %_", Assert.Single(counterpartyResult).CounterpartyName);
     }
 
     [Fact]

@@ -88,6 +88,9 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 Amount = (decimal?)operation.Amount,
                 operation.ReceiptBatchId,
                 operation.ExpensePaymentType,
+                operation.ExpensePaymentSource,
+                operation.CounterpartyName,
+                NegativeFundBalanceConfirmed = (bool?)operation.NegativeFundBalanceConfirmed,
                 operation.DocumentNumber,
                 operation.Comment,
                 operation.GarageId,
@@ -127,6 +130,9 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 Amount = (decimal?)null,
                 ReceiptBatchId = (Guid?)null,
                 ExpensePaymentType = (string?)null,
+                ExpensePaymentSource = (string?)null,
+                CounterpartyName = (string?)null,
+                NegativeFundBalanceConfirmed = (bool?)null,
                 DocumentNumber = (string?)null,
                 Comment = (string?)null,
                 GarageId = (Guid?)null,
@@ -172,6 +178,9 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 Amount = row.Amount!.Value,
                 ReceiptBatchId = row.ReceiptBatchId,
                 ExpensePaymentType = row.ExpensePaymentType,
+                ExpensePaymentSource = row.ExpensePaymentSource,
+                CounterpartyName = row.CounterpartyName,
+                NegativeFundBalanceConfirmed = row.NegativeFundBalanceConfirmed!.Value,
                 DocumentNumber = row.DocumentNumber,
                 Comment = row.Comment,
                 GarageId = row.GarageId,
@@ -484,13 +493,14 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
             return query;
         }
 
+        var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
         return query.Where(operation =>
-            (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
-            (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)) ||
-            (operation.Garage != null && operation.Garage.Number.ToLower().Contains(normalizedSearch)) ||
-            (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
-            (operation.CounterpartyName != null && operation.CounterpartyName.ToLower().Contains(normalizedSearch)) ||
-            (operation.StaffMember != null && operation.StaffMember.FullName.ToLower().Contains(normalizedSearch)));
+            (operation.DocumentNumber != null && EF.Functions.ILike(operation.DocumentNumber, pattern, @"\")) ||
+            (operation.Comment != null && EF.Functions.ILike(operation.Comment, pattern, @"\")) ||
+            (operation.Garage != null && EF.Functions.ILike(operation.Garage.Number, pattern, @"\")) ||
+            (operation.Supplier != null && EF.Functions.ILike(operation.Supplier.Name, pattern, @"\")) ||
+            (operation.CounterpartyName != null && EF.Functions.ILike(operation.CounterpartyName, pattern, @"\")) ||
+            (operation.StaffMember != null && EF.Functions.ILike(operation.StaffMember.FullName, pattern, @"\")));
     }
 
     private static IOrderedQueryable<FinancialOperation> Order(IQueryable<FinancialOperation> query) =>
@@ -502,6 +512,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (operation.Garage?.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (operation.CounterpartyName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (operation.StaffMember?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
 
     private bool IsSqliteProvider() =>

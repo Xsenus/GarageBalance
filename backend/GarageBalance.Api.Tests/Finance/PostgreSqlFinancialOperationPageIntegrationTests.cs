@@ -88,7 +88,18 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
                     new DateOnly(2048, 3, 12),
                     150m,
                     "IN-PLAIN",
-                    "Обычная операция"));
+                    "Обычная операция"),
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = new DateOnly(2048, 3, 15),
+                    AccountingMonth = new DateOnly(2048, 3, 1),
+                    Amount = 75m,
+                    ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt,
+                    ExpensePaymentSource = ExpensePaymentSources.Cash,
+                    CounterpartyName = "Разовый %_ исполнитель",
+                    NegativeFundBalanceConfirmed = true
+                });
             await seedContext.SaveChangesAsync();
         }
 
@@ -209,6 +220,17 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
         Assert.Equal(0, empty.TotalCount);
         Assert.Empty(empty.Items);
         AssertSingleCombinedCommand(capture);
+
+        capture.Commands.Clear();
+        var literalWildcard = await repository.GetPageAsync(null, null, null, "%_", null, null, null, 0, 5, CancellationToken.None);
+
+        Assert.Equal(1, literalWildcard.TotalCount);
+        var literalWildcardOperation = Assert.Single(literalWildcard.Items);
+        Assert.Equal(ExpensePaymentTypes.WithoutReceipt, literalWildcardOperation.ExpensePaymentType);
+        Assert.Equal(ExpensePaymentSources.Cash, literalWildcardOperation.ExpensePaymentSource);
+        Assert.Equal("Разовый %_ исполнитель", literalWildcardOperation.CounterpartyName);
+        Assert.True(literalWildcardOperation.NegativeFundBalanceConfirmed);
+        AssertSingleCombinedCommand(capture);
     }
 
     private static FinancialOperation CreateIncome(
@@ -291,7 +313,13 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OFFSET", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(12, CountOccurrences(command, "ILIKE"));
+        Assert.Contains("ESCAPE '\\'", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(", command, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static int CountOccurrences(string source, string value) =>
+        source.Split(value, StringSplitOptions.None).Length - 1;
 
     private sealed class ReaderCommandCapture : DbCommandInterceptor
     {
