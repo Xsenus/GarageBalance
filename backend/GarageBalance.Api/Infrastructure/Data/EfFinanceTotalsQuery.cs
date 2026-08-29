@@ -103,20 +103,20 @@ public sealed class EfFinanceTotalsQuery(GarageBalanceDbContext dbContext) : IFi
             operations = operations.Where(operation =>
                 (operation.DocumentNumber != null && EF.Functions.ILike(operation.DocumentNumber, pattern, @"\")) ||
                 (operation.Comment != null && EF.Functions.ILike(operation.Comment, pattern, @"\")) ||
-                (operation.Garage != null && operation.Garage.Number.ToLower().Contains(normalizedSearch)) ||
-                (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
+                (operation.Garage != null && EF.Functions.ILike(operation.Garage.Number, pattern, @"\")) ||
+                (operation.Supplier != null && EF.Functions.ILike(operation.Supplier.Name, pattern, @"\")) ||
                 (operation.CounterpartyName != null && EF.Functions.ILike(operation.CounterpartyName, pattern, @"\")) ||
-                (operation.StaffMember != null && operation.StaffMember.FullName.ToLower().Contains(normalizedSearch)));
+                (operation.StaffMember != null && EF.Functions.ILike(operation.StaffMember.FullName, pattern, @"\")));
             accruals = accruals.Where(accrual =>
-                accrual.Garage.Number.ToLower().Contains(normalizedSearch) ||
-                accrual.IncomeType.Name.ToLower().Contains(normalizedSearch) ||
+                EF.Functions.ILike(accrual.Garage.Number, pattern, @"\") ||
+                EF.Functions.ILike(accrual.IncomeType.Name, pattern, @"\") ||
                 (accrual.Comment != null && EF.Functions.ILike(accrual.Comment, pattern, @"\")));
             meterReadings = meterReadings.Where(reading =>
-                reading.Garage.Number.ToLower().Contains(normalizedSearch) ||
+                EF.Functions.ILike(reading.Garage.Number, pattern, @"\") ||
                 (reading.Comment != null && EF.Functions.ILike(reading.Comment, pattern, @"\")));
             supplierAccruals = supplierAccruals.Where(accrual =>
-                accrual.Supplier.Name.ToLower().Contains(normalizedSearch) ||
-                accrual.ExpenseType.Name.ToLower().Contains(normalizedSearch) ||
+                EF.Functions.ILike(accrual.Supplier.Name, pattern, @"\") ||
+                EF.Functions.ILike(accrual.ExpenseType.Name, pattern, @"\") ||
                 (accrual.DocumentNumber != null && EF.Functions.ILike(accrual.DocumentNumber, pattern, @"\")) ||
                 (accrual.Comment != null && EF.Functions.ILike(accrual.Comment, pattern, @"\")));
         }
@@ -234,6 +234,7 @@ public sealed class EfFinanceTotalsQuery(GarageBalanceDbContext dbContext) : IFi
         (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (operation.Garage?.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (operation.CounterpartyName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (operation.StaffMember?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
 
     private static bool AccrualMatchesSearch(Accrual accrual, string normalizedSearch) =>

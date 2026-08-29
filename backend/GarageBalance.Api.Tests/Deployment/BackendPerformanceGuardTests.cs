@@ -67,13 +67,19 @@ public sealed class BackendPerformanceGuardTests
         Assert.DoesNotContain("meterReadingRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("supplierAccrualRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
         Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", totalsSource, StringComparison.Ordinal);
-        Assert.Equal(7, CountOccurrences(totalsSource, "EF.Functions.ILike("));
         Assert.DoesNotContain("operation.DocumentNumber.ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("operation.Comment.ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("operation.CounterpartyName.ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("accrual.Comment.ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("meterReading.Comment.ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("supplierAccrual.Comment.ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ToLower().Contains(normalizedSearch)", totalsSource, StringComparison.Ordinal);
+        Assert.Equal(15, CountOccurrences(totalsSource, "EF.Functions.ILike("));
+        Assert.Contains("operation.Garage.Number, pattern", totalsSource, StringComparison.Ordinal);
+        Assert.Contains("operation.Supplier.Name, pattern", totalsSource, StringComparison.Ordinal);
+        Assert.Contains("operation.StaffMember.FullName, pattern", totalsSource, StringComparison.Ordinal);
+        Assert.Contains("accrual.IncomeType.Name, pattern", totalsSource, StringComparison.Ordinal);
+        Assert.Contains("accrual.ExpenseType.Name, pattern", totalsSource, StringComparison.Ordinal);
     }
 
     [Fact]

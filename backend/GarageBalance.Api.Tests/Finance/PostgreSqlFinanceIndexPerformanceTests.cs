@@ -74,6 +74,142 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
     }
 
     [PostgreSqlFact]
+    public async Task FinanceSummaryRelatedSearchUsesRawIlikeForIndexedNames()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var setupContext = database.CreateContext())
+        {
+            var garage = new Garage { Number = "ГАРАЖ-%_-СВОДКА", PeopleCount = 1, FloorCount = 1 };
+            var incomeType = new IncomeType { Name = "Взнос сводки" };
+            setupContext.Accruals.Add(new Accrual
+            {
+                Garage = garage,
+                IncomeType = incomeType,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                DueDate = new DateOnly(2026, 9, 1),
+                OverdueFromDate = new DateOnly(2026, 10, 1),
+                Amount = 250m,
+                Source = AccrualSources.Manual
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfFinanceTotalsQuery(context).GetAsync(
+            null,
+            null,
+            null,
+            "%_",
+            null,
+            null,
+            null,
+            CancellationToken.None);
+        var command = capture.TakeSingle();
+
+        Assert.Equal(1, result.AccrualCount);
+        Assert.Equal(250m, result.AccrualTotal);
+        Assert.DoesNotContain("lower(", command.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ILIKE", command.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ГАРАЖ-%_-СВОДКА", command.CommandText, StringComparison.Ordinal);
+    }
+
+    [PostgreSqlFact]
+    public async Task FinanceSummaryRelatedSearchKeepsEverySectionExact()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var setupContext = database.CreateContext())
+        {
+            var garage = new Garage { Number = "гараж-маркер", PeopleCount = 1, FloorCount = 1 };
+            var incomeType = new IncomeType { Name = "доход-маркер" };
+            var expenseType = new ExpenseType { Name = "расход-маркер" };
+            var supplier = new Supplier
+            {
+                Name = "поставщик-маркер",
+                Group = new SupplierGroup { Name = "Группа сводки" }
+            };
+            var staffMember = new StaffMember
+            {
+                FullName = "сотрудник-маркер",
+                Department = new StaffDepartment { Name = "Отдел сводки" }
+            };
+            setupContext.FinancialOperations.AddRange(
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = new DateOnly(2026, 8, 20),
+                    AccountingMonth = new DateOnly(2026, 8, 1),
+                    Amount = 10m,
+                    Garage = garage
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = new DateOnly(2026, 8, 21),
+                    AccountingMonth = new DateOnly(2026, 8, 1),
+                    Amount = 20m,
+                    Supplier = supplier
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = new DateOnly(2026, 8, 22),
+                    AccountingMonth = new DateOnly(2026, 8, 1),
+                    Amount = 30m,
+                    StaffMember = staffMember
+                });
+            setupContext.Accruals.Add(new Accrual
+            {
+                Garage = garage,
+                IncomeType = incomeType,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                DueDate = new DateOnly(2026, 9, 1),
+                OverdueFromDate = new DateOnly(2026, 10, 1),
+                Amount = 40m,
+                Source = AccrualSources.Manual
+            });
+            setupContext.MeterReadings.Add(new MeterReading
+            {
+                Garage = garage,
+                MeterKind = MeterKinds.Water,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                ReadingDate = new DateOnly(2026, 8, 20),
+                PreviousValue = 1m,
+                CurrentValue = 2m,
+                Consumption = 1m
+            });
+            setupContext.SupplierAccruals.Add(new SupplierAccrual
+            {
+                Supplier = supplier,
+                ExpenseType = expenseType,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                Amount = 50m,
+                Source = AccrualSources.Manual
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var query = new EfFinanceTotalsQuery(context);
+        var garageResult = await query.GetAsync(null, null, null, "гараж-маркер", null, null, null, CancellationToken.None);
+        var supplierResult = await query.GetAsync(null, null, null, "поставщик-маркер", null, null, null, CancellationToken.None);
+        var staffResult = await query.GetAsync(null, null, null, "сотрудник-маркер", null, null, null, CancellationToken.None);
+        var incomeTypeResult = await query.GetAsync(null, null, null, "доход-маркер", null, null, null, CancellationToken.None);
+        var expenseTypeResult = await query.GetAsync(null, null, null, "расход-маркер", null, null, null, CancellationToken.None);
+
+        Assert.Equal((1, 1, 1), (garageResult.OperationCount, garageResult.AccrualCount, garageResult.MeterReadingCount));
+        Assert.Equal((1, 1), (supplierResult.OperationCount, supplierResult.SupplierAccrualCount));
+        Assert.Equal(1, staffResult.OperationCount);
+        Assert.Equal(1, incomeTypeResult.AccrualCount);
+        Assert.Equal(1, expenseTypeResult.SupplierAccrualCount);
+    }
+
+    [PostgreSqlFact]
     public async Task FinanceAndFundPredicatesUsePurposeBuiltIndexes()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -108,6 +244,9 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_meter_readings_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_supplier_accruals_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_cash_bank_transfers_Comment_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_garages_Number_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_suppliers_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_staff_members_FullName_trgm", "gin_trgm_ops");
 
         await AssertPlanUsesAsync(
             connection,
@@ -447,7 +586,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 'cash_bank_transfers',
                 'funds',
                 'expense_types',
-                'income_types');
+                'income_types',
+                'garages',
+                'suppliers',
+                'staff_members');
             """;
         await using var reader = await command.ExecuteReaderAsync();
         var indexes = new Dictionary<string, string>(StringComparer.Ordinal);

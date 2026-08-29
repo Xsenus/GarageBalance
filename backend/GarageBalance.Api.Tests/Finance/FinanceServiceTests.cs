@@ -3726,6 +3726,39 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetSummaryAsync_SearchesEpisodicCounterpartyAndTreatsWildcardsLiterally()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 20),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 300m,
+                CounterpartyName = "Разовый исполнитель %_"
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 21),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 400m,
+                CounterpartyName = "Разовый исполнитель без маркера"
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GetSummaryAsync(
+            new FinancialOperationListRequest(null, null, null, "%_"),
+            CancellationToken.None);
+
+        Assert.Equal(1, result.OperationCount);
+        Assert.Equal(1, result.ExpenseCount);
+        Assert.Equal(300m, result.ExpenseTotal);
+    }
+
+    [Fact]
     public async Task GetSummaryAsync_AppliesOperationKindWithoutHidingAccrualTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
