@@ -1103,6 +1103,22 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ImportAuditQuery_CombinesCountersAndKeepsOnlyThreeDatabaseReads()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
+        var methodStart = source.IndexOf("GetAuditDataAsync", StringComparison.Ordinal);
+        var methodEnd = source.IndexOf("public void AddRun", methodStart, StringComparison.Ordinal);
+        var methodSource = source[methodStart..methodEnd];
+
+        Assert.Contains(".GroupBy(_ => 1)", methodSource, StringComparison.Ordinal);
+        Assert.Contains("PendingRollbackRecordCount = group.Count", methodSource, StringComparison.Ordinal);
+        Assert.Contains(".Distinct()", methodSource, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(methodSource, ".SingleOrDefaultAsync(cancellationToken)"));
+        Assert.Equal(2, CountOccurrences(methodSource, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("await query.CountAsync", methodSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfAuditEventRepository.cs");

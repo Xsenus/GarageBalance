@@ -117,12 +117,19 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
     {
         var query = dbContext.AccessImportCreatedRecords.AsNoTracking()
             .Where(record => record.AccessImportRunId == runId);
-        var createdRecordCount = await query.CountAsync(cancellationToken);
-        var pendingRollbackRecordCount = await query.CountAsync(record => record.RollbackStatus == "created", cancellationToken);
-        var sourceRowFingerprintCount = await query.Select(record => record.SourceRowHash)
-            .Where(rowHash => rowHash != string.Empty)
-            .Distinct()
-            .CountAsync(cancellationToken);
+        var counts = await query
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                CreatedRecordCount = group.Count(),
+                PendingRollbackRecordCount = group.Count(record => record.RollbackStatus == "created"),
+                SourceRowFingerprintCount = group
+                    .Where(record => record.SourceRowHash != string.Empty)
+                    .Select(record => record.SourceRowHash)
+                    .Distinct()
+                    .Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
         var targetEntityTypes = await query.Select(record => record.TargetEntityType)
             .Where(targetEntityType => targetEntityType != string.Empty)
             .Distinct()
@@ -140,9 +147,9 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
             .Take(5)
             .ToList();
         return new AccessImportAuditData(
-            createdRecordCount,
-            pendingRollbackRecordCount,
-            sourceRowFingerprintCount,
+            counts?.CreatedRecordCount ?? 0,
+            counts?.PendingRollbackRecordCount ?? 0,
+            counts?.SourceRowFingerprintCount ?? 0,
             targetEntityTypes,
             sourceRowFingerprints);
     }

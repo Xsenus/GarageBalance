@@ -1,10 +1,74 @@
+using System.Data.Common;
+using GarageBalance.Api.Domain.Import;
+using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 
 namespace GarageBalance.Api.Tests.Import;
 
 public sealed class PostgreSqlImportPerformanceTests
 {
+    [PostgreSqlFact]
+    public async Task ImportAuditCombinesAllCountersAndKeepsSamplesBounded()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var runId = Guid.NewGuid();
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportCreatedRecords.AddRange(
+                CreateRecord(runId, "garage", "garage-2", new string('b', 64), "created", 2),
+                CreateRecord(runId, "financial_operation", "operation-1", new string('a', 64), "rolled_back", 1),
+                CreateRecord(runId, "garage", "garage-1", new string('a', 64), "created", 0),
+                CreateRecord(runId, "", "ignored-empty-type", string.Empty, "created", 3),
+                CreateRecord(Guid.NewGuid(), "other_run", "ignored-run", new string('c', 64), "created", 4));
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context).GetAuditDataAsync(runId, CancellationToken.None);
+
+        Assert.Equal(4, result.CreatedRecordCount);
+        Assert.Equal(3, result.PendingRollbackRecordCount);
+        Assert.Equal(2, result.SourceRowFingerprintCount);
+        Assert.Equal(["financial_operation", "garage"], result.TargetEntityTypes);
+        Assert.Equal([new string('a', 64), new string('b', 64)], result.SourceRowFingerprints);
+        Assert.Equal(3, commandCapture.Commands.Count);
+        Assert.Contains("COUNT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DISTINCT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.All(commandCapture.Commands, command => Assert.Contains("AccessImportRunId", command, StringComparison.Ordinal));
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task ImportAuditReturnsEmptyResultInThreeSelects()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context).GetAuditDataAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.Equal(0, result.CreatedRecordCount);
+        Assert.Equal(0, result.PendingRollbackRecordCount);
+        Assert.Equal(0, result.SourceRowFingerprintCount);
+        Assert.Empty(result.TargetEntityTypes);
+        Assert.Empty(result.SourceRowFingerprints);
+        Assert.Equal(3, commandCapture.Commands.Count);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
     [PostgreSqlFact]
     public async Task ImportRecoveryDuplicateAndQuarantineQueriesUseCompositeIndexes()
     {
@@ -108,5 +172,43 @@ public sealed class PostgreSqlImportPerformanceTests
         }
 
         Assert.Contains(expectedIndex, string.Join(Environment.NewLine, lines), StringComparison.Ordinal);
+    }
+
+    private static AccessImportCreatedRecord CreateRecord(
+        Guid runId,
+        string targetEntityType,
+        string targetEntityId,
+        string sourceRowHash,
+        string rollbackStatus,
+        int minuteOffset) =>
+        new()
+        {
+            AccessImportRunId = runId,
+            SourceEntityType = "Garage",
+            SourceExternalId = targetEntityId,
+            SourceRowHash = sourceRowHash,
+            TargetEntityType = targetEntityType,
+            TargetEntityId = targetEntityId,
+            RollbackStatus = rollbackStatus,
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 30, 1, minuteOffset, 0, TimeSpan.Zero)
+        };
+
+    private sealed class SelectCommandCapture : DbCommandInterceptor
+    {
+        public List<string> Commands { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Commands.Add(command.CommandText);
+            }
+
+            return ValueTask.FromResult(result);
+        }
     }
 }
