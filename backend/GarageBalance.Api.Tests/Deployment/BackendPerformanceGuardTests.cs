@@ -1076,11 +1076,17 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", irregularPaymentRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Database.IsNpgsql()", irregularPaymentRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", irregularPaymentRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("EF.Functions.ILike(item.Name, pattern", irregularPaymentRepositorySource, StringComparison.Ordinal);
         Assert.Contains(
             "chargeServiceSettingRepository.GetListAsync(\n            normalizedSearch,\n            includeArchived,\n            isRegular,\n            isMetered,\n            NormalizeListLimit(limit),\n            businessDateProvider.Today",
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", chargeServiceSettingRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Database.IsNpgsql()", chargeServiceSettingRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", chargeServiceSettingRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("EF.Functions.ILike(item.Name, pattern", chargeServiceSettingRepositorySource, StringComparison.Ordinal);
         Assert.Contains(
             "feeCampaignRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit)",
             source,

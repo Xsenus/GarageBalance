@@ -32,6 +32,19 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
 
         await new EfSupplierAccrualRepository(context).GetPageAsync(null, null, "счет-2026", null, 0, 25, CancellationToken.None);
         await AssertCapturedPlanUsesAsync(database.ConnectionString, capture.TakeSingle(), "IX_supplier_accruals_DocumentNumber_trgm");
+
+        await new EfIrregularPaymentRepository(context).GetListAsync("разовый платёж для поиска", false, 25, CancellationToken.None);
+        AssertCapturedSearchUsesIlike(capture.TakeSingle());
+
+        await new EfChargeServiceSettingRepository(context).GetListAsync(
+            "регулярная услуга для поиска",
+            false,
+            null,
+            null,
+            25,
+            new DateOnly(2026, 8, 29),
+            CancellationToken.None);
+        AssertCapturedSearchUsesIlike(capture.TakeSingleContaining("FROM charge_service_settings"));
     }
 
     [PostgreSqlFact]
@@ -71,6 +84,28 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         Assert.Equal(1, result.OperationCount);
         Assert.Equal(1, result.ExpenseCount);
         Assert.Equal(100m, result.ExpenseTotal);
+    }
+
+    [PostgreSqlFact]
+    public async Task DictionarySearchTreatsWildcardsLiterallyOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        context.IrregularPayments.AddRange(
+            new IrregularPayment { Name = "Разовый 100%_готово", Amount = 100m },
+            new IrregularPayment { Name = "Разовый 100 процентов готово", Amount = 200m });
+        context.ChargeServiceSettings.AddRange(
+            new ChargeServiceSetting { Name = "Услуга 100%_готово" },
+            new ChargeServiceSetting { Name = "Услуга 100 процентов готово" });
+        await context.SaveChangesAsync();
+
+        var irregularPayments = await new EfIrregularPaymentRepository(context)
+            .GetListAsync("%_", false, 25, CancellationToken.None);
+        var chargeServices = await new EfChargeServiceSettingRepository(context)
+            .GetListAsync("%_", false, null, null, 25, new DateOnly(2026, 8, 29), CancellationToken.None);
+
+        Assert.Collection(irregularPayments, item => Assert.Equal("Разовый 100%_готово", item.Name));
+        Assert.Collection(chargeServices, item => Assert.Equal("Услуга 100%_готово", item.Name));
     }
 
     [PostgreSqlFact]
@@ -240,6 +275,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_accruals_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_accruals_Basis_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_irregular_payments_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_charge_service_settings_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_fee_campaigns_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_meter_readings_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_supplier_accruals_Comment_trgm", "gin_trgm_ops");
@@ -418,6 +454,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             """SELECT "Id" FROM irregular_payments WHERE "Name" ILIKE '%разовый платёж%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
             connection,
+            "IX_charge_service_settings_Name_trgm",
+            """SELECT "Id" FROM charge_service_settings WHERE "Name" ILIKE '%регулярная услуга%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
             "IX_fee_campaigns_Name_trgm",
             """SELECT "Id" FROM fee_campaigns WHERE "Name" ILIKE '%объявленный сбор%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
@@ -488,6 +528,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         {
             Name = index == 173 ? "Разовый платёж для поиска" : $"Разовый платёж {index:D3}",
             Amount = 1m
+        }));
+        context.ChargeServiceSettings.AddRange(Enumerable.Range(0, 300).Select(index => new ChargeServiceSetting
+        {
+            Name = index == 193 ? "Регулярная услуга для поиска" : $"Услуга производительности {index:D3}"
         }));
         context.FeeCampaigns.AddRange(Enumerable.Range(0, 300).Select(index => new FeeCampaign
         {
@@ -579,6 +623,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 'accruals',
                 'meter_readings',
                 'irregular_payments',
+                'charge_service_settings',
                 'fee_campaigns',
                 'accrual_payment_allocations',
                 'supplier_accruals',
@@ -659,6 +704,13 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             $"Expected PostgreSQL working-list plan to use {indexName}.{Environment.NewLine}{plan}");
     }
 
+    private static void AssertCapturedSearchUsesIlike(CapturedCommand captured)
+    {
+        Assert.Contains("ILIKE", captured.CommandText, StringComparison.Ordinal);
+        Assert.Contains("ESCAPE '\\'", captured.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(", captured.CommandText, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed record CapturedCommand(
         string CommandText,
         IReadOnlyList<CapturedParameter> Parameters);
@@ -686,6 +738,13 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         public CapturedCommand TakeSingle()
         {
             var command = Assert.Single(commands);
+            commands.Clear();
+            return command;
+        }
+
+        public CapturedCommand TakeSingleContaining(string fragment)
+        {
+            var command = Assert.Single(commands, candidate => candidate.CommandText.Contains(fragment, StringComparison.Ordinal));
             commands.Clear();
             return command;
         }

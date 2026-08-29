@@ -22,7 +22,15 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Where(item => includeArchived || !item.IsArchived);
         if (normalizedSearch is not null)
         {
-            query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+            if (dbContext.Database.IsNpgsql())
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+                query = query.Where(item => EF.Functions.ILike(item.Name, pattern, @"\"));
+            }
+            else
+            {
+                query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+            }
         }
         if (isRegular.HasValue)
         {
