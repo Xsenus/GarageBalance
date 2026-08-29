@@ -5687,7 +5687,7 @@ public sealed class DictionaryServiceTests
             effectiveFrom,
             CancellationToken.None);
 
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         var trackedVersions = database.Context.ChangeTracker.Entries<ChargeServiceTariffVersion>()
             .Select(entry => entry.Entity)
             .OrderBy(version => version.EffectiveFrom)
@@ -5698,6 +5698,82 @@ public sealed class DictionaryServiceTests
         Assert.Equal(effectiveFrom, trackedVersions[1].EffectiveFrom);
         Assert.Equal(new DateOnly(2030, 6, 30), trackedVersions[1].EffectiveTo);
         Assert.Equal(new DateOnly(2030, 7, 1), trackedVersions[2].EffectiveFrom);
+    }
+
+    [Fact]
+    public async Task SetTariffVersion_RestoresArchivedExactPeriodInSameBoundedSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var oldTariff = new Tariff
+        {
+            Name = "Архивная ставка",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 6, 1)
+        };
+        var newTariff = new Tariff
+        {
+            Name = "Восстановленная ставка",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 6, 15)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Услуга с архивной датой",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            Tariff = newTariff,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(oldTariff, newTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = oldTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 1),
+                EffectiveTo = new DateOnly(2026, 6, 30)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = oldTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 6, 15),
+                EffectiveTo = new DateOnly(2026, 6, 20),
+                IsArchived = true
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = newTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 7, 1)
+            });
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        await new EfChargeServiceSettingRepository(database.Context).SetTariffVersionAsync(
+            setting.Id,
+            newTariff.Id,
+            new DateOnly(2026, 6, 15),
+            CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        var trackedVersions = database.Context.ChangeTracker.Entries<ChargeServiceTariffVersion>()
+            .Select(entry => entry.Entity)
+            .OrderBy(version => version.EffectiveFrom)
+            .ToList();
+        Assert.Equal(3, trackedVersions.Count);
+        Assert.Equal(new DateOnly(2026, 6, 14), trackedVersions[0].EffectiveTo);
+        Assert.Equal(newTariff.Id, trackedVersions[1].TariffId);
+        Assert.Equal(new DateOnly(2026, 6, 30), trackedVersions[1].EffectiveTo);
+        Assert.False(trackedVersions[1].IsArchived);
+        Assert.Equal(new DateOnly(2026, 7, 1), trackedVersions[2].EffectiveFrom);
     }
 
     [Fact]

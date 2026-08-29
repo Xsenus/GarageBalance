@@ -256,28 +256,30 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         CancellationToken cancellationToken,
         DateOnly? effectiveTo = null)
     {
-        var activeVersions = dbContext.ChargeServiceTariffVersions
-            .Where(item => item.ChargeServiceSettingId == serviceId && !item.IsArchived);
-        var adjacent = await activeVersions
+        var serviceVersions = dbContext.ChargeServiceTariffVersions
+            .Where(item => item.ChargeServiceSettingId == serviceId);
+        var activeVersions = serviceVersions.Where(item => !item.IsArchived);
+        var selectedVersions = await activeVersions
             .Where(item => item.EffectiveFrom < effectiveFrom)
             .OrderByDescending(item => item.EffectiveFrom)
             .Take(1)
+            .Concat(serviceVersions
+                .Where(item => item.EffectiveFrom == effectiveFrom)
+                .Take(1))
             .Concat(activeVersions
                 .Where(item => item.EffectiveFrom > effectiveFrom)
                 .OrderBy(item => item.EffectiveFrom)
                 .Take(1))
             .ToListAsync(cancellationToken);
-        var previous = adjacent.SingleOrDefault(item => item.EffectiveFrom < effectiveFrom);
-        var next = adjacent.SingleOrDefault(item => item.EffectiveFrom > effectiveFrom);
+        var previous = selectedVersions.SingleOrDefault(item => item.EffectiveFrom < effectiveFrom);
+        var existing = selectedVersions.SingleOrDefault(item => item.EffectiveFrom == effectiveFrom);
+        var next = selectedVersions.SingleOrDefault(item => item.EffectiveFrom > effectiveFrom);
         if (previous is not null)
         {
             previous.EffectiveTo = effectiveFrom.AddDays(-1);
         }
 
         effectiveTo ??= next?.EffectiveFrom.AddDays(-1);
-        var existing = await dbContext.ChargeServiceTariffVersions.SingleOrDefaultAsync(
-            item => item.ChargeServiceSettingId == serviceId && item.EffectiveFrom == effectiveFrom,
-            cancellationToken);
         if (existing is null)
         {
             dbContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion

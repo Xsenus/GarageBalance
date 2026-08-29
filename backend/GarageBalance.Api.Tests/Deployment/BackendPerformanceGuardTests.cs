@@ -653,8 +653,12 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Matches(
-            BoundedQueryRegex(@"SetTariffVersionAsync[\s\S]*?OrderByDescending\(item => item\.EffectiveFrom\)[\s\S]*?Take\(1\)[\s\S]*?Concat\(activeVersions[\s\S]*?OrderBy\(item => item\.EffectiveFrom\)[\s\S]*?Take\(1\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"SetTariffVersionAsync[\s\S]*?OrderByDescending\(item => item\.EffectiveFrom\)[\s\S]*?Take\(1\)[\s\S]*?EffectiveFrom == effectiveFrom[\s\S]*?Take\(1\)[\s\S]*?Concat\(activeVersions[\s\S]*?OrderBy\(item => item\.EffectiveFrom\)[\s\S]*?Take\(1\)[\s\S]*?ToListAsync\(cancellationToken\)"),
             source);
+        Assert.DoesNotContain(
+            "var existing = await dbContext.ChargeServiceTariffVersions.SingleOrDefaultAsync",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Fact]
