@@ -136,16 +136,13 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
             .OrderBy(targetEntityType => targetEntityType)
             .Take(10)
             .ToListAsync(cancellationToken);
-        var sourceRowFingerprints = (await query
-                .OrderBy(record => record.TargetEntityType)
-                .ThenBy(record => record.TargetEntityId)
-                .Select(record => record.SourceRowHash)
-                .Where(rowHash => rowHash != string.Empty)
-                .Take(20)
-                .ToListAsync(cancellationToken))
-            .Distinct(StringComparer.Ordinal)
+        var sourceRowFingerprints = await query
+            .Select(record => record.SourceRowHash)
+            .Where(rowHash => rowHash != string.Empty)
+            .Distinct()
+            .OrderBy(rowHash => rowHash)
             .Take(5)
-            .ToList();
+            .ToListAsync(cancellationToken);
         return new AccessImportAuditData(
             counts?.CreatedRecordCount ?? 0,
             counts?.PendingRollbackRecordCount ?? 0,

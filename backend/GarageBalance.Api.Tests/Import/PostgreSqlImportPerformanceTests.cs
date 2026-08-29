@@ -48,6 +48,55 @@ public sealed class PostgreSqlImportPerformanceTests
     }
 
     [PostgreSqlFact]
+    public async Task ImportAuditReturnsFiveDistinctFingerprintsWhenEarlyRowsRepeat()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var runId = Guid.NewGuid();
+        var repeatedHash = new string('a', 64);
+        var records = Enumerable.Range(0, 25)
+            .Select(index => CreateRecord(
+                runId,
+                "duplicate",
+                $"duplicate-{index:D2}",
+                repeatedHash,
+                "created",
+                index))
+            .Concat(Enumerable.Range(0, 5).Select(index => CreateRecord(
+                runId,
+                "unique",
+                $"unique-{index:D2}",
+                new string((char)('b' + index), 64),
+                "created",
+                25 + index)))
+            .ToArray();
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportCreatedRecords.AddRange(records);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context).GetAuditDataAsync(runId, CancellationToken.None);
+
+        Assert.Equal(30, result.CreatedRecordCount);
+        Assert.Equal(6, result.SourceRowFingerprintCount);
+        Assert.Equal(
+            Enumerable.Range(0, 5).Select(index => new string((char)('a' + index), 64)),
+            result.SourceRowFingerprints);
+        Assert.Equal(3, commandCapture.Commands.Count);
+        Assert.Contains("DISTINCT", commandCapture.Commands[2], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ORDER BY", commandCapture.Commands[2], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", commandCapture.Commands[2], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TargetEntityId", commandCapture.Commands[2], StringComparison.Ordinal);
+    }
+
+    [PostgreSqlFact]
     public async Task ImportAuditReturnsEmptyResultInThreeSelects()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

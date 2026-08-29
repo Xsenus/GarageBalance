@@ -1116,6 +1116,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(methodSource, ".SingleOrDefaultAsync(cancellationToken)"));
         Assert.Equal(2, CountOccurrences(methodSource, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("await query.CountAsync", methodSource, StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"Select\(record => record\.SourceRowHash\)[\s\S]*?\.Distinct\(\)[\s\S]*?\.OrderBy\(rowHash => rowHash\)[\s\S]*?\.Take\(5\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            methodSource);
+        Assert.DoesNotContain(".Take(20)", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Distinct(StringComparer.Ordinal)", methodSource, StringComparison.Ordinal);
     }
 
     [Fact]
