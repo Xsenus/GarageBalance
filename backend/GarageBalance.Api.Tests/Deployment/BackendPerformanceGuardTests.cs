@@ -253,6 +253,10 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
         Assert.Contains("GetPostgreSqlCandidatesAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetMissingServiceMetersPostgreSqlAsync", source, StringComparison.Ordinal);
+        Assert.Contains("unnest(@meter_kinds::text[]) WITH ORDINALITY", source, StringComparison.Ordinal);
+        Assert.Contains("requested.\"MeterKind\"", source, StringComparison.Ordinal);
+        Assert.Contains("NOT EXISTS (", source, StringComparison.Ordinal);
         Assert.Contains("SqlQuery<MissingMeterCandidateRow>", source, StringComparison.Ordinal);
         Assert.Contains("COUNT(*) FILTER", source, StringComparison.Ordinal);
         Assert.Contains("FROM meter_readings AS reading", source, StringComparison.Ordinal);
@@ -267,6 +271,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("HasWaterReading", source, StringComparison.Ordinal);
         Assert.Contains("HasElectricityReading", source, StringComparison.Ordinal);
         Assert.DoesNotContain("foreach (var meterKind in meterKinds)", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(source, "foreach (var serviceMeterKind in serviceMeterKinds)"));
     }
 
     [Fact]

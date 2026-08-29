@@ -2,6 +2,7 @@ using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -32,19 +33,31 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             var result = legacyKinds.Length == 0
                 ? new List<MissingMeterReadingData>()
                 : (await GetMissingAsync(accountingMonth, legacyKinds, normalizedSearch, limit, cancellationToken)).ToList();
-            foreach (var serviceMeterKind in serviceMeterKinds)
+            if (result.Count < limit && dbContext.Database.IsNpgsql())
             {
-                if (result.Count >= limit)
-                {
-                    break;
-                }
-
-                result.AddRange(await GetMissingServiceMeterAsync(
+                result.AddRange(await GetMissingServiceMetersPostgreSqlAsync(
                     accountingMonth,
-                    serviceMeterKind,
+                    serviceMeterKinds,
                     normalizedSearch,
                     limit - result.Count,
                     cancellationToken));
+            }
+            else
+            {
+                foreach (var serviceMeterKind in serviceMeterKinds)
+                {
+                    if (result.Count >= limit)
+                    {
+                        break;
+                    }
+
+                    result.AddRange(await GetMissingServiceMeterAsync(
+                        accountingMonth,
+                        serviceMeterKind,
+                        normalizedSearch,
+                        limit - result.Count,
+                        cancellationToken));
+                }
             }
 
             return result;
@@ -160,6 +173,80 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             meterKind)).ToArray();
     }
 
+    private async Task<IReadOnlyList<MissingMeterReadingData>> GetMissingServiceMetersPostgreSqlAsync(
+        DateOnly accountingMonth,
+        string[] meterKinds,
+        string? normalizedSearch,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var searchPattern = normalizedSearch is null
+            ? null
+            : PostgresLikeSearch.ContainsPattern(normalizedSearch);
+        const string sql = """
+            WITH requested_kinds AS MATERIALIZED (
+                SELECT requested."MeterKind", requested."Order"
+                FROM unnest(@meter_kinds::text[]) WITH ORDINALITY AS requested("MeterKind", "Order")
+            ),
+            matching_garages AS MATERIALIZED (
+                SELECT garage."Id"
+                FROM garages AS garage
+                WHERE @has_search = FALSE
+                   OR garage."Number" ILIKE @search ESCAPE '\'
+                UNION
+                SELECT garage."Id"
+                FROM garages AS garage
+                INNER JOIN owners AS owner ON owner."Id" = garage."OwnerId"
+                WHERE @has_search = TRUE
+                  AND (
+                        owner."LastName" ILIKE @search ESCAPE '\'
+                     OR owner."FirstName" ILIKE @search ESCAPE '\'
+                     OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                     OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
+                  )
+            )
+            SELECT
+                garage."Id" AS "GarageId",
+                garage."Number" AS "GarageNumber",
+                owner."LastName" AS "OwnerLastName",
+                owner."FirstName" AS "OwnerFirstName",
+                owner."MiddleName" AS "OwnerMiddleName",
+                requested."MeterKind" AS "MeterKind"
+            FROM requested_kinds AS requested
+            CROSS JOIN garages AS garage
+            INNER JOIN matching_garages AS matching ON matching."Id" = garage."Id"
+            LEFT JOIN owners AS owner ON owner."Id" = garage."OwnerId"
+            WHERE garage."IsArchived" = FALSE
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM meter_readings AS reading
+                    WHERE reading."IsCanceled" = FALSE
+                      AND reading."GarageId" = garage."Id"
+                      AND reading."AccountingMonth" = @accounting_month
+                      AND reading."MeterKind" = requested."MeterKind"
+              )
+            ORDER BY requested."Order", garage."Number"
+            LIMIT @limit
+            """;
+        var rows = await dbContext.Database.SqlQueryRaw<MissingServiceMeterRow>(
+            sql,
+            new NpgsqlParameter<string[]>("meter_kinds", meterKinds),
+            new NpgsqlParameter<bool>("has_search", searchPattern is not null),
+            new NpgsqlParameter<string>("search", searchPattern ?? string.Empty),
+            new NpgsqlParameter<DateOnly>("accounting_month", accountingMonth),
+            new NpgsqlParameter<int>("limit", limit))
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(row => new MissingMeterReadingData(
+            row.GarageId,
+            row.GarageNumber,
+            row.OwnerLastName is null || row.OwnerFirstName is null
+                ? null
+                : string.Join(' ', new[] { row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName }
+                    .Where(part => !string.IsNullOrWhiteSpace(part))),
+            row.MeterKind)).ToArray();
+    }
+
     private async Task<IReadOnlyList<MissingMeterCandidate>> GetPostgreSqlCandidatesAsync(
         DateOnly accountingMonth,
         string? normalizedSearch,
@@ -231,6 +318,16 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
         public string? OwnerMiddleName { get; set; }
         public bool HasWaterReading { get; set; }
         public bool HasElectricityReading { get; set; }
+    }
+
+    private sealed class MissingServiceMeterRow
+    {
+        public Guid GarageId { get; set; }
+        public string GarageNumber { get; set; } = string.Empty;
+        public string? OwnerLastName { get; set; }
+        public string? OwnerFirstName { get; set; }
+        public string? OwnerMiddleName { get; set; }
+        public string MeterKind { get; set; } = string.Empty;
     }
 
     private static bool CandidateMatchesSearch(MissingMeterCandidate candidate, string normalizedSearch) =>

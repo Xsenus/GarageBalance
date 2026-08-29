@@ -11,6 +11,85 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task GetMissingAsync_BatchesCustomMeterKindsWithOneBoundedQuery()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var month = new DateOnly(2026, 8, 1);
+        const string firstKind = "custom_meter_first";
+        const string secondKind = "custom_meter_second";
+        const string thirdKind = "custom_meter_third";
+        var firstGarage = CreateGarage("CUSTOM-01");
+        firstGarage.Owner = new Owner { LastName = "Поиск%_", FirstName = "Точный" };
+        var secondGarage = CreateGarage("CUSTOM-02");
+        var completeGarage = CreateGarage("CUSTOM-03");
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.Garages.AddRange(firstGarage, secondGarage, completeGarage);
+            setupContext.MeterReadings.AddRange(
+                CreateReading(firstGarage, month, firstKind),
+                CreateReading(secondGarage, month, secondKind),
+                CreateReading(completeGarage, month, firstKind),
+                CreateReading(completeGarage, month, secondKind),
+                CreateReading(completeGarage, month, thirdKind));
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var queryContext = new GarageBalanceDbContext(options);
+        var query = new EfMissingMeterReadingQuery(queryContext);
+
+        var result = await query.GetMissingAsync(
+            month,
+            [firstKind, secondKind, thirdKind],
+            null,
+            4,
+            CancellationToken.None);
+        var literalSearch = await query.GetMissingAsync(
+            month,
+            [firstKind, secondKind, thirdKind],
+            "%_",
+            10,
+            CancellationToken.None);
+
+        Assert.Collection(
+            result,
+            row => Assert.Equal(("CUSTOM-02", firstKind), (row.GarageNumber, row.MeterKind)),
+            row => Assert.Equal(("CUSTOM-01", secondKind), (row.GarageNumber, row.MeterKind)),
+            row => Assert.Equal(("CUSTOM-01", thirdKind), (row.GarageNumber, row.MeterKind)),
+            row => Assert.Equal(("CUSTOM-02", thirdKind), (row.GarageNumber, row.MeterKind)));
+        Assert.Collection(
+            literalSearch,
+            row => Assert.Equal(("CUSTOM-01", secondKind), (row.GarageNumber, row.MeterKind)),
+            row => Assert.Equal(("CUSTOM-01", thirdKind), (row.GarageNumber, row.MeterKind)));
+
+        Assert.Equal(2, capture.Commands.Count);
+        Assert.All(capture.Commands, command =>
+        {
+            Assert.Contains("unnest(@meter_kinds::text[]) WITH ORDINALITY", command, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("NOT EXISTS", command, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, CountOccurrences(command, "FROM meter_readings"));
+            Assert.Contains("LIMIT @limit", command, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.Contains("ILIKE @search ESCAPE '\\'", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("lower(", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Поиск%_", capture.Commands[1], StringComparison.Ordinal);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => query.GetMissingAsync(
+            month,
+            [firstKind, secondKind, thirdKind],
+            null,
+            10,
+            cancellation.Token));
+        Assert.Equal(2, capture.Commands.Count);
+    }
+
+    [PostgreSqlFact]
     public async Task GetMissingAsync_AggregatesMonthlyReadingStatusOnceAndKeepsMissingKindsExact()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -122,7 +201,9 @@ public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
             InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            var commandText = command.CommandText.TrimStart();
+            if (commandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) ||
+                commandText.StartsWith("WITH", StringComparison.OrdinalIgnoreCase))
             {
                 Commands.Add(command.CommandText);
             }
