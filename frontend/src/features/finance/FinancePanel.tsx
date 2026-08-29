@@ -9,6 +9,7 @@ import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
+import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -2837,7 +2838,6 @@ function PaymentsPrototypePanel({
   const [garageSearchError, setGarageSearchError] = useState<string | null>(null)
   const [garageSearchOpen, setGarageSearchOpen] = useState(false)
   const garageSearchWrapRef = useCloseOnOutsidePointer<HTMLDivElement>(garageSearchOpen, setGarageSearchOpen)
-  const garageSearchRequestSequenceRef = useRef(0)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
@@ -2956,7 +2956,6 @@ function PaymentsPrototypePanel({
   const garageSearchListId = useId()
   useEffect(() => {
     const query = garageSearch.trim()
-    const requestSequence = ++garageSearchRequestSequenceRef.current
     if (!query && !garageSearchOpen) {
       setGarageSearchGarages([])
       setGarageSearchLoading(false)
@@ -2964,55 +2963,27 @@ function PaymentsPrototypePanel({
       return
     }
 
-    let requestTimeoutHandle = 0
-    let timedOut = false
-    const controller = new AbortController()
-    const handle = window.setTimeout(() => {
-      setGarageSearchLoading(true)
-      setGarageSearchError(null)
-      const request = dictionaryClient.getGaragesPage
-        ? dictionaryClient.getGaragesPage(auth.accessToken, query, 0, 20, false, undefined, undefined, false, {}, controller.signal)
+    return scheduleDebouncedRequest({
+      delay: 250,
+      requestTimeout: garageSearchTimeoutMs,
+      timeoutError: new Error('Поиск гаражей занял слишком много времени. Повторите запрос.'),
+      request: (signal) => dictionaryClient.getGaragesPage
+        ? dictionaryClient.getGaragesPage(auth.accessToken, query, 0, 20, false, undefined, undefined, false, {}, signal)
             .then((page) => page.items)
-        : dictionaryClient.getGarages(auth.accessToken, query, 20, false, controller.signal)
-      const timeout = new Promise<GarageDto[]>((_resolve, reject) => {
-        requestTimeoutHandle = window.setTimeout(
-          () => {
-            timedOut = true
-            controller.abort()
-            reject(new Error('Поиск гаражей занял слишком много времени. Повторите запрос.'))
-          },
-          garageSearchTimeoutMs,
-        )
-      })
-      void Promise.race([request, timeout])
-        .then((foundGarages) => {
-          if (garageSearchRequestSequenceRef.current === requestSequence) {
-            setGarageSearchGarages(foundGarages)
-          }
-        })
-        .catch((error: unknown) => {
-          if (garageSearchRequestSequenceRef.current === requestSequence) {
-            setGarageSearchError(timedOut
-              ? 'Поиск гаражей занял слишком много времени. Повторите запрос.'
-              : error instanceof Error ? error.message : 'Не удалось выполнить поиск гаражей.')
-          }
-        })
-        .finally(() => {
-          window.clearTimeout(requestTimeoutHandle)
-          if (garageSearchRequestSequenceRef.current === requestSequence) {
-            setGarageSearchLoading(false)
-          }
-        })
-    }, 250)
-
-    return () => {
-      window.clearTimeout(handle)
-      window.clearTimeout(requestTimeoutHandle)
-      controller.abort()
-      if (garageSearchRequestSequenceRef.current === requestSequence) {
-        garageSearchRequestSequenceRef.current += 1
-      }
-    }
+        : dictionaryClient.getGarages(auth.accessToken, query, 20, false, signal),
+      onStart: () => {
+        setGarageSearchLoading(true)
+        setGarageSearchError(null)
+      },
+      onSuccess: (foundGarages) => {
+        setGarageSearchGarages(foundGarages)
+        setGarageSearchLoading(false)
+      },
+      onError: (error) => {
+        setGarageSearchError(error instanceof Error ? error.message : 'Не удалось выполнить поиск гаражей.')
+        setGarageSearchLoading(false)
+      },
+    })
   }, [auth.accessToken, dictionaryClient, garageSearch, garageSearchOpen])
 
   useEffect(() => {
