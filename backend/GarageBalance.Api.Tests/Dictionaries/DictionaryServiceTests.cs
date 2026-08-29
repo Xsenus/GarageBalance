@@ -5466,6 +5466,99 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ChargeServiceList_LoadsOnlyBusinessDateTariffInOneSelectAndPreservesScheduleGaps()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var julyTariff = new Tariff
+        {
+            Name = "Тариф списка июля",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 7, 1)
+        };
+        var augustTariff = new Tariff
+        {
+            Name = "Тариф списка августа",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        var scheduledSetting = new ChargeServiceSetting
+        {
+            Name = "A — услуга с текущим периодом",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            Tariff = augustTariff,
+            UnitName = "руб."
+        };
+        var gapTariff = new Tariff
+        {
+            Name = "Тариф после пробела",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 150m,
+            EffectiveFrom = new DateOnly(2026, 9, 1)
+        };
+        var gapSetting = new ChargeServiceSetting
+        {
+            Name = "B — услуга с пробелом",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            Tariff = gapTariff,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(julyTariff, augustTariff, gapTariff, scheduledSetting, gapSetting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = scheduledSetting.Id,
+                TariffId = julyTariff.Id,
+                EffectiveFrom = julyTariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2026, 7, 31)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = scheduledSetting.Id,
+                TariffId = augustTariff.Id,
+                EffectiveFrom = augustTariff.EffectiveFrom
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = gapSetting.Id,
+                TariffId = gapTariff.Id,
+                EffectiveFrom = gapTariff.EffectiveFrom
+            });
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        var result = await new EfChargeServiceSettingRepository(database.Context).GetListAsync(
+            normalizedSearch: null,
+            includeArchived: false,
+            isRegular: null,
+            isMetered: null,
+            limit: 50,
+            businessDate: new DateOnly(2026, 7, 15),
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        var scheduled = Assert.Single(result, item => item.Id == scheduledSetting.Id);
+        Assert.Equal(julyTariff.Id, scheduled.TariffId);
+        Assert.Equal(julyTariff.Id, Assert.Single(scheduled.TariffVersions).TariffId);
+        var gap = Assert.Single(result, item => item.Id == gapSetting.Id);
+        Assert.Null(gap.TariffId);
+        Assert.Null(gap.Tariff);
+        Assert.Empty(gap.TariffVersions);
+        Assert.Empty(database.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
     public async Task BalanceAggregates_WithEmptyIdentifiers_DoNotQueryDatabase()
     {
         var commandCounter = new SelectCommandCounter();

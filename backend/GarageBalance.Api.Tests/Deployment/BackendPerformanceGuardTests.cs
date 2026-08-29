@@ -621,6 +621,9 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Matches(
+            BoundedQueryRegex(@"GetListAsync[\s\S]*?Include\(item => item\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= businessDate[\s\S]*?Take\(limit\)[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, businessDate, cancellationToken, servicesWithVersions\)"),
+            source);
+        Assert.Matches(
             BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Include\(setting => setting\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= monthEnd[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, servicesWithVersions\)"),
             source);
         Assert.Matches(

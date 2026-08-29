@@ -41,11 +41,25 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             query = query.Where(item => item.IsMetered == isMetered.Value);
         }
 
-        var settings = await query
+        var rows = await query
+            .Include(item => item.TariffVersions.Where(version =>
+                !version.IsArchived &&
+                version.EffectiveFrom <= businessDate &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= businessDate)))
+                .ThenInclude(version => version.Tariff)
             .OrderBy(item => item.Name)
             .Take(limit)
+            .Select(setting => new ChargeServiceSettingQueryRow(
+                setting,
+                setting.TariffVersions.Any(version => !version.IsArchived && !version.Tariff.IsArchived)))
             .ToListAsync(cancellationToken);
-        await ApplyTariffsForMonthAsync(settings, businessDate, cancellationToken);
+        var settings = rows.Select(row => row.Setting).ToList();
+        var servicesWithVersions = rows
+            .Where(row => row.HasTariffVersions)
+            .Select(row => row.Setting.Id)
+            .ToHashSet();
+
+        await ApplyTariffsForMonthAsync(settings, businessDate, cancellationToken, servicesWithVersions);
         return settings;
     }
 
