@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import { CalendarPlus, CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
@@ -25,6 +25,7 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEdi
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
+import { usePointerResize } from '../../shared/useColumnResize'
 import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
@@ -1245,20 +1246,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
   }
 
-  function startTariffPanelsResize(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setTariffPanelsWidthFromPointer(event.clientX)
-  }
-
-  function moveTariffPanelsResize(event: PointerEvent<HTMLDivElement>) {
-    if (event.buttons !== 1) return
-    setTariffPanelsWidthFromPointer(event.clientX)
-  }
-
-  function finishTariffPanelsResize(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.releasePointerCapture(event.pointerId)
-    void persistTariffPanelsWidth()
-  }
+  const tariffPanelsResize = usePointerResize<HTMLDivElement>(setTariffPanelsWidthFromPointer, (cancelled) => {
+    if (!cancelled) void persistTariffPanelsWidth()
+  })
 
   function resizeTariffPanelsWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
     const delta = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0
@@ -2920,9 +2910,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               aria-valuemax={maximumTariffPanelsSplitPercent}
               aria-valuenow={tariffPanelsWidth}
               tabIndex={0}
-              onPointerDown={startTariffPanelsResize}
-              onPointerMove={moveTariffPanelsResize}
-              onPointerUp={finishTariffPanelsResize}
+              onPointerDown={tariffPanelsResize.startPointerResize}
+              onPointerMove={tariffPanelsResize.continuePointerResize}
+              onPointerUp={tariffPanelsResize.finishPointerResize}
+              onPointerCancel={tariffPanelsResize.cancelPointerResize}
               onKeyDown={resizeTariffPanelsWithKeyboard}
             />
 

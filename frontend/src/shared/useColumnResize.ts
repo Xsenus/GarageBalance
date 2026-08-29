@@ -1,23 +1,9 @@
 import { useEffect, useRef } from 'react'
 import type { Dispatch, KeyboardEvent, PointerEvent, SetStateAction } from 'react'
 
-type ResizableColumnDefinition<TKey extends string> = { key: TKey; minWidth: number }
-type ColumnWidths<TKey extends string> = Record<TKey, number>
-type ActiveResize<TKey extends string> = {
-  columnKey: TKey
-  minWidth: number
-  pointerId: number
-  startWidth: number
-  startX: number
-  latestX: number
-}
-
-export function useColumnResize<TKey extends string>(
-  definitions: ReadonlyArray<ResizableColumnDefinition<TKey>>,
-  widths: ColumnWidths<TKey>,
-  setWidths: Dispatch<SetStateAction<ColumnWidths<TKey>>>,
-) {
-  const activeResizeRef = useRef<ActiveResize<TKey> | null>(null)
+export function usePointerResize<TElement extends HTMLElement>(onResize: (clientX: number) => void, onEnd?: (cancelled: boolean) => void) {
+  const pointerIdRef = useRef<number | null>(null)
+  const latestXRef = useRef(0)
   const animationFrameRef = useRef<number | null>(null)
 
   function cancelScheduledFrame() {
@@ -27,64 +13,93 @@ export function useColumnResize<TKey extends string>(
     }
   }
 
-  function applyLatestWidth() {
+  function applyLatestPosition() {
     animationFrameRef.current = null
-    const activeResize = activeResizeRef.current
-    if (!activeResize) return
-    const nextWidth = Math.max(activeResize.minWidth, activeResize.startWidth + activeResize.latestX - activeResize.startX)
-    setWidths((current) => current[activeResize.columnKey] === nextWidth
-      ? current
-      : { ...current, [activeResize.columnKey]: nextWidth })
+    onResize(latestXRef.current)
   }
 
   useEffect(() => () => {
     cancelScheduledFrame()
-    activeResizeRef.current = null
+    pointerIdRef.current = null
   }, [])
+
+  function startPointerResize(event: PointerEvent<TElement>) {
+    if (event.button > 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    cancelScheduledFrame()
+    pointerIdRef.current = event.pointerId
+    latestXRef.current = event.clientX
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    applyLatestPosition()
+  }
+
+  function continuePointerResize(event: PointerEvent<TElement>) {
+    if (event.pointerId !== pointerIdRef.current) return
+    latestXRef.current = event.clientX
+    if (animationFrameRef.current === null) {
+      animationFrameRef.current = requestAnimationFrame(applyLatestPosition)
+    }
+  }
+
+  function finishPointerResize(event: PointerEvent<TElement>) {
+    if (event.pointerId !== pointerIdRef.current) return
+    latestXRef.current = event.clientX
+    cancelScheduledFrame()
+    applyLatestPosition()
+    pointerIdRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    onEnd?.(false)
+  }
+
+  function cancelPointerResize(event: PointerEvent<TElement>) {
+    if (event.pointerId !== pointerIdRef.current) return
+    cancelScheduledFrame()
+    applyLatestPosition()
+    pointerIdRef.current = null
+    onEnd?.(true)
+  }
+
+  return { startPointerResize, continuePointerResize, finishPointerResize, cancelPointerResize }
+}
+
+type ResizableColumnDefinition<TKey extends string> = { key: TKey; minWidth: number }
+type ColumnWidths<TKey extends string> = Record<TKey, number>
+type ActiveResize<TKey extends string> = {
+  columnKey: TKey
+  minWidth: number
+  startWidth: number
+  startX: number
+}
+
+export function useColumnResize<TKey extends string>(
+  definitions: ReadonlyArray<ResizableColumnDefinition<TKey>>,
+  widths: ColumnWidths<TKey>,
+  setWidths: Dispatch<SetStateAction<ColumnWidths<TKey>>>,
+) {
+  const activeResizeRef = useRef<ActiveResize<TKey> | null>(null)
+  const pointerResize = usePointerResize<HTMLButtonElement>((clientX) => {
+    const activeResize = activeResizeRef.current
+    if (!activeResize) return
+    const nextWidth = Math.max(activeResize.minWidth, activeResize.startWidth + clientX - activeResize.startX)
+    setWidths((current) => current[activeResize.columnKey] === nextWidth
+      ? current
+      : { ...current, [activeResize.columnKey]: nextWidth })
+  }, () => {
+    activeResizeRef.current = null
+  })
 
   function startResize(columnKey: TKey, event: PointerEvent<HTMLButtonElement>) {
     if (event.button > 0) return
     const column = definitions.find((item) => item.key === columnKey)
     if (!column) return
-    event.preventDefault()
-    event.stopPropagation()
-    cancelScheduledFrame()
     activeResizeRef.current = {
       columnKey,
       minWidth: column.minWidth,
-      pointerId: event.pointerId,
       startWidth: widths[columnKey],
       startX: event.clientX,
-      latestX: event.clientX,
     }
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-  }
-
-  function continueResize(event: PointerEvent<HTMLButtonElement>) {
-    const activeResize = activeResizeRef.current
-    if (!activeResize || event.pointerId !== activeResize.pointerId) return
-    activeResize.latestX = event.clientX
-    if (animationFrameRef.current === null) {
-      animationFrameRef.current = requestAnimationFrame(applyLatestWidth)
-    }
-  }
-
-  function finishResize(event: PointerEvent<HTMLButtonElement>) {
-    const activeResize = activeResizeRef.current
-    if (!activeResize || event.pointerId !== activeResize.pointerId) return
-    activeResize.latestX = event.clientX
-    cancelScheduledFrame()
-    applyLatestWidth()
-    activeResizeRef.current = null
-    event.currentTarget.releasePointerCapture?.(event.pointerId)
-  }
-
-  function cancelResize(event: PointerEvent<HTMLButtonElement>) {
-    const activeResize = activeResizeRef.current
-    if (!activeResize || event.pointerId !== activeResize.pointerId) return
-    cancelScheduledFrame()
-    applyLatestWidth()
-    activeResizeRef.current = null
+    pointerResize.startPointerResize(event)
   }
 
   function resizeWithKeyboard(columnKey: TKey, event: KeyboardEvent<HTMLButtonElement>) {
@@ -101,5 +116,11 @@ export function useColumnResize<TKey extends string>(
     })
   }
 
-  return { startResize, continueResize, finishResize, cancelResize, resizeWithKeyboard }
+  return {
+    startResize,
+    continueResize: pointerResize.continuePointerResize,
+    finishResize: pointerResize.finishPointerResize,
+    cancelResize: pointerResize.cancelPointerResize,
+    resizeWithKeyboard,
+  }
 }

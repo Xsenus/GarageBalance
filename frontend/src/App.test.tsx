@@ -1043,10 +1043,17 @@ describe('App', () => {
     await waitFor(() => expect(savedLayouts[0]).toEqual({ irregularPaymentsWidthPercent: 28 }))
     expect(splitter).toHaveAttribute('aria-valuenow', '28')
 
+    fireEvent.pointerDown(splitter, { pointerId: 2, clientX: 300 })
+    fireEvent.pointerMove(splitter, { pointerId: 2, clientX: 330 })
+    fireEvent.pointerMove(splitter, { pointerId: 2, clientX: 350 })
+    fireEvent.pointerCancel(splitter, { pointerId: 2, clientX: 0 })
+    await waitFor(() => expect(splitter).toHaveAttribute('aria-valuenow', '35'))
+    expect(savedLayouts).toHaveLength(1)
+
     splitter.focus()
     await user.keyboard('{ArrowRight}')
-    await waitFor(() => expect(savedLayouts[1]).toEqual({ irregularPaymentsWidthPercent: 29 }))
-    expect(splitter).toHaveAttribute('aria-valuenow', '29')
+    await waitFor(() => expect(savedLayouts[1]).toEqual({ irregularPaymentsWidthPercent: 36 }))
+    expect(splitter).toHaveAttribute('aria-valuenow', '36')
 
     await user.keyboard('{ArrowRight}')
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Не удалось сохранить ширину таблиц.')
