@@ -3368,6 +3368,7 @@ public sealed class FinanceService(
                 await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
                     incomeType.Id,
                     tariffId: null,
+                    month,
                     cancellationToken),
                 month)
             : null;
@@ -3607,6 +3608,7 @@ public sealed class FinanceService(
                 await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
                     incomeType.Id,
                     tariffId: null,
+                    month,
                     cancellationToken),
                 month)
             : null;
@@ -3861,6 +3863,7 @@ public sealed class FinanceService(
             await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
                 incomeType.Id,
                 tariff.Id,
+                month,
                 cancellationToken),
             month);
         if (matchingSetting is null && !IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))

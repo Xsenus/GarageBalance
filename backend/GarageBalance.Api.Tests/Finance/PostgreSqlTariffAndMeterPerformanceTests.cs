@@ -103,6 +103,14 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             var listedActiveService = Assert.Single(listedServices, item => item.Id == activeService.Id);
             Assert.Equal(activeTariff.Id, listedActiveService.TariffId);
             Assert.Equal(activeTariff.Id, Assert.Single(listedActiveService.TariffVersions).TariffId);
+
+            var dueDateServices = await repository.GetActiveRegularForDueDatesAsync(
+                incomeType.Id,
+                activeTariff.Id,
+                new DateOnly(2026, 7, 19),
+                CancellationToken.None);
+            var dueDateService = Assert.Single(dueDateServices, item => item.Id == activeService.Id);
+            Assert.Equal(activeTariff.Id, Assert.Single(dueDateService.TariffVersions).TariffId);
         }
 
         await using var connection = new NpgsqlConnection(database.ConnectionString);

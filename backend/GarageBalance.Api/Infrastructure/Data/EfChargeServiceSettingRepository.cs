@@ -180,10 +180,17 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForDueDatesAsync(
         Guid incomeTypeId,
         Guid? tariffId,
+        DateOnly accountingMonth,
         CancellationToken cancellationToken)
     {
+        var month = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);
+        var monthEnd = month.AddMonths(1).AddDays(-1);
         var settings = await dbContext.ChargeServiceSettings.AsNoTracking()
-            .Include(setting => setting.TariffVersions.Where(version => !version.IsArchived))
+            .Include(setting => setting.TariffVersions.Where(version =>
+                !version.IsArchived &&
+                !version.Tariff.IsArchived &&
+                version.EffectiveFrom <= monthEnd &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= month)))
                 .ThenInclude(version => version.Tariff)
             .Where(setting =>
                 !setting.IsArchived &&
@@ -202,8 +209,13 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             return settings;
         }
 
-        var historicalTariff = await dbContext.Tariffs.AsNoTracking()
-            .SingleOrDefaultAsync(tariff => tariff.Id == tariffId.Value && !tariff.IsArchived, cancellationToken);
+        var historicalTariff = settings
+            .SelectMany(setting => setting.TariffVersions)
+            .Where(version => version.TariffId == tariffId.Value && !version.Tariff.IsArchived)
+            .Select(version => version.Tariff)
+            .FirstOrDefault()
+            ?? await dbContext.Tariffs.AsNoTracking()
+                .SingleOrDefaultAsync(tariff => tariff.Id == tariffId.Value && !tariff.IsArchived, cancellationToken);
         if (historicalTariff is null)
         {
             return settings;

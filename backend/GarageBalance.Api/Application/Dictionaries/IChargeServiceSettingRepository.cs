@@ -22,7 +22,11 @@ public interface IChargeServiceSettingRepository
         DateOnly accountingMonth,
         int limit,
         CancellationToken cancellationToken);
-    Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForDueDatesAsync(Guid incomeTypeId, Guid? tariffId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForDueDatesAsync(
+        Guid incomeTypeId,
+        Guid? tariffId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken);
     Task<ChargeServiceSetting?> FindActiveAsync(Guid id, CancellationToken cancellationToken);
     Task<ChargeServiceSetting?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);

@@ -5559,6 +5559,87 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task DueDateSettings_LoadOnlySelectedMonthTariffAndPreserveHistoricalMode()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var incomeType = new IncomeType { Name = "Услуга для срока оплаты", Code = "due_date_service" };
+        var julyTariff = new Tariff
+        {
+            Name = "Тариф срока оплаты июля",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 7, 1)
+        };
+        var augustTariff = new Tariff
+        {
+            Name = "Тариф срока оплаты августа",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        var septemberTariff = new Tariff
+        {
+            Name = "Тариф срока оплаты сентября",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 9, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Регулярная услуга для срока оплаты",
+            IsRegular = true,
+            IsMetered = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = septemberTariff,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(incomeType, julyTariff, augustTariff, septemberTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = julyTariff.Id,
+                EffectiveFrom = julyTariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2026, 7, 31)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = augustTariff.Id,
+                EffectiveFrom = augustTariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2026, 8, 31)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = septemberTariff.Id,
+                EffectiveFrom = septemberTariff.EffectiveFrom
+            });
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        var result = await new EfChargeServiceSettingRepository(database.Context)
+            .GetActiveRegularForDueDatesAsync(
+                incomeType.Id,
+                augustTariff.Id,
+                new DateOnly(2026, 8, 19),
+                CancellationToken.None);
+
+        var selected = Assert.Single(result);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(augustTariff.Id, Assert.Single(selected.TariffVersions).TariffId);
+        Assert.False(selected.IsMetered);
+        Assert.False(selected.HasTieredTariff);
+        Assert.Empty(database.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
     public async Task BalanceAggregates_WithEmptyIdentifiers_DoNotQueryDatabase()
     {
         var commandCounter = new SelectCommandCounter();
