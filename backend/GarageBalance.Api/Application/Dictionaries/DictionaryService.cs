@@ -2525,15 +2525,16 @@ public sealed class DictionaryService(
         Guid id,
         CancellationToken cancellationToken)
     {
-        if (await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken) is null)
+        var schedule = await chargeServiceSettingRepository.GetActiveTariffScheduleAsync(id, cancellationToken);
+        if (!schedule.ServiceExists)
         {
             return DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Failure(
                 "charge_service_not_found",
                 "Настройка услуги не найдена.");
         }
 
-        var periods = await chargeServiceSettingRepository.GetTariffPeriodsAsync(id, false, cancellationToken);
-        return DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Success(periods.Select(ToChargeServiceTariffPeriodDto).ToList());
+        return DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Success(
+            schedule.Periods.Select(ToChargeServiceTariffPeriodDto).ToList());
     }
 
     public async Task<DictionaryResult<UpdatedChargeServiceTariffScheduleDto>> UpdateChargeServiceTariffScheduleAsync(
@@ -2564,7 +2565,7 @@ public sealed class DictionaryService(
             return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
-        var allExisting = await chargeServiceSettingRepository.GetTariffPeriodsAsync(id, true, cancellationToken);
+        var allExisting = await chargeServiceSettingRepository.GetTrackedTariffPeriodsAsync(id, cancellationToken);
         var existing = allExisting.Where(item => !item.IsArchived).ToList();
         var existingByTariff = existing.ToDictionary(item => item.TariffId);
         var fallbackTariff = existing.LastOrDefault()?.Tariff

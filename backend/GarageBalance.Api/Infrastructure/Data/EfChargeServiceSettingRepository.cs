@@ -249,6 +249,24 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Select(item => item.Tariff)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public async Task<ChargeServiceTariffScheduleData> GetActiveTariffScheduleAsync(
+        Guid serviceId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await dbContext.ChargeServiceSettings
+            .AsNoTracking()
+            .Where(item => item.Id == serviceId && !item.IsArchived)
+            .Include(item => item.TariffVersions.Where(version => !version.IsArchived))
+            .ThenInclude(version => version.Tariff)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return setting is null
+            ? new ChargeServiceTariffScheduleData(false, [])
+            : new ChargeServiceTariffScheduleData(
+                true,
+                setting.TariffVersions.OrderBy(item => item.EffectiveFrom).ToList());
+    }
+
     public async Task SetTariffVersionAsync(
         Guid serviceId,
         Guid tariffId,
@@ -297,18 +315,13 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         existing.IsArchived = false;
     }
 
-    public async Task<IReadOnlyList<ChargeServiceTariffVersion>> GetTariffPeriodsAsync(
+    public async Task<IReadOnlyList<ChargeServiceTariffVersion>> GetTrackedTariffPeriodsAsync(
         Guid serviceId,
-        bool tracked,
         CancellationToken cancellationToken)
     {
         var query = dbContext.ChargeServiceTariffVersions
             .Include(item => item.Tariff)
-            .Where(item => item.ChargeServiceSettingId == serviceId && (tracked || !item.IsArchived));
-        if (!tracked)
-        {
-            query = query.AsNoTracking();
-        }
+            .Where(item => item.ChargeServiceSettingId == serviceId);
 
         return await query.OrderBy(item => item.EffectiveFrom).ToListAsync(cancellationToken);
     }

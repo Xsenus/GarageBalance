@@ -1,7 +1,9 @@
+using System.Data.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 
 namespace GarageBalance.Api.Tests.Finance;
@@ -218,6 +220,52 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                 cancellation.Token));
     }
 
+    [PostgreSqlFact]
+    public async Task ActiveTariffScheduleLoadsServiceAndPeriodsInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var firstTariff = CreateTariff("Расписание январь", TariffCalculationBases.Fixed, new DateOnly(2026, 1, 1));
+        var secondTariff = CreateTariff("Расписание сентябрь", TariffCalculationBases.Fixed, new DateOnly(2026, 9, 1));
+        var service = new ChargeServiceSetting { Name = "Расписание performance", IsRegular = true };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AddRange(firstTariff, secondTariff, service);
+            seedContext.ChargeServiceTariffVersions.AddRange(
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = service.Id,
+                    TariffId = secondTariff.Id,
+                    EffectiveFrom = secondTariff.EffectiveFrom
+                },
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = service.Id,
+                    TariffId = firstTariff.Id,
+                    EffectiveFrom = firstTariff.EffectiveFrom,
+                    EffectiveTo = new DateOnly(2026, 8, 31)
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCounter = new SelectCommandCounter();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCounter)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfChargeServiceSettingRepository(context)
+            .GetActiveTariffScheduleAsync(service.Id, CancellationToken.None);
+
+        Assert.True(result.ServiceExists);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal([firstTariff.Id, secondTariff.Id], result.Periods.Select(period => period.TariffId).ToArray());
+        Assert.Contains("charge_service_tariff_versions", commandCounter.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tariffs", commandCounter.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("IsArchived", commandCounter.CommandText, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
     private static Tariff CreateTariff(string name, string calculationBase, DateOnly effectiveFrom, bool isArchived = false) =>
         new()
         {
@@ -281,5 +329,26 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private sealed class SelectCommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+        public string CommandText { get; private set; } = string.Empty;
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Count++;
+                CommandText = command.CommandText;
+            }
+
+            return ValueTask.FromResult(result);
+        }
     }
 }

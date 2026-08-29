@@ -659,6 +659,17 @@ public sealed class BackendPerformanceGuardTests
             "var existing = await dbContext.ChargeServiceTariffVersions.SingleOrDefaultAsync",
             source,
             StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetActiveTariffScheduleAsync[\s\S]*?Where\(item => item\.Id == serviceId && !item\.IsArchived\)[\s\S]*?Include\(item => item\.TariffVersions\.Where\(version => !version\.IsArchived\)\)[\s\S]*?ThenInclude\(version => version\.Tariff\)[\s\S]*?SingleOrDefaultAsync\(cancellationToken\)"),
+            source);
+
+        var dictionaryService = ReadApiSource("Application/Dictionaries/DictionaryService.cs");
+        Assert.Matches(
+            BoundedQueryRegex(@"GetChargeServiceTariffScheduleAsync[\s\S]*?GetActiveTariffScheduleAsync\(id, cancellationToken\)[\s\S]*?schedule\.Periods"),
+            dictionaryService);
+        Assert.DoesNotMatch(
+            BoundedQueryRegex(@"GetChargeServiceTariffScheduleAsync[\s\S]*?FindActiveAsync\(id, cancellationToken\)[\s\S]*?GetTariffPeriodsAsync\(id, false"),
+            dictionaryService);
     }
 
     [Fact]

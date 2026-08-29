@@ -4751,6 +4751,133 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetChargeServiceTariffScheduleAsync_LoadsSortedActivePeriodsInOneSelectWithoutTracking()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var firstTariff = new Tariff
+        {
+            Name = "Охрана до сентября",
+            CalculationBase = "fixed",
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var secondTariff = new Tariff
+        {
+            Name = "Охрана с сентября",
+            CalculationBase = "fixed",
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 9, 1)
+        };
+        var archivedTariff = new Tariff
+        {
+            Name = "Удалённая версия охраны",
+            CalculationBase = "fixed",
+            Rate = 90m,
+            EffectiveFrom = new DateOnly(2025, 1, 1)
+        };
+        var setting = new ChargeServiceSetting { Name = "Охрана", IsRegular = true };
+        database.Context.AddRange(firstTariff, secondTariff, archivedTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = secondTariff.Id,
+                EffectiveFrom = secondTariff.EffectiveFrom
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = firstTariff.Id,
+                EffectiveFrom = firstTariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2026, 8, 31)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = archivedTariff.Id,
+                EffectiveFrom = archivedTariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2025, 12, 31),
+                IsArchived = true
+            });
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context)
+            .GetChargeServiceTariffScheduleAsync(setting.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Collection(
+            result.Value!,
+            period =>
+            {
+                Assert.Equal(firstTariff.Id, period.TariffId);
+                Assert.Equal(firstTariff.EffectiveFrom, period.EffectiveFrom);
+                Assert.Equal(new DateOnly(2026, 8, 31), period.EffectiveTo);
+                Assert.Equal(100m, period.Rate);
+            },
+            period =>
+            {
+                Assert.Equal(secondTariff.Id, period.TariffId);
+                Assert.Equal(secondTariff.EffectiveFrom, period.EffectiveFrom);
+                Assert.Null(period.EffectiveTo);
+                Assert.Equal(125m, period.Rate);
+            });
+        Assert.Empty(database.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task GetChargeServiceTariffScheduleAsync_ReturnsEmptyScheduleInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var setting = new ChargeServiceSetting { Name = "Услуга без сетки", IsRegular = true };
+        database.Context.ChargeServiceSettings.Add(setting);
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context)
+            .GetChargeServiceTariffScheduleAsync(setting.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Empty(result.Value!);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Empty(database.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task GetChargeServiceTariffScheduleAsync_ReturnsNotFoundInOneSelectForMissingOrArchivedService()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var archivedSetting = new ChargeServiceSetting
+        {
+            Name = "Удалённая услуга",
+            IsRegular = true,
+            IsArchived = true
+        };
+        database.Context.ChargeServiceSettings.Add(archivedSetting);
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+
+        foreach (var serviceId in new[] { Guid.NewGuid(), archivedSetting.Id })
+        {
+            commandCounter.Reset();
+
+            var result = await DictionaryServiceTestFactory.Create(database.Context)
+                .GetChargeServiceTariffScheduleAsync(serviceId, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("charge_service_not_found", result.ErrorCode);
+            Assert.Equal(1, commandCounter.Count);
+            Assert.Empty(database.Context.ChangeTracker.Entries());
+        }
+    }
+
+    [Fact]
     public async Task UpdateChargeServiceTariffScheduleAsync_SavesContiguousPeriodsAndSelectsRateByMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
