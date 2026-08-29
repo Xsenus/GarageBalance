@@ -11,6 +11,45 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlFinanceIndexPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task FinanceSummarySearchTreatsWildcardsLiterallyOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 8, 29),
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                Amount = 100m,
+                Comment = "Оплата 100%_готово"
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 8, 29),
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                Amount = 200m,
+                Comment = "Оплата 100 процентов готово"
+            });
+        await context.SaveChangesAsync();
+
+        var result = await new EfFinanceTotalsQuery(context).GetAsync(
+            null,
+            null,
+            null,
+            "%_",
+            null,
+            null,
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(1, result.OperationCount);
+        Assert.Equal(1, result.ExpenseCount);
+        Assert.Equal(100m, result.ExpenseTotal);
+    }
+
+    [PostgreSqlFact]
     public async Task FinanceAndFundPredicatesUsePurposeBuiltIndexes()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -37,6 +76,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_supplier_accruals_DocumentNumber_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_financial_operations_DocumentNumber_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_financial_operations_Comment_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_financial_operations_CounterpartyName_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_accruals_Comment_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_meter_readings_Comment_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_supplier_accruals_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_cash_bank_transfers_Comment_trgm", "gin_trgm_ops");
 
         await AssertPlanUsesAsync(
@@ -193,6 +236,22 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             """);
         await AssertPlanUsesAsync(
             connection,
+            "IX_financial_operations_CounterpartyName_trgm",
+            """SELECT "Id" FROM financial_operations WHERE "CounterpartyName" ILIKE '%подрядчик%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_accruals_Comment_trgm",
+            """SELECT "Id" FROM accruals WHERE "Comment" ILIKE '%начисление%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_meter_readings_Comment_trgm",
+            """SELECT "Id" FROM meter_readings WHERE "Comment" ILIKE '%показание%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_supplier_accruals_Comment_trgm",
+            """SELECT "Id" FROM supplier_accruals WHERE "Comment" ILIKE '%поставщик%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
             "IX_cash_bank_transfers_Comment_trgm",
             """
             SELECT "Id" FROM cash_bank_transfers
@@ -240,7 +299,13 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             })
             .ToArray();
         var operationFund = funds[0];
+        var garage = new Garage { Number = "PERF-SEARCH", PeopleCount = 1, FloorCount = 1 };
+        var incomeType = new IncomeType { Name = "Начисления производительности" };
+        var expenseType = new ExpenseType { Name = "Расходы производительности" };
+        var supplierGroup = new SupplierGroup { Name = "Поставщики производительности" };
+        var supplier = new Supplier { Name = "Поставщик производительности", Group = supplierGroup };
         context.Funds.AddRange(funds);
+        context.AddRange(garage, incomeType, expenseType, supplierGroup, supplier);
         context.FundOperations.AddRange(Enumerable.Range(0, 500).Select(index => new FundOperation
         {
             Fund = operationFund,
@@ -261,7 +326,40 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             AccountingMonth = new DateOnly(2026, 1, 1),
             Amount = 1m,
             DocumentNumber = index == 201 ? "АКТ-2026-NEEDLE" : $"DOC-{index:D3}",
-            Comment = index == 389 ? "Ремонт ворот для поиска" : $"Расход {index:D3}"
+            Comment = index == 389 ? "Ремонт ворот для поиска" : $"Расход {index:D3}",
+            CounterpartyName = index == 433 ? "Подрядчик для поиска" : $"Контрагент {index:D3}"
+        }));
+        context.Accruals.AddRange(Enumerable.Range(0, 500).Select(index => new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            AccountingMonth = new DateOnly(2026, 1, 1).AddMonths(index),
+            DueDate = new DateOnly(2026, 2, 1).AddMonths(index),
+            OverdueFromDate = new DateOnly(2026, 3, 1).AddMonths(index),
+            Amount = 1m,
+            Source = AccrualSources.Manual,
+            Comment = index == 317 ? "Начисление для поиска" : $"Начислено {index:D3}"
+        }));
+        context.MeterReadings.AddRange(Enumerable.Range(0, 500).Select(index => new MeterReading
+        {
+            Garage = garage,
+            MeterKind = MeterKinds.Water,
+            AccountingMonth = new DateOnly(2026, 1, 1).AddMonths(index),
+            ReadingDate = new DateOnly(2026, 1, 15).AddMonths(index),
+            CurrentValue = index + 1,
+            PreviousValue = index,
+            Consumption = 1m,
+            Comment = index == 283 ? "Показание для поиска" : $"Счётчик {index:D3}"
+        }));
+        context.SupplierAccruals.AddRange(Enumerable.Range(0, 500).Select(index => new SupplierAccrual
+        {
+            Supplier = supplier,
+            ExpenseType = expenseType,
+            AccountingMonth = new DateOnly(2026, 1, 1).AddMonths(index),
+            Amount = 1m,
+            Source = AccrualSources.Manual,
+            DocumentNumber = index == 251 ? "СЧЕТ-2026-NEEDLE" : $"SUP-{index:D3}",
+            Comment = index == 367 ? "Поставщик для поиска" : $"Документ поставщика {index:D3}"
         }));
         context.CashBankTransfers.AddRange(Enumerable.Range(0, 500).Select(index => new CashBankTransfer
         {
@@ -287,6 +385,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
               AND tablename IN (
                 'financial_operations',
                 'accruals',
+                'meter_readings',
                 'accrual_payment_allocations',
                 'supplier_accruals',
                 'fund_operations',
