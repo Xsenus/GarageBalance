@@ -78,8 +78,21 @@ public sealed class EfSupplierGroupRepository(GarageBalanceDbContext dbContext) 
     private IQueryable<SupplierGroup> BaseQuery(bool includeArchived) =>
         dbContext.SupplierGroups.AsNoTracking().Where(group => includeArchived || !group.IsArchived);
 
-    private static IQueryable<SupplierGroup> ApplySearch(IQueryable<SupplierGroup> query, string? normalizedSearch) =>
-        normalizedSearch is null ? query : query.Where(group => group.Name.ToLower().Contains(normalizedSearch));
+    private IQueryable<SupplierGroup> ApplySearch(IQueryable<SupplierGroup> query, string? normalizedSearch)
+    {
+        if (normalizedSearch is null)
+        {
+            return query;
+        }
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+            return query.Where(group => EF.Functions.ILike(group.Name, pattern, @"\"));
+        }
+
+        return query.Where(group => group.Name.ToLower().Contains(normalizedSearch));
+    }
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;

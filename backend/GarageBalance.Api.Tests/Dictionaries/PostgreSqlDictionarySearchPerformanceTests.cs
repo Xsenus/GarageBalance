@@ -12,6 +12,41 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlDictionarySearchPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task SmallDictionarySearchUsesRawIlikeAndTreatsWildcardsLiterally()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.SupplierGroups.AddRange(
+                new SupplierGroup { Name = "Группа 100%_готово" },
+                new SupplierGroup { Name = "Группа 100 процентов готово" });
+            setupContext.MeasurementUnits.AddRange(
+                new MeasurementUnit { Name = "Единица 100%_готово" },
+                new MeasurementUnit { Name = "Единица 100 процентов готово" });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var groups = await new EfSupplierGroupRepository(context)
+            .GetListAsync("%_", false, 25, CancellationToken.None);
+        var groupCommand = capture.TakeCommandsAndClear().Single();
+        var units = await new EfMeasurementUnitRepository(context)
+            .GetListAsync("%_", false, 25, CancellationToken.None);
+        var unitCommand = capture.TakeCommandsAndClear().Single();
+
+        Assert.Collection(groups, item => Assert.Equal("Группа 100%_готово", item.Name));
+        Assert.Collection(units, item => Assert.Equal("Единица 100%_готово", item.Name));
+        AssertRawIlike(groupCommand);
+        AssertRawIlike(unitCommand);
+    }
+
+    [PostgreSqlFact]
     public async Task DictionaryPages_KeepSearchPagingAndRelatedDataQueriesBounded()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -129,6 +164,7 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             "IX_suppliers_Name_trgm",
             "IX_suppliers_Inn_trgm",
             "IX_supplier_groups_Name_trgm",
+            "IX_measurement_units_Name_trgm",
             "IX_charge_service_settings_Name_trgm",
             "IX_supplier_contacts_FullName_trgm",
             "IX_supplier_contacts_Position_trgm",
@@ -164,6 +200,21 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             WHERE ("LastName" || ' ' || "FirstName" || ' ' || COALESCE("MiddleName", ''))
                   ILIKE '%иванов иван%' ESCAPE '\';
             """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_supplier_groups_Name_trgm",
+            """SELECT "Id" FROM supplier_groups WHERE "Name" ILIKE '%коммунальные%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_measurement_units_Name_trgm",
+            """SELECT "Id" FROM measurement_units WHERE "Name" ILIKE '%кубический метр%' ESCAPE '\';""");
+    }
+
+    private static void AssertRawIlike(string commandText)
+    {
+        Assert.DoesNotContain("lower(", commandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ILIKE", commandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ESCAPE", commandText, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task AssertPlanUsesAsync(NpgsqlConnection connection, string indexName, string query)
@@ -183,11 +234,21 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
     private sealed class SelectCommandCapture : DbCommandInterceptor
     {
         private int count;
+        private readonly List<string> commands = [];
 
         public int TakeCountAndClear()
         {
             var result = count;
             count = 0;
+            commands.Clear();
+            return result;
+        }
+
+        public IReadOnlyList<string> TakeCommandsAndClear()
+        {
+            var result = commands.ToArray();
+            count = 0;
+            commands.Clear();
             return result;
         }
 
@@ -200,6 +261,7 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 count++;
+                commands.Add(command.CommandText);
             }
 
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);

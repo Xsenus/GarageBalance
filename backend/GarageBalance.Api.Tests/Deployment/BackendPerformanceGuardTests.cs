@@ -401,9 +401,32 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfSupplierGroupRepository.cs");
 
         Assert.Contains("IsSqliteProvider()", source, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(source, "EF.Functions.ILike("));
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
+    }
+
+    [Fact]
+    public void MeasurementUnitRepository_UsesIndexedPostgreSqlSearchAndDatabasePaging()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfMeasurementUnitRepository.cs");
+
+        Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, "EF.Functions.ILike(") >= 5);
+        Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
+
+        var migration = ReadApiSource(
+            "Infrastructure/Data/Migrations/20260829123636_OptimizeSmallDictionarySearch.cs");
+        Assert.Contains("CREATE EXTENSION IF NOT EXISTS pg_trgm", migration, StringComparison.Ordinal);
+        Assert.Contains("IX_measurement_units_Name_trgm", migration, StringComparison.Ordinal);
+        Assert.Contains("gin_trgm_ops", migration, StringComparison.Ordinal);
+        Assert.Contains("DROP INDEX IF EXISTS", migration, StringComparison.Ordinal);
     }
 
     [Fact]

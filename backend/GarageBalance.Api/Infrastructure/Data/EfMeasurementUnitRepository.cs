@@ -102,6 +102,19 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
     private IQueryable<MeasurementUnit> ApplyArchiveFilter(bool includeArchived) =>
         dbContext.MeasurementUnits.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
 
-    private static IQueryable<MeasurementUnit> ApplySearch(IQueryable<MeasurementUnit> query, string? normalizedSearch) =>
-        normalizedSearch is null ? query : query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+    private IQueryable<MeasurementUnit> ApplySearch(IQueryable<MeasurementUnit> query, string? normalizedSearch)
+    {
+        if (normalizedSearch is null)
+        {
+            return query;
+        }
+
+        if (dbContext.Database.IsNpgsql())
+        {
+            var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+            return query.Where(item => EF.Functions.ILike(item.Name, pattern, @"\"));
+        }
+
+        return query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+    }
 }
