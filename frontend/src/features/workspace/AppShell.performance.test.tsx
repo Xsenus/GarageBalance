@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AuthResponse } from '../../services/authApi'
 import { permissions } from '../../shared/accessControl'
+import { intentPreloadDelayMs } from '../../shared/useIntentPreload'
 
 const workspaceRenderSpy = vi.hoisted(() => vi.fn())
 const workspacePropsSpy = vi.hoisted(() => vi.fn())
@@ -23,6 +24,7 @@ vi.mock('./workspaceSectionLoader', () => ({
 }))
 
 import { AuthenticatedAppShell } from './AppShell'
+import { preloadWorkspaceSection } from './workspaceSectionLoader'
 
 const auth: AuthResponse = {
   accessToken: 'token',
@@ -61,6 +63,8 @@ describe('AuthenticatedAppShell performance', () => {
   afterEach(() => {
     workspaceRenderSpy.mockReset()
     workspacePropsSpy.mockReset()
+    vi.mocked(preloadWorkspaceSection).mockReset()
+    vi.useRealTimers()
     window.localStorage.clear()
   })
 
@@ -109,6 +113,30 @@ describe('AuthenticatedAppShell performance', () => {
     expect(screen.getByRole('region', { name: 'workspace-settings' })).toBeInTheDocument()
     expect(workspaceRenderSpy.mock.calls.length - renderCountBeforeBurst).toBe(1)
     expect(withinNavigationButtons(navigation)).toHaveLength(13)
+  })
+
+  it('preloads sidebar sections only after pointer intent and immediately on focus', () => {
+    vi.useFakeTimers()
+    renderShell()
+    const usersButton = screen.getByRole('button', { name: 'Пользователи' })
+
+    fireEvent.pointerEnter(usersButton)
+    act(() => vi.advanceTimersByTime(intentPreloadDelayMs - 1))
+    expect(preloadWorkspaceSection).not.toHaveBeenCalled()
+    fireEvent.pointerLeave(usersButton)
+    act(() => vi.runAllTimers())
+    expect(preloadWorkspaceSection).not.toHaveBeenCalled()
+
+    fireEvent.pointerEnter(usersButton)
+    act(() => vi.advanceTimersByTime(intentPreloadDelayMs))
+    expect(preloadWorkspaceSection).toHaveBeenCalledWith('users')
+
+    const tariffsButton = screen.getByRole('button', { name: 'Тарифы и сборы' })
+    fireEvent.pointerEnter(tariffsButton)
+    fireEvent.focus(tariffsButton)
+    expect(preloadWorkspaceSection).toHaveBeenCalledWith('tariffsAndFees')
+    act(() => vi.runAllTimers())
+    expect(preloadWorkspaceSection).toHaveBeenCalledTimes(2)
   })
 
   it('provides production API clients when callers do not inject test clients', () => {

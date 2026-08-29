@@ -91,8 +91,9 @@ describe('shared loading-state coverage', () => {
     expect(workspace).toContain('<WorkspaceSectionErrorBoundary')
     expect(workspace).toContain('onPointerEnter={() => preloadWorkspaceSection(tile.section)}')
     expect(workspace).toContain('onFocus={() => preloadWorkspaceSection(tile.section)}')
-    expect(appShell).toContain('onPointerEnter={() => preloadWorkspaceSection(item.section)}')
-    expect(appShell).toContain('onFocus={() => preloadWorkspaceSection(item.section)}')
+    expect(appShell).toContain('onPointerEnter={() => sectionPreload.schedule(item.section)}')
+    expect(appShell).toContain('onPointerLeave={sectionPreload.cancel}')
+    expect(appShell).toContain('onFocus={() => sectionPreload.runNow(item.section)}')
     for (const [loaderName, modulePath] of lazySectionModules) {
       expect(loader).toContain(`const ${loaderName} = createRetryableLazyLoader(() => import('../${modulePath}')`)
       expect(loader).toContain(`lazy(${loaderName})`)

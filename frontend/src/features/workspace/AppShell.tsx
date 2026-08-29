@@ -35,6 +35,7 @@ import { settingsApi } from '../../services/settingsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
+import { useIntentPreload } from '../../shared/useIntentPreload'
 import { Workspace } from './Workspace'
 import { preloadWorkspaceSection } from './workspaceSectionLoader'
 
@@ -99,6 +100,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
   const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
   const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)
   const [isSidebarExpanded, setSidebarExpanded] = useState(loadStoredSidebarExpanded)
+  const sectionPreload = useIntentPreload(preloadWorkspaceSection)
 
   const effectiveActiveSection = canAccessWorkspaceSection(auth, activeSection) ? activeSection : 'dashboard'
   const visibleNavigation = useMemo(
@@ -160,7 +162,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
               const Icon = item.icon
               const isActive = effectiveActiveSection === item.section
               return (
-                <button className={isActive ? 'nav-item active' : 'nav-item'} type="button" key={item.section} aria-label={item.label} title={item.label} aria-current={isActive ? 'page' : undefined} onPointerEnter={() => preloadWorkspaceSection(item.section)} onFocus={() => preloadWorkspaceSection(item.section)} onClick={() => openWorkspaceSection(item.section)}>
+                <button className={isActive ? 'nav-item active' : 'nav-item'} type="button" key={item.section} aria-label={item.label} title={item.label} aria-current={isActive ? 'page' : undefined} onPointerEnter={() => sectionPreload.schedule(item.section)} onPointerLeave={sectionPreload.cancel} onFocus={() => sectionPreload.runNow(item.section)} onClick={() => openWorkspaceSection(item.section)}>
                   <Icon size={18} />
                   <span>{item.label}</span>
                 </button>
