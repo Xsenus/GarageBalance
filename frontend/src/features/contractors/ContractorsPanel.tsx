@@ -8,6 +8,7 @@ import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
+import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -3356,37 +3357,29 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
   const [suggestions, setSuggestions] = useState<DadataAddressSuggestionDto[]>([])
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const [status, setStatus] = useState('')
-  const requestSequence = useRef(0)
   const inputTouched = useRef(false)
   const statusId = `${suggestionsId}-status`
 
   useEffect(() => {
     const query = value.trim()
-    const sequence = ++requestSequence.current
-    const controller = new AbortController()
     if (!inputTouched.current || query.length < 2) {
       return
     }
 
-    const timer = window.setTimeout(() => {
-      setStatus('Ищем адрес...')
-      void integrationClient.suggestAddresses(accessToken, query, undefined, controller.signal).then((items) => {
-        if (sequence !== requestSequence.current) return
+    return scheduleDebouncedRequest({
+      request: (signal) => integrationClient.suggestAddresses(accessToken, query, undefined, signal),
+      onStart: () => setStatus('Ищем адрес...'),
+      onSuccess: (items) => {
         setSuggestions(items)
         setSuggestionsOpen(items.length > 0)
         setStatus(items.length > 0 ? `Найдено вариантов: ${items.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
-      }).catch(() => {
-        if (controller.signal.aborted || sequence !== requestSequence.current) return
+      },
+      onError: () => {
         setSuggestions([])
         setSuggestionsOpen(false)
         setStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
-      })
-    }, 350)
-
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
+      },
+    })
   }, [accessToken, integrationClient, value])
 
   function selectSuggestion(suggestion: DadataAddressSuggestionDto) {
@@ -3641,7 +3634,6 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   const [partySuggestions, setPartySuggestions] = useState<DadataPartySuggestionDto[]>([])
   const [partySuggestionsOpen, setPartySuggestionsOpen] = useState(false)
   const [partySuggestionStatus, setPartySuggestionStatus] = useState('')
-  const partyRequestSequence = useRef(0)
   const partyInputTouched = useRef(false)
   const [contactContextMenu, setContactContextMenu] = useState<{ contact: ContractorSupplierContact; x: number; y: number } | null>(null)
   const [contactDeleteTarget, setContactDeleteTarget] = useState<ContractorSupplierContact | null>(null)
@@ -3664,31 +3656,24 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
 
   useEffect(() => {
     const query = form.inn.trim()
-    const sequence = ++partyRequestSequence.current
-    const controller = new AbortController()
     if (!partyInputTouched.current || query.length < 2) {
       return
     }
 
-    const timer = window.setTimeout(() => {
-      setPartySuggestionStatus('Ищем организацию...')
-      void integrationClient.suggestParties(accessToken, query, undefined, controller.signal).then((suggestions) => {
-        if (sequence !== partyRequestSequence.current) return
+    return scheduleDebouncedRequest({
+      request: (signal) => integrationClient.suggestParties(accessToken, query, undefined, signal),
+      onStart: () => setPartySuggestionStatus('Ищем организацию...'),
+      onSuccess: (suggestions) => {
         setPartySuggestions(suggestions)
         setPartySuggestionsOpen(suggestions.length > 0)
         setPartySuggestionStatus(suggestions.length > 0 ? `Найдено вариантов: ${suggestions.length}` : 'Подходящих организаций не найдено. Можно продолжить ввод вручную.')
-      }).catch(() => {
-        if (controller.signal.aborted || sequence !== partyRequestSequence.current) return
+      },
+      onError: () => {
         setPartySuggestions([])
         setPartySuggestionsOpen(false)
         setPartySuggestionStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
-      })
-    }, 350)
-
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
+      },
+    })
   }, [accessToken, form.inn, integrationClient])
 
   async function saveAndClose() {

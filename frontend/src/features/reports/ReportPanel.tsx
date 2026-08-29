@@ -5,6 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
@@ -113,32 +114,22 @@ function ReportCheckboxMultiSelect({
       return undefined
     }
 
-    const controller = new AbortController()
-    const handle = window.setTimeout(() => {
-      setRemoteLoading(true)
-      setRemoteError(null)
-      loadOptions(normalizedSearch, controller.signal)
-        .then((loaded) => {
-          if (!controller.signal.aborted) {
-            setRemoteOptions((current) => Array.from(new Map([...current, ...loaded].map((option) => [option.value, option])).values()))
-          }
-        })
-        .catch((error: unknown) => {
-          if (!controller.signal.aborted) {
-            setRemoteError(error instanceof Error ? error.message : 'Не удалось выполнить поиск.')
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) {
-            setRemoteLoading(false)
-          }
-        })
-    }, 250)
-
-    return () => {
-      window.clearTimeout(handle)
-      controller.abort()
-    }
+    return scheduleDebouncedRequest({
+      delay: 250,
+      request: (signal) => loadOptions(normalizedSearch, signal),
+      onStart: () => {
+        setRemoteLoading(true)
+        setRemoteError(null)
+      },
+      onSuccess: (loaded) => {
+        setRemoteOptions((current) => Array.from(new Map([...current, ...loaded].map((option) => [option.value, option])).values()))
+        setRemoteLoading(false)
+      },
+      onError: (error) => {
+        setRemoteError(error instanceof Error ? error.message : 'Не удалось выполнить поиск.')
+        setRemoteLoading(false)
+      },
+    })
   }, [loadOptions, normalizedSearch, openOnFocus, searchOpen])
 
   function toggleSelection(value: string) {
@@ -405,33 +396,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return undefined
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const handle = window.setTimeout(() => {
-      setGarageQuickListsLoading(true)
-      setGarageQuickListError(null)
-      reportClient.getGarageReportQuickLists(auth.accessToken, controller.signal)
-        .then((items) => {
-          if (!ignore) {
-            setGarageQuickLists(items)
-          }
-        })
-        .catch((error: unknown) => {
-          if (!ignore) {
-            setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось загрузить быстрые списки гаражей.')
-          }
-        })
-        .finally(() => {
-          if (!ignore) {
-            setGarageQuickListsLoading(false)
-          }
-        })
-    }, 0)
-    return () => {
-      ignore = true
-      controller.abort()
-      window.clearTimeout(handle)
-    }
+    return scheduleDebouncedRequest({
+      delay: 0,
+      request: (signal) => reportClient.getGarageReportQuickLists(auth.accessToken, signal),
+      onStart: () => {
+        setGarageQuickListsLoading(true)
+        setGarageQuickListError(null)
+      },
+      onSuccess: (items) => {
+        setGarageQuickLists(items)
+        setGarageQuickListsLoading(false)
+      },
+      onError: (error) => {
+        setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось загрузить быстрые списки гаражей.')
+        setGarageQuickListsLoading(false)
+      },
+    })
   }, [activeReportTab, auth.accessToken, reportClient])
 
   useEffect(() => {

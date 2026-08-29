@@ -16,6 +16,7 @@ import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmpty
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
+import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
@@ -111,8 +112,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [ownerAddressSuggestionsOpen, setOwnerAddressSuggestionsOpen] = useState(false)
   const [ownerAddressSuggestionStatus, setOwnerAddressSuggestionStatus] = useState('')
   const [ownerAddressActiveIndex, setOwnerAddressActiveIndex] = useState(0)
-  const ownerAddressRequestSequence = useRef(0)
   const ownerAddressInputTouched = useRef(false)
+  const ownerAddressRequestSequence = useRef(0)
   const [garageForm, setGarageForm] = useState(createEmptyGarageForm())
   const [accountingTypeForm, setAccountingTypeForm] = useState(createEmptyAccountingTypeForm())
   const [measurementUnitName, setMeasurementUnitName] = useState('')
@@ -155,37 +156,27 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   useEffect(() => {
     const query = ownerForm.address?.trim() ?? ''
     const sequence = ++ownerAddressRequestSequence.current
-    const controller = new AbortController()
     if (editor?.section !== 'owners' || !ownerAddressInputTouched.current || query.length < 2) {
       return undefined
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setOwnerAddressSuggestionStatus('Ищем адрес...')
-      void integrationClient.suggestAddresses(auth.accessToken, query, undefined, controller.signal).then((suggestions) => {
-        if (sequence !== ownerAddressRequestSequence.current) {
-          return
-        }
-
+    return scheduleDebouncedRequest({
+      request: (signal) => integrationClient.suggestAddresses(auth.accessToken, query, undefined, signal),
+      onStart: () => setOwnerAddressSuggestionStatus('Ищем адрес...'),
+      onSuccess: (suggestions) => {
+        if (sequence !== ownerAddressRequestSequence.current) return
         setOwnerAddressSuggestions(suggestions)
         setOwnerAddressActiveIndex(0)
         setOwnerAddressSuggestionsOpen(suggestions.length > 0)
         setOwnerAddressSuggestionStatus(suggestions.length > 0 ? `Найдено вариантов: ${suggestions.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
-      }).catch(() => {
-        if (controller.signal.aborted || sequence !== ownerAddressRequestSequence.current) {
-          return
-        }
-
+      },
+      onError: () => {
+        if (sequence !== ownerAddressRequestSequence.current) return
         setOwnerAddressSuggestions([])
         setOwnerAddressSuggestionsOpen(false)
         setOwnerAddressSuggestionStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
-      })
-    }, 350)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-      controller.abort()
-    }
+      },
+    })
   }, [auth.accessToken, editor?.section, integrationClient, ownerForm.address])
 
   useEffect(() => {
