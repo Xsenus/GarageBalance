@@ -36,8 +36,17 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(meterReadingRepositorySource, ".Take(limit)") >= 4);
         Assert.Contains("accrualRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(accrualRepositorySource, ".Take(limit)") >= 4);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", accrualRepositorySource, StringComparison.Ordinal);
+        Assert.Equal(6, CountOccurrences(accrualRepositorySource, "EF.Functions.ILike("));
+        Assert.DoesNotContain(".ToLower().Contains(normalizedSearch)", accrualRepositorySource, StringComparison.Ordinal);
         Assert.Contains("supplierAccrualRepository.GetListAsync", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(supplierAccrualRepositorySource, ".Take(limit)") >= 4);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", supplierAccrualRepositorySource, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(supplierAccrualRepositorySource, "EF.Functions.ILike("));
+        Assert.DoesNotContain(".ToLower().Contains(normalizedSearch)", supplierAccrualRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", meterReadingRepositorySource, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(meterReadingRepositorySource, "EF.Functions.ILike("));
+        Assert.DoesNotContain(".ToLower().Contains(normalizedSearch)", meterReadingRepositorySource, StringComparison.Ordinal);
     }
 
     [Fact]

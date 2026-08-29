@@ -272,18 +272,28 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         return query;
     }
 
-    private static IQueryable<SupplierAccrual> ApplySearch(IQueryable<SupplierAccrual> query, string? normalizedSearch)
+    private IQueryable<SupplierAccrual> ApplySearch(IQueryable<SupplierAccrual> query, string? normalizedSearch)
     {
         if (normalizedSearch is null)
         {
             return query;
         }
 
-        return query.Where(accrual =>
-            accrual.Supplier.Name.ToLower().Contains(normalizedSearch) ||
-            accrual.ExpenseType.Name.ToLower().Contains(normalizedSearch) ||
-            (accrual.DocumentNumber != null && accrual.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
-            (accrual.Comment != null && accrual.Comment.ToLower().Contains(normalizedSearch)));
+        var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+        var candidates = dbContext.SupplierAccruals.AsNoTracking();
+        var matchingIds = candidates
+            .Where(accrual => EF.Functions.ILike(accrual.Supplier.Name, pattern, @"\"))
+            .Select(accrual => accrual.Id)
+            .Concat(candidates
+                .Where(accrual => EF.Functions.ILike(accrual.ExpenseType.Name, pattern, @"\"))
+                .Select(accrual => accrual.Id))
+            .Concat(candidates
+                .Where(accrual => accrual.DocumentNumber != null && EF.Functions.ILike(accrual.DocumentNumber, pattern, @"\"))
+                .Select(accrual => accrual.Id))
+            .Concat(candidates
+                .Where(accrual => accrual.Comment != null && EF.Functions.ILike(accrual.Comment, pattern, @"\"))
+                .Select(accrual => accrual.Id));
+        return query.Where(accrual => matchingIds.Contains(accrual.Id));
     }
 
     private static IOrderedQueryable<SupplierAccrual> Order(IQueryable<SupplierAccrual> query) =>

@@ -4809,11 +4809,13 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 5, 1), 900m, "regular", "INV-05", null), null, CancellationToken.None);
-        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-06", "Ежемесячная корректировка поставщика"), null, CancellationToken.None);
+        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-06", "Ежемесячная корректировка поставщика %_"), null, CancellationToken.None);
 
         var result = await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, "ежемесячная"), CancellationToken.None);
+        var literalWildcard = await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, "%_"), CancellationToken.None);
 
         Assert.Single(result);
+        Assert.Equal(result, literalWildcard);
         Assert.Equal(new DateOnly(2026, 6, 1), result[0].AccountingMonth);
         Assert.Equal(1200m, result[0].Amount);
     }
@@ -8064,11 +8066,13 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 5, 1), 500m, "regular", null), null, CancellationToken.None);
-        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 600m, "manual", "Ежемесячная корректировка гаража"), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 600m, "manual", "Ежемесячная корректировка гаража %_"), null, CancellationToken.None);
 
         var result = await service.GetAccrualsAsync(new AccrualListRequest(null, null, "ежемесячная"), CancellationToken.None);
+        var literalWildcard = await service.GetAccrualsAsync(new AccrualListRequest(null, null, "%_"), CancellationToken.None);
 
         Assert.Single(result);
+        Assert.Equal(result, literalWildcard);
         Assert.Equal(new DateOnly(2026, 6, 1), result[0].AccountingMonth);
         Assert.Equal(600m, result[0].Amount);
     }
@@ -9213,12 +9217,14 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 14m, null), null, CancellationToken.None);
-        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "Ежемесячное электричество"), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 120m, "Ежемесячное электричество %_"), null, CancellationToken.None);
 
         var result = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", "ежемесячное"), CancellationToken.None);
+        var literalWildcard = await service.GetMeterReadingsAsync(new MeterReadingListRequest(null, null, "electricity", "%_"), CancellationToken.None);
         var summary = await service.GetSummaryAsync(new FinancialOperationListRequest(null, null, null, "ежемесячное"), CancellationToken.None);
 
         var reading = Assert.Single(result);
+        Assert.Equal(result, literalWildcard);
         Assert.Equal("electricity", reading.MeterKind);
         Assert.Equal(new DateOnly(2026, 6, 1), reading.AccountingMonth);
         Assert.Equal(20m, reading.Consumption);

@@ -37,7 +37,7 @@ public sealed class PostgreSqlSupplierAccrualPageIntegrationTests
                     ordinaryExpenseType,
                     new DateOnly(2047, 2, 1),
                     725.50m,
-                    "Target invoice 2047",
+                    "Target invoice %_ 2047",
                     "Счёт поставщика",
                     createdAtUtc: expectedCreatedAt,
                     updatedAtUtc: expectedUpdatedAt),
@@ -102,7 +102,7 @@ public sealed class PostgreSqlSupplierAccrualPageIntegrationTests
         Assert.Equal("Обычная услуга страницы 2047", documentAccrual.ExpenseType.Name);
         Assert.Equal(725.50m, documentAccrual.Amount);
         Assert.Equal("manual", documentAccrual.Source);
-        Assert.Equal("Target invoice 2047", documentAccrual.DocumentNumber);
+        Assert.Equal("Target invoice %_ 2047", documentAccrual.DocumentNumber);
         Assert.Equal("Счёт поставщика", documentAccrual.Comment);
         Assert.False(documentAccrual.IsCanceled);
         Assert.Equal(expectedCreatedAt, documentAccrual.CreatedAtUtc);
@@ -132,6 +132,12 @@ public sealed class PostgreSqlSupplierAccrualPageIntegrationTests
 
         Assert.Equal(0, empty.TotalCount);
         Assert.Empty(empty.Items);
+        AssertSingleCombinedCommand(capture);
+
+        capture.Commands.Clear();
+        var literalWildcard = await repository.GetPageAsync(null, null, "%_", null, 0, 5, CancellationToken.None);
+
+        Assert.Equal("Target invoice %_ 2047", Assert.Single(literalWildcard.Items).DocumentNumber);
         AssertSingleCombinedCommand(capture);
     }
 
@@ -169,7 +175,13 @@ public sealed class PostgreSqlSupplierAccrualPageIntegrationTests
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OFFSET", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(8, CountOccurrences(command, "ILIKE"));
+        Assert.Contains("ESCAPE '\\'", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(", command, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static int CountOccurrences(string source, string value) =>
+        source.Split(value, StringSplitOptions.None).Length - 1;
 
     private sealed class ReaderCommandCapture : DbCommandInterceptor
     {

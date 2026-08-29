@@ -666,20 +666,34 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         return query;
     }
 
-    private static IQueryable<Accrual> ApplySearch(IQueryable<Accrual> query, string? normalizedSearch)
+    private IQueryable<Accrual> ApplySearch(IQueryable<Accrual> query, string? normalizedSearch)
     {
         if (normalizedSearch is null)
         {
             return query;
         }
 
-        return query.Where(accrual =>
-            accrual.Garage.Number.ToLower().Contains(normalizedSearch) ||
-            accrual.IncomeType.Name.ToLower().Contains(normalizedSearch) ||
-            (accrual.IrregularPayment != null && accrual.IrregularPayment.Name.ToLower().Contains(normalizedSearch)) ||
-            (accrual.Basis != null && accrual.Basis.ToLower().Contains(normalizedSearch)) ||
-            (accrual.FeeCampaign != null && accrual.FeeCampaign.Name.ToLower().Contains(normalizedSearch)) ||
-            (accrual.Comment != null && accrual.Comment.ToLower().Contains(normalizedSearch)));
+        var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+        var candidates = dbContext.Accruals.AsNoTracking();
+        var matchingIds = candidates
+            .Where(accrual => EF.Functions.ILike(accrual.Garage.Number, pattern, @"\"))
+            .Select(accrual => accrual.Id)
+            .Concat(candidates
+                .Where(accrual => EF.Functions.ILike(accrual.IncomeType.Name, pattern, @"\"))
+                .Select(accrual => accrual.Id))
+            .Concat(candidates
+                .Where(accrual => accrual.IrregularPayment != null && EF.Functions.ILike(accrual.IrregularPayment.Name, pattern, @"\"))
+                .Select(accrual => accrual.Id))
+            .Concat(candidates
+                .Where(accrual => accrual.Basis != null && EF.Functions.ILike(accrual.Basis, pattern, @"\"))
+                .Select(accrual => accrual.Id))
+            .Concat(candidates
+                .Where(accrual => accrual.FeeCampaign != null && EF.Functions.ILike(accrual.FeeCampaign.Name, pattern, @"\"))
+                .Select(accrual => accrual.Id))
+            .Concat(candidates
+                .Where(accrual => accrual.Comment != null && EF.Functions.ILike(accrual.Comment, pattern, @"\"))
+                .Select(accrual => accrual.Id));
+        return query.Where(accrual => matchingIds.Contains(accrual.Id));
     }
 
     private static IOrderedQueryable<Accrual> Order(IQueryable<Accrual> query) =>

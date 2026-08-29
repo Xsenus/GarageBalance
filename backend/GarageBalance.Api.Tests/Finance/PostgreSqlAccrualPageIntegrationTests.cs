@@ -38,7 +38,7 @@ public sealed class PostgreSqlAccrualPageIntegrationTests
                     regularIncomeType,
                     new DateOnly(2046, 3, 1),
                     900m,
-                    "Target latest"),
+                    "Target latest %_"),
                 CreateAccrual(
                     firstGarage,
                     otherIncomeType,
@@ -147,6 +147,12 @@ public sealed class PostgreSqlAccrualPageIntegrationTests
         Assert.Equal(0, empty.TotalCount);
         Assert.Empty(empty.Items);
         AssertSingleCombinedCommand(capture);
+
+        capture.Commands.Clear();
+        var literalWildcard = await repository.GetPageAsync(null, null, "%_", 0, 5, CancellationToken.None);
+
+        Assert.Equal("Target latest %_", Assert.Single(literalWildcard.Items).Comment);
+        AssertSingleCombinedCommand(capture);
     }
 
     private static Accrual CreateAccrual(
@@ -196,7 +202,13 @@ public sealed class PostgreSqlAccrualPageIntegrationTests
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OFFSET", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(12, CountOccurrences(command, "ILIKE"));
+        Assert.Contains("ESCAPE '\\'", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(", command, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static int CountOccurrences(string source, string value) =>
+        source.Split(value, StringSplitOptions.None).Length - 1;
 
     private sealed class ReaderCommandCapture : DbCommandInterceptor
     {

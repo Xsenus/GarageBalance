@@ -1,15 +1,39 @@
+using System.Data.Common;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 
 namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlFinanceIndexPerformanceTests
 {
+    [PostgreSqlFact]
+    public async Task FinanceWorkingListSearchPlansUseTrigramIndexes()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await SeedSearchVolumeAsync(database);
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        await new EfAccrualRepository(context).GetPageAsync(null, null, "основание для поиска", 0, 25, CancellationToken.None);
+        await AssertCapturedPlanUsesAsync(database.ConnectionString, capture.TakeSingle(), "IX_accruals_Basis_trgm");
+
+        await new EfMeterReadingRepository(context).GetPageAsync(null, null, null, "показание для поиска", 0, 25, CancellationToken.None);
+        await AssertCapturedPlanUsesAsync(database.ConnectionString, capture.TakeSingle(), "IX_meter_readings_Comment_trgm");
+
+        await new EfSupplierAccrualRepository(context).GetPageAsync(null, null, "счет-2026", null, 0, 25, CancellationToken.None);
+        await AssertCapturedPlanUsesAsync(database.ConnectionString, capture.TakeSingle(), "IX_supplier_accruals_DocumentNumber_trgm");
+    }
+
     [PostgreSqlFact]
     public async Task FinanceSummarySearchTreatsWildcardsLiterallyOnPostgreSql()
     {
@@ -78,6 +102,9 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_financial_operations_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_financial_operations_CounterpartyName_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_accruals_Comment_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_accruals_Basis_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_irregular_payments_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_fee_campaigns_Name_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_meter_readings_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_supplier_accruals_Comment_trgm", "gin_trgm_ops");
         AssertIndex(indexes, "IX_cash_bank_transfers_Comment_trgm", "gin_trgm_ops");
@@ -244,6 +271,18 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             """SELECT "Id" FROM accruals WHERE "Comment" ILIKE '%начисление%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
             connection,
+            "IX_accruals_Basis_trgm",
+            """SELECT "Id" FROM accruals WHERE "Basis" ILIKE '%основание%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_irregular_payments_Name_trgm",
+            """SELECT "Id" FROM irregular_payments WHERE "Name" ILIKE '%разовый платёж%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_fee_campaigns_Name_trgm",
+            """SELECT "Id" FROM fee_campaigns WHERE "Name" ILIKE '%объявленный сбор%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
             "IX_meter_readings_Comment_trgm",
             """SELECT "Id" FROM meter_readings WHERE "Comment" ILIKE '%показание%' ESCAPE '\';""");
         await AssertPlanUsesAsync(
@@ -306,6 +345,19 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         var supplier = new Supplier { Name = "Поставщик производительности", Group = supplierGroup };
         context.Funds.AddRange(funds);
         context.AddRange(garage, incomeType, expenseType, supplierGroup, supplier);
+        context.IrregularPayments.AddRange(Enumerable.Range(0, 300).Select(index => new IrregularPayment
+        {
+            Name = index == 173 ? "Разовый платёж для поиска" : $"Разовый платёж {index:D3}",
+            Amount = 1m
+        }));
+        context.FeeCampaigns.AddRange(Enumerable.Range(0, 300).Select(index => new FeeCampaign
+        {
+            Name = index == 211 ? "Объявленный сбор для поиска" : $"Объявленный сбор {index:D3}",
+            IncomeType = incomeType,
+            ContributionAmount = 1m,
+            TargetAmount = 300m,
+            StartsOn = new DateOnly(2026, 1, 1).AddDays(index)
+        }));
         context.FundOperations.AddRange(Enumerable.Range(0, 500).Select(index => new FundOperation
         {
             Fund = operationFund,
@@ -329,7 +381,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             Comment = index == 389 ? "Ремонт ворот для поиска" : $"Расход {index:D3}",
             CounterpartyName = index == 433 ? "Подрядчик для поиска" : $"Контрагент {index:D3}"
         }));
-        context.Accruals.AddRange(Enumerable.Range(0, 500).Select(index => new Accrual
+        context.Accruals.AddRange(Enumerable.Range(0, 5000).Select(index => new Accrual
         {
             Garage = garage,
             IncomeType = incomeType,
@@ -338,9 +390,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             OverdueFromDate = new DateOnly(2026, 3, 1).AddMonths(index),
             Amount = 1m,
             Source = AccrualSources.Manual,
+            Basis = index == 227 ? "Основание для поиска" : $"Основание {index:D3}",
             Comment = index == 317 ? "Начисление для поиска" : $"Начислено {index:D3}"
         }));
-        context.MeterReadings.AddRange(Enumerable.Range(0, 500).Select(index => new MeterReading
+        context.MeterReadings.AddRange(Enumerable.Range(0, 5000).Select(index => new MeterReading
         {
             Garage = garage,
             MeterKind = MeterKinds.Water,
@@ -351,7 +404,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             Consumption = 1m,
             Comment = index == 283 ? "Показание для поиска" : $"Счётчик {index:D3}"
         }));
-        context.SupplierAccruals.AddRange(Enumerable.Range(0, 500).Select(index => new SupplierAccrual
+        context.SupplierAccruals.AddRange(Enumerable.Range(0, 5000).Select(index => new SupplierAccrual
         {
             Supplier = supplier,
             ExpenseType = expenseType,
@@ -386,6 +439,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 'financial_operations',
                 'accruals',
                 'meter_readings',
+                'irregular_payments',
+                'fee_campaigns',
                 'accrual_payment_allocations',
                 'supplier_accruals',
                 'fund_operations',
@@ -432,5 +487,65 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         Assert.True(
             plan.Contains(indexName, StringComparison.Ordinal),
             $"Expected PostgreSQL plan to use {indexName}.{Environment.NewLine}{plan}");
+    }
+
+    private static async Task AssertCapturedPlanUsesAsync(
+        string connectionString,
+        CapturedCommand captured,
+        string indexName)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"SET enable_seqscan = off; SET enable_indexscan = on; SET enable_bitmapscan = on; SET jit = off; EXPLAIN (FORMAT TEXT) {captured.CommandText}";
+        foreach (var parameter in captured.Parameters)
+        {
+            command.Parameters.AddWithValue(parameter.Name, parameter.Value ?? DBNull.Value);
+        }
+
+        await using var reader = await command.ExecuteReaderAsync();
+        var lines = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            lines.Add(reader.GetString(0));
+        }
+
+        var plan = string.Join(Environment.NewLine, lines);
+        Assert.True(
+            plan.Contains(indexName, StringComparison.Ordinal),
+            $"Expected PostgreSQL working-list plan to use {indexName}.{Environment.NewLine}{plan}");
+    }
+
+    private sealed record CapturedCommand(
+        string CommandText,
+        IReadOnlyList<CapturedParameter> Parameters);
+
+    private sealed record CapturedParameter(string Name, object? Value);
+
+    private sealed class ReaderCommandCapture : DbCommandInterceptor
+    {
+        private readonly List<CapturedCommand> commands = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            commands.Add(new CapturedCommand(
+                command.CommandText,
+                command.Parameters.Cast<DbParameter>()
+                    .Select(parameter => new CapturedParameter(parameter.ParameterName, parameter.Value))
+                    .ToList()));
+            return ValueTask.FromResult(result);
+        }
+
+        public CapturedCommand TakeSingle()
+        {
+            var command = Assert.Single(commands);
+            commands.Clear();
+            return command;
+        }
     }
 }

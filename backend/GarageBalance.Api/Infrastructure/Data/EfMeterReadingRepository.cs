@@ -573,16 +573,22 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         return query;
     }
 
-    private static IQueryable<MeterReading> ApplySearch(IQueryable<MeterReading> query, string? normalizedSearch)
+    private IQueryable<MeterReading> ApplySearch(IQueryable<MeterReading> query, string? normalizedSearch)
     {
         if (normalizedSearch is null)
         {
             return query;
         }
 
-        return query.Where(reading =>
-            reading.Garage.Number.ToLower().Contains(normalizedSearch) ||
-            (reading.Comment != null && reading.Comment.ToLower().Contains(normalizedSearch)));
+        var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+        var candidates = dbContext.MeterReadings.AsNoTracking();
+        var matchingIds = candidates
+            .Where(reading => EF.Functions.ILike(reading.Garage.Number, pattern, @"\"))
+            .Select(reading => reading.Id)
+            .Concat(candidates
+                .Where(reading => reading.Comment != null && EF.Functions.ILike(reading.Comment, pattern, @"\"))
+                .Select(reading => reading.Id));
+        return query.Where(reading => matchingIds.Contains(reading.Id));
     }
 
     private static IOrderedQueryable<MeterReading> Order(IQueryable<MeterReading> query) =>

@@ -21,7 +21,7 @@ public sealed class PostgreSqlMeterReadingPageIntegrationTests
         {
             seedContext.Garages.AddRange(firstGarage, secondGarage);
             seedContext.MeterReadings.AddRange(
-                CreateReading(secondGarage, MeterKinds.Electricity, new DateOnly(2046, 3, 1), 130m, "Target latest"),
+                CreateReading(secondGarage, MeterKinds.Electricity, new DateOnly(2046, 3, 1), 130m, "Target latest %_"),
                 CreateReading(firstGarage, MeterKinds.Electricity, new DateOnly(2046, 2, 1), 120m, "Target owner row", previousValue: 100m, hasGapWarning: true),
                 CreateReading(firstGarage, MeterKinds.Electricity, new DateOnly(2046, 1, 1), 100m, "Ordinary row"),
                 CreateReading(firstGarage, MeterKinds.Water, new DateOnly(2046, 2, 1), 20m, "Target wrong kind"),
@@ -83,6 +83,12 @@ public sealed class PostgreSqlMeterReadingPageIntegrationTests
         Assert.Equal(0, empty.TotalCount);
         Assert.Empty(empty.Items);
         AssertSingleCombinedCommand(capture);
+
+        capture.Commands.Clear();
+        var literalWildcard = await repository.GetPageAsync(null, null, null, "%_", 0, 5, CancellationToken.None);
+
+        Assert.Equal("Target latest %_", Assert.Single(literalWildcard.Items).Comment);
+        AssertSingleCombinedCommand(capture);
     }
 
     private static MeterReading CreateReading(
@@ -118,7 +124,13 @@ public sealed class PostgreSqlMeterReadingPageIntegrationTests
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OFFSET", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(4, CountOccurrences(command, "ILIKE"));
+        Assert.Contains("ESCAPE '\\'", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(", command, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static int CountOccurrences(string source, string value) =>
+        source.Split(value, StringSplitOptions.None).Length - 1;
 
     private sealed class ReaderCommandCapture : DbCommandInterceptor
     {
