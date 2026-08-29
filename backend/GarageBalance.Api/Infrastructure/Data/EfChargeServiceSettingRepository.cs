@@ -61,7 +61,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .OrderBy(setting => setting.Name)
             .ToListAsync(cancellationToken);
 
-        await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken);
+        await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken, useLoadedTariffVersions: true);
         return settings;
     }
 
@@ -118,7 +118,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Take(limit)
             .ToListAsync(cancellationToken);
 
-        await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken);
+        await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken, useLoadedTariffVersions: true);
         foreach (var setting in settings)
         {
             setting.MeterKind ??= setting.IncomeType?.Code switch
@@ -291,22 +291,21 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     private async Task ApplyTariffsForMonthAsync(
         IReadOnlyCollection<ChargeServiceSetting> settings,
         DateOnly accountingMonth,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool useLoadedTariffVersions = false)
     {
         if (settings.Count == 0)
         {
             return;
         }
 
-        var serviceIds = settings.Select(setting => setting.Id).ToArray();
-        var versions = await dbContext.ChargeServiceTariffVersions
-            .Include(version => version.Tariff)
-            .Where(version =>
-                serviceIds.Contains(version.ChargeServiceSettingId) &&
-                !version.IsArchived &&
-                !version.Tariff.IsArchived)
-            .OrderByDescending(version => version.EffectiveFrom)
-            .ToListAsync(cancellationToken);
+        var versions = useLoadedTariffVersions
+            ? settings
+                .SelectMany(setting => setting.TariffVersions)
+                .Where(version => !version.IsArchived && !version.Tariff.IsArchived)
+                .OrderByDescending(version => version.EffectiveFrom)
+                .ToList()
+            : await LoadTariffVersionsAsync(settings, cancellationToken);
         var applicable = versions
             .Where(version =>
                 version.EffectiveFrom <= accountingMonth &&
@@ -333,6 +332,21 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                 setting.Tariff = null;
             }
         }
+    }
+
+    private async Task<List<ChargeServiceTariffVersion>> LoadTariffVersionsAsync(
+        IReadOnlyCollection<ChargeServiceSetting> settings,
+        CancellationToken cancellationToken)
+    {
+        var serviceIds = settings.Select(setting => setting.Id).ToArray();
+        return await dbContext.ChargeServiceTariffVersions
+            .Include(version => version.Tariff)
+            .Where(version =>
+                serviceIds.Contains(version.ChargeServiceSettingId) &&
+                !version.IsArchived &&
+                !version.Tariff.IsArchived)
+            .OrderByDescending(version => version.EffectiveFrom)
+            .ToListAsync(cancellationToken);
     }
 
     private static void ApplyTariffMode(ChargeServiceSetting setting, Tariff tariff)

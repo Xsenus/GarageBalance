@@ -5339,6 +5339,109 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ActiveRegularServices_ReuseIncludedTariffVersionsInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var incomeType = new IncomeType { Name = "Регулярные услуги", Code = "regular_services_query_count" };
+        var julyTariff = new Tariff
+        {
+            Name = "Тариф июля",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 7, 1)
+        };
+        var augustTariff = new Tariff
+        {
+            Name = "Тариф августа",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Регулярная услуга",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = augustTariff,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(incomeType, julyTariff, augustTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = julyTariff.Id,
+                EffectiveFrom = julyTariff.EffectiveFrom,
+                EffectiveTo = new DateOnly(2026, 7, 31)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = augustTariff.Id,
+                EffectiveFrom = augustTariff.EffectiveFrom
+            });
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        var result = await new EfChargeServiceSettingRepository(database.Context).GetActiveRegularAsync(
+            new DateOnly(2026, 7, 1),
+            CancellationToken.None);
+
+        var selected = Assert.Single(result);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(julyTariff.Id, selected.TariffId);
+        Assert.Equal(2, selected.TariffVersions.Count);
+        Assert.Empty(database.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task ActiveRegularMeteredServices_ReuseIncludedTariffVersionsInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var incomeType = new IncomeType { Name = "Вода", Code = MeterKinds.Water };
+        var tariff = new Tariff
+        {
+            Name = "Вода по счётчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Водоснабжение",
+            IsRegular = true,
+            IsMetered = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            UnitName = "м³"
+        };
+        database.Context.AddRange(incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+        database.Context.ChangeTracker.Clear();
+        commandCounter.Reset();
+
+        var result = await new EfChargeServiceSettingRepository(database.Context).GetActiveRegularMeteredAsync(
+            TariffCalculationBases.MeterWater,
+            new DateOnly(2026, 7, 1),
+            50,
+            CancellationToken.None);
+
+        Assert.Equal(setting.Id, Assert.Single(result).Id);
+        Assert.Equal(1, commandCounter.Count);
+    }
+
+    [Fact]
     public async Task BalanceAggregates_WithEmptyIdentifiers_DoNotQueryDatabase()
     {
         var commandCounter = new SelectCommandCounter();

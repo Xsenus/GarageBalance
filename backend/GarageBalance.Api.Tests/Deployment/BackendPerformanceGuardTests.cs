@@ -620,6 +620,12 @@ public sealed class BackendPerformanceGuardTests
             "GetActiveRegularMeteredCoreAsync(calculationBase, accountingMonth, limit, cancellationToken)",
             source,
             StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Include\(setting => setting\.TariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, useLoadedTariffVersions: true\)"),
+            source);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetActiveRegularMeteredCoreAsync[\s\S]*?Include\(setting => setting\.TariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, useLoadedTariffVersions: true\)"),
+            source);
         Assert.DoesNotContain(
             "(await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken))",
             source,
