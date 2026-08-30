@@ -1104,15 +1104,25 @@ public sealed class BackendPerformanceGuardTests
         Assert.DoesNotContain("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("incomeByMonth.Count == 0 && expenseByMonth.Count == 0", source, StringComparison.Ordinal);
         var postgresStart = source.IndexOf("private async Task<ConsolidatedMonthlyReportData> GetPostgresDataAsync", StringComparison.Ordinal);
-        var fallbackStart = source.IndexOf("private static IReadOnlyList<MonthlyReportQueryRow> GetFallbackMonthlyRows", StringComparison.Ordinal);
-        var postgresSource = source[postgresStart..fallbackStart];
+        var postgresEnd = source.IndexOf("private async Task<IReadOnlyDictionary<DateOnly, BankBalanceRange>> GetBankBalancesAsync", StringComparison.Ordinal);
+        var postgresSource = source[postgresStart..postgresEnd];
         Assert.Equal(1, CountOccurrences(postgresSource, "SqlQueryRaw<ConsolidatedReportCombinedQueryRow>"));
-        Assert.Equal(2, CountOccurrences(postgresSource, ".ToListAsync(cancellationToken)"));
-        Assert.Equal(4, CountOccurrences(postgresSource, "AS MATERIALIZED"));
-        Assert.Equal(1, CountOccurrences(postgresSource, "FROM financial_operations"));
+        Assert.Equal(1, CountOccurrences(postgresSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(5, CountOccurrences(postgresSource, "AS MATERIALIZED"));
+        Assert.Equal(2, CountOccurrences(postgresSource, "FROM financial_operations"));
         Assert.Equal(1, CountOccurrences(postgresSource, "FROM accruals"));
         Assert.Equal(1, CountOccurrences(postgresSource, "FROM meter_readings"));
         Assert.Equal(1, CountOccurrences(postgresSource, "FROM garages"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM cash_bank_transfers"));
+        Assert.Contains("BankMovementCategory", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("bank_movements AS MATERIALIZED", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("bank_balance_buckets AS", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("date_trunc('month', movement_date)", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("FROM bank_balance_buckets", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("ExpensePaymentSource", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("ExpensePaymentType", postgresSource, StringComparison.Ordinal);
+        Assert.Contains("BuildBankBalances(", postgresSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("await GetBankBalancesAsync", postgresSource, StringComparison.Ordinal);
     }
 
     [Fact]

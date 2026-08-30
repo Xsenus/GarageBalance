@@ -33,6 +33,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
     private const int IncomeBreakdownCategory = 5;
     private const int ExpenseBreakdownCategory = 6;
     private const int MonthlyPageCategory = 7;
+    private const int BankMovementCategory = 8;
 
     public async Task<ConsolidatedMonthlyReportData> GetMonthlyDataAsync(
         DateOnly periodFrom,
@@ -316,6 +317,46 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
                 WHERE operation."OperationKind" = 'expense'
                 GROUP BY operation."AccountingMonth", operation."ExpenseTypeId", expense_type."Name"
+            ), bank_movements AS MATERIALIZED (
+                SELECT transfer."TransferDate" AS movement_date, SUM(transfer."Amount") AS amount
+                FROM cash_bank_transfers transfer
+                WHERE transfer."IsCanceled" = FALSE
+                  AND transfer."TransferDate" < @period_end_exclusive::date
+                GROUP BY transfer."TransferDate"
+                UNION ALL
+                SELECT operation."OperationDate" AS movement_date, -SUM(operation."Amount") AS amount
+                FROM financial_operations operation
+                LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'expense'
+                  AND operation."OperationDate" < @period_end_exclusive::date
+                  AND (
+                      operation."ExpensePaymentSource" = 'bank'
+                      OR (
+                          operation."ExpensePaymentSource" IS NULL
+                          AND (operation."ExpensePaymentType" IS NULL OR operation."ExpensePaymentType" <> 'without_receipt')
+                          AND (
+                              operation."ExpensePaymentType" IS NOT NULL
+                              OR expense_type."Id" IS NULL
+                              OR NOT (
+                                  (expense_type."Code" IS NOT NULL AND expense_type."Code" = ANY (@cash_expense_type_codes))
+                                  OR expense_type."Name" = ANY (@cash_expense_type_names)
+                              )
+                          )
+                      )
+                )
+                GROUP BY operation."OperationDate"
+            ), bank_balance_buckets AS (
+                SELECT CASE
+                           WHEN movement_date < @period_from::date THEN (@period_from::date - 1)
+                           ELSE date_trunc('month', movement_date)::date
+                       END AS balance_date,
+                       SUM(amount) AS amount
+                FROM bank_movements
+                GROUP BY CASE
+                             WHEN movement_date < @period_from::date THEN (@period_from::date - 1)
+                             ELSE date_trunc('month', movement_date)::date
+                         END
             ), report_rows AS (
                 SELECT months.month AS "AccountingMonth",
                        COALESCE(operation_totals.income_total, 0) AS "IncomeTotal",
@@ -378,12 +419,19 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                    0::numeric, 0, "AccountingMonth", "IncomeTotal", "ExpenseTotal", "AccrualTotal", "Balance", "Debt",
                    "OperationCount", "AccrualCount", "MeterReadingCount"
             FROM monthly_page
+            UNION ALL
+            SELECT {{BankMovementCategory}}, 0, balance_date, NULL::text, NULL::uuid, NULL::text,
+                   amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM bank_balance_buckets
             ORDER BY "Category", "RowOrder", "Month", "Name"
             """;
         var parameters = new List<object>
         {
             new NpgsqlParameter<DateOnly>("period_from", periodFrom),
             new NpgsqlParameter<DateOnly>("period_to", periodTo),
+            new NpgsqlParameter<DateOnly>("period_end_exclusive", periodTo.AddMonths(1)),
+            new NpgsqlParameter<string[]>("cash_expense_type_codes", CashExpenseTypeCodes),
+            new NpgsqlParameter<string[]>("cash_expense_type_names", CashExpenseTypeNames),
             new NpgsqlParameter<int>("offset", offset)
         };
         if (limit is > 0)
@@ -437,7 +485,12 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .OrderBy(group => group.Key.Name)
             .Select(group => new NamedAmountTotal(group.Key.TypeId, group.Key.Name, group.Sum(row => row.Amount)))
             .ToList();
-        var bankBalances = await GetBankBalancesAsync(periodFrom, periodTo, cancellationToken);
+        var bankBalances = BuildBankBalances(
+            periodFrom,
+            periodTo,
+            rows
+                .Where(row => row.Category == BankMovementCategory)
+                .Select(row => new BankMovementQueryRow(row.Month!.Value, row.Amount)));
         var monthlyRows = rows
             .Where(row => row.Category == MonthlyPageCategory)
             .Select(row =>
@@ -508,9 +561,17 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         var movementRows = await bankDeposits
             .Concat(bankExpenses)
             .ToListAsync(cancellationToken);
-        var movements = movementRows
-            .Select(row => new BankMovementQueryRow(row.Date, row.Amount))
-            .ToList();
+        return BuildBankBalances(
+            periodFrom,
+            periodTo,
+            movementRows.Select(row => new BankMovementQueryRow(row.Date, row.Amount)));
+    }
+
+    private static IReadOnlyDictionary<DateOnly, BankBalanceRange> BuildBankBalances(
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        IEnumerable<BankMovementQueryRow> movements)
+    {
         var runningBalance = movements
             .Where(row => row.Date < periodFrom)
             .Sum(row => row.Amount);
