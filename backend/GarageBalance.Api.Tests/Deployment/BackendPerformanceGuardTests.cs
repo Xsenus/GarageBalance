@@ -7,7 +7,7 @@ public sealed class BackendPerformanceGuardTests
     [Theory]
     [InlineData("Infrastructure/Data/EfAuditEventRepository.cs", @"OrderByDescending[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfUserManagementRepository.cs", @"OrderBy\(user => user\.[^)]+\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    [InlineData("Infrastructure/Data/EfFinancialOperationRepository.cs", @"return await Order\(ApplySearch[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfFinancialOperationRepository.cs", @"return await ReadCompactListAsync\([\s\S]*?Order\(ApplySearch[\s\S]*?\.Take\(limit\)[\s\S]*?cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportRepository.cs", @"IsSqliteProvider[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportQuarantineRepository.cs", @"return await query[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfFeeCampaignRepository.cs", @"\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
