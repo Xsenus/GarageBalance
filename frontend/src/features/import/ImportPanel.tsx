@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { DatabaseZap, FileText, RotateCcw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from '../../services/importApi'
+import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunListItemDto, AccessImportRunLogEntryDto, ImportClient } from '../../services/importApi'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { buildImportReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
@@ -19,7 +19,7 @@ const importCreatedRecordsScreenRequestLimit = 100
 type ImportTab = 'checks' | 'log' | 'created' | 'history' | 'quarantine'
 export function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient: ImportClient }) {
   const fileInputId = useId()
-  const [runs, setRuns] = useState<AccessImportRunDto[]>([])
+  const [runs, setRuns] = useState<AccessImportRunListItemDto[]>([])
   const [readerStatus, setReaderStatus] = useState<AccessImportReaderStatusDto | null>(null)
   const [quarantineItems, setQuarantineItems] = useState<AccessImportQuarantineItemDto[]>([])
   const [runLogEntries, setRunLogEntries] = useState<AccessImportRunLogEntryDto[]>([])
@@ -68,6 +68,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const loadedCreatedRecordsRunIdRef = useRef<string | null>(null)
   const loadedQuarantineRevisionRef = useRef(-1)
   const loadedQuarantineTokenRef = useRef<string | null>(null)
+  const selectedRunControllerRef = useRef<AbortController | null>(null)
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
   const reportDownloadActionLabel = currentRun ? `Скачать JSON-отчет dry-run ${currentRun.originalFileName}` : 'Скачать JSON-отчет dry-run'
@@ -121,6 +122,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   }, [auth.accessToken, importClient])
 
   useEffect(() => {
+    selectedRunControllerRef.current?.abort()
+    selectedRunControllerRef.current = null
     let ignore = false
     const controller = new AbortController()
     async function load() {
@@ -131,10 +134,13 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
           importClient.getAccessReaderStatus(auth.accessToken, controller.signal),
           importClient.getAccessRuns(auth.accessToken, undefined, controller.signal),
         ])
+        const loadedRun = loadedRuns[0]
+          ? await importClient.getAccessRun(auth.accessToken, loadedRuns[0].id, controller.signal)
+          : null
         if (!ignore) {
           setReaderStatus(loadedReaderStatus)
           setRuns(loadedRuns)
-          setCurrentRun(loadedRuns[0] ?? null)
+          setCurrentRun(loadedRun)
         }
       } catch (caught) {
         if (!ignore) {
@@ -153,6 +159,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       controller.abort()
     }
   }, [auth.accessToken, importClient, reloadRevision])
+
+  useEffect(() => () => selectedRunControllerRef.current?.abort(), [])
 
   useEffect(() => {
     if (activeImportTab !== 'log') {
@@ -222,9 +230,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         }
 
         if (status.status === 'queued' || status.status === 'processing') {
-          const mergeStatus = (run: AccessImportRunDto): AccessImportRunDto => ({ ...run, ...status })
-          setRuns((items) => items.map((run) => run.id === currentRunId ? mergeStatus(run) : run))
-          setCurrentRun((run) => run?.id === currentRunId ? mergeStatus(run) : run)
+          setRuns((items) => items.map((run) => run.id === currentRunId ? { ...run, ...status } : run))
+          setCurrentRun((run) => run?.id === currentRunId ? { ...run, ...status } : run)
           return
         }
 
@@ -334,6 +341,26 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
   }, [activeImportTab, auth.accessToken, importClient, quarantineReloadRevision, reloadRevision])
 
+  async function selectRun(run: AccessImportRunListItemDto) {
+    selectedRunControllerRef.current?.abort()
+    const controller = new AbortController()
+    selectedRunControllerRef.current = controller
+    setLoading(true)
+    setError(null)
+    setCurrentRun(null)
+    try {
+      const selectedRun = await importClient.getAccessRun(auth.accessToken, run.id, controller.signal)
+      if (selectedRunControllerRef.current === controller) setCurrentRun(selectedRun)
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Не удалось загрузить выбранный запуск импорта.')
+    } finally {
+      if (selectedRunControllerRef.current === controller) {
+        selectedRunControllerRef.current = null
+        setLoading(false)
+      }
+    }
+  }
+
   async function runDryRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
@@ -346,6 +373,9 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     setError(null)
     try {
       const run = await importClient.dryRunAccess(auth.accessToken, selectedFile)
+      selectedRunControllerRef.current?.abort()
+      selectedRunControllerRef.current = null
+      setLoading(false)
       setCurrentRun(run)
       setRuns((items) => [run, ...items.filter((item) => item.id !== run.id)])
       loadedLogKeyRef.current = null
@@ -669,7 +699,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   </div>
                 </div>
               </>
-            ) : <StatusMessage>Выберите запуск dry-run</StatusMessage>}
+            ) : loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем выбранный запуск импорта" rows={3} columns={2} /> : <StatusMessage>Выберите запуск dry-run</StatusMessage>}
             <div className="import-report-group import-report-actions" aria-label="Действия с отчетом проверки">
               <h4>Действия</h4>
               <div>
@@ -719,7 +749,8 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
             <span role="columnheader">Статус</span>
             <span role="columnheader">Итог</span>
           </div>
-          {!currentRun ? <StatusMessage>Проверок пока нет</StatusMessage> : null}
+          {loading && !currentRun ? <TableLoadingState label="Загружаем проверки выбранного запуска" /> : null}
+          {!loading && !currentRun ? <StatusMessage>Проверок пока нет</StatusMessage> : null}
           {currentRun?.checks.map((check) => (
             <div className="operation-row" role="row" key={check.code}>
               <span role="cell">
@@ -773,7 +804,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
             </div>
             {runs.length === 0 ? <StatusMessage>Истории импорта пока нет</StatusMessage> : null}
             {historyPage.items.map((run) => (
-              <button className="operation-row" role="row" type="button" key={run.id} onClick={() => setCurrentRun(run)}>
+              <button className="operation-row" role="row" type="button" key={run.id} onClick={() => { void selectRun(run) }}>
                 <span role="cell">
                   <strong>{run.originalFileName}</strong>
                   <small>{run.summary}</small>

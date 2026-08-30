@@ -1150,8 +1150,32 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("importClient.getAccessRunStatus(auth.accessToken, currentRunId, controller.signal)", panelSource, StringComparison.Ordinal);
         Assert.Contains("const completedRun = await importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal)", panelSource, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(panelSource, "importClient.getAccessRuns("));
-        Assert.Equal(1, CountOccurrences(panelSource, "importClient.getAccessRun("));
         Assert.Contains("status.status === 'queued' || status.status === 'processing'", panelSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ImportHistory_LoadsSummariesBeforeTheSelectedFullRun()
+    {
+        var repositorySource = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
+        var panelSource = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "frontend",
+            "src",
+            "features",
+            "import",
+            "ImportPanel.tsx"));
+        var methodStart = repositorySource.IndexOf("GetRunsAsync", StringComparison.Ordinal);
+        var methodEnd = repositorySource.IndexOf("RunExistsAsync", methodStart, StringComparison.Ordinal);
+        var methodSource = repositorySource[methodStart..methodEnd];
+
+        Assert.Contains("Select(run => new AccessImportRunListItemData", methodSource, StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReportJson", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentSha256", methodSource, StringComparison.Ordinal);
+        Assert.Contains("importClient.getAccessRuns(auth.accessToken, undefined, controller.signal)", panelSource, StringComparison.Ordinal);
+        Assert.Contains("await importClient.getAccessRun(auth.accessToken, loadedRuns[0].id, controller.signal)", panelSource, StringComparison.Ordinal);
+        Assert.Contains("await importClient.getAccessRun(auth.accessToken, run.id, controller.signal)", panelSource, StringComparison.Ordinal);
+        Assert.Contains("selectedRunControllerRef.current?.abort()", panelSource, StringComparison.Ordinal);
     }
 
     [Fact]

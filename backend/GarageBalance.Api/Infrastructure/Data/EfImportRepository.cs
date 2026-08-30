@@ -6,12 +6,46 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImportRepository
 {
-    public async Task<IReadOnlyList<AccessImportRun>> GetRunsAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AccessImportRunListItemData>> GetRunsAsync(int limit, CancellationToken cancellationToken)
     {
         var query = dbContext.AccessImportRuns.AsNoTracking();
-        return IsSqliteProvider()
-            ? (await query.ToListAsync(cancellationToken)).OrderByDescending(run => run.StartedAtUtc).ThenByDescending(run => run.Id).Take(limit).ToList()
-            : await query.OrderByDescending(run => run.StartedAtUtc).ThenByDescending(run => run.Id).Take(limit).ToListAsync(cancellationToken);
+        if (IsSqliteProvider())
+        {
+            return (await query
+                    .Select(run => new AccessImportRunListItemData(
+                        run.Id,
+                        run.Status,
+                        run.OriginalFileName,
+                        run.StartedAtUtc,
+                        run.FinishedAtUtc,
+                        run.TotalChecks,
+                        run.PassedChecks,
+                        run.WarningCount,
+                        run.ErrorCount,
+                        run.Summary))
+                    .ToListAsync(cancellationToken))
+                .OrderByDescending(run => run.StartedAtUtc)
+                .ThenByDescending(run => run.Id)
+                .Take(limit)
+                .ToList();
+        }
+
+        return await query
+            .OrderByDescending(run => run.StartedAtUtc)
+            .ThenByDescending(run => run.Id)
+            .Take(limit)
+            .Select(run => new AccessImportRunListItemData(
+                run.Id,
+                run.Status,
+                run.OriginalFileName,
+                run.StartedAtUtc,
+                run.FinishedAtUtc,
+                run.TotalChecks,
+                run.PassedChecks,
+                run.WarningCount,
+                run.ErrorCount,
+                run.Summary))
+            .ToListAsync(cancellationToken);
     }
 
     public Task<bool> RunExistsAsync(Guid runId, CancellationToken cancellationToken)

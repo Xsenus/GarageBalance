@@ -11,6 +11,45 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class PostgreSqlImportPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task RunListProjectsOnlyBoundedSummaryColumnsInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.AddRange(Enumerable.Range(1, 60).Select(index => new AccessImportRun
+            {
+                OriginalFileName = $"history-{index:D2}.accdb",
+                StartedAtUtc = new DateTimeOffset(2026, 8, 30, 0, 0, 0, TimeSpan.Zero).AddMinutes(index),
+                ContentSha256 = new string((char)('a' + index % 20), 64),
+                ReportJson = $"[{{\"message\":\"{new string('x', 20_000)}\"}}]"
+            }));
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context).GetRunsAsync(50, CancellationToken.None);
+
+        Assert.Equal(50, result.Count);
+        Assert.Equal("history-60.accdb", result[0].OriginalFileName);
+        Assert.DoesNotContain(result, run => run.OriginalFileName == "history-01.accdb");
+        var command = Assert.Single(commandCapture.Commands);
+        Assert.Contains("ORDER BY", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ReportJson", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentSha256", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("FileExtension", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("FileSizeBytes", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("Mode", command, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
     public async Task ExactRunLookupLoadsOnlyRequestedRunInOneSelect()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

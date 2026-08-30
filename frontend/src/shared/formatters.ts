@@ -1,6 +1,6 @@
 import type { TariffDto } from '../services/dictionariesApi'
 import type { MissingMeterReadingDto, PaymentAllocationDto } from '../services/financeApi'
-import type { AccessImportCheckDto, AccessImportCreatedRecordDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto } from '../services/importApi'
+import type { AccessImportCheckDto, AccessImportCreatedRecordDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunListItemDto, AccessImportRunLogEntryDto } from '../services/importApi'
 import { formatMoneyInput } from './moneyInputFormatting'
 
 export function formatMoney(value: number): string {
@@ -175,7 +175,7 @@ export function formatImportReaderStatus(status: AccessImportReaderStatusDto['st
   return 'Не настроен'
 }
 
-export function formatImportRunCheckSummary(run: AccessImportRunDto): string {
+export function formatImportRunCheckSummary(run: AccessImportRunListItemDto): string {
   return `${run.passedChecks}/${run.totalChecks} · ${formatCount(run.warningCount, 'предупреждение', 'предупреждения', 'предупреждений')} · ${formatCount(run.errorCount, 'ошибка', 'ошибки', 'ошибок')}`
 }
 

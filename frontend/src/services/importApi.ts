@@ -28,6 +28,9 @@ export type AccessImportRunDto = {
 export type AccessImportRunStatusDto = Pick<AccessImportRunDto,
   'id' | 'status' | 'finishedAtUtc' | 'totalChecks' | 'passedChecks' | 'warningCount' | 'errorCount' | 'summary'>
 
+export type AccessImportRunListItemDto = Pick<AccessImportRunDto,
+  'id' | 'status' | 'originalFileName' | 'startedAtUtc' | 'finishedAtUtc' | 'totalChecks' | 'passedChecks' | 'warningCount' | 'errorCount' | 'summary'>
+
 export type AccessImportQuarantineItemDto = {
   id: string
   accessImportRunId: string | null
@@ -85,7 +88,7 @@ export type AccessImportReaderStatusDto = {
 
 export type ImportClient = {
   getAccessReaderStatus(accessToken: string, signal?: AbortSignal): Promise<AccessImportReaderStatusDto>
-  getAccessRuns(accessToken: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunDto[]>
+  getAccessRuns(accessToken: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunListItemDto[]>
   getAccessRun(accessToken: string, runId: string, signal?: AbortSignal): Promise<AccessImportRunDto>
   getAccessRunStatus(accessToken: string, runId: string, signal?: AbortSignal): Promise<AccessImportRunStatusDto>
   getAccessRunLog(accessToken: string, runId: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunLogEntryDto[]>

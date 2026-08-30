@@ -19295,6 +19295,7 @@ describe('App', () => {
     })
     const importClient = createImportClient({
       getAccessRuns: async () => [run],
+      getAccessRun: async () => run,
       getAccessRunLog: async () => [
         createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'duplicate_content_detected', level: 'warning', message: 'Найден предыдущий dry-run с тем же содержимым файла Access.' }),
       ],
@@ -19349,6 +19350,7 @@ describe('App', () => {
       },
       getAccessRun: async (_accessToken, runId, signal) => {
         exactRunRequests += 1
+        if (runId === historicalRun.id) return historicalRun
         exactRunSignal = signal
         expect(runId).toBe(queuedRun.id)
         return completedRun
@@ -19370,7 +19372,7 @@ describe('App', () => {
     expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.', {}, { timeout: 3500 })).toBeInTheDocument()
     expect(runListRequests).toBe(1)
     expect(statusRequests).toBe(2)
-    expect(exactRunRequests).toBe(1)
+    expect(exactRunRequests).toBe(2)
     expect(statusSignals).toHaveLength(2)
     expect(statusSignals[1]).toBe(statusSignals[0])
     expect(exactRunSignal).toBe(statusSignals[1])
@@ -19386,11 +19388,12 @@ describe('App', () => {
     let resolvePoll!: (run: AccessImportRunDto) => void
     const pollResult = new Promise<AccessImportRunDto>((resolve) => { resolvePoll = resolve })
     let logRequests = 0
+    let exactRunRequests = 0
     let refreshSignal: AbortSignal | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => [queuedRun],
       getAccessRunStatus: () => pollResult,
-      getAccessRun: async () => completedRun,
+      getAccessRun: async () => ++exactRunRequests === 1 ? queuedRun : completedRun,
       getAccessRunLog: (_token, _runId, _limit, signal) => {
         logRequests += 1
         if (logRequests === 1) {
@@ -19430,11 +19433,12 @@ describe('App', () => {
     let resolvePoll!: (run: AccessImportRunDto) => void
     const pollResult = new Promise<AccessImportRunDto>((resolve) => { resolvePoll = resolve })
     let createdRequests = 0
+    let exactRunRequests = 0
     let refreshSignal: AbortSignal | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => [queuedRun],
       getAccessRunStatus: () => pollResult,
-      getAccessRun: async () => completedRun,
+      getAccessRun: async () => ++exactRunRequests === 1 ? queuedRun : completedRun,
       getAccessCreatedRecords: (_token, _runId, _limit, signal) => {
         createdRequests += 1
         if (createdRequests === 1) {
@@ -19476,6 +19480,7 @@ describe('App', () => {
     let secondCreatedSignal: AbortSignal | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => [firstRun, secondRun],
+      getAccessRun: async (_token, runId) => runId === firstRun.id ? firstRun : secondRun,
       getAccessRunLog: (_token, runId, _limit, signal) => {
         if (runId === firstRun.id) {
           return Promise.resolve([firstLogEntry])
@@ -19571,6 +19576,7 @@ describe('App', () => {
     const run = createAccessImportRun()
     const importClient = createImportClient({
       getAccessRuns: async () => [run],
+      getAccessRun: async () => run,
       getAccessRunLog: async () => [
         createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'dry_run_finished', message: run.summary }),
       ],
@@ -19622,6 +19628,7 @@ describe('App', () => {
     const run = createAccessImportRun()
     const importClient = createImportClient({
       getAccessRuns: async () => [run],
+      getAccessRun: async () => run,
       getAccessRunLog: async () => [
         createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'dry_run_finished', message: run.summary }),
       ],
@@ -19680,6 +19687,7 @@ describe('App', () => {
     })
     const importClient = createImportClient({
       getAccessRuns: async () => [run],
+      getAccessRun: async () => run,
       getAccessRunLog: async () => [
         createAccessImportRunLogEntry({ accessImportRunId: run.id, stepCode: 'import_requested', level: 'warning', message: run.summary }),
       ],

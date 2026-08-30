@@ -26,11 +26,21 @@ public sealed class ImportService(
         return accessImportReader.GetStatusAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AccessImportRunListItemDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
     {
         var limit = QueryLimits.NormalizeListSize(request.Limit, 50, 200);
         var runs = await repository.GetRunsAsync(limit, cancellationToken);
-        return runs.Select(ToDto).ToList();
+        return runs.Select(run => new AccessImportRunListItemDto(
+            run.Id,
+            run.Status,
+            run.OriginalFileName,
+            run.StartedAtUtc,
+            run.FinishedAtUtc,
+            run.TotalChecks,
+            run.PassedChecks,
+            run.WarningCount,
+            run.ErrorCount,
+            run.Summary)).ToList();
     }
 
     public async Task<ImportResult<AccessImportRunDto>> GetAccessImportRunAsync(Guid runId, CancellationToken cancellationToken)

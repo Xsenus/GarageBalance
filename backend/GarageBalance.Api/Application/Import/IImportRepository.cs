@@ -4,7 +4,7 @@ namespace GarageBalance.Api.Application.Import;
 
 public interface IImportRepository
 {
-    Task<IReadOnlyList<AccessImportRun>> GetRunsAsync(int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AccessImportRunListItemData>> GetRunsAsync(int limit, CancellationToken cancellationToken);
     Task<bool> RunExistsAsync(Guid runId, CancellationToken cancellationToken);
     Task<AccessImportRunStatusData?> FindRunStatusAsync(Guid runId, CancellationToken cancellationToken);
     Task<AccessImportRunLogEntryListData> GetRunLogEntryListDataAsync(Guid runId, int limit, CancellationToken cancellationToken);
@@ -22,6 +22,18 @@ public sealed record PreviousAccessImportRunData(
     Guid Id,
     string OriginalFileName,
     DateTimeOffset StartedAtUtc);
+
+public sealed record AccessImportRunListItemData(
+    Guid Id,
+    string Status,
+    string OriginalFileName,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? FinishedAtUtc,
+    int TotalChecks,
+    int PassedChecks,
+    int WarningCount,
+    int ErrorCount,
+    string Summary);
 
 public sealed record AccessImportRunStatusData(
     Guid Id,

@@ -22,8 +22,8 @@ public sealed class ImportController(
     }
 
     [HttpGet("runs")]
-    [ProducesResponseType<IReadOnlyList<AccessImportRunDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<AccessImportRunDto>>> GetAccessImportRuns(
+    [ProducesResponseType<IReadOnlyList<AccessImportRunListItemDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AccessImportRunListItemDto>>> GetAccessImportRuns(
         [FromQuery] AccessImportRunListRequest request,
         CancellationToken cancellationToken)
     {

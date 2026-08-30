@@ -442,14 +442,14 @@ public sealed class ImportControllerTests
         var run = CreateRun();
         var service = new FakeImportService
         {
-            Runs = [run]
+            Runs = [CreateRunListItem(run)]
         };
         var controller = CreateController(service);
 
         var result = await controller.GetAccessImportRuns(new AccessImportRunListRequest { Limit = 12 }, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var runs = Assert.IsAssignableFrom<IReadOnlyList<AccessImportRunDto>>(ok.Value);
+        var runs = Assert.IsAssignableFrom<IReadOnlyList<AccessImportRunListItemDto>>(ok.Value);
         Assert.Equal(run.Id, Assert.Single(runs).Id);
         Assert.Equal(12, service.LastRunRequest?.Limit);
     }
@@ -701,6 +701,21 @@ public sealed class ImportControllerTests
             [new AccessImportCheckDto("extension", "Формат", "passed", "OK")]);
     }
 
+    private static AccessImportRunListItemDto CreateRunListItem(AccessImportRunDto run)
+    {
+        return new AccessImportRunListItemDto(
+            run.Id,
+            run.Status,
+            run.OriginalFileName,
+            run.StartedAtUtc,
+            run.FinishedAtUtc,
+            run.TotalChecks,
+            run.PassedChecks,
+            run.WarningCount,
+            run.ErrorCount,
+            run.Summary);
+    }
+
     private static AccessImportQuarantineItemDto CreateQuarantineItem(string status = "open")
     {
         return new AccessImportQuarantineItemDto(
@@ -775,7 +790,7 @@ public sealed class ImportControllerTests
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
         public AccessImportCreatedRecordListRequest? LastCreatedRecordsRequest { get; private set; }
         public bool ReaderStatusWasRequested { get; private set; }
-        public IReadOnlyList<AccessImportRunDto> Runs { get; init; } = [];
+        public IReadOnlyList<AccessImportRunListItemDto> Runs { get; init; } = [];
         public ImportResult<AccessImportRunDto> RunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public ImportResult<AccessImportRunStatusDto> RunStatusResult { get; init; } = ImportResult<AccessImportRunStatusDto>.Failure("not_configured", "Not configured.");
         public AccessImportReaderStatusDto ReaderStatus { get; init; } = new(
@@ -796,7 +811,7 @@ public sealed class ImportControllerTests
         public ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>> CreatedRecordsResult { get; init; } =
             ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success([]);
 
-        public Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<AccessImportRunListItemDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
         {
             LastRunRequest = request;
             return Task.FromResult(Runs);

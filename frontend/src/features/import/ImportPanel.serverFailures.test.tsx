@@ -104,7 +104,11 @@ describe('ImportPanel server failures', () => {
       throw new Error('Точечное обновление запуска недоступно.')
     })
 
-    render(<ImportPanel auth={auth} importClient={createClient({ getAccessRuns, getAccessRunStatus })} />)
+    render(<ImportPanel auth={auth} importClient={createClient({
+      getAccessRuns,
+      getAccessRun: async () => queuedRun,
+      getAccessRunStatus,
+    })} />)
 
     expect(await screen.findByText('Reader не настроен.')).toBeInTheDocument()
     expect(await screen.findByText('Точечное обновление запуска недоступно.', {}, { timeout: 2500 })).toHaveAttribute('role', 'alert')
@@ -163,6 +167,65 @@ describe('ImportPanel server failures', () => {
 
     await user.click(screen.getByRole('tab', { name: /Проверки/ }))
     expect(requestSignal?.aborted).toBe(true)
+  })
+
+  it('aborts stale run details and keeps the latest selected history run', async () => {
+    const user = userEvent.setup()
+    const firstRun = createRun({ id: 'first-run', originalFileName: 'Первый.accdb' })
+    const secondRun = createRun({ id: 'second-run', originalFileName: 'Второй.accdb' })
+    const thirdRun = createRun({ id: 'third-run', originalFileName: 'Третий.accdb' })
+    let secondSignal: AbortSignal | undefined
+    let resolveSecond!: (run: AccessImportRunDto) => void
+    const secondDetails = new Promise<AccessImportRunDto>((resolve) => { resolveSecond = resolve })
+    const getAccessRun = vi.fn((_token: string, runId: string, signal?: AbortSignal) => {
+      if (runId === secondRun.id) {
+        secondSignal = signal
+        return secondDetails
+      }
+      return Promise.resolve(runId === firstRun.id ? firstRun : thirdRun)
+    })
+
+    render(<ImportPanel auth={auth} importClient={createClient({
+      getAccessRuns: async () => [firstRun, secondRun, thirdRun],
+      getAccessRun,
+    })} />)
+
+    expect(await screen.findByText('Reader не настроен.')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /История/ }))
+    await user.click(screen.getByText('Второй.accdb').closest('button')!)
+    await waitFor(() => expect(secondSignal).toBeDefined())
+    await user.click(screen.getByText('Третий.accdb').closest('button')!)
+
+    expect(secondSignal?.aborted).toBe(true)
+    expect(await within(screen.getByLabelText('Проверенный файл и результат')).findByText('Третий.accdb')).toBeInTheDocument()
+    resolveSecond(secondRun)
+    await user.click(screen.getByRole('tab', { name: /Проверки/ }))
+    expect(within(screen.getByLabelText('Проверенный файл и результат')).getByText('Третий.accdb')).toBeInTheDocument()
+    expect(getAccessRun).toHaveBeenCalledTimes(3)
+  })
+
+  it('shows a selected history run failure and allows another selection', async () => {
+    const user = userEvent.setup()
+    const firstRun = createRun({ id: 'first-run', originalFileName: 'Первый.accdb' })
+    const failedRun = createRun({ id: 'failed-run', originalFileName: 'Недоступный.accdb' })
+    const lastRun = createRun({ id: 'last-run', originalFileName: 'Доступный.accdb' })
+    const getAccessRun = vi.fn(async (_token: string, runId: string) => {
+      if (runId === failedRun.id) throw new Error('Детали запуска временно недоступны.')
+      return runId === firstRun.id ? firstRun : lastRun
+    })
+
+    render(<ImportPanel auth={auth} importClient={createClient({
+      getAccessRuns: async () => [firstRun, failedRun, lastRun],
+      getAccessRun,
+    })} />)
+
+    expect(await screen.findByText('Reader не настроен.')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /История/ }))
+    await user.click(screen.getByText('Недоступный.accdb').closest('button')!)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Детали запуска временно недоступны.')
+    await user.click(screen.getByText('Доступный.accdb').closest('button')!)
+    await user.click(screen.getByRole('tab', { name: /Проверки/ }))
+    expect(await screen.findByText('Доступный.accdb')).toBeInTheDocument()
   })
 
   it('shows an apply failure inside the dialog, preserves input and allows retry', async () => {
@@ -240,6 +303,7 @@ describe('ImportPanel server failures', () => {
     const run = createRun({ status: 'import_requested' })
     const client = createClient({
       getAccessRuns: async () => [run],
+      getAccessRun: async () => run,
       cancelAccessImportApplyRequest: async (_token, runId) => {
         attempts += 1
         if (attempts === 1) {

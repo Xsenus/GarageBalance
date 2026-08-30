@@ -3,7 +3,7 @@ namespace GarageBalance.Api.Application.Import;
 public interface IImportService
 {
     Task<AccessImportReaderStatusDto> GetAccessImportReaderStatusAsync(CancellationToken cancellationToken);
-    Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AccessImportRunListItemDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> GetAccessImportRunAsync(Guid runId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunStatusDto>> GetAccessImportRunStatusAsync(Guid runId, CancellationToken cancellationToken);
     Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken);
