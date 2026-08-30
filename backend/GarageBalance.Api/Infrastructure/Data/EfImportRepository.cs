@@ -226,6 +226,11 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
 
     public async Task<AccessImportAuditData> GetAuditDataAsync(Guid runId, CancellationToken cancellationToken)
     {
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresAuditDataAsync(runId, cancellationToken);
+        }
+
         var query = dbContext.AccessImportCreatedRecords.AsNoTracking()
             .Where(record => record.AccessImportRunId == runId);
         var counts = await query
@@ -275,6 +280,74 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
             sourceRowFingerprints);
     }
 
+    private async Task<AccessImportAuditData> GetPostgresAuditDataAsync(
+        Guid runId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Database.SqlQuery<AccessImportAuditQueryRow>($$"""
+            WITH records AS MATERIALIZED (
+                SELECT
+                    record."TargetEntityType",
+                    record."SourceRowHash",
+                    record."RollbackStatus"
+                FROM access_import_created_records AS record
+                WHERE record."AccessImportRunId" = {{runId}}
+            ), counts AS (
+                SELECT
+                    COUNT(*)::int AS created_record_count,
+                    COUNT(*) FILTER (WHERE "RollbackStatus" = 'created')::int AS pending_rollback_record_count,
+                    COUNT(DISTINCT NULLIF("SourceRowHash", ''))::int AS source_row_fingerprint_count
+                FROM records
+            ), target_entity_type_samples AS (
+                SELECT DISTINCT "TargetEntityType" AS value
+                FROM records
+                WHERE "TargetEntityType" <> ''
+                ORDER BY value
+                LIMIT 10
+            ), source_row_fingerprint_samples AS (
+                SELECT DISTINCT "SourceRowHash" AS value
+                FROM records
+                WHERE "SourceRowHash" <> ''
+                ORDER BY value
+                LIMIT 5
+            )
+            SELECT
+                0 AS "Kind",
+                NULL::text AS "Value",
+                counts.created_record_count AS "CreatedRecordCount",
+                counts.pending_rollback_record_count AS "PendingRollbackRecordCount",
+                counts.source_row_fingerprint_count AS "SourceRowFingerprintCount"
+            FROM counts
+
+            UNION ALL
+
+            SELECT 1, value, 0, 0, 0
+            FROM target_entity_type_samples
+
+            UNION ALL
+
+            SELECT 2, value, 0, 0, 0
+            FROM source_row_fingerprint_samples
+            ORDER BY "Kind", "Value"
+            """).ToListAsync(cancellationToken);
+
+        var counts = rows.Single(row => row.Kind == 0);
+        var targetEntityTypes = rows
+            .Where(row => row.Kind == 1)
+            .Select(row => row.Value!)
+            .ToList();
+        var sourceRowFingerprints = rows
+            .Where(row => row.Kind == 2)
+            .Select(row => row.Value!)
+            .ToList();
+        return new AccessImportAuditData(
+            counts.CreatedRecordCount,
+            counts.PendingRollbackRecordCount,
+            counts.SourceRowFingerprintCount,
+            targetEntityTypes,
+            sourceRowFingerprints);
+    }
+
     public void AddRun(AccessImportRun run) => dbContext.AccessImportRuns.Add(run);
 
     public void AddRunLogEntry(AccessImportRunLogEntry entry) => dbContext.AccessImportRunLogEntries.Add(entry);
@@ -283,4 +356,11 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
 
     private bool IsSqliteProvider() =>
         string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
+
+    private sealed record AccessImportAuditQueryRow(
+        int Kind,
+        string? Value,
+        int CreatedRecordCount,
+        int PendingRollbackRecordCount,
+        int SourceRowFingerprintCount);
 }

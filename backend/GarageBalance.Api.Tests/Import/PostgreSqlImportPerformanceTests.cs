@@ -339,7 +339,7 @@ public sealed class PostgreSqlImportPerformanceTests
     }
 
     [PostgreSqlFact]
-    public async Task ImportAuditCombinesAllCountersAndKeepsSamplesBounded()
+    public async Task ImportAuditCombinesAllCountersAndKeepsSamplesBoundedInOneCommand()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var runId = Guid.NewGuid();
@@ -368,11 +368,50 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Equal(2, result.SourceRowFingerprintCount);
         Assert.Equal(["financial_operation", "garage"], result.TargetEntityTypes);
         Assert.Equal([new string('a', 64), new string('b', 64)], result.SourceRowFingerprints);
-        Assert.Equal(2, commandCapture.Commands.Count);
-        Assert.Contains("COUNT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("DISTINCT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("UNION ALL", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
-        Assert.All(commandCapture.Commands, command => Assert.Contains("AccessImportRunId", command, StringComparison.Ordinal));
+        var command = Assert.Single(commandCapture.Commands);
+        Assert.Contains("COUNT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DISTINCT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MATERIALIZED", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AccessImportRunId", command, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task ImportAuditReturnsAtMostTenSortedTargetEntityTypes()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var runId = Guid.NewGuid();
+        var records = Enumerable.Range(0, 12)
+            .Reverse()
+            .Select(index => CreateRecord(
+                runId,
+                $"type-{index:D2}",
+                $"entity-{index:D2}",
+                new string((char)('a' + index), 64),
+                "created",
+                index))
+            .ToArray();
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportCreatedRecords.AddRange(records);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context).GetAuditDataAsync(runId, CancellationToken.None);
+
+        Assert.Equal(12, result.CreatedRecordCount);
+        Assert.Equal(
+            Enumerable.Range(0, 10).Select(index => $"type-{index:D2}"),
+            result.TargetEntityTypes);
+        Assert.Single(commandCapture.Commands);
         Assert.Empty(context.ChangeTracker.Entries());
     }
 
@@ -418,16 +457,16 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Equal(
             Enumerable.Range(0, 5).Select(index => new string((char)('a' + index), 64)),
             result.SourceRowFingerprints);
-        Assert.Equal(2, commandCapture.Commands.Count);
-        Assert.Contains("UNION ALL", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("DISTINCT", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ORDER BY", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("LIMIT", commandCapture.Commands[1], StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TargetEntityId", commandCapture.Commands[1], StringComparison.Ordinal);
+        var command = Assert.Single(commandCapture.Commands);
+        Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DISTINCT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ORDER BY", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TargetEntityId", command, StringComparison.Ordinal);
     }
 
     [PostgreSqlFact]
-    public async Task ImportAuditReturnsEmptyResultInTwoSelects()
+    public async Task ImportAuditReturnsEmptyResultInOneSelect()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var commandCapture = new SelectCommandCapture();
@@ -444,7 +483,27 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Equal(0, result.SourceRowFingerprintCount);
         Assert.Empty(result.TargetEntityTypes);
         Assert.Empty(result.SourceRowFingerprints);
-        Assert.Equal(2, commandCapture.Commands.Count);
+        Assert.Single(commandCapture.Commands);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task ImportAuditHonorsPreCanceledRequestWithoutDatabaseRead()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfImportRepository(context).GetAuditDataAsync(Guid.NewGuid(), cancellation.Token));
+
+        Assert.Empty(commandCapture.Commands);
         Assert.Empty(context.ChangeTracker.Entries());
     }
 
@@ -592,7 +651,9 @@ public sealed class PostgreSqlImportPerformanceTests
             InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            var commandText = command.CommandText.TrimStart();
+            if (commandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                || commandText.StartsWith("WITH", StringComparison.OrdinalIgnoreCase))
             {
                 Commands.Add(command.CommandText);
             }

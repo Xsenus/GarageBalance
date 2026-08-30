@@ -1337,27 +1337,27 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void ImportAuditQuery_CombinesCountersAndKeepsOnlyTwoDatabaseReads()
+    public void ImportAuditQuery_CombinesCountersAndSamplesInOnePostgresRead()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
         var methodStart = source.IndexOf("GetAuditDataAsync", StringComparison.Ordinal);
         var methodEnd = source.IndexOf("public void AddRun", methodStart, StringComparison.Ordinal);
         var methodSource = source[methodStart..methodEnd];
 
-        Assert.Contains(".GroupBy(_ => 1)", methodSource, StringComparison.Ordinal);
-        Assert.Contains("PendingRollbackRecordCount = group.Count", methodSource, StringComparison.Ordinal);
-        Assert.Contains(".Distinct()", methodSource, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresAuditDataAsync(runId, cancellationToken)", methodSource, StringComparison.Ordinal);
+        Assert.Contains("WITH records AS MATERIALIZED", methodSource, StringComparison.Ordinal);
+        Assert.Contains("COUNT(DISTINCT NULLIF", methodSource, StringComparison.Ordinal);
+        Assert.Contains("target_entity_type_samples", methodSource, StringComparison.Ordinal);
+        Assert.Contains("source_row_fingerprint_samples", methodSource, StringComparison.Ordinal);
+        Assert.Contains("LIMIT 10", methodSource, StringComparison.Ordinal);
+        Assert.Contains("LIMIT 5", methodSource, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(methodSource, "UNION ALL"));
         Assert.Equal(1, CountOccurrences(methodSource, ".SingleOrDefaultAsync(cancellationToken)"));
-        Assert.Equal(1, CountOccurrences(methodSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(2, CountOccurrences(methodSource, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("await query.CountAsync", methodSource, StringComparison.Ordinal);
-        Assert.Matches(
-            BoundedQueryRegex(@"Select\(record => record\.SourceRowHash\)[\s\S]*?\.Distinct\(\)[\s\S]*?\.OrderBy\(rowHash => rowHash\)[\s\S]*?\.Take\(5\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
-            methodSource);
         Assert.DoesNotContain(".Take(20)", methodSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Distinct(StringComparer.Ordinal)", methodSource, StringComparison.Ordinal);
-        Assert.Contains("targetEntityTypeSamples", methodSource, StringComparison.Ordinal);
-        Assert.Contains("sourceRowFingerprintSamples", methodSource, StringComparison.Ordinal);
-        Assert.Contains(".Concat(sourceRowFingerprintSamples)", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("TargetEntityId", methodSource, StringComparison.Ordinal);
     }
 
     [Fact]
