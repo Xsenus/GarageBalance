@@ -9,7 +9,7 @@ import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
-import { formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
+import { formatCount, formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { filterAndRankReportOptions } from '../../shared/reportFilters'
@@ -38,20 +38,6 @@ const reportGarageBrowseLimit = 100
 const reportGarageFilterPanelDefaultSize = { width: 760, height: 480 }
 
 type ReportGarageFilterPanelSize = typeof reportGarageFilterPanelDefaultSize
-
-function formatReportOperationCount(count: number) {
-  const absoluteCount = Math.abs(count)
-  const lastTwoDigits = absoluteCount % 100
-  const lastDigit = absoluteCount % 10
-  const suffix = lastTwoDigits >= 11 && lastTwoDigits <= 14
-    ? 'операций'
-    : lastDigit === 1
-      ? 'операция'
-      : lastDigit >= 2 && lastDigit <= 4
-        ? 'операции'
-        : 'операций'
-  return `${count} ${suffix}`
-}
 
 type ReportFilterOption = RankableReportFilterOption
 
@@ -1640,7 +1626,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             'Отчет по оплатам из кассы',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Наличие чека', sortField: 'hasReceipt' }, { label: 'Назначение', sortField: 'purpose' }, 'Комментарий'],
             cashRows,
-            report ? ['ИТОГО', formatMoney(report.total), '', '', formatReportOperationCount(report.rowCount)] : undefined,
+            report ? ['ИТОГО', formatMoney(report.total), '', '', formatCount(report.rowCount, 'операция', 'операции', 'операций')] : undefined,
             { tab: 'cashPayments', disabled: cashPaymentReportLoading, totalCount: report?.rowCount },
             primaryLoading || cashPaymentReportError ? undefined : 'Операций за период нет',
           )}
@@ -1667,7 +1653,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             'Отчет по сдаче кассы в банк',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Комментарий', sortField: 'comment' }],
             bankRows,
-            report ? ['ИТОГО', formatMoney(report.total), formatReportOperationCount(report.rowCount)] : undefined,
+            report ? ['ИТОГО', formatMoney(report.total), formatCount(report.rowCount, 'операция', 'операции', 'операций')] : undefined,
             { tab: 'bankDeposits', disabled: bankDepositReportLoading, totalCount: report?.rowCount },
             primaryLoading || bankDepositReportError ? undefined : 'Операций за период нет',
           )}
