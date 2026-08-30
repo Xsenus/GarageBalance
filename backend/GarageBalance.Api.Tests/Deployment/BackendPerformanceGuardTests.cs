@@ -19,6 +19,19 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ImportQuarantineList_ProjectsAwayPrivateRowSnapshots()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfImportQuarantineRepository.cs");
+        var methodStart = source.IndexOf("GetOpenItemsAsync", StringComparison.Ordinal);
+        var methodEnd = source.IndexOf("FindForUpdateAsync", methodStart, StringComparison.Ordinal);
+        var methodSource = source[methodStart..methodEnd];
+
+        Assert.Contains("Select(item => new AccessImportQuarantineListItemData", methodSource, StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("RowSnapshotJson", methodSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinanceWorkingLists_AllUseNormalizedRequestLimit()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");

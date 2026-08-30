@@ -224,6 +224,26 @@ public sealed class ImportQuarantineService(
             item.ResolutionComment);
     }
 
+    private static AccessImportQuarantineItemDto ToDto(AccessImportQuarantineListItemData item)
+    {
+        return new AccessImportQuarantineItemDto(
+            item.Id,
+            item.AccessImportRunId,
+            item.SourceSystem,
+            item.EntityType,
+            item.ExternalId,
+            item.RowHash,
+            item.ReasonCode,
+            item.ReasonMessage,
+            item.Severity,
+            item.Status,
+            item.CreatedAtUtc,
+            item.CreatedByUserId,
+            item.ResolvedAtUtc,
+            item.ResolvedByUserId,
+            item.ResolutionComment);
+    }
+
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();

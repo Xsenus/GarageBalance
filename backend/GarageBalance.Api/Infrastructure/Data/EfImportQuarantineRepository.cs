@@ -6,7 +6,7 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfImportQuarantineRepository(GarageBalanceDbContext dbContext) : IImportQuarantineRepository
 {
-    public async Task<IReadOnlyList<AccessImportQuarantineItem>> GetOpenItemsAsync(
+    public async Task<IReadOnlyList<AccessImportQuarantineListItemData>> GetOpenItemsAsync(
         Guid? accessImportRunId,
         int limit,
         CancellationToken cancellationToken)
@@ -22,7 +22,24 @@ public sealed class EfImportQuarantineRepository(GarageBalanceDbContext dbContex
 
         if (string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal))
         {
-            return (await query.ToListAsync(cancellationToken))
+            return (await query
+                    .Select(item => new AccessImportQuarantineListItemData(
+                        item.Id,
+                        item.AccessImportRunId,
+                        item.SourceSystem,
+                        item.EntityType,
+                        item.ExternalId,
+                        item.RowHash,
+                        item.ReasonCode,
+                        item.ReasonMessage,
+                        item.Severity,
+                        item.Status,
+                        item.CreatedAtUtc,
+                        item.CreatedByUserId,
+                        item.ResolvedAtUtc,
+                        item.ResolvedByUserId,
+                        item.ResolutionComment))
+                    .ToListAsync(cancellationToken))
                 .OrderByDescending(item => item.CreatedAtUtc)
                 .ThenByDescending(item => item.Id)
                 .Take(limit)
@@ -33,6 +50,22 @@ public sealed class EfImportQuarantineRepository(GarageBalanceDbContext dbContex
             .OrderByDescending(item => item.CreatedAtUtc)
             .ThenByDescending(item => item.Id)
             .Take(limit)
+            .Select(item => new AccessImportQuarantineListItemData(
+                item.Id,
+                item.AccessImportRunId,
+                item.SourceSystem,
+                item.EntityType,
+                item.ExternalId,
+                item.RowHash,
+                item.ReasonCode,
+                item.ReasonMessage,
+                item.Severity,
+                item.Status,
+                item.CreatedAtUtc,
+                item.CreatedByUserId,
+                item.ResolvedAtUtc,
+                item.ResolvedByUserId,
+                item.ResolutionComment))
             .ToListAsync(cancellationToken);
     }
 

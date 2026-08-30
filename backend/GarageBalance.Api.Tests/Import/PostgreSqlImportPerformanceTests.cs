@@ -11,6 +11,50 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class PostgreSqlImportPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task OpenQuarantineListProjectsOnlyBoundedPublicColumnsInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var run = new AccessImportRun { OriginalFileName = "quarantine.accdb" };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.Add(run);
+            seedContext.AccessImportQuarantineItems.AddRange(Enumerable.Range(1, 60).Select(index => new AccessImportQuarantineItem
+            {
+                AccessImportRunId = run.Id,
+                SourceSystem = "Access",
+                EntityType = "Garage",
+                ExternalId = $"garage-{index:D2}",
+                RowHash = index.ToString("x64"),
+                ReasonCode = "missing-owner",
+                ReasonMessage = "Не найден владелец гаража.",
+                RowSnapshotJson = $"{{\"payload\":\"{new string('x', 20_000)}\"}}",
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 30, 0, 0, 0, TimeSpan.Zero).AddMinutes(index)
+            }));
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportQuarantineRepository(context)
+            .GetOpenItemsAsync(run.Id, 50, CancellationToken.None);
+
+        Assert.Equal(50, result.Count);
+        Assert.Equal("garage-60", result[0].ExternalId);
+        Assert.DoesNotContain(result, item => item.ExternalId == "garage-01");
+        var command = Assert.Single(commandCapture.Commands);
+        Assert.Contains("AccessImportRunId", command, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("RowSnapshotJson", command, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
     public async Task RunListProjectsOnlyBoundedSummaryColumnsInOneSelect()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
