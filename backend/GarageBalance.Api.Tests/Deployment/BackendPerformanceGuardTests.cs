@@ -940,13 +940,23 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COALESCE(SUM(income_amount), 0)", incomePaymentMethod, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<IncomePaymentCombinedQueryRow>", incomePaymentMethod, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(incomePaymentMethod, ".ToListAsync(cancellationToken)"));
+        var postgresIncomeDebtStart = incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculatePostgresDebtAfterPaymentsAsync", StringComparison.Ordinal);
         var incomeDebtMethod = incomeSource[
-            incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
+            incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..postgresIncomeDebtStart];
         Assert.Contains("startingBalanceQuery", incomeDebtMethod, StringComparison.Ordinal);
         Assert.Contains("accrualQuery", incomeDebtMethod, StringComparison.Ordinal);
         Assert.Contains("paymentQuery", incomeDebtMethod, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(incomeDebtMethod, ".Concat("));
         Assert.Equal(1, CountOccurrences(incomeDebtMethod, ".ToListAsync(cancellationToken)"));
+        var postgresIncomeDebtMethod = incomeSource[
+            postgresIncomeDebtStart..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
+        Assert.Contains("UNNEST(@operation_ids::uuid[])", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN LATERAL", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("accrual.\"AccountingMonth\" <= target.accounting_month", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("payment.\"Id\" <= target.operation_id", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<IncomeDebtResultRow>", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Concat(", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresIncomeDebtMethod, ".ToListAsync(cancellationToken)"));
         Assert.Contains("useClientSearch = hasSearch && !", incomeSource, StringComparison.Ordinal);
         Assert.DoesNotContain("STRPOS", incomeSource, StringComparison.OrdinalIgnoreCase);
         Assert.True(
