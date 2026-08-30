@@ -87,23 +87,8 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
 
     public async Task<decimal> GetCollectedAmountAsync(Guid id, CancellationToken cancellationToken)
     {
-        var tagged = await dbContext.FinancialOperations
-            .AsNoTracking()
-            .Where(item =>
-                !item.IsCanceled &&
-                item.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income &&
-                item.FeeCampaignId == id)
+        return await BuildCollectedAmountsQuery([id])
             .SumAsync(item => item.Amount, cancellationToken);
-        var legacyAllocated = await dbContext.AccrualPaymentAllocations
-            .AsNoTracking()
-            .Where(item =>
-                item.IsActive &&
-                !item.Accrual.IsCanceled &&
-                item.Accrual.FeeCampaignId == id &&
-                !item.FinancialOperation.IsCanceled &&
-                item.FinancialOperation.FeeCampaignId == null)
-            .SumAsync(item => item.Amount, cancellationToken);
-        return tagged + legacyAllocated;
     }
 
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetCollectedAmountsAsync(
@@ -115,35 +100,8 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             return new Dictionary<Guid, decimal>();
         }
 
-        var tagged = await dbContext.FinancialOperations
-            .AsNoTracking()
-            .Where(item =>
-                !item.IsCanceled &&
-                item.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income &&
-                item.FeeCampaignId.HasValue &&
-                ids.Contains(item.FeeCampaignId.Value))
-            .GroupBy(item => item.FeeCampaignId!.Value)
-            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
+        return await BuildCollectedAmountsQuery(ids)
             .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
-        var legacy = await dbContext.AccrualPaymentAllocations
-            .AsNoTracking()
-            .Where(item =>
-                item.IsActive &&
-                !item.Accrual.IsCanceled &&
-                item.Accrual.FeeCampaignId.HasValue &&
-                ids.Contains(item.Accrual.FeeCampaignId.Value) &&
-                !item.FinancialOperation.IsCanceled &&
-                item.FinancialOperation.FeeCampaignId == null)
-            .GroupBy(item => item.Accrual.FeeCampaignId!.Value)
-            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
-
-        foreach (var item in legacy)
-        {
-            tagged[item.Key] = tagged.GetValueOrDefault(item.Key) + item.Value;
-        }
-
-        return tagged;
     }
 
     public async Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync(
@@ -169,32 +127,31 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         }
 
         var ids = campaigns.Select(item => item.Id).ToArray();
-        var accruals = await dbContext.Accruals
+        var accrualRows = await dbContext.Accruals
             .Include(item => item.FeeCampaign)
             .Where(item => !item.IsCanceled && item.GarageId == garageId && item.FeeCampaignId.HasValue && ids.Contains(item.FeeCampaignId.Value))
             .OrderBy(item => item.AccountingMonth)
             .ThenBy(item => item.Id)
+            .Select(accrual => new FeeCampaignAccrualPaymentRow(
+                accrual,
+                dbContext.AccrualPaymentAllocations
+                    .Where(allocation =>
+                        allocation.AccrualId == accrual.Id &&
+                        allocation.IsActive &&
+                        !allocation.FinancialOperation.IsCanceled)
+                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m))
             .ToListAsync(cancellationToken);
-        var paidByAccrual = await dbContext.AccrualPaymentAllocations.AsNoTracking()
-            .Where(item => item.IsActive && !item.FinancialOperation.IsCanceled && item.Accrual.GarageId == garageId && item.Accrual.FeeCampaignId.HasValue && ids.Contains(item.Accrual.FeeCampaignId.Value))
-            .GroupBy(item => item.AccrualId)
-            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
-        var collected = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(item => !item.IsCanceled && item.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income && item.FeeCampaignId.HasValue && ids.Contains(item.FeeCampaignId.Value))
-            .GroupBy(item => item.FeeCampaignId!.Value)
-            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
-        var legacyCollected = await dbContext.AccrualPaymentAllocations.AsNoTracking()
-            .Where(item => item.IsActive && !item.FinancialOperation.IsCanceled && item.FinancialOperation.FeeCampaignId == null && item.Accrual.FeeCampaignId.HasValue && ids.Contains(item.Accrual.FeeCampaignId.Value))
-            .GroupBy(item => item.Accrual.FeeCampaignId!.Value)
-            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
+        var collected = await BuildCollectedAmountsQuery(ids)
             .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
 
         return campaigns.Select(campaign =>
         {
-            var accrual = accruals.FirstOrDefault(item => item.FeeCampaignId == campaign.Id);
-            return new FeeCampaignPaymentOption(campaign, accrual, accrual is null ? 0m : paidByAccrual.GetValueOrDefault(accrual.Id), collected.GetValueOrDefault(campaign.Id) + legacyCollected.GetValueOrDefault(campaign.Id));
+            var accrualRow = accrualRows.FirstOrDefault(item => item.Accrual.FeeCampaignId == campaign.Id);
+            return new FeeCampaignPaymentOption(
+                campaign,
+                accrualRow?.Accrual,
+                accrualRow?.PaidAmount ?? 0m,
+                collected.GetValueOrDefault(campaign.Id));
         }).ToList();
     }
 
@@ -230,18 +187,29 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
 
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetPaidAmountsByGarageAsync(Guid id, CancellationToken cancellationToken)
     {
-        var tagged = await dbContext.FinancialOperations.AsNoTracking()
+        var tagged = dbContext.FinancialOperations.AsNoTracking()
             .Where(item => !item.IsCanceled && item.FeeCampaignId == id && item.GarageId.HasValue)
-            .GroupBy(item => item.GarageId!.Value)
-            .Select(group => new { GarageId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
-        var legacy = await dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Select(item => new FeeCampaignAmountRow
+            {
+                Id = item.GarageId!.Value,
+                Amount = item.Amount
+            });
+        var legacy = dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(item => item.IsActive && !item.FinancialOperation.IsCanceled && item.FinancialOperation.FeeCampaignId == null && item.Accrual.FeeCampaignId == id)
-            .GroupBy(item => item.Accrual.GarageId)
-            .Select(group => new { GarageId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
-        foreach (var item in legacy) tagged[item.Key] = tagged.GetValueOrDefault(item.Key) + item.Value;
-        return tagged;
+            .Select(item => new FeeCampaignAmountRow
+            {
+                Id = item.Accrual.GarageId,
+                Amount = item.Amount
+            });
+        return await tagged
+            .Concat(legacy)
+            .GroupBy(item => item.Id)
+            .Select(group => new FeeCampaignAmountRow
+            {
+                Id = group.Key,
+                Amount = group.Sum(item => item.Amount)
+            })
+            .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
     }
 
     public void Add(FeeCampaign campaign) => dbContext.FeeCampaigns.Add(campaign);
@@ -252,6 +220,52 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
                 .ThenInclude(item => item.DestinationFund)
             .Include(item => item.ParticipantGarages)
                 .ThenInclude(item => item.Garage);
+
+    private IQueryable<FeeCampaignAmountRow> BuildCollectedAmountsQuery(IReadOnlyCollection<Guid> ids)
+    {
+        var tagged = dbContext.FinancialOperations.AsNoTracking()
+            .Where(item =>
+                !item.IsCanceled &&
+                item.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income &&
+                item.FeeCampaignId.HasValue &&
+                ids.Contains(item.FeeCampaignId.Value))
+            .Select(item => new FeeCampaignAmountRow
+            {
+                Id = item.FeeCampaignId!.Value,
+                Amount = item.Amount
+            });
+        var legacy = dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item =>
+                item.IsActive &&
+                !item.Accrual.IsCanceled &&
+                item.Accrual.FeeCampaignId.HasValue &&
+                ids.Contains(item.Accrual.FeeCampaignId.Value) &&
+                !item.FinancialOperation.IsCanceled &&
+                item.FinancialOperation.FeeCampaignId == null)
+            .Select(item => new FeeCampaignAmountRow
+            {
+                Id = item.Accrual.FeeCampaignId!.Value,
+                Amount = item.Amount
+            });
+        return tagged
+            .Concat(legacy)
+            .GroupBy(item => item.Id)
+            .Select(group => new FeeCampaignAmountRow
+            {
+                Id = group.Key,
+                Amount = group.Sum(item => item.Amount)
+            });
+    }
+
+    private sealed record FeeCampaignAccrualPaymentRow(
+        GarageBalance.Api.Domain.Finance.Accrual Accrual,
+        decimal PaidAmount);
+
+    private sealed class FeeCampaignAmountRow
+    {
+        public Guid Id { get; init; }
+        public decimal Amount { get; init; }
+    }
 
     private sealed class AdvisoryLockLease(System.Data.Common.DbConnection connection, long key, bool close) : IAsyncDisposable
     {

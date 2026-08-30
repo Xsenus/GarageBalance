@@ -787,6 +787,43 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FeeCampaignRepository_CombinesTaggedAndLegacyAmountsBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFeeCampaignRepository.cs");
+        var singleAmount = ExtractMethodSource(
+            source,
+            "public async Task<decimal> GetCollectedAmountAsync");
+        var amountPage = ExtractMethodSource(
+            source,
+            "public async Task<IReadOnlyDictionary<Guid, decimal>> GetCollectedAmountsAsync");
+        var paymentOptions = ExtractMethodSource(
+            source,
+            "public async Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync");
+        var paidByGarage = ExtractMethodSource(
+            source,
+            "public async Task<IReadOnlyDictionary<Guid, decimal>> GetPaidAmountsByGarageAsync");
+        var combinedAmounts = ExtractMethodSource(
+            source,
+            "private IQueryable<FeeCampaignAmountRow> BuildCollectedAmountsQuery");
+
+        Assert.Contains("BuildCollectedAmountsQuery([id])", singleAmount, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(singleAmount, ".SumAsync("));
+        Assert.Contains("BuildCollectedAmountsQuery(ids)", amountPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(amountPage, ".ToDictionaryAsync("));
+        Assert.Contains("BuildCollectedAmountsQuery(ids)", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains("FeeCampaignAccrualPaymentRow", paymentOptions, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(paymentOptions, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(paymentOptions, ".ToDictionaryAsync("));
+        Assert.DoesNotContain("paidByAccrual", paymentOptions, StringComparison.Ordinal);
+        Assert.DoesNotContain("legacyCollected", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains(".Concat(legacy)", paidByGarage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(paidByGarage, ".ToDictionaryAsync("));
+        Assert.Contains(".Concat(legacy)", combinedAmounts, StringComparison.Ordinal);
+        Assert.Contains(".GroupBy(item => item.Id)", combinedAmounts, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToListAsync", combinedAmounts, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization()
     {
         var source = ReadApiSource("Application/Finance/FinanceService.cs");
