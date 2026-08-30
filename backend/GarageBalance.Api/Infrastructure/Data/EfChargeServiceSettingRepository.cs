@@ -2,6 +2,7 @@ using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -16,6 +17,18 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         DateOnly businessDate,
         CancellationToken cancellationToken)
     {
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresListAsync(
+                normalizedSearch,
+                includeArchived,
+                isRegular,
+                isMetered,
+                limit,
+                businessDate,
+                cancellationToken);
+        }
+
         var query = dbContext.ChargeServiceSettings
             .AsNoTracking()
             .Include(item => item.Tariff)
@@ -62,6 +75,194 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         await ApplyTariffsForMonthAsync(settings, businessDate, cancellationToken, servicesWithVersions);
         return settings;
     }
+
+    private async Task<IReadOnlyList<ChargeServiceSetting>> GetPostgresListAsync(
+        string? normalizedSearch,
+        bool includeArchived,
+        bool? isRegular,
+        bool? isMetered,
+        int limit,
+        DateOnly businessDate,
+        CancellationToken cancellationToken)
+    {
+        var archiveClause = includeArchived ? string.Empty : "AND setting.\"IsArchived\" = FALSE";
+        var regularClause = isRegular.HasValue ? "AND setting.\"IsRegular\" = @is_regular" : string.Empty;
+        var meteredClause = isMetered.HasValue ? "AND setting.\"IsMetered\" = @is_metered" : string.Empty;
+        var searchClause = normalizedSearch is null
+            ? string.Empty
+            : "AND setting.\"Name\" ILIKE @search COLLATE \"und-x-icu\" ESCAPE '\\'";
+        var sql = $$"""
+            SELECT setting."Id" AS "Id",
+                   setting."Name" AS "Name",
+                   setting."IsRegular" AS "IsRegular",
+                   setting."PeriodicityMonths" AS "PeriodicityMonths",
+                   setting."AccrualStartMonth" AS "AccrualStartMonth",
+                   setting."PaymentDueDay" AS "PaymentDueDay",
+                   setting."PaymentDueMonth" AS "PaymentDueMonth",
+                   setting."OverdueGraceDays" AS "OverdueGraceDays",
+                   setting."IncomeTypeId" AS "IncomeTypeId",
+                   setting."TariffId" AS "StoredTariffId",
+                   setting."IsMetered" AS "IsMetered",
+                   setting."MeterKind" AS "MeterKind",
+                   setting."HasTieredTariff" AS "HasTieredTariff",
+                   setting."UnitName" AS "UnitName",
+                   setting."IsArchived" AS "IsArchived",
+                   setting."Version" AS "Version",
+                   direct_tariff."Id" AS "DirectTariffId",
+                   direct_tariff."CalculationBase" AS "DirectTariffCalculationBase",
+                   direct_tariff."EffectiveFrom" AS "DirectTariffEffectiveFrom",
+                   EXISTS (
+                       SELECT 1
+                       FROM charge_service_tariff_versions existing_version
+                       INNER JOIN tariffs existing_tariff ON existing_tariff."Id" = existing_version."TariffId"
+                       WHERE existing_version."ChargeServiceSettingId" = setting."Id"
+                         AND existing_version."IsArchived" = FALSE
+                         AND existing_tariff."IsArchived" = FALSE
+                   ) AS "HasTariffVersions",
+                   active_version.tariff_id AS "ActiveTariffId",
+                   active_version.effective_from AS "ActiveTariffEffectiveFrom",
+                   active_version.effective_to AS "ActiveTariffEffectiveTo",
+                   active_version.calculation_base AS "ActiveTariffCalculationBase",
+                   active_version.electricity_first_rate AS "ActiveTariffElectricityFirstRate",
+                   active_version.electricity_second_rate AS "ActiveTariffElectricitySecondRate",
+                   active_version.electricity_tiers_json AS "ActiveTariffElectricityTiersJson"
+            FROM charge_service_settings setting
+            LEFT JOIN tariffs direct_tariff ON direct_tariff."Id" = setting."TariffId"
+            LEFT JOIN LATERAL (
+                SELECT version."TariffId" AS tariff_id,
+                       version."EffectiveFrom" AS effective_from,
+                       version."EffectiveTo" AS effective_to,
+                       tariff."CalculationBase" AS calculation_base,
+                       tariff."ElectricityFirstRate" AS electricity_first_rate,
+                       tariff."ElectricitySecondRate" AS electricity_second_rate,
+                       tariff."ElectricityTiersJson" AS electricity_tiers_json
+                FROM charge_service_tariff_versions version
+                INNER JOIN tariffs tariff ON tariff."Id" = version."TariffId"
+                WHERE version."ChargeServiceSettingId" = setting."Id"
+                  AND version."IsArchived" = FALSE
+                  AND tariff."IsArchived" = FALSE
+                  AND version."EffectiveFrom" <= @business_date::date
+                  AND (version."EffectiveTo" IS NULL OR version."EffectiveTo" >= @business_date::date)
+                ORDER BY version."EffectiveFrom" DESC
+                LIMIT 1
+            ) active_version ON TRUE
+            WHERE TRUE
+              {{archiveClause}}
+              {{regularClause}}
+              {{meteredClause}}
+              {{searchClause}}
+            ORDER BY setting."Name", setting."Id"
+            LIMIT @limit
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<DateOnly>("business_date", businessDate),
+            new NpgsqlParameter<int>("limit", limit)
+        };
+        if (isRegular.HasValue)
+        {
+            parameters.Add(new NpgsqlParameter<bool>("is_regular", isRegular.Value));
+        }
+        if (isMetered.HasValue)
+        {
+            parameters.Add(new NpgsqlParameter<bool>("is_metered", isMetered.Value));
+        }
+        if (normalizedSearch is not null)
+        {
+            parameters.Add(new NpgsqlParameter<string>(
+                "search",
+                PostgresLikeSearch.ContainsPattern(normalizedSearch)));
+        }
+
+        var rows = await dbContext.Database
+            .SqlQueryRaw<ChargeServiceListRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => CreateCompactSetting(row, businessDate)).ToList();
+    }
+
+    private static ChargeServiceSetting CreateCompactSetting(
+        ChargeServiceListRow row,
+        DateOnly businessDate)
+    {
+        var directTariff = row.DirectTariffId.HasValue
+            ? CreateCompactTariff(
+                row.DirectTariffId.Value,
+                row.DirectTariffCalculationBase!,
+                row.DirectTariffEffectiveFrom!.Value)
+            : null;
+        var setting = new ChargeServiceSetting
+        {
+            Id = row.Id,
+            Name = row.Name,
+            IsRegular = row.IsRegular,
+            PeriodicityMonths = row.PeriodicityMonths,
+            AccrualStartMonth = row.AccrualStartMonth,
+            PaymentDueDay = row.PaymentDueDay,
+            PaymentDueMonth = row.PaymentDueMonth,
+            OverdueGraceDays = row.OverdueGraceDays,
+            IncomeTypeId = row.IncomeTypeId,
+            TariffId = row.StoredTariffId,
+            Tariff = directTariff,
+            IsMetered = row.IsMetered,
+            MeterKind = row.MeterKind,
+            HasTieredTariff = row.HasTieredTariff,
+            UnitName = row.UnitName,
+            IsArchived = row.IsArchived,
+            Version = row.Version
+        };
+
+        if (row.ActiveTariffId.HasValue)
+        {
+            var activeTariff = CreateCompactTariff(
+                row.ActiveTariffId.Value,
+                row.ActiveTariffCalculationBase!,
+                row.ActiveTariffEffectiveFrom!.Value,
+                row.ActiveTariffElectricityFirstRate,
+                row.ActiveTariffElectricitySecondRate,
+                row.ActiveTariffElectricityTiersJson);
+            setting.TariffVersions.Add(new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                ChargeServiceSetting = setting,
+                TariffId = activeTariff.Id,
+                Tariff = activeTariff,
+                EffectiveFrom = row.ActiveTariffEffectiveFrom.Value,
+                EffectiveTo = row.ActiveTariffEffectiveTo
+            });
+            var selectedHistoricalVersion = setting.TariffId != activeTariff.Id;
+            setting.TariffId = activeTariff.Id;
+            setting.Tariff = activeTariff;
+            if (selectedHistoricalVersion)
+            {
+                ApplyTariffMode(setting, activeTariff);
+            }
+        }
+        else if (row.HasTariffVersions || directTariff?.EffectiveFrom > businessDate)
+        {
+            setting.TariffId = null;
+            setting.Tariff = null;
+        }
+
+        return setting;
+    }
+
+    private static Tariff CreateCompactTariff(
+        Guid id,
+        string calculationBase,
+        DateOnly effectiveFrom,
+        decimal? electricityFirstRate = null,
+        decimal? electricitySecondRate = null,
+        string? electricityTiersJson = null) =>
+        new()
+        {
+            Id = id,
+            Name = string.Empty,
+            CalculationBase = calculationBase,
+            EffectiveFrom = effectiveFrom,
+            ElectricityFirstRate = electricityFirstRate,
+            ElectricitySecondRate = electricitySecondRate,
+            ElectricityTiersJson = electricityTiersJson
+        };
 
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync(
         DateOnly accountingMonth,
@@ -432,4 +633,33 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     private sealed record ChargeServiceSettingQueryRow(
         ChargeServiceSetting Setting,
         bool HasTariffVersions);
+
+    private sealed record ChargeServiceListRow(
+        Guid Id,
+        string Name,
+        bool IsRegular,
+        int? PeriodicityMonths,
+        int? AccrualStartMonth,
+        int? PaymentDueDay,
+        int? PaymentDueMonth,
+        int OverdueGraceDays,
+        Guid? IncomeTypeId,
+        Guid? StoredTariffId,
+        bool IsMetered,
+        string? MeterKind,
+        bool HasTieredTariff,
+        string? UnitName,
+        bool IsArchived,
+        Guid Version,
+        Guid? DirectTariffId,
+        string? DirectTariffCalculationBase,
+        DateOnly? DirectTariffEffectiveFrom,
+        bool HasTariffVersions,
+        Guid? ActiveTariffId,
+        DateOnly? ActiveTariffEffectiveFrom,
+        DateOnly? ActiveTariffEffectiveTo,
+        string? ActiveTariffCalculationBase,
+        decimal? ActiveTariffElectricityFirstRate,
+        decimal? ActiveTariffElectricitySecondRate,
+        string? ActiveTariffElectricityTiersJson);
 }

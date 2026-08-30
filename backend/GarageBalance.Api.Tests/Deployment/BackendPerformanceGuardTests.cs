@@ -726,6 +726,17 @@ public sealed class BackendPerformanceGuardTests
         Assert.Matches(
             BoundedQueryRegex(@"GetListAsync[\s\S]*?Include\(item => item\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= businessDate[\s\S]*?Take\(limit\)[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, businessDate, cancellationToken, servicesWithVersions\)"),
             source);
+        var postgresListMethod = source[
+            source.IndexOf("private async Task<IReadOnlyList<ChargeServiceSetting>> GetPostgresListAsync", StringComparison.Ordinal)..source.IndexOf("public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync", StringComparison.Ordinal)];
+        Assert.Contains("LEFT JOIN LATERAL", postgresListMethod, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @limit", postgresListMethod, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", postgresListMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<ChargeServiceListRow>", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("direct_tariff.\"Rate\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("direct_tariff.\"Comment\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("setting.\"CreatedAtUtc\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("setting.\"UpdatedAtUtc\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresListMethod, ".ToListAsync(cancellationToken)"));
         Assert.Matches(
             BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Include\(setting => setting\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= monthEnd[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, servicesWithVersions\)"),
             source);
