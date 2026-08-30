@@ -1345,6 +1345,14 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(
             CountOccurrences(fundRepositorySource, ".Take(limit)") >= 2,
             "Fund operation lists must apply the same bound in PostgreSQL and SQLite branches.");
+        var postgresPageSource = ExtractMethodSource(
+            fundRepositorySource,
+            "private async Task<FundOperationPageData> GetPostgresOperationsPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresPageSource, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPageSource, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPageSource, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("ActorUserId", postgresPageSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresPageSource, StringComparison.Ordinal);
         Assert.Contains("private const int DefaultLimit = 9", releaseSource, StringComparison.Ordinal);
         Assert.Contains("private const int MaxLimit = 50", releaseSource, StringComparison.Ordinal);
         Assert.Contains("QueryLimits.NormalizeListSize(limit, DefaultLimit, MaxLimit)", releaseSource, StringComparison.Ordinal);
@@ -1597,6 +1605,28 @@ public sealed class BackendPerformanceGuardTests
         }
 
         return count;
+    }
+
+    private static string ExtractMethodSource(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Method signature was not found: {signature}");
+        var bodyStart = source.IndexOf('{', start);
+        Assert.True(bodyStart >= 0, $"Method body was not found: {signature}");
+        var depth = 0;
+        for (var index = bodyStart; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+            {
+                depth++;
+            }
+            else if (source[index] == '}' && --depth == 0)
+            {
+                return source[start..(index + 1)];
+            }
+        }
+
+        throw new InvalidOperationException($"Method body is incomplete: {signature}");
     }
 
     private static string FindApiProjectRoot()

@@ -148,14 +148,20 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
         CancellationToken cancellationToken)
     {
         var query = dbContext.FundOperations.AsNoTracking()
-            .Include(operation => operation.Fund)
             .Where(operation =>
                 operation.SourceFinancialOperationId == null &&
                 (includeCanceled || !operation.IsCanceled));
 
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresOperationsPageAsync(query, offset, limit, cancellationToken);
+        }
+
+        var queryWithFund = query.Include(operation => operation.Fund);
+
         if (IsSqliteProvider())
         {
-            var operations = await query.ToListAsync(cancellationToken);
+            var operations = await queryWithFund.ToListAsync(cancellationToken);
             return new FundOperationPageData(
                 operations.OrderByDescending(operation => operation.CreatedAtUtc)
                     .ThenByDescending(operation => operation.Id)
@@ -165,14 +171,88 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                 operations.Count);
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
+        var totalCount = await queryWithFund.CountAsync(cancellationToken);
+        var items = await queryWithFund
             .OrderByDescending(operation => operation.CreatedAtUtc)
             .ThenByDescending(operation => operation.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
 
+        return new FundOperationPageData(items, totalCount);
+    }
+
+    private async Task<FundOperationPageData> GetPostgresOperationsPageAsync(
+        IQueryable<FundOperation> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = query
+            .OrderByDescending(operation => operation.CreatedAtUtc)
+            .ThenByDescending(operation => operation.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(operation => new
+            {
+                Category = PageCategory,
+                Id = (Guid?)operation.Id,
+                FundId = (Guid?)operation.FundId,
+                FundName = (string?)operation.Fund.Name,
+                SourceFinancialOperationId = (Guid?)operation.SourceFinancialOperationId,
+                OperationKind = (string?)operation.OperationKind,
+                Amount = (decimal?)operation.Amount,
+                BalanceBefore = (decimal?)operation.BalanceBefore,
+                BalanceAfter = (decimal?)operation.BalanceAfter,
+                Reason = (string?)operation.Reason,
+                IsCanceled = (bool?)operation.IsCanceled,
+                CreatedAtUtc = (DateTimeOffset?)operation.CreatedAtUtc,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new
+            {
+                Category = TotalsCategory,
+                Id = (Guid?)null,
+                FundId = (Guid?)null,
+                FundName = (string?)null,
+                SourceFinancialOperationId = (Guid?)null,
+                OperationKind = (string?)null,
+                Amount = (decimal?)null,
+                BalanceBefore = (decimal?)null,
+                BalanceAfter = (decimal?)null,
+                Reason = (string?)null,
+                IsCanceled = (bool?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenByDescending(row => row.CreatedAtUtc)
+            .ThenByDescending(row => row.Id)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new FundOperation
+            {
+                Id = row.Id!.Value,
+                FundId = row.FundId!.Value,
+                Fund = new Fund { Id = row.FundId.Value, Name = row.FundName! },
+                SourceFinancialOperationId = row.SourceFinancialOperationId,
+                OperationKind = row.OperationKind!,
+                Amount = row.Amount!.Value,
+                BalanceBefore = row.BalanceBefore!.Value,
+                BalanceAfter = row.BalanceAfter!.Value,
+                Reason = row.Reason!,
+                IsCanceled = row.IsCanceled!.Value,
+                CreatedAtUtc = row.CreatedAtUtc!.Value
+            })
+            .ToList();
         return new FundOperationPageData(items, totalCount);
     }
 
