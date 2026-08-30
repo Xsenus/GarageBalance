@@ -359,11 +359,22 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("SqlQuery<MeterReadingYearPageRow>", source, StringComparison.Ordinal);
         Assert.Contains("COUNT(*) OVER () AS \"TotalCount\"", source, StringComparison.Ordinal);
         Assert.Contains("LEFT JOIN meter_readings AS reading", source, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(reading.\"IsMeterReplacement\", FALSE)", source, StringComparison.Ordinal);
+        Assert.Contains("AND reading.\"IsMeterReplacement\" = TRUE", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM meter_devices AS other_device", source, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT EXISTS (SELECT 1 FROM paged_garages)", source, StringComparison.Ordinal);
         var postgresYearPageStart = source.IndexOf("private async Task<MeterReadingYearPageData> GetPostgresYearPageAsync", StringComparison.Ordinal);
         var postgresYearPageEnd = source.IndexOf("private sealed class MeterReadingYearPageRow", postgresYearPageStart, StringComparison.Ordinal);
         var postgresYearPageMethod = source[postgresYearPageStart..postgresYearPageEnd];
         Assert.Equal(1, CountOccurrences(postgresYearPageMethod, ".ToListAsync(cancellationToken)"));
+
+        var migration = ReadApiSource("Infrastructure/Data/Migrations/20260831014500_OptimizeMeterReadingYearGrid.cs");
+        Assert.Contains("UPDATE meter_readings AS reading", migration, StringComparison.Ordinal);
+        Assert.Contains("SET \"IsMeterReplacement\" = TRUE", migration, StringComparison.Ordinal);
+        Assert.Contains("FROM meter_devices AS previous_device", migration, StringComparison.Ordinal);
+        Assert.Contains("IX_garages_active_natural_number", migration, StringComparison.Ordinal);
+        Assert.Contains("ON garages ((length(\"Number\")), \"Number\", \"Id\")", migration, StringComparison.Ordinal);
+        Assert.Contains("WHERE \"IsArchived\" = false", migration, StringComparison.Ordinal);
     }
 
     [Fact]
