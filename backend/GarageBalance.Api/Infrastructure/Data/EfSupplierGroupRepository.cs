@@ -42,11 +42,69 @@ public sealed class EfSupplierGroupRepository(GarageBalanceDbContext dbContext) 
         }
 
         query = ApplySearch(query, normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(group => group.Name)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new SupplierGroupPageData(items, totalCount);
+    }
+
+    private async Task<SupplierGroupPageData> GetPostgresPageAsync(
+        IQueryable<SupplierGroup> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = query
+            .OrderBy(group => group.Name)
+            .ThenBy(group => group.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(group => new SupplierGroupPageRow
+            {
+                Category = PageCategory,
+                Id = group.Id,
+                Name = group.Name,
+                IsSystem = group.IsSystem,
+                IsArchived = group.IsArchived,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new SupplierGroupPageRow
+            {
+                Category = TotalsCategory,
+                Id = null,
+                Name = null,
+                IsSystem = null,
+                IsArchived = null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenBy(row => row.Name)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new SupplierGroup
+            {
+                Id = row.Id!.Value,
+                Name = row.Name!,
+                IsSystem = row.IsSystem!.Value,
+                IsArchived = row.IsArchived!.Value
+            })
+            .ToList();
         return new SupplierGroupPageData(items, totalCount);
     }
 
@@ -96,4 +154,14 @@ public sealed class EfSupplierGroupRepository(GarageBalanceDbContext dbContext) 
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed class SupplierGroupPageRow
+    {
+        public int Category { get; init; }
+        public Guid? Id { get; init; }
+        public string? Name { get; init; }
+        public bool? IsSystem { get; init; }
+        public bool? IsArchived { get; init; }
+        public int TotalCount { get; init; }
+    }
 }

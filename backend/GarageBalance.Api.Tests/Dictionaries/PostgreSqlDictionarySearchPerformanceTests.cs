@@ -1,6 +1,7 @@
 using System.Data.Common;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
@@ -276,6 +277,140 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CreatedAtUtc", command, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
+    }
+
+    [PostgreSqlFact]
+    public async Task SmallDictionaryPagesReturnExactTotalsFromOneCompactPostgresCommand()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var fund = new Fund { Name = "Фонд оптимизации страниц", NormalizedName = "ФОНД ОПТИМИЗАЦИИ СТРАНИЦ" };
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.Add(fund);
+            setupContext.ExpenseTypes.AddRange(
+                new ExpenseType { Name = "Page A — расходы", Code = "page_expense_a", IsSystem = true },
+                new ExpenseType { Name = "Page B — расходы", Code = "page_expense_b" },
+                new ExpenseType { Name = "Page C — архив расходов", IsArchived = true });
+            setupContext.IncomeTypes.AddRange(
+                new IncomeType { Name = "Page A — поступления", Code = "page_income_a", DestinationFund = fund, IsSystem = true },
+                new IncomeType { Name = "Page B — поступления", Code = "page_income_b" },
+                new IncomeType { Name = "Page C — архив поступлений", IsArchived = true });
+            setupContext.MeasurementUnits.AddRange(
+                new MeasurementUnit { Name = "Page A — единица" },
+                new MeasurementUnit { Name = "Page B — единица" },
+                new MeasurementUnit { Name = "Page C — архив единиц", IsArchived = true });
+            setupContext.SupplierGroups.AddRange(
+                new SupplierGroup { Name = "Page A — группы", IsSystem = true },
+                new SupplierGroup { Name = "Page B — группы" },
+                new SupplierGroup { Name = "Page C — архив групп", IsArchived = true });
+            setupContext.Tariffs.AddRange(
+                new Tariff
+                {
+                    Name = "Page A — тариф",
+                    CalculationBase = "По счетчику",
+                    Rate = 35.5m,
+                    EffectiveFrom = new DateOnly(2026, 8, 1),
+                    Comment = "Текущий",
+                    ElectricityTiersJson = "[]"
+                },
+                new Tariff
+                {
+                    Name = "Page B — тариф",
+                    CalculationBase = "По счетчику",
+                    Rate = 7.5m,
+                    EffectiveFrom = new DateOnly(2026, 7, 1),
+                    ElectricityFirstThreshold = 100m,
+                    ElectricityFirstTierName = "Первый",
+                    ElectricityFirstRate = 7.5m
+                },
+                new Tariff
+                {
+                    Name = "Page C — архив тарифов",
+                    CalculationBase = "Фиксированная сумма",
+                    Rate = 1m,
+                    EffectiveFrom = new DateOnly(2026, 6, 1),
+                    IsArchived = true
+                });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var expenseRepository = new EfExpenseTypeRepository(context);
+        var expenses = await expenseRepository.GetPageAsync("page", false, 0, 1, CancellationToken.None);
+        Assert.Equal(2, expenses.TotalCount);
+        Assert.Equal("Page A — расходы", Assert.Single(expenses.Items).Name);
+        AssertCompactPageCommand(capture);
+        var emptyExpenses = await expenseRepository.GetPageAsync("page", false, 2, 1, CancellationToken.None);
+        Assert.Equal(2, emptyExpenses.TotalCount);
+        Assert.Empty(emptyExpenses.Items);
+        AssertCompactPageCommand(capture);
+        var archivedExpenses = await expenseRepository.GetPageAsync("page", true, 2, 1, CancellationToken.None);
+        Assert.Equal(3, archivedExpenses.TotalCount);
+        Assert.True(Assert.Single(archivedExpenses.Items).IsArchived);
+        AssertCompactPageCommand(capture);
+
+        var incomeRepository = new EfIncomeTypeRepository(context);
+        var incomes = await incomeRepository.GetPageAsync("page", false, 0, 1, CancellationToken.None);
+        var income = Assert.Single(incomes.Items);
+        Assert.Equal(2, incomes.TotalCount);
+        Assert.Equal("Фонд оптимизации страниц", income.DestinationFund?.Name);
+        AssertCompactPageCommand(capture);
+        var incomeWithoutFund = await incomeRepository.GetPageAsync("page", false, 1, 1, CancellationToken.None);
+        Assert.Equal(2, incomeWithoutFund.TotalCount);
+        Assert.Null(Assert.Single(incomeWithoutFund.Items).DestinationFund);
+        AssertCompactPageCommand(capture);
+        var emptyIncomes = await incomeRepository.GetPageAsync("page", false, 2, 1, CancellationToken.None);
+        Assert.Equal(2, emptyIncomes.TotalCount);
+        Assert.Empty(emptyIncomes.Items);
+        AssertCompactPageCommand(capture);
+
+        var unitRepository = new EfMeasurementUnitRepository(context);
+        var units = await unitRepository.GetPageAsync("page", false, 0, 1, CancellationToken.None);
+        Assert.Equal(2, units.TotalCount);
+        Assert.Equal("Page A — единица", Assert.Single(units.Items).Name);
+        AssertCompactPageCommand(capture);
+        var emptyUnits = await unitRepository.GetPageAsync("page", false, 2, 1, CancellationToken.None);
+        Assert.Equal(2, emptyUnits.TotalCount);
+        Assert.Empty(emptyUnits.Items);
+        AssertCompactPageCommand(capture);
+
+        var groupRepository = new EfSupplierGroupRepository(context);
+        var groups = await groupRepository.GetPageAsync("page", false, 0, 1, CancellationToken.None);
+        Assert.Equal(2, groups.TotalCount);
+        Assert.Equal("Page A — группы", Assert.Single(groups.Items).Name);
+        AssertCompactPageCommand(capture);
+        var emptyGroups = await groupRepository.GetPageAsync("page", false, 2, 1, CancellationToken.None);
+        Assert.Equal(2, emptyGroups.TotalCount);
+        Assert.Empty(emptyGroups.Items);
+        AssertCompactPageCommand(capture);
+
+        var tariffRepository = new EfTariffRepository(context);
+        var tariffs = await tariffRepository.GetPageAsync("page", false, 0, 1, CancellationToken.None);
+        var tariff = Assert.Single(tariffs.Items);
+        Assert.Equal(2, tariffs.TotalCount);
+        Assert.Equal("Page A — тариф", tariff.Name);
+        Assert.Equal("[]", tariff.ElectricityTiersJson);
+        Assert.NotEqual(Guid.Empty, tariff.Version);
+        AssertCompactPageCommand(capture);
+        var tieredTariffs = await tariffRepository.GetPageAsync("page", false, 1, 1, CancellationToken.None);
+        var tieredTariff = Assert.Single(tieredTariffs.Items);
+        Assert.Equal(2, tieredTariffs.TotalCount);
+        Assert.Equal(100m, tieredTariff.ElectricityFirstThreshold);
+        Assert.Equal("Первый", tieredTariff.ElectricityFirstTierName);
+        Assert.Equal(7.5m, tieredTariff.ElectricityFirstRate);
+        AssertCompactPageCommand(capture);
+        var emptyTariffs = await tariffRepository.GetPageAsync("page", false, 2, 1, CancellationToken.None);
+        Assert.Equal(2, emptyTariffs.TotalCount);
+        Assert.Empty(emptyTariffs.Items);
+        AssertCompactPageCommand(capture);
+
+        Assert.Empty(context.ChangeTracker.Entries());
     }
 
     [PostgreSqlFact]

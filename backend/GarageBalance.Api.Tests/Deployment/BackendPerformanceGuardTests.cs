@@ -628,6 +628,43 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("DROP INDEX IF EXISTS", migration, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Infrastructure/Data/EfExpenseTypeRepository.cs", "private async Task<ExpenseTypePageData> GetPostgresPageAsync")]
+    [InlineData("Infrastructure/Data/EfIncomeTypeRepository.cs", "private async Task<IncomeTypePageData> GetPostgresPageAsync")]
+    [InlineData("Infrastructure/Data/EfMeasurementUnitRepository.cs", "private async Task<MeasurementUnitPageData> GetPostgresPageAsync")]
+    [InlineData("Infrastructure/Data/EfSupplierGroupRepository.cs", "private async Task<SupplierGroupPageData> GetPostgresPageAsync")]
+    [InlineData("Infrastructure/Data/EfTariffRepository.cs", "private async Task<TariffPageData> GetPostgresPageAsync")]
+    public void SmallDictionaryPage_CombinesRowsAndExactTotalInOneCompactPostgresCommand(
+        string relativePath,
+        string methodSignature)
+    {
+        var source = ReadApiSource(relativePath);
+        var postgresPage = ExtractMethodSource(source, methodSignature);
+
+        Assert.Contains("GetPostgresPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPage, StringComparison.Ordinal);
+        Assert.Contains(".Concat(totalsRow)", postgresPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("CreatedAtUtc", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IncomeTypePostgresPage_ProjectsOnlyTheDestinationFundFieldsUsedByTheDictionary()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfIncomeTypeRepository.cs");
+        var postgresPage = ExtractMethodSource(
+            source,
+            "private async Task<IncomeTypePageData> GetPostgresPageAsync");
+
+        Assert.Contains("DestinationFundId = item.DestinationFundId", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("DestinationFundName = item.DestinationFund == null ? null : item.DestinationFund.Name", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("DestinationFund.Balance", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("DestinationFund.SortOrder", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("DestinationFund.Version", postgresPage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ExpenseTypeRepository_UsesProviderAwareSearchAndDatabasePaging()
     {

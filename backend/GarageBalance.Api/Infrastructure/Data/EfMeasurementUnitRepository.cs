@@ -15,8 +15,63 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
     public async Task<MeasurementUnitPageData> GetPageAsync(string? normalizedSearch, bool includeArchived, int offset, int limit, CancellationToken cancellationToken)
     {
         var query = ApplySearch(ApplyArchiveFilter(includeArchived), normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(item => item.Name).Skip(offset).Take(limit).ToListAsync(cancellationToken);
+        return new MeasurementUnitPageData(items, totalCount);
+    }
+
+    private async Task<MeasurementUnitPageData> GetPostgresPageAsync(
+        IQueryable<MeasurementUnit> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = query
+            .OrderBy(item => item.Name)
+            .ThenBy(item => item.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(item => new MeasurementUnitPageRow
+            {
+                Category = PageCategory,
+                Id = item.Id,
+                Name = item.Name,
+                IsArchived = item.IsArchived,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new MeasurementUnitPageRow
+            {
+                Category = TotalsCategory,
+                Id = null,
+                Name = null,
+                IsArchived = null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenBy(row => row.Name)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new MeasurementUnit
+            {
+                Id = row.Id!.Value,
+                Name = row.Name!,
+                IsArchived = row.IsArchived!.Value
+            })
+            .ToList();
         return new MeasurementUnitPageData(items, totalCount);
     }
 
@@ -116,5 +171,14 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
         }
 
         return query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
+    }
+
+    private sealed class MeasurementUnitPageRow
+    {
+        public int Category { get; init; }
+        public Guid? Id { get; init; }
+        public string? Name { get; init; }
+        public bool? IsArchived { get; init; }
+        public int TotalCount { get; init; }
     }
 }

@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
@@ -44,12 +45,81 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
         }
 
         query = ApplySearch(query, normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(item => item.Name)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new IncomeTypePageData(items, totalCount);
+    }
+
+    private async Task<IncomeTypePageData> GetPostgresPageAsync(
+        IQueryable<IncomeType> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = query
+            .OrderBy(item => item.Name)
+            .ThenBy(item => item.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(item => new IncomeTypePageRow
+            {
+                Category = PageCategory,
+                Id = item.Id,
+                Name = item.Name,
+                Code = item.Code,
+                DestinationFundId = item.DestinationFundId,
+                DestinationFundName = item.DestinationFund == null ? null : item.DestinationFund.Name,
+                IsSystem = item.IsSystem,
+                IsArchived = item.IsArchived,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new IncomeTypePageRow
+            {
+                Category = TotalsCategory,
+                Id = null,
+                Name = null,
+                Code = null,
+                DestinationFundId = null,
+                DestinationFundName = null,
+                IsSystem = null,
+                IsArchived = null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenBy(row => row.Name)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new IncomeType
+            {
+                Id = row.Id!.Value,
+                Name = row.Name!,
+                Code = row.Code,
+                DestinationFundId = row.DestinationFundId,
+                DestinationFund = row.DestinationFundId.HasValue
+                    ? new Fund { Id = row.DestinationFundId.Value, Name = row.DestinationFundName! }
+                    : null,
+                IsSystem = row.IsSystem!.Value,
+                IsArchived = row.IsArchived!.Value
+            })
+            .ToList();
         return new IncomeTypePageData(items, totalCount);
     }
 
@@ -134,4 +204,17 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed class IncomeTypePageRow
+    {
+        public int Category { get; init; }
+        public Guid? Id { get; init; }
+        public string? Name { get; init; }
+        public string? Code { get; init; }
+        public Guid? DestinationFundId { get; init; }
+        public string? DestinationFundName { get; init; }
+        public bool? IsSystem { get; init; }
+        public bool? IsArchived { get; init; }
+        public int TotalCount { get; init; }
+    }
 }

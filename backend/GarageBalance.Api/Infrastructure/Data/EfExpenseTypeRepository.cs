@@ -44,12 +44,73 @@ public sealed class EfExpenseTypeRepository(GarageBalanceDbContext dbContext) : 
         }
 
         query = ApplySearch(query, normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(item => item.Name)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new ExpenseTypePageData(items, totalCount);
+    }
+
+    private async Task<ExpenseTypePageData> GetPostgresPageAsync(
+        IQueryable<ExpenseType> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = query
+            .OrderBy(item => item.Name)
+            .ThenBy(item => item.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(item => new ExpenseTypePageRow
+            {
+                Category = PageCategory,
+                Id = item.Id,
+                Name = item.Name,
+                Code = item.Code,
+                IsSystem = item.IsSystem,
+                IsArchived = item.IsArchived,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new ExpenseTypePageRow
+            {
+                Category = TotalsCategory,
+                Id = null,
+                Name = null,
+                Code = null,
+                IsSystem = null,
+                IsArchived = null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenBy(row => row.Name)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new ExpenseType
+            {
+                Id = row.Id!.Value,
+                Name = row.Name!,
+                Code = row.Code,
+                IsSystem = row.IsSystem!.Value,
+                IsArchived = row.IsArchived!.Value
+            })
+            .ToList();
         return new ExpenseTypePageData(items, totalCount);
     }
 
@@ -110,4 +171,15 @@ public sealed class EfExpenseTypeRepository(GarageBalanceDbContext dbContext) : 
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed class ExpenseTypePageRow
+    {
+        public int Category { get; init; }
+        public Guid? Id { get; init; }
+        public string? Name { get; init; }
+        public string? Code { get; init; }
+        public bool? IsSystem { get; init; }
+        public bool? IsArchived { get; init; }
+        public int TotalCount { get; init; }
+    }
 }
