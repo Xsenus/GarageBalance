@@ -1129,6 +1129,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("var limit = QueryLimits.NormalizeListSize(request.Limit, 100)", methodSource, StringComparison.Ordinal);
         Assert.Contains("repository.GetRunLogEntryListDataAsync(runId, limit, cancellationToken)", methodSource, StringComparison.Ordinal);
         Assert.DoesNotContain("repository.RunExistsAsync(runId", methodSource, StringComparison.Ordinal);
+        var repositoryMethodStart = repositorySource.IndexOf("GetRunLogEntryListDataAsync", StringComparison.Ordinal);
+        var repositoryMethodEnd = repositorySource.IndexOf("GetCreatedRecordListDataAsync", repositoryMethodStart, StringComparison.Ordinal);
+        var repositoryMethodSource = repositorySource[repositoryMethodStart..repositoryMethodEnd];
+        Assert.Contains("new AccessImportRunLogEntryListItemData", repositoryMethodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DetailsJson", repositoryMethodSource, StringComparison.Ordinal);
         Assert.Matches(
             BoundedQueryRegex(@"GetRunLogEntryListDataAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.SelectMany\([\s\S]*?DefaultIfEmpty\(\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             repositorySource);

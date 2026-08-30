@@ -818,7 +818,7 @@ public sealed class ImportService(
             checks);
     }
 
-    private static AccessImportRunLogEntryDto ToLogEntryDto(AccessImportRunLogEntry entry)
+    private static AccessImportRunLogEntryDto ToLogEntryDto(AccessImportRunLogEntryListItemData entry)
     {
         return new AccessImportRunLogEntryDto(
             entry.Id,

@@ -47,7 +47,15 @@ public sealed record AccessImportRunStatusData(
 
 public sealed record AccessImportRunLogEntryListData(
     bool RunExists,
-    IReadOnlyList<AccessImportRunLogEntry> Entries);
+    IReadOnlyList<AccessImportRunLogEntryListItemData> Entries);
+
+public sealed record AccessImportRunLogEntryListItemData(
+    Guid Id,
+    Guid AccessImportRunId,
+    DateTimeOffset CreatedAtUtc,
+    string Level,
+    string StepCode,
+    string Message);
 
 public sealed record AccessImportCreatedRecordListData(
     bool RunExists,

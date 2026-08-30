@@ -89,6 +89,15 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
                 .SelectMany(
                     _ => orderedEntries.DefaultIfEmpty(),
                     (_, entry) => entry)
+                .Select(entry => entry == null
+                    ? null
+                    : new AccessImportRunLogEntryListItemData(
+                        entry.Id,
+                        entry.AccessImportRunId,
+                        entry.CreatedAtUtc,
+                        entry.Level,
+                        entry.StepCode,
+                        entry.Message))
                 .ToListAsync(cancellationToken);
 
             return new AccessImportRunLogEntryListData(
@@ -101,7 +110,15 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
             return new AccessImportRunLogEntryListData(false, []);
         }
 
-        var entries = (await query.ToListAsync(cancellationToken))
+        var entries = (await query
+                .Select(entry => new AccessImportRunLogEntryListItemData(
+                    entry.Id,
+                    entry.AccessImportRunId,
+                    entry.CreatedAtUtc,
+                    entry.Level,
+                    entry.StepCode,
+                    entry.Message))
+                .ToListAsync(cancellationToken))
             .OrderBy(entry => entry.CreatedAtUtc)
             .ThenBy(entry => entry.Id)
             .Take(limit)

@@ -205,6 +205,7 @@ public sealed class PostgreSqlImportPerformanceTests
         Assert.Contains("access_import_runs", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("access_import_run_log_entries", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DetailsJson", commandCapture.Commands[0], StringComparison.Ordinal);
         Assert.Empty(context.ChangeTracker.Entries());
     }
 
@@ -577,6 +578,7 @@ public sealed class PostgreSqlImportPerformanceTests
             AccessImportRunId = runId,
             StepCode = stepCode,
             Message = stepCode,
+            DetailsJson = $"{{\"payload\":\"{new string('x', 20_000)}\"}}",
             CreatedAtUtc = new DateTimeOffset(2026, 8, 30, 1, minuteOffset, 0, TimeSpan.Zero)
         };
 
