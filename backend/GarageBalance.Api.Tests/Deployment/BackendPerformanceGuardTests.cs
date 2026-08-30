@@ -1508,6 +1508,14 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains(".Skip(offset)", users, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", users, StringComparison.Ordinal);
+        var postgresUserPage = ExtractMethodSource(
+            users,
+            "private async Task<UserManagementUsersPageData> GetPostgresUsersPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresUserPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresUserPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresUserPage, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("user.PasswordHash", postgresUserPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("user.SessionVersion", postgresUserPage, StringComparison.Ordinal);
         Assert.Contains("EF.Functions.ILike(user.DisplayName", users, StringComparison.Ordinal);
         Assert.Contains("ThenBy(user => user.Id)", users, StringComparison.Ordinal);
         Assert.Contains("GetPostgresEventsPageAsync", audit, StringComparison.Ordinal);
