@@ -1,5 +1,6 @@
 using System.Data.Common;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
@@ -14,20 +15,37 @@ public sealed class PostgreSqlSupplierPrimaryContactIntegrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var group = new SupplierGroup { Name = "Коммунальные услуги" };
+        var expenseType = new ExpenseType { Name = "Коммунальные расходы" };
+        var expenseFund = new Fund { Name = "Основной", NormalizedName = "основной", Balance = 1234m };
+        var serviceSettings = Enumerable.Range(1, 3)
+            .Select(index => new ChargeServiceSetting { Name = $"Услуга {4 - index}" })
+            .ToArray();
         var suppliers = Enumerable.Range(1, 3)
             .Select(index => new Supplier
             {
                 Name = $"Поставщик {index}",
-                Group = group
+                Group = group,
+                Inn = $"260000000{index}",
+                LegalAddress = $"Адрес {index}",
+                ContactPerson = $"Резервный контакт {index}",
+                Phone = $"Резервный телефон {index}",
+                Email = $"fallback{index}@example.test",
+                StartingBalance = index * 100m,
+                Comment = $"Комментарий {index}",
+                ChargeServiceSetting = serviceSettings[index - 1],
+                ExpenseType = expenseType,
+                ExpenseFund = expenseFund
             })
             .ToArray();
 
         await using (var setupContext = database.CreateContext())
         {
-            setupContext.AddRange(group);
+            setupContext.AddRange(group, expenseType, expenseFund);
+            setupContext.AddRange(serviceSettings);
             setupContext.AddRange(suppliers);
-            foreach (var supplier in suppliers)
+            for (var supplierIndex = 0; supplierIndex < suppliers.Length; supplierIndex++)
             {
+                var supplier = suppliers[supplierIndex];
                 setupContext.SupplierContacts.Add(new SupplierContact
                 {
                     Supplier = supplier,
@@ -45,8 +63,8 @@ public sealed class PostgreSqlSupplierPrimaryContactIntegrationTests
                 {
                     Supplier = supplier,
                     FullName = $"Б Основной {supplier.Name}",
-                    Phone = "+7 900 000-00-00",
-                    Email = "primary@example.test",
+                    Phone = $"+7 900 000-00-0{supplierIndex + 1}",
+                    Email = $"primary{supplierIndex + 1}@example.test",
                     Status = "Работает"
                 });
                 for (var index = 0; index < 40; index++)
@@ -87,20 +105,95 @@ public sealed class PostgreSqlSupplierPrimaryContactIntegrationTests
         {
             Assert.NotNull(item.PrimaryContact);
             Assert.StartsWith("Б Основной", item.PrimaryContact.FullName, StringComparison.Ordinal);
-            Assert.Equal("+7 900 000-00-00", item.PrimaryContact.Phone);
-            Assert.Equal("primary@example.test", item.PrimaryContact.Email);
+            Assert.StartsWith("+7 900 000-00-0", item.PrimaryContact.Phone, StringComparison.Ordinal);
+            Assert.StartsWith("primary", item.PrimaryContact.Email, StringComparison.Ordinal);
+            Assert.NotNull(item.Supplier.ChargeServiceSetting);
+            Assert.Equal("Коммунальные расходы", item.Supplier.ExpenseType?.Name);
+            Assert.Equal("Основной", item.Supplier.ExpenseFund?.Name);
+            Assert.Equal(1234m, item.Supplier.ExpenseFund?.Balance);
+            Assert.Equal(item.Supplier.StartingBalance, item.DebtTotal);
         });
 
-        var contactQuery = Assert.Single(
-            capture.Commands,
-            command => command.Contains("supplier_contacts", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains("ROW_NUMBER() OVER(PARTITION BY", contactQuery, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("row <= 1", contactQuery, StringComparison.OrdinalIgnoreCase);
+        var command = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_contacts", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ROW_NUMBER() OVER(PARTITION BY", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, CountOccurrences(command, "supplier_contacts"));
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CreatedAtUtc", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
+
+        var sortingCases = new (string SortBy, bool Descending, string ExpectedName)[]
+        {
+            ("name", false, "Поставщик 1"),
+            ("name", true, "Поставщик 3"),
+            ("debt", false, "Поставщик 1"),
+            ("debt", true, "Поставщик 3"),
+            ("contactPerson", false, "Поставщик 1"),
+            ("contactPerson", true, "Поставщик 3"),
+            ("phone", false, "Поставщик 1"),
+            ("phone", true, "Поставщик 3"),
+            ("email", false, "Поставщик 1"),
+            ("email", true, "Поставщик 3"),
+            ("unsupported", false, "Поставщик 3"),
+            ("unsupported", true, "Поставщик 1")
+        };
+        foreach (var sortingCase in sortingCases)
+        {
+            var sortedPage = await repository.GetPageAsync(
+                null,
+                null,
+                false,
+                0,
+                1,
+                sortingCase.SortBy,
+                sortingCase.Descending,
+                CancellationToken.None);
+
+            Assert.Equal(3, sortedPage.TotalCount);
+            Assert.Equal(sortingCase.ExpectedName, Assert.Single(sortedPage.Items).Supplier.Name);
+            Assert.Single(capture.TakeCommandsAndClear());
+        }
+
+        var emptyPage = await repository.GetPageAsync(
+            null,
+            null,
+            false,
+            3,
+            3,
+            "name",
+            false,
+            CancellationToken.None);
+        Assert.Equal(3, emptyPage.TotalCount);
+        Assert.Empty(emptyPage.Items);
+        Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Empty(queryContext.ChangeTracker.Entries());
+    }
+
+    private static int CountOccurrences(string value, string fragment)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = value.IndexOf(fragment, offset, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            count++;
+            offset += fragment.Length;
+        }
+
+        return count;
     }
 
     private sealed class SelectCommandCapture : DbCommandInterceptor
     {
         public List<string> Commands { get; } = [];
+
+        public IReadOnlyList<string> TakeCommandsAndClear()
+        {
+            var commands = Commands.ToArray();
+            Commands.Clear();
+            return commands;
+        }
 
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
             DbCommand command,

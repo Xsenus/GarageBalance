@@ -137,7 +137,10 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             null, "%", false, 0, 10, "name", false, CancellationToken.None);
         Assert.Single(supplierPage.Items);
         Assert.Equal(1, supplierPage.TotalCount);
-        Assert.InRange(capture.TakeCountAndClear(), 2, 4);
+        var supplierCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", supplierCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", supplierCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supplier_contacts", supplierCommand, StringComparison.OrdinalIgnoreCase);
 
         var contactPage = await new EfSupplierContactRepository(context).GetPageAsync(
             null, "%", false, 0, 10, "fullName", false, CancellationToken.None);

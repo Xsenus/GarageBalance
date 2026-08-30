@@ -466,7 +466,7 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("IsSqliteProvider() && sortBy is \"debt\" or \"contactPerson\" or \"phone\" or \"email\"", source, StringComparison.Ordinal);
-        Assert.Contains("ApplyPageSorting(query, sortBy, sortDescending)", source, StringComparison.Ordinal);
+        Assert.Contains("ApplyPageSorting(queryWithDetails, sortBy, sortDescending)", source, StringComparison.Ordinal);
         Assert.Contains("supplierIds.Contains(contact.SupplierId) && !contact.IsArchived", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(contact => contact.SupplierId)", source, StringComparison.Ordinal);
         Assert.Contains("contact.Status == \"Работает\"", source, StringComparison.Ordinal);
@@ -476,6 +476,17 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Select(supplier => new SupplierPageDebtRow(", source, StringComparison.Ordinal);
         Assert.Contains("pageRows.ToDictionary(row => row.Supplier.Id, row => row.DebtTotal)", source, StringComparison.Ordinal);
+        var postgresPage = ExtractMethodSource(
+            source,
+            "private async Task<SupplierPageData> GetPostgresPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
+        var postgresProjection = ExtractMethodSource(
+            source,
+            "private IQueryable<SupplierListRow> BuildPostgresRows");
+        Assert.DoesNotContain("CreatedAtUtc", postgresProjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresProjection, StringComparison.Ordinal);
         var supplierPageMethod = serviceSource[
             serviceSource.IndexOf("public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync", StringComparison.Ordinal)];
         Assert.DoesNotContain("GetDebtTotalsAsync", supplierPageMethod, StringComparison.Ordinal);
