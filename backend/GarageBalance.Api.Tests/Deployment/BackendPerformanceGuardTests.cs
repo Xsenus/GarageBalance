@@ -546,6 +546,14 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+        var postgresPage = ExtractMethodSource(
+            source,
+            "private async Task<SupplierContactPageData> GetPostgresPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("CreatedAtUtc", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresPage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -562,10 +570,18 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("sortBy == \"rate\" && IsSqliteProvider()", source, StringComparison.Ordinal);
-        Assert.Contains("ApplyPageSorting(query, sortBy, sortDescending)", source, StringComparison.Ordinal);
+        Assert.Contains("ApplyPageSorting(queryWithDepartment, sortBy, sortDescending)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+        var postgresPage = ExtractMethodSource(
+            source,
+            "private async Task<StaffMemberPageData> GetPostgresPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("CreatedAtUtc", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresPage, StringComparison.Ordinal);
     }
 
     [Fact]

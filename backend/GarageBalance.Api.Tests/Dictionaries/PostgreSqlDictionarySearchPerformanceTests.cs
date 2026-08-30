@@ -146,13 +146,133 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             null, "%", false, 0, 10, "fullName", false, CancellationToken.None);
         Assert.Single(contactPage.Items);
         Assert.Equal(1, contactPage.TotalCount);
-        Assert.Equal(2, capture.TakeCountAndClear());
+        var contactCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", contactCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", contactCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CreatedAtUtc", contactCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", contactCommand, StringComparison.Ordinal);
 
         var staffPage = await new EfStaffMemberRepository(context).GetPageAsync(
             null, "%", false, 0, 10, "fullName", false, CancellationToken.None);
         Assert.Single(staffPage.Items);
         Assert.Equal(1, staffPage.TotalCount);
-        Assert.Equal(2, capture.TakeCountAndClear());
+        var staffCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", staffCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", staffCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CreatedAtUtc", staffCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", staffCommand, StringComparison.Ordinal);
+    }
+
+    [PostgreSqlFact]
+    public async Task CompactRelatedDictionaryPagesPreserveAllPostgresSortingAndEmptySlices()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var group = new SupplierGroup { Name = "Поставщики" };
+        var suppliers = new[]
+        {
+            new Supplier { Name = "Поставщик В", Group = group },
+            new Supplier { Name = "Поставщик А", Group = group },
+            new Supplier { Name = "Поставщик Б", Group = group }
+        };
+        var contacts = new[]
+        {
+            new SupplierContact { Supplier = suppliers[0], FullName = "Контакт 1", Position = "Ведущий", Phone = "101", Email = "one@example.test", Status = "Работает", Comment = "Первый" },
+            new SupplierContact { Supplier = suppliers[1], FullName = "Контакт 2", Position = "Аналитик", Phone = "102", Email = "two@example.test", Status = "Не работает", Comment = "Второй" },
+            new SupplierContact { Supplier = suppliers[2], FullName = "Контакт 3", Position = "Специалист", Phone = "103", Email = "three@example.test", Status = "В отпуске", Comment = "Третий" }
+        };
+        var departments = new[]
+        {
+            new StaffDepartment { Name = "Отдел В" },
+            new StaffDepartment { Name = "Отдел А" },
+            new StaffDepartment { Name = "Отдел Б" }
+        };
+        var staff = new[]
+        {
+            new StaffMember { FullName = "Сотрудник 1", Department = departments[0], Rate = 300m },
+            new StaffMember { FullName = "Сотрудник 2", Department = departments[1], Rate = 100m },
+            new StaffMember { FullName = "Сотрудник 3", Department = departments[2], Rate = 200m }
+        };
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.Add(group);
+            setupContext.AddRange(suppliers);
+            setupContext.AddRange(contacts);
+            setupContext.AddRange(departments);
+            setupContext.AddRange(staff);
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        var contactRepository = new EfSupplierContactRepository(context);
+        var contactCases = new (string SortBy, bool Descending, string ExpectedName)[]
+        {
+            ("supplier", false, "Контакт 2"),
+            ("supplier", true, "Контакт 1"),
+            ("position", false, "Контакт 2"),
+            ("position", true, "Контакт 3"),
+            ("status", false, "Контакт 3"),
+            ("status", true, "Контакт 1"),
+            ("fullName", false, "Контакт 1"),
+            ("unsupported", true, "Контакт 3")
+        };
+        foreach (var item in contactCases)
+        {
+            var page = await contactRepository.GetPageAsync(
+                null, null, false, 0, 1, item.SortBy, item.Descending, CancellationToken.None);
+            Assert.Equal(3, page.TotalCount);
+            var contact = Assert.Single(page.Items);
+            Assert.Equal(item.ExpectedName, contact.FullName);
+            Assert.NotEmpty(contact.Supplier.Name);
+            AssertCompactPageCommand(capture);
+        }
+
+        var emptyContacts = await contactRepository.GetPageAsync(
+            null, null, false, 3, 3, "fullName", false, CancellationToken.None);
+        Assert.Equal(3, emptyContacts.TotalCount);
+        Assert.Empty(emptyContacts.Items);
+        AssertCompactPageCommand(capture);
+
+        var staffRepository = new EfStaffMemberRepository(context);
+        var staffCases = new (string SortBy, bool Descending, string ExpectedName)[]
+        {
+            ("department", false, "Сотрудник 2"),
+            ("department", true, "Сотрудник 1"),
+            ("rate", false, "Сотрудник 2"),
+            ("rate", true, "Сотрудник 1"),
+            ("fullName", false, "Сотрудник 1"),
+            ("unsupported", true, "Сотрудник 3")
+        };
+        foreach (var item in staffCases)
+        {
+            var page = await staffRepository.GetPageAsync(
+                null, null, false, 0, 1, item.SortBy, item.Descending, CancellationToken.None);
+            Assert.Equal(3, page.TotalCount);
+            var member = Assert.Single(page.Items);
+            Assert.Equal(item.ExpectedName, member.FullName);
+            Assert.NotEmpty(member.Department.Name);
+            AssertCompactPageCommand(capture);
+        }
+
+        var emptyStaff = await staffRepository.GetPageAsync(
+            null, null, false, 3, 3, "fullName", false, CancellationToken.None);
+        Assert.Equal(3, emptyStaff.TotalCount);
+        Assert.Empty(emptyStaff.Items);
+        AssertCompactPageCommand(capture);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    private static void AssertCompactPageCommand(SelectCommandCapture capture)
+    {
+        var command = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CreatedAtUtc", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
     }
 
     [PostgreSqlFact]
