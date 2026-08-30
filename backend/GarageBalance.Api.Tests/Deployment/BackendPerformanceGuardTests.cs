@@ -1747,7 +1747,9 @@ public sealed class BackendPerformanceGuardTests
 
     private static string ReadApiSource(string relativePath)
     {
-        return File.ReadAllText(Path.Combine(FindApiProjectRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        return File
+            .ReadAllText(Path.Combine(FindApiProjectRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)))
+            .ReplaceLineEndings("\n");
     }
 
     private static int CountOccurrences(string text, string value)
