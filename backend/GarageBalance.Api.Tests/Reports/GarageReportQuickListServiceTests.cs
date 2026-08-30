@@ -203,6 +203,17 @@ public sealed class GarageReportQuickListServiceTests
         Assert.Single(await service.GetAllAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task GetAll_PropagatesCancellationBeforeReadingQuickLists()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            CreateService(database.Context).GetAllAsync(cancellation.Token));
+    }
+
     private static GarageReportQuickListService CreateService(GarageBalanceDbContext context)
     {
         return new GarageReportQuickListService(
