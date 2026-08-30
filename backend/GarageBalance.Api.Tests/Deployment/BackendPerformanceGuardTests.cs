@@ -435,6 +435,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".ToHashSetAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("GetMonthlyBucketsThroughMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains("ReadCompactListAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("new SupplierAccrualListRow(", source, StringComparison.Ordinal);
+        Assert.Contains("Order(ApplySearch(query, normalizedSearch)).Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains("GetPostgresPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", source, StringComparison.Ordinal);
         Assert.Contains("TotalCount = query.Count()", source, StringComparison.Ordinal);
