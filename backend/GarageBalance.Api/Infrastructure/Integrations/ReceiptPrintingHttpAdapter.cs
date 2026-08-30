@@ -40,15 +40,14 @@ public sealed class ReceiptPrintingHttpAdapter(
             return ReceiptPrintingAdapterResult.Pending(availability.Message);
         }
 
-        var deviceConnection = await secretSettingsService.GetSecretAsync(
+        var secrets = await secretSettingsService.GetSecretsAsync(
             IntegrationSecretCatalog.ReceiptPrintingProvider,
-            IntegrationSecretCatalog.ReceiptPrintingDeviceConnection,
+            [
+                IntegrationSecretCatalog.ReceiptPrintingDeviceConnection,
+                IntegrationSecretCatalog.ReceiptPrintingReceiptTemplate
+            ],
             cancellationToken);
-        var receiptTemplate = await secretSettingsService.GetSecretAsync(
-            IntegrationSecretCatalog.ReceiptPrintingProvider,
-            IntegrationSecretCatalog.ReceiptPrintingReceiptTemplate,
-            cancellationToken);
-        if (!deviceConnection.Succeeded || !receiptTemplate.Succeeded)
+        if (!secrets.Succeeded)
         {
             return ReceiptPrintingAdapterResult.Failed(
                 "not_configured",
@@ -56,9 +55,10 @@ public sealed class ReceiptPrintingHttpAdapter(
                 "receipt_printing_not_configured");
         }
 
+        var protectedSettings = secrets.Value!;
         var payload = new ReceiptPrintingBridgeRequest(
-            deviceConnection.Value!,
-            receiptTemplate.Value!,
+            protectedSettings[IntegrationSecretCatalog.ReceiptPrintingDeviceConnection],
+            protectedSettings[IntegrationSecretCatalog.ReceiptPrintingReceiptTemplate],
             request);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _options.Endpoint)
         {

@@ -27,7 +27,20 @@ public sealed class EfIntegrationSecretSettingsRepository(GarageBalanceDbContext
             .FirstOrDefaultAsync(item =>
                 item.NormalizedProvider == normalizedProvider &&
                 item.NormalizedSettingKey == normalizedSettingKey,
-                cancellationToken);
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<IntegrationSecretSetting>> FindManyAsync(
+        string normalizedProvider,
+        IReadOnlyCollection<string> normalizedSettingKeys,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.IntegrationSecretSettings
+            .AsNoTracking()
+            .Where(item =>
+                item.NormalizedProvider == normalizedProvider &&
+                normalizedSettingKeys.Contains(item.NormalizedSettingKey))
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<IntegrationSecretSetting>> GetSettingsAsync(

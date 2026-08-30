@@ -12,6 +12,11 @@ public interface IIntegrationSecretSettingsService
         string settingKey,
         CancellationToken cancellationToken);
 
+    Task<IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>> GetSecretsAsync(
+        string provider,
+        IReadOnlyCollection<string> settingKeys,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<IntegrationSecretSettingDto>> GetSettingsAsync(
         string? provider,
         CancellationToken cancellationToken);

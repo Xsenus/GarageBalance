@@ -88,6 +88,8 @@ public sealed class HttpIntegrationAdapterTests
         Assert.Contains("private-device", handler.Body, StringComparison.Ordinal);
         Assert.Contains("private-template", handler.Body, StringComparison.Ordinal);
         Assert.Contains("DOC-42", handler.Body, StringComparison.Ordinal);
+        Assert.Equal(1, secrets.BatchReadCount);
+        Assert.Equal(0, secrets.SingleReadCount);
     }
 
     [Fact]
@@ -105,6 +107,8 @@ public sealed class HttpIntegrationAdapterTests
         Assert.Equal("not_configured", result.Status);
         Assert.Equal("receipt_printing_not_configured", result.DeviceResponseCode);
         Assert.Null(handler.Request);
+        Assert.Equal(1, secrets.BatchReadCount);
+        Assert.Equal(0, secrets.SingleReadCount);
     }
 
     [Fact]
@@ -185,6 +189,9 @@ public sealed class HttpIntegrationAdapterTests
 
     private sealed class FakeSecretSettingsService(IReadOnlyDictionary<string, string> settings) : IIntegrationSecretSettingsService
     {
+        public int BatchReadCount { get; private set; }
+        public int SingleReadCount { get; private set; }
+
         public Task<IntegrationSecretSettingResult<IntegrationSecretSettingDto>> UpsertSecretAsync(
             UpsertIntegrationSecretRequest request,
             Guid? actorUserId,
@@ -194,10 +201,27 @@ public sealed class HttpIntegrationAdapterTests
         public Task<IntegrationSecretSettingResult<string>> GetSecretAsync(
             string provider,
             string settingKey,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(settings.TryGetValue(settingKey, out var value)
+            CancellationToken cancellationToken)
+        {
+            SingleReadCount++;
+            return Task.FromResult(settings.TryGetValue(settingKey, out var value)
                 ? IntegrationSecretSettingResult<string>.Success(value)
                 : IntegrationSecretSettingResult<string>.Failure("not_found", "Not found."));
+        }
+
+        public Task<IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>> GetSecretsAsync(
+            string provider,
+            IReadOnlyCollection<string> settingKeys,
+            CancellationToken cancellationToken)
+        {
+            BatchReadCount++;
+            var values = settingKeys
+                .Where(settings.ContainsKey)
+                .ToDictionary(settingKey => settingKey, settingKey => settings[settingKey], StringComparer.OrdinalIgnoreCase);
+            return Task.FromResult(values.Count == settingKeys.Count
+                ? IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>.Success(values)
+                : IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>.Failure("not_found", "Not found."));
+        }
 
         public Task<IReadOnlyList<IntegrationSecretSettingDto>> GetSettingsAsync(
             string? provider,
