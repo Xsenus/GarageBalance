@@ -1405,6 +1405,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", releaseRepositorySource, StringComparison.Ordinal);
+        var postgresReleasePage = ExtractMethodSource(
+            releaseRepositorySource,
+            "private async Task<AppReleasePageDto> GetPostgresPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresReleasePage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresReleasePage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresReleasePage, ".ToArrayAsync(cancellationToken)"));
         Assert.Contains("item.Version.ToLower() == normalizedVersion", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains("IX_app_releases_Version_ci", releaseVersionMigrationSource, StringComparison.Ordinal);
         Assert.Contains("CREATE UNIQUE INDEX", releaseVersionMigrationSource, StringComparison.Ordinal);

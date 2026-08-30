@@ -1,10 +1,13 @@
+using System.Data.Common;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Releases;
+using GarageBalance.Api.Domain.Releases;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Npgsql;
 
@@ -12,6 +15,73 @@ namespace GarageBalance.Api.Tests.Releases;
 
 public sealed class PostgreSqlAppReleasePersistenceIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task ReleasePage_ReturnsRowsAndExactTotalInOneBoundedCommand()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.AppReleases.AddRange(
+                new AppReleaseRecord
+                {
+                    ReleaseId = "release-old",
+                    Version = "1.1.0",
+                    PublishedAt = DateTimeOffset.Parse("2026-08-01T10:00:00Z"),
+                    Title = "Старый релиз",
+                    Summary = "Старое описание.",
+                    ItemsJson = "[{\"type\":\"fixed\",\"text\":\"Старое исправление.\"}]",
+                    IsPublished = true
+                },
+                new AppReleaseRecord
+                {
+                    ReleaseId = "release-new",
+                    Version = "1.2.0",
+                    PublishedAt = DateTimeOffset.Parse("2026-08-02T10:00:00Z"),
+                    Title = "Новый релиз",
+                    Summary = "Новое описание.",
+                    ItemsJson = "[{\"type\":\"improved\",\"text\":\"Новое улучшение.\"}]",
+                    IsPublished = true
+                },
+                new AppReleaseRecord
+                {
+                    ReleaseId = "release-draft",
+                    Version = "1.3.0",
+                    PublishedAt = DateTimeOffset.Parse("2026-08-03T10:00:00Z"),
+                    Title = "Черновик",
+                    Summary = "Описание черновика.",
+                    ItemsJson = "[]",
+                    IsPublished = false
+                });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        var repository = new EfAppReleaseRepository(context);
+
+        var publicPage = await repository.GetPageAsync(false, 0, 1, CancellationToken.None);
+
+        Assert.Equal(2, publicPage.TotalCount);
+        Assert.True(publicPage.HasMore);
+        var published = Assert.Single(publicPage.Items);
+        Assert.Equal("release-new", published.ReleaseId);
+        Assert.Equal("Новое улучшение.", Assert.Single(published.Items).Text);
+        AssertSingleCombinedPageCommand(capture.Commands);
+        capture.Commands.Clear();
+
+        var emptyPage = await repository.GetPageAsync(true, 10, 5, CancellationToken.None);
+
+        Assert.Equal(3, emptyPage.TotalCount);
+        Assert.Empty(emptyPage.Items);
+        Assert.False(emptyPage.HasMore);
+        AssertSingleCombinedPageCommand(capture.Commands);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
     [PostgreSqlFact]
     public async Task UnitOfWork_MapsConcurrentReleaseVersionToPersistenceConflict()
     {
@@ -183,5 +253,32 @@ public sealed class PostgreSqlAppReleasePersistenceIntegrationTests
         public string EnvironmentName { get; set; } = "Development";
         public string WebRootPath { get; set; } = contentRootPath;
         public IFileProvider WebRootFileProvider { get; set; } = new PhysicalFileProvider(contentRootPath);
+    }
+
+    private static void AssertSingleCombinedPageCommand(IReadOnlyCollection<string> commands)
+    {
+        var command = Assert.Single(commands);
+        Assert.Contains("COUNT(*)", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class SelectCommandCapture : DbCommandInterceptor
+    {
+        public List<string> Commands { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Commands.Add(command.CommandText);
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 }
