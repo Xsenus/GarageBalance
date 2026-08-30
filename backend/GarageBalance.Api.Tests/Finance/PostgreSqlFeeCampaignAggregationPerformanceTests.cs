@@ -27,7 +27,7 @@ public sealed class PostgreSqlFeeCampaignAggregationPerformanceTests
             ContributionAmount = 500m,
             TargetAmount = 5_000m,
             StartsOn = new DateOnly(2026, 8, 1),
-            AppliesToAllGarages = true,
+            AppliesToAllGarages = false,
             OverdueGraceDays = 30
         };
         var secondCampaign = new FeeCampaign
@@ -40,6 +40,11 @@ public sealed class PostgreSqlFeeCampaignAggregationPerformanceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        firstCampaign.ParticipantGarages.Add(new FeeCampaignGarage
+        {
+            FeeCampaign = firstCampaign,
+            Garage = garage
+        });
         var firstAccrual = CreateAccrual(garage, incomeType, firstCampaign, 500m);
         var secondAccrual = CreateAccrual(garage, incomeType, secondCampaign, 700m);
         var taggedFirst = CreateIncome(garage, incomeType, 100m, firstCampaign);
@@ -103,14 +108,40 @@ public sealed class PostgreSqlFeeCampaignAggregationPerformanceTests
         Assert.Equal(firstAccrual.Id, firstOption.Accrual?.Id);
         Assert.Equal(40m, firstOption.PaidAmount);
         Assert.Equal(140m, firstOption.CollectedAmount);
+        Assert.Equal(EntityState.Unchanged, context.Entry(firstOption.Campaign).State);
+        Assert.Equal(EntityState.Unchanged, context.Entry(firstOption.Accrual!).State);
+        Assert.Same(firstOption.Campaign, firstOption.Accrual!.FeeCampaign);
+        Assert.Equal(incomeType.Id, firstOption.Campaign.IncomeType.Id);
+        Assert.Equal(garage.Id, Assert.Single(firstOption.Campaign.ParticipantGarages).Garage.Id);
         var secondOption = optionsByCampaign[secondCampaign.Id];
         Assert.Equal(secondAccrual.Id, secondOption.Accrual?.Id);
         Assert.Equal(0m, secondOption.PaidAmount);
         Assert.Equal(80m, secondOption.CollectedAmount);
-        var optionCommands = capture.TakeCommandsAndClear();
-        Assert.Equal(3, optionCommands.Count);
-        Assert.Contains(optionCommands, command => command.Contains("UNION ALL", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(optionCommands, command => command.Contains("SELECT count(", StringComparison.OrdinalIgnoreCase));
+        var optionCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("FROM fee_campaigns", optionCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FROM accruals", optionCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FROM financial_operations", optionCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FROM accrual_payment_allocations", optionCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT count(", optionCommand, StringComparison.OrdinalIgnoreCase);
+
+        var emptyOptions = await repository.GetPaymentOptionsForGarageAsync(
+            garage.Id,
+            new DateOnly(2025, 8, 1),
+            new DateOnly(2025, 8, 1),
+            CancellationToken.None);
+        Assert.Empty(emptyOptions);
+        var emptyOptionCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("FROM fee_campaigns", emptyOptionCommand, StringComparison.OrdinalIgnoreCase);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            repository.GetPaymentOptionsForGarageAsync(
+                garage.Id,
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 1),
+                cancellation.Token));
+        Assert.Empty(capture.TakeCommandsAndClear());
     }
 
     private static Accrual CreateAccrual(

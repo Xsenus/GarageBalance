@@ -787,7 +787,7 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void FeeCampaignRepository_CombinesTaggedAndLegacyAmountsBeforeMaterialization()
+    public void FeeCampaignRepository_CombinesAmountsAndPaymentOptionsBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfFeeCampaignRepository.cs");
         var singleAmount = ExtractMethodSource(
@@ -810,10 +810,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(singleAmount, ".SumAsync("));
         Assert.Contains("BuildCollectedAmountsQuery(ids)", amountPage, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(amountPage, ".ToDictionaryAsync("));
-        Assert.Contains("BuildCollectedAmountsQuery(ids)", paymentOptions, StringComparison.Ordinal);
-        Assert.Contains("FeeCampaignAccrualPaymentRow", paymentOptions, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(paymentOptions, ".ToListAsync(cancellationToken)"));
-        Assert.Equal(1, CountOccurrences(paymentOptions, ".ToDictionaryAsync("));
+        Assert.Contains("FeeCampaignPaymentOptionQueryRow", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Accruals", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains("dbContext.FinancialOperations", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains("dbContext.AccrualPaymentAllocations", paymentOptions, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(paymentOptions, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain(".ToDictionaryAsync(", paymentOptions, StringComparison.Ordinal);
+        Assert.DoesNotContain("BuildCollectedAmountsQuery", paymentOptions, StringComparison.Ordinal);
         Assert.DoesNotContain("paidByAccrual", paymentOptions, StringComparison.Ordinal);
         Assert.DoesNotContain("legacyCollected", paymentOptions, StringComparison.Ordinal);
         Assert.Contains(".Concat(legacy)", paidByGarage, StringComparison.Ordinal);
