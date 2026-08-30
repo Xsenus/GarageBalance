@@ -22762,8 +22762,11 @@ describe('App', () => {
     const exportCashPaymentReportXlsx = vi.fn()
       .mockRejectedValueOnce(new Error('XLSX отчета временно недоступен'))
       .mockResolvedValueOnce(new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const exportCashPaymentReportPdf = vi.fn()
+      .mockResolvedValueOnce(new Blob(['cash pdf'], { type: 'application/pdf' }))
     const reportClient = createReportClient({
       exportCashPaymentReportXlsx,
+      exportCashPaymentReportPdf,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -22785,6 +22788,11 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText('Отчет XLSX готов.')).toBeInTheDocument()
     expect(within(reportsPanel).queryByText('XLSX отчета временно недоступен')).not.toBeInTheDocument()
     expect(exportCashPaymentReportXlsx).toHaveBeenCalledTimes(2)
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
+
+    expect(await within(reportsPanel).findByText('Отчет PDF готов.')).toBeInTheDocument()
+    expect(exportCashPaymentReportPdf).toHaveBeenCalledTimes(1)
   })
 
   it('shows login errors without opening protected workspace', async () => {

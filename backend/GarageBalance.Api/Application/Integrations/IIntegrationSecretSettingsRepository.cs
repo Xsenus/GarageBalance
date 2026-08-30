@@ -14,6 +14,11 @@ public interface IIntegrationSecretSettingsRepository
         string normalizedSettingKey,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<IntegrationSecretSetting>> FindManyAsync(
+        string normalizedProvider,
+        IReadOnlyCollection<string> normalizedSettingKeys,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<IntegrationSecretSetting>> GetSettingsAsync(
         string? normalizedProvider,
         CancellationToken cancellationToken);

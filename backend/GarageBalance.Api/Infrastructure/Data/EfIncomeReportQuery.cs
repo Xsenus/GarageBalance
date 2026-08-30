@@ -1175,6 +1175,11 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
             return new Dictionary<Guid, decimal>();
         }
 
+        if (IsNpgsql())
+        {
+            return await CalculatePostgresDebtAfterPaymentsAsync(targets, cancellationToken);
+        }
+
         var garageIds = targets.Select(target => target.GarageId).Distinct().ToArray();
         var targetAccountingMonths = targets.ToDictionary(target => target.OperationId, target => target.AccountingMonth);
         var maxOperationDate = targets.Max(target => target.OperationDate);
@@ -1266,6 +1271,68 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         return result;
     }
 
+    private async Task<IReadOnlyDictionary<Guid, decimal>> CalculatePostgresDebtAfterPaymentsAsync(
+        IReadOnlyList<IncomeDebtTarget> targets,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH target_ids AS (
+                SELECT UNNEST(@operation_ids::uuid[]) AS operation_id
+            ), targets AS (
+                SELECT operation."Id" AS operation_id,
+                       operation."GarageId" AS garage_id,
+                       operation."AccountingMonth" AS accounting_month,
+                       operation."OperationDate" AS operation_date,
+                       operation."CreatedAtUtc" AS created_at_utc
+                FROM target_ids
+                INNER JOIN financial_operations operation
+                    ON operation."Id" = target_ids.operation_id
+            )
+            SELECT target.operation_id AS "OperationId",
+                   garage."StartingBalance"
+                       + COALESCE(accrual_total.amount, 0)
+                       - COALESCE(payment_total.amount, 0) AS "DebtAfterPayment"
+            FROM targets target
+            INNER JOIN garages garage ON garage."Id" = target.garage_id
+            LEFT JOIN LATERAL (
+                SELECT SUM(accrual."Amount") AS amount
+                FROM accruals accrual
+                WHERE accrual."IsCanceled" = FALSE
+                  AND accrual."GarageId" = target.garage_id
+                  AND accrual."AccountingMonth" <= target.accounting_month
+            ) accrual_total ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT SUM(payment."Amount") AS amount
+                FROM financial_operations payment
+                WHERE payment."IsCanceled" = FALSE
+                  AND payment."OperationKind" = 'income'
+                  AND payment."GarageId" = target.garage_id
+                  AND (
+                      payment."OperationDate" < target.operation_date
+                      OR (
+                          payment."OperationDate" = target.operation_date
+                          AND (
+                              payment."CreatedAtUtc" < target.created_at_utc
+                              OR (
+                                  payment."CreatedAtUtc" = target.created_at_utc
+                                  AND payment."Id" <= target.operation_id
+                              )
+                          )
+                      )
+                  )
+            ) payment_total ON TRUE
+            ORDER BY target.operation_id
+            """;
+        var operationIds = targets.Select(target => target.OperationId).Distinct().ToArray();
+        var rows = await dbContext.Database
+            .SqlQueryRaw<IncomeDebtResultRow>(
+                sql,
+                new NpgsqlParameter<Guid[]>("operation_ids", operationIds))
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(row => row.OperationId, row => row.DebtAfterPayment);
+    }
+
     private static IQueryable<T> ApplyLimit<T>(IQueryable<T> query, int? limit) =>
         limit is > 0 ? query.Take(limit.Value) : query;
 
@@ -1347,6 +1414,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
     private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
     private readonly record struct IncomeDebtTarget(Guid OperationId, Guid GarageId, DateOnly AccountingMonth, DateOnly OperationDate);
+    private sealed record IncomeDebtResultRow(Guid OperationId, decimal DebtAfterPayment);
     private readonly record struct IncomePaymentGroupKey(
         Guid? ReceiptBatchId,
         Guid? StandaloneOperationId,

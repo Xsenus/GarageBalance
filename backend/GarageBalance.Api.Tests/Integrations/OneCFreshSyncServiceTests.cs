@@ -451,6 +451,12 @@ public sealed class OneCFreshSyncServiceTests
                 : IntegrationSecretSettingResult<string>.Success(refreshToken));
         }
 
+        public Task<IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>> GetSecretsAsync(
+            string provider,
+            IReadOnlyCollection<string> settingKeys,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<IntegrationSecretSettingDto>> GetSettingsAsync(string? provider, CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlyList<IntegrationSecretSettingDto>>([]);

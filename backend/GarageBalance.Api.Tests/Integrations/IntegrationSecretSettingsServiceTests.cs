@@ -69,6 +69,78 @@ public sealed class IntegrationSecretSettingsServiceTests
     }
 
     [Fact]
+    public async Task GetSecretsAsync_ReturnsAllRequestedPlaintextValuesCaseInsensitively()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "DeviceConnection", "printer-device"),
+            null,
+            CancellationToken.None);
+        await service.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "ReceiptTemplate", "printer-template"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GetSecretsAsync(
+            " receiptprinting ",
+            ["deviceconnection", "RECEIPTTEMPLATE", "DeviceConnection"],
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("printer-device", result.Value!["DeviceConnection"]);
+        Assert.Equal("printer-template", result.Value["receipttemplate"]);
+    }
+
+    [Theory]
+    [InlineData("", new string[] { "DeviceConnection" })]
+    [InlineData("ReceiptPrinting", new string[0])]
+    [InlineData("ReceiptPrinting", new string[] { "" })]
+    public async Task GetSecretsAsync_ValidatesProviderAndKeys(string provider, string[] settingKeys)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetSecretsAsync(provider, settingKeys, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("integration_secret_key_required", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_FailsWhenAnyRequestedSettingIsMissing()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "DeviceConnection", "printer-device"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GetSecretsAsync(
+            "ReceiptPrinting",
+            ["DeviceConnection", "ReceiptTemplate"],
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("integration_secret_not_found", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetSecretsAsync_ForwardsCancellationToRepositoryRead()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetSecretsAsync(
+            "ReceiptPrinting",
+            ["DeviceConnection", "ReceiptTemplate"],
+            cancellation.Token));
+    }
+
+    [Fact]
     public async Task UpsertSecretAsync_UpdatesExistingSecretCaseInsensitively()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -37,6 +37,10 @@ const reportDictionarySearchLimit = 20
 const reportGarageBrowseLimit = 100
 const reportGarageFilterPanelDefaultSize = { width: 760, height: 480 }
 
+function getReportExportSuccessMessage(extension: 'xlsx' | 'pdf') {
+  return `Отчет ${extension.toUpperCase()} готов.`
+}
+
 type ReportGarageFilterPanelSize = typeof reportGarageFilterPanelDefaultSize
 
 type ReportFilterOption = RankableReportFilterOption
@@ -833,7 +837,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportConsolidatedReportXlsx(auth.accessToken, params)
         : await reportClient.exportConsolidatedReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('consolidated', params.monthFrom, params.monthTo, extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {
@@ -860,7 +864,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportGarageReportXlsx(auth.accessToken, params)
         : await reportClient.exportGarageReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('garages', params.monthFrom, params.monthTo, extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {
@@ -1004,7 +1008,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportExpenseReportXlsx(auth.accessToken, params)
         : await reportClient.exportExpenseReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('expense', params.dateFrom, params.dateTo, extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {
@@ -1031,7 +1035,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportIncomeReportXlsx(auth.accessToken, params)
         : await reportClient.exportIncomeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('income', filter.dateFrom, filter.dateTo, extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {
@@ -1057,7 +1061,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           : await reportClient.exportBankDepositReportPdf(auth.accessToken, params)
       const reportType = type === 'cashPayments' ? 'cash-payments' : 'bank-deposits'
       downloadBlob(blob, buildReportFileName(reportType, filter.dateFrom, filter.dateTo, extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {
@@ -1076,7 +1080,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportFeeReportXlsx(auth.accessToken, params)
         : await reportClient.exportFeeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildSnapshotReportFileName('fees', extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {
@@ -1096,7 +1100,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportFundChangeReportXlsx(auth.accessToken, params)
         : await reportClient.exportFundChangeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('fund-changes', filter.dateFrom, filter.dateTo, extension))
-      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+      setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
     } finally {

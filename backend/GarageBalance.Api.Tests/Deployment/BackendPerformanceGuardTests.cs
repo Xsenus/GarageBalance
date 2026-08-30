@@ -7,7 +7,7 @@ public sealed class BackendPerformanceGuardTests
     [Theory]
     [InlineData("Infrastructure/Data/EfAuditEventRepository.cs", @"OrderByDescending[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfUserManagementRepository.cs", @"OrderBy\(user => user\.[^)]+\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
-    [InlineData("Infrastructure/Data/EfFinancialOperationRepository.cs", @"return await Order\(ApplySearch[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
+    [InlineData("Infrastructure/Data/EfFinancialOperationRepository.cs", @"return await ReadCompactListAsync\([\s\S]*?Order\(ApplySearch[\s\S]*?\.Take\(limit\)[\s\S]*?cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportRepository.cs", @"IsSqliteProvider[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfImportQuarantineRepository.cs", @"return await query[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
     [InlineData("Infrastructure/Data/EfFeeCampaignRepository.cs", @"\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)")]
@@ -359,11 +359,22 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("SqlQuery<MeterReadingYearPageRow>", source, StringComparison.Ordinal);
         Assert.Contains("COUNT(*) OVER () AS \"TotalCount\"", source, StringComparison.Ordinal);
         Assert.Contains("LEFT JOIN meter_readings AS reading", source, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(reading.\"IsMeterReplacement\", FALSE)", source, StringComparison.Ordinal);
+        Assert.Contains("AND reading.\"IsMeterReplacement\" = TRUE", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM meter_devices AS other_device", source, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT EXISTS (SELECT 1 FROM paged_garages)", source, StringComparison.Ordinal);
         var postgresYearPageStart = source.IndexOf("private async Task<MeterReadingYearPageData> GetPostgresYearPageAsync", StringComparison.Ordinal);
         var postgresYearPageEnd = source.IndexOf("private sealed class MeterReadingYearPageRow", postgresYearPageStart, StringComparison.Ordinal);
         var postgresYearPageMethod = source[postgresYearPageStart..postgresYearPageEnd];
         Assert.Equal(1, CountOccurrences(postgresYearPageMethod, ".ToListAsync(cancellationToken)"));
+
+        var migration = ReadApiSource("Infrastructure/Data/Migrations/20260831014500_OptimizeMeterReadingYearGrid.cs");
+        Assert.Contains("UPDATE meter_readings AS reading", migration, StringComparison.Ordinal);
+        Assert.Contains("SET \"IsMeterReplacement\" = TRUE", migration, StringComparison.Ordinal);
+        Assert.Contains("FROM meter_devices AS previous_device", migration, StringComparison.Ordinal);
+        Assert.Contains("IX_garages_active_natural_number", migration, StringComparison.Ordinal);
+        Assert.Contains("ON garages ((length(\"Number\")), \"Number\", \"Id\")", migration, StringComparison.Ordinal);
+        Assert.Contains("WHERE \"IsArchived\" = false", migration, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -424,6 +435,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".ToHashSetAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("GetMonthlyBucketsThroughMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains("ReadCompactListAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("new SupplierAccrualListRow(", source, StringComparison.Ordinal);
+        Assert.Contains("Order(ApplySearch(query, normalizedSearch)).Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains("GetPostgresPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", source, StringComparison.Ordinal);
         Assert.Contains("TotalCount = query.Count()", source, StringComparison.Ordinal);
@@ -726,6 +740,17 @@ public sealed class BackendPerformanceGuardTests
         Assert.Matches(
             BoundedQueryRegex(@"GetListAsync[\s\S]*?Include\(item => item\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= businessDate[\s\S]*?Take\(limit\)[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, businessDate, cancellationToken, servicesWithVersions\)"),
             source);
+        var postgresListMethod = source[
+            source.IndexOf("private async Task<IReadOnlyList<ChargeServiceSetting>> GetPostgresListAsync", StringComparison.Ordinal)..source.IndexOf("public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync", StringComparison.Ordinal)];
+        Assert.Contains("LEFT JOIN LATERAL", postgresListMethod, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @limit", postgresListMethod, StringComparison.Ordinal);
+        Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", postgresListMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<ChargeServiceListRow>", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("direct_tariff.\"Rate\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("direct_tariff.\"Comment\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("setting.\"CreatedAtUtc\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("setting.\"UpdatedAtUtc\"", postgresListMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresListMethod, ".ToListAsync(cancellationToken)"));
         Assert.Matches(
             BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Include\(setting => setting\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= monthEnd[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, servicesWithVersions\)"),
             source);
@@ -940,13 +965,23 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COALESCE(SUM(income_amount), 0)", incomePaymentMethod, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<IncomePaymentCombinedQueryRow>", incomePaymentMethod, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(incomePaymentMethod, ".ToListAsync(cancellationToken)"));
+        var postgresIncomeDebtStart = incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculatePostgresDebtAfterPaymentsAsync", StringComparison.Ordinal);
         var incomeDebtMethod = incomeSource[
-            incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
+            incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..postgresIncomeDebtStart];
         Assert.Contains("startingBalanceQuery", incomeDebtMethod, StringComparison.Ordinal);
         Assert.Contains("accrualQuery", incomeDebtMethod, StringComparison.Ordinal);
         Assert.Contains("paymentQuery", incomeDebtMethod, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(incomeDebtMethod, ".Concat("));
         Assert.Equal(1, CountOccurrences(incomeDebtMethod, ".ToListAsync(cancellationToken)"));
+        var postgresIncomeDebtMethod = incomeSource[
+            postgresIncomeDebtStart..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
+        Assert.Contains("UNNEST(@operation_ids::uuid[])", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN LATERAL", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("accrual.\"AccountingMonth\" <= target.accounting_month", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("payment.\"Id\" <= target.operation_id", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<IncomeDebtResultRow>", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Concat(", postgresIncomeDebtMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresIncomeDebtMethod, ".ToListAsync(cancellationToken)"));
         Assert.Contains("useClientSearch = hasSearch && !", incomeSource, StringComparison.Ordinal);
         Assert.DoesNotContain("STRPOS", incomeSource, StringComparison.OrdinalIgnoreCase);
         Assert.True(

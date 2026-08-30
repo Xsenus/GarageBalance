@@ -49,18 +49,18 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         int limit,
         CancellationToken cancellationToken)
     {
-        var query = ApplyPeriod(QueryActive(), monthFrom, monthTo);
+        var query = ApplyPeriod(QueryActiveList(), monthFrom, monthTo);
         if (normalizedSearch is not null && IsSqliteProvider())
         {
-            return (await Order(query).ToListAsync(cancellationToken))
+            return (await ReadCompactListAsync(Order(query), cancellationToken))
                 .Where(accrual => AccrualMatchesSearch(accrual, normalizedSearch))
                 .Take(limit)
                 .ToList();
         }
 
-        return await Order(ApplySearch(query, normalizedSearch))
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        return await ReadCompactListAsync(
+            Order(ApplySearch(query, normalizedSearch)).Take(limit),
+            cancellationToken);
     }
 
     public async Task<AccrualPageData> GetPageAsync(
@@ -716,6 +716,92 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
 
     public void Add(Accrual accrual) => dbContext.Accruals.Add(accrual);
 
+    private IQueryable<Accrual> QueryActiveList() =>
+        dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled);
+
+    private static async Task<IReadOnlyList<Accrual>> ReadCompactListAsync(
+        IQueryable<Accrual> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .Select(accrual => new AccrualListRow(
+                accrual.Id,
+                accrual.GarageId,
+                accrual.Garage.Number,
+                accrual.Garage.OwnerId,
+                accrual.Garage.Owner == null ? null : accrual.Garage.Owner.LastName,
+                accrual.Garage.Owner == null ? null : accrual.Garage.Owner.FirstName,
+                accrual.Garage.Owner == null ? null : accrual.Garage.Owner.MiddleName,
+                accrual.IncomeTypeId,
+                accrual.IncomeType.Name,
+                accrual.IrregularPaymentId,
+                accrual.IrregularPayment == null ? null : accrual.IrregularPayment.Name,
+                accrual.Basis,
+                accrual.FeeCampaignId,
+                accrual.FeeCampaign == null ? null : accrual.FeeCampaign.Name,
+                accrual.AccountingMonth,
+                accrual.AccountingYear,
+                accrual.DueDate,
+                accrual.OverdueFromDate,
+                accrual.Amount,
+                accrual.Source,
+                accrual.Comment,
+                accrual.IsCanceled))
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(CreateCompactAccrual).ToList();
+    }
+
+    private static Accrual CreateCompactAccrual(AccrualListRow row) =>
+        new()
+        {
+            Id = row.Id,
+            GarageId = row.GarageId,
+            Garage = new Garage
+            {
+                Id = row.GarageId,
+                Number = row.GarageNumber,
+                OwnerId = row.OwnerId,
+                Owner = row.OwnerId is null
+                    ? null
+                    : new Owner
+                    {
+                        Id = row.OwnerId.Value,
+                        LastName = row.OwnerLastName ?? string.Empty,
+                        FirstName = row.OwnerFirstName ?? string.Empty,
+                        MiddleName = row.OwnerMiddleName
+                    }
+            },
+            IncomeTypeId = row.IncomeTypeId,
+            IncomeType = new IncomeType { Id = row.IncomeTypeId, Name = row.IncomeTypeName },
+            IrregularPaymentId = row.IrregularPaymentId,
+            IrregularPayment = row.IrregularPaymentId is null
+                ? null
+                : new IrregularPayment
+                {
+                    Id = row.IrregularPaymentId.Value,
+                    Name = row.IrregularPaymentName ?? string.Empty
+                },
+            Basis = row.Basis,
+            FeeCampaignId = row.FeeCampaignId,
+            FeeCampaign = row.FeeCampaignId is null
+                ? null
+                : new FeeCampaign
+                {
+                    Id = row.FeeCampaignId.Value,
+                    Name = row.FeeCampaignName ?? string.Empty
+                },
+            AccountingMonth = row.AccountingMonth,
+            AccountingYear = row.AccountingYear,
+            DueDate = row.DueDate,
+            OverdueFromDate = row.OverdueFromDate,
+            Amount = row.Amount,
+            Source = row.Source,
+            Comment = row.Comment,
+            IsCanceled = row.IsCanceled
+        };
+
     private IQueryable<Accrual> QueryActive() =>
         dbContext.Accruals.AsNoTracking()
             .Include(accrual => accrual.Garage)
@@ -732,6 +818,30 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Include(accrual => accrual.IncomeType)
             .Include(accrual => accrual.IrregularPayment)
             .Include(accrual => accrual.FeeCampaign);
+
+    private sealed record AccrualListRow(
+        Guid Id,
+        Guid GarageId,
+        string GarageNumber,
+        Guid? OwnerId,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        Guid IncomeTypeId,
+        string IncomeTypeName,
+        Guid? IrregularPaymentId,
+        string? IrregularPaymentName,
+        string? Basis,
+        Guid? FeeCampaignId,
+        string? FeeCampaignName,
+        DateOnly AccountingMonth,
+        int? AccountingYear,
+        DateOnly DueDate,
+        DateOnly OverdueFromDate,
+        decimal Amount,
+        string Source,
+        string? Comment,
+        bool IsCanceled);
 
     private static IQueryable<Accrual> ApplyPeriod(IQueryable<Accrual> query, DateOnly? monthFrom, DateOnly? monthTo)
     {

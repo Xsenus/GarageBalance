@@ -141,6 +141,38 @@ public sealed class IntegrationSecretSettingsService(
         return IntegrationSecretSettingResult<string>.Success(plaintext);
     }
 
+    public async Task<IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>> GetSecretsAsync(
+        string provider,
+        IReadOnlyCollection<string> settingKeys,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(provider) || settingKeys.Count == 0 || settingKeys.Any(string.IsNullOrWhiteSpace))
+        {
+            return IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>.Failure(
+                "integration_secret_key_required",
+                "Provider and setting keys are required.");
+        }
+
+        var normalizedProvider = Normalize(provider);
+        var normalizedSettingKeys = settingKeys
+            .Select(Normalize)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var settings = await repository.FindManyAsync(normalizedProvider, normalizedSettingKeys, cancellationToken);
+        if (settings.Count != normalizedSettingKeys.Length)
+        {
+            return IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>.Failure(
+                "integration_secret_not_found",
+                "One or more integration secret settings were not found.");
+        }
+
+        var plaintextValues = settings.ToDictionary(
+            setting => setting.SettingKey,
+            setting => sensitiveDataProtector.Unprotect(setting.ProtectedValue, setting.Purpose),
+            StringComparer.OrdinalIgnoreCase);
+        return IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>.Success(plaintextValues);
+    }
+
     public async Task<IReadOnlyList<IntegrationSecretSettingDto>> GetSettingsAsync(
         string? provider,
         CancellationToken cancellationToken)

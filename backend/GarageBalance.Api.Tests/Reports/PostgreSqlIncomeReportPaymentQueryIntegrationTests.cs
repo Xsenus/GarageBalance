@@ -70,9 +70,129 @@ public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
         Assert.Equal(2, capture.Commands.Count(command => command.Contains("financial_operations", StringComparison.OrdinalIgnoreCase)));
         Assert.Contains("WITH filtered_rows AS", capture.Commands[0], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COALESCE(SUM(income_amount), 0)", capture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNNEST(@operation_ids::uuid[])", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LEFT JOIN LATERAL", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("accrual.\"AccountingMonth\" <= target.accounting_month", capture.Commands[1], StringComparison.Ordinal);
+        Assert.Contains("payment.\"Id\" <= target.operation_id", capture.Commands[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("UNION ALL", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(capture.Commands, command =>
             command.Contains("WHERE f.\"Id\" = ANY", StringComparison.OrdinalIgnoreCase) ||
             command.Contains("WHERE \"f\".\"Id\" = ANY", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [PostgreSqlFact]
+    public async Task PaymentDebtCalculationReturnsOnlyCurrentPageTargetsAndSkipsEmptyPageRead()
+    {
+        var month = new DateOnly(2042, 11, 1);
+        var suffix = Guid.NewGuid().ToString("N");
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage { Number = $"INCOME-PAGE-{suffix}", StartingBalance = 50m };
+            var incomeType = new IncomeType { Name = $"Income page {suffix}" };
+            seedContext.AddRange(garage, incomeType);
+            seedContext.Accruals.Add(new Accrual
+            {
+                Garage = garage,
+                IncomeType = incomeType,
+                AccountingMonth = month,
+                DueDate = month.AddMonths(1).AddDays(-1),
+                OverdueFromDate = month.AddMonths(1),
+                Amount = 1000m,
+                Source = "income_payment_page_debt_integration"
+            });
+            for (var index = 0; index < 40; index++)
+            {
+                seedContext.FinancialOperations.Add(CreatePayment(
+                    garage,
+                    incomeType,
+                    month.AddDays(index % 20),
+                    10m,
+                    $"PKO-HISTORY-{index:00}",
+                    hour: 8 + (index % 10),
+                    minute: index));
+            }
+
+            await seedContext.SaveChangesAsync();
+        }
+
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        var query = new EfIncomeReportQuery(context);
+
+        var page = await query.GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            1,
+            0,
+            new ReportSort("date", false),
+            CancellationToken.None);
+
+        Assert.Equal(40, page.RowCount);
+        Assert.Single(page.Rows);
+        Assert.Equal("PKO-HISTORY-20", page.Rows[0].DocumentNumber);
+        Assert.Equal(1030m, page.Rows[0].DebtAfterPayment);
+        Assert.Equal(2, capture.Commands.Count);
+        Assert.Contains("UNNEST(@operation_ids::uuid[])", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SELECT \"f\".", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+
+        capture.Commands.Clear();
+        var emptyPage = await query.GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            1,
+            100,
+            new ReportSort("date", false),
+            CancellationToken.None);
+
+        Assert.Equal(40, emptyPage.RowCount);
+        Assert.Equal(400m, emptyPage.IncomeTotal);
+        Assert.Empty(emptyPage.Rows);
+        Assert.Single(capture.Commands);
+    }
+
+    [PostgreSqlFact]
+    public async Task PaymentPagePropagatesCancellationBeforeDatabaseRead()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfIncomeReportQuery(context).GetRowsAsync(
+                new DateOnly(2042, 11, 1),
+                new DateOnly(2042, 11, 30),
+                "payments",
+                new HashSet<Guid>(),
+                new HashSet<Guid>(),
+                new HashSet<Guid>(),
+                null,
+                25,
+                0,
+                new ReportSort("date", false),
+                cancellation.Token));
+
+        Assert.Empty(capture.Commands);
     }
 
     [PostgreSqlFact]

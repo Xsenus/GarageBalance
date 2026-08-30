@@ -21,15 +21,15 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         var query = ApplyFilters(QueryActive(), dateFrom, dateTo, operationKind, garageId, supplierId, staffMemberId);
         if (normalizedSearch is not null && IsSqliteProvider())
         {
-            return (await Order(query).ToListAsync(cancellationToken))
+            return (await ReadCompactListAsync(Order(query), cancellationToken))
                 .Where(operation => OperationMatchesSearch(operation, normalizedSearch))
                 .Take(limit)
                 .ToList();
         }
 
-        return await Order(ApplySearch(query, normalizedSearch))
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        return await ReadCompactListAsync(
+            Order(ApplySearch(query, normalizedSearch)).Take(limit),
+            cancellationToken);
     }
 
     public async Task<FinancialOperationPageData> GetPageAsync(
@@ -47,7 +47,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         var query = ApplyFilters(QueryActive(), dateFrom, dateTo, operationKind, garageId, supplierId, staffMemberId);
         if (normalizedSearch is not null && IsSqliteProvider())
         {
-            var filtered = (await Order(query).ToListAsync(cancellationToken))
+            var filtered = (await ReadCompactListAsync(Order(query), cancellationToken))
                 .Where(operation => OperationMatchesSearch(operation, normalizedSearch))
                 .ToList();
             return new FinancialOperationPageData(filtered.Skip(offset).Take(limit).ToList(), filtered.Count);
@@ -60,10 +60,9 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await Order(query)
-            .Skip(offset)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        var items = await ReadCompactListAsync(
+            Order(query).Skip(offset).Take(limit),
+            cancellationToken);
         return new FinancialOperationPageData(items, totalCount);
     }
 
@@ -430,8 +429,133 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
     public void Add(FinancialOperation operation) => dbContext.FinancialOperations.Add(operation);
 
     private IQueryable<FinancialOperation> QueryActive() =>
-        Aggregate(dbContext.FinancialOperations.AsNoTracking())
+        dbContext.FinancialOperations.AsNoTracking()
             .Where(operation => !operation.IsCanceled);
+
+    private static async Task<IReadOnlyList<FinancialOperation>> ReadCompactListAsync(
+        IQueryable<FinancialOperation> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .Select(operation => new FinancialOperationListRow(
+                operation.Id,
+                operation.OperationKind,
+                operation.OperationDate,
+                operation.AccountingMonth,
+                operation.Amount,
+                operation.ReceiptBatchId,
+                operation.ExpensePaymentType,
+                operation.ExpensePaymentSource,
+                operation.CounterpartyName,
+                operation.NegativeFundBalanceConfirmed,
+                operation.DocumentNumber,
+                operation.Comment,
+                operation.GarageId,
+                operation.Garage == null ? null : operation.Garage.Number,
+                operation.Garage == null ? null : (decimal?)operation.Garage.StartingBalance,
+                operation.Garage == null ? null : operation.Garage.OwnerId,
+                operation.Garage == null || operation.Garage.Owner == null ? null : operation.Garage.Owner.LastName,
+                operation.Garage == null || operation.Garage.Owner == null ? null : operation.Garage.Owner.FirstName,
+                operation.Garage == null || operation.Garage.Owner == null ? null : operation.Garage.Owner.MiddleName,
+                operation.IncomeTypeId,
+                operation.IncomeType == null ? null : operation.IncomeType.Name,
+                operation.SupplierId,
+                operation.Supplier == null ? null : operation.Supplier.Name,
+                operation.Supplier == null ? null : (decimal?)operation.Supplier.StartingBalance,
+                operation.StaffMemberId,
+                operation.StaffMember == null ? null : operation.StaffMember.FullName,
+                operation.StaffMember == null ? null : (Guid?)operation.StaffMember.DepartmentId,
+                operation.StaffMember == null ? null : operation.StaffMember.Department.Name,
+                operation.ExpenseTypeId,
+                operation.ExpenseType == null ? null : operation.ExpenseType.Name,
+                operation.ExpenseFundId,
+                operation.ExpenseFund == null ? null : operation.ExpenseFund.Name,
+                operation.IsCanceled,
+                operation.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(CreateCompactOperation).ToList();
+    }
+
+    private static FinancialOperation CreateCompactOperation(FinancialOperationListRow row)
+    {
+        return new FinancialOperation
+        {
+            Id = row.Id,
+            OperationKind = row.OperationKind,
+            OperationDate = row.OperationDate,
+            AccountingMonth = row.AccountingMonth,
+            Amount = row.Amount,
+            ReceiptBatchId = row.ReceiptBatchId,
+            ExpensePaymentType = row.ExpensePaymentType,
+            ExpensePaymentSource = row.ExpensePaymentSource,
+            CounterpartyName = row.CounterpartyName,
+            NegativeFundBalanceConfirmed = row.NegativeFundBalanceConfirmed,
+            DocumentNumber = row.DocumentNumber,
+            Comment = row.Comment,
+            GarageId = row.GarageId,
+            Garage = row.GarageId is null
+                ? null
+                : new Garage
+                {
+                    Id = row.GarageId.Value,
+                    Number = row.GarageNumber ?? string.Empty,
+                    StartingBalance = row.GarageStartingBalance ?? 0m,
+                    OwnerId = row.OwnerId,
+                    Owner = row.OwnerId is null
+                        ? null
+                        : new Owner
+                        {
+                            Id = row.OwnerId.Value,
+                            LastName = row.OwnerLastName ?? string.Empty,
+                            FirstName = row.OwnerFirstName ?? string.Empty,
+                            MiddleName = row.OwnerMiddleName
+                        }
+                },
+            IncomeTypeId = row.IncomeTypeId,
+            IncomeType = row.IncomeTypeId is null
+                ? null
+                : new IncomeType { Id = row.IncomeTypeId.Value, Name = row.IncomeTypeName ?? string.Empty },
+            SupplierId = row.SupplierId,
+            Supplier = row.SupplierId is null
+                ? null
+                : new Supplier
+                {
+                    Id = row.SupplierId.Value,
+                    Name = row.SupplierName ?? string.Empty,
+                    StartingBalance = row.SupplierStartingBalance ?? 0m
+                },
+            StaffMemberId = row.StaffMemberId,
+            StaffMember = row.StaffMemberId is null
+                ? null
+                : new StaffMember
+                {
+                    Id = row.StaffMemberId.Value,
+                    FullName = row.StaffMemberName ?? string.Empty,
+                    DepartmentId = row.StaffDepartmentId!.Value,
+                    Department = new StaffDepartment
+                    {
+                        Id = row.StaffDepartmentId.Value,
+                        Name = row.StaffDepartmentName ?? string.Empty
+                    }
+                },
+            ExpenseTypeId = row.ExpenseTypeId,
+            ExpenseType = row.ExpenseTypeId is null
+                ? null
+                : new ExpenseType { Id = row.ExpenseTypeId.Value, Name = row.ExpenseTypeName ?? string.Empty },
+            ExpenseFundId = row.ExpenseFundId,
+            ExpenseFund = row.ExpenseFundId is null
+                ? null
+                : new Fund
+                {
+                    Id = row.ExpenseFundId.Value,
+                    Name = row.ExpenseFundName ?? string.Empty,
+                    NormalizedName = row.ExpenseFundName ?? string.Empty
+                },
+            IsCanceled = row.IsCanceled,
+            CreatedAtUtc = row.CreatedAtUtc
+        };
+    }
 
     private static IQueryable<FinancialOperation> Aggregate(IQueryable<FinancialOperation> query) =>
         query
@@ -443,6 +567,42 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
             .ThenInclude(staffMember => staffMember!.Department)
             .Include(operation => operation.ExpenseType)
             .Include(operation => operation.ExpenseFund);
+
+    private sealed record FinancialOperationListRow(
+        Guid Id,
+        string OperationKind,
+        DateOnly OperationDate,
+        DateOnly AccountingMonth,
+        decimal Amount,
+        Guid? ReceiptBatchId,
+        string? ExpensePaymentType,
+        string? ExpensePaymentSource,
+        string? CounterpartyName,
+        bool NegativeFundBalanceConfirmed,
+        string? DocumentNumber,
+        string? Comment,
+        Guid? GarageId,
+        string? GarageNumber,
+        decimal? GarageStartingBalance,
+        Guid? OwnerId,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        Guid? IncomeTypeId,
+        string? IncomeTypeName,
+        Guid? SupplierId,
+        string? SupplierName,
+        decimal? SupplierStartingBalance,
+        Guid? StaffMemberId,
+        string? StaffMemberName,
+        Guid? StaffDepartmentId,
+        string? StaffDepartmentName,
+        Guid? ExpenseTypeId,
+        string? ExpenseTypeName,
+        Guid? ExpenseFundId,
+        string? ExpenseFundName,
+        bool IsCanceled,
+        DateTimeOffset CreatedAtUtc);
 
     private static IQueryable<FinancialOperation> ApplyFilters(
         IQueryable<FinancialOperation> query,

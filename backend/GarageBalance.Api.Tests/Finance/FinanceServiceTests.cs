@@ -1110,7 +1110,7 @@ public sealed class FinanceServiceTests
         var replacementDevice = new MeterDevice { GarageId = secondGarage.Id, Garage = secondGarage, MeterKind = "electricity", SerialNumber = "NEW-20", InstalledOn = new DateOnly(2026, 2, 10), InitialValue = 0m };
         database.Context.MeterDevices.AddRange(previousDevice, replacementDevice);
         database.Context.MeterReadings.AddRange(
-            new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 125m, MeterDeviceId = replacementDevice.Id, MeterDevice = replacementDevice },
+            new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 125m, MeterDeviceId = replacementDevice.Id, MeterDevice = replacementDevice, IsMeterReplacement = true },
             new MeterReading { GarageId = secondGarage.Id, MeterKind = "water", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 25m },
             new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2025, 12, 1), ReadingDate = new DateOnly(2025, 12, 20), CurrentValue = 100m },
             new MeterReading { GarageId = archivedGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 500m });

@@ -15,18 +15,18 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         int limit,
         CancellationToken cancellationToken)
     {
-        var query = ApplyFilters(QueryActive(), monthFrom, monthTo, supplierId);
+        var query = ApplyFilters(QueryActiveList(), monthFrom, monthTo, supplierId);
         if (normalizedSearch is not null && IsSqliteProvider())
         {
-            return (await Order(query).ToListAsync(cancellationToken))
+            return (await ReadCompactListAsync(Order(query), cancellationToken))
                 .Where(accrual => AccrualMatchesSearch(accrual, normalizedSearch))
                 .Take(limit)
                 .ToList();
         }
 
-        return await Order(ApplySearch(query, normalizedSearch))
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        return await ReadCompactListAsync(
+            Order(ApplySearch(query, normalizedSearch)).Take(limit),
+            cancellationToken);
     }
 
     public async Task<SupplierAccrualPageData> GetPageAsync(
@@ -241,6 +241,59 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
 
     public void Add(SupplierAccrual accrual) => dbContext.SupplierAccruals.Add(accrual);
 
+    private IQueryable<SupplierAccrual> QueryActiveList() =>
+        dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled);
+
+    private static async Task<IReadOnlyList<SupplierAccrual>> ReadCompactListAsync(
+        IQueryable<SupplierAccrual> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .Select(accrual => new SupplierAccrualListRow(
+                accrual.Id,
+                accrual.SupplierId,
+                accrual.Supplier.Name,
+                accrual.ExpenseTypeId,
+                accrual.ExpenseType.Name,
+                accrual.ExpenseFundId,
+                accrual.ExpenseFund == null ? null : accrual.ExpenseFund.Name,
+                accrual.AccountingMonth,
+                accrual.Amount,
+                accrual.Source,
+                accrual.DocumentNumber,
+                accrual.Comment,
+                accrual.IsCanceled))
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(CreateCompactAccrual).ToList();
+    }
+
+    private static SupplierAccrual CreateCompactAccrual(SupplierAccrualListRow row) =>
+        new()
+        {
+            Id = row.Id,
+            SupplierId = row.SupplierId,
+            Supplier = new Supplier { Id = row.SupplierId, Name = row.SupplierName },
+            ExpenseTypeId = row.ExpenseTypeId,
+            ExpenseType = new ExpenseType { Id = row.ExpenseTypeId, Name = row.ExpenseTypeName },
+            ExpenseFundId = row.ExpenseFundId,
+            ExpenseFund = row.ExpenseFundId is null
+                ? null
+                : new Fund
+                {
+                    Id = row.ExpenseFundId.Value,
+                    Name = row.ExpenseFundName ?? string.Empty,
+                    NormalizedName = row.ExpenseFundName ?? string.Empty
+                },
+            AccountingMonth = row.AccountingMonth,
+            Amount = row.Amount,
+            Source = row.Source,
+            DocumentNumber = row.DocumentNumber,
+            Comment = row.Comment,
+            IsCanceled = row.IsCanceled
+        };
+
     private IQueryable<SupplierAccrual> QueryActive() =>
         dbContext.SupplierAccruals.AsNoTracking()
             .Include(accrual => accrual.Supplier)
@@ -308,4 +361,19 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed record SupplierAccrualListRow(
+        Guid Id,
+        Guid SupplierId,
+        string SupplierName,
+        Guid ExpenseTypeId,
+        string ExpenseTypeName,
+        Guid? ExpenseFundId,
+        string? ExpenseFundName,
+        DateOnly AccountingMonth,
+        decimal Amount,
+        string Source,
+        string? DocumentNumber,
+        string? Comment,
+        bool IsCanceled);
 }

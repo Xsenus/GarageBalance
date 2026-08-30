@@ -97,6 +97,12 @@ public sealed class DadataSuggestionServiceTests
                 ? IntegrationSecretSettingResult<string>.Failure("not_found", "Not found")
                 : IntegrationSecretSettingResult<string>.Success(value));
 
+        public Task<IntegrationSecretSettingResult<IReadOnlyDictionary<string, string>>> GetSecretsAsync(
+            string provider,
+            IReadOnlyCollection<string> settingKeys,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<IntegrationSecretSettingDto>> GetSettingsAsync(string? provider, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<IntegrationSecretSettingDto>>([]);
 
