@@ -155,6 +155,70 @@ public sealed class PostgreSqlAccrualPageIntegrationTests
         AssertSingleCombinedCommand(capture);
     }
 
+    [PostgreSqlFact]
+    public async Task DueDateReviewPageLoadsCountAndOnlyVisibleColumnsInOneCommand()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var garage = new Garage { Number = "review-1", PeopleCount = 1, FloorCount = 1 };
+        var incomeType = new IncomeType { Name = "Проверяемый взнос" };
+        var first = CreateAccrual(
+            garage,
+            incomeType,
+            new DateOnly(2047, 1, 1),
+            100m,
+            "Первое",
+            dueDateNeedsReview: true,
+            dueDateReviewReason: "first-reason");
+        var second = CreateAccrual(
+            garage,
+            incomeType,
+            new DateOnly(2047, 2, 1),
+            200m,
+            "Второе",
+            dueDateNeedsReview: true,
+            dueDateReviewReason: "second-reason");
+        var third = CreateAccrual(
+            garage,
+            incomeType,
+            new DateOnly(2047, 3, 1),
+            300m,
+            "Третье",
+            dueDateNeedsReview: true,
+            dueDateReviewReason: "third-reason");
+        first.CalculationDetailsJson = $"{{\"payload\":\"{new string('x', 20_000)}\"}}";
+        second.CalculationDetailsJson = first.CalculationDetailsJson;
+        third.CalculationDetailsJson = first.CalculationDetailsJson;
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AddRange(first, second, third);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var page = await new EfAccrualRepository(context)
+            .GetDueDateReviewPageAsync(1, 1, CancellationToken.None);
+
+        Assert.Equal(3, page.TotalCount);
+        var item = Assert.Single(page.Items);
+        Assert.Equal(second.Id, item.Id);
+        Assert.Equal("review-1", item.Garage.Number);
+        Assert.Equal("Проверяемый взнос", item.IncomeType.Name);
+        Assert.Equal("second-reason", item.DueDateReviewReason);
+        var command = Assert.Single(capture.Commands);
+        Assert.Contains("COUNT(*)", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OFFSET", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CalculationDetailsJson", command, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
     private static Accrual CreateAccrual(
         Garage garage,
         IncomeType incomeType,

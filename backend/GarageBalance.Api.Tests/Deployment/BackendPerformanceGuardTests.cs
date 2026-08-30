@@ -377,6 +377,13 @@ public sealed class BackendPerformanceGuardTests
         var postgresPageEnd = source.IndexOf("public async Task<AccrualPageData> GetDueDateReviewPageAsync", postgresPageStart, StringComparison.Ordinal);
         var postgresPageMethod = source[postgresPageStart..postgresPageEnd];
         Assert.Equal(1, CountOccurrences(postgresPageMethod, ".ToListAsync(cancellationToken)"));
+        var dueDateReviewStart = source.IndexOf("private async Task<AccrualPageData> GetPostgresDueDateReviewPageAsync", postgresPageEnd, StringComparison.Ordinal);
+        var dueDateReviewEnd = source.IndexOf("GetTotalBeforeMonthAsync", dueDateReviewStart, StringComparison.Ordinal);
+        var dueDateReviewMethod = source[dueDateReviewStart..dueDateReviewEnd];
+        Assert.Contains(".Concat(totalsRow)", dueDateReviewMethod, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", dueDateReviewMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("CalculationDetailsJson", dueDateReviewMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(dueDateReviewMethod, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]

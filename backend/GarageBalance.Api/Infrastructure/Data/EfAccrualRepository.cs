@@ -231,17 +231,99 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
     public async Task<AccrualPageData> GetDueDateReviewPageAsync(int offset, int limit, CancellationToken cancellationToken)
     {
         var query = dbContext.Accruals.AsNoTracking()
-            .Include(accrual => accrual.Garage)
-            .Include(accrual => accrual.IncomeType)
             .Where(accrual => !accrual.IsCanceled && accrual.DueDateNeedsReview);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresDueDateReviewPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
+            .Include(accrual => accrual.Garage)
+            .Include(accrual => accrual.IncomeType)
             .OrderBy(accrual => accrual.AccountingMonth)
             .ThenBy(accrual => accrual.Garage.Number)
             .ThenBy(accrual => accrual.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new AccrualPageData(items, totalCount);
+    }
+
+    private async Task<AccrualPageData> GetPostgresDueDateReviewPageAsync(
+        IQueryable<Accrual> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = query
+            .OrderBy(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.Garage.Number)
+            .ThenBy(accrual => accrual.Id)
+            .Skip(offset)
+            .Take(limit)
+            .Select(accrual => new
+            {
+                Category = PageCategory,
+                Id = (Guid?)accrual.Id,
+                GarageId = (Guid?)accrual.GarageId,
+                GarageNumber = (string?)accrual.Garage.Number,
+                IncomeTypeId = (Guid?)accrual.IncomeTypeId,
+                IncomeTypeName = (string?)accrual.IncomeType.Name,
+                AccountingMonth = (DateOnly?)accrual.AccountingMonth,
+                Amount = (decimal?)accrual.Amount,
+                Source = (string?)accrual.Source,
+                DueDate = (DateOnly?)accrual.DueDate,
+                OverdueFromDate = (DateOnly?)accrual.OverdueFromDate,
+                accrual.DueDateReviewReason,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new
+            {
+                Category = TotalsCategory,
+                Id = (Guid?)null,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                IncomeTypeId = (Guid?)null,
+                IncomeTypeName = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                Amount = (decimal?)null,
+                Source = (string?)null,
+                DueDate = (DateOnly?)null,
+                OverdueFromDate = (DateOnly?)null,
+                DueDateReviewReason = (string?)null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenBy(row => row.AccountingMonth)
+            .ThenBy(row => row.GarageNumber)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new Accrual
+            {
+                Id = row.Id!.Value,
+                GarageId = row.GarageId!.Value,
+                Garage = new Garage { Id = row.GarageId.Value, Number = row.GarageNumber! },
+                IncomeTypeId = row.IncomeTypeId!.Value,
+                IncomeType = new IncomeType { Id = row.IncomeTypeId.Value, Name = row.IncomeTypeName! },
+                AccountingMonth = row.AccountingMonth!.Value,
+                Amount = row.Amount!.Value,
+                Source = row.Source!,
+                DueDate = row.DueDate!.Value,
+                OverdueFromDate = row.OverdueFromDate!.Value,
+                DueDateNeedsReview = true,
+                DueDateReviewReason = row.DueDateReviewReason
+            })
+            .ToList();
         return new AccrualPageData(items, totalCount);
     }
 
