@@ -19328,16 +19328,22 @@ describe('App', () => {
       status: 'completed',
       summary: 'Dry-run завершен с предупреждениями.',
     })
+    const historicalRun = createAccessImportRun({ id: 'historical-import-run', originalFileName: 'history.accdb' })
     let runListRequests = 0
+    let exactRunRequests = 0
     const pollSignals: Array<AbortSignal | undefined> = []
     const importClient = createImportClient({
-      getAccessRuns: async (_accessToken, _limit, signal) => {
+      getAccessRuns: async () => {
         runListRequests += 1
-        if (runListRequests === 1) return []
+        return [historicalRun]
+      },
+      getAccessRun: async (_accessToken, runId, signal) => {
+        exactRunRequests += 1
         pollSignals.push(signal)
-        return runListRequests === 2
-          ? [{ ...queuedRun, summary: 'Фоновая проверка продолжается.' }]
-          : [completedRun]
+        expect(runId).toBe(queuedRun.id)
+        return exactRunRequests === 1
+          ? { ...queuedRun, summary: 'Фоновая проверка продолжается.' }
+          : completedRun
       },
       dryRunAccess: async () => queuedRun,
     })
@@ -19354,9 +19360,12 @@ describe('App', () => {
     expect(await within(importPanel).findByText(/Проверка выполняется в фоне/)).toHaveAttribute('role', 'status')
     expect(within(importPanel).getByRole('tab', { name: /История/ })).toBeEnabled()
     expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.', {}, { timeout: 3500 })).toBeInTheDocument()
-    expect(runListRequests).toBe(3)
+    expect(runListRequests).toBe(1)
+    expect(exactRunRequests).toBe(2)
     expect(pollSignals).toHaveLength(2)
     expect(pollSignals[1]).toBe(pollSignals[0])
+    await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
+    expect(within(importPanel).getByText('history.accdb')).toBeInTheDocument()
   })
 
   it('keeps the loaded import log visible while the same background run refreshes', async () => {
@@ -19364,16 +19373,13 @@ describe('App', () => {
     const queuedRun = createAccessImportRun({ id: 'background-log-run', status: 'queued', finishedAtUtc: null })
     const completedRun = createAccessImportRun({ ...queuedRun, status: 'completed', finishedAtUtc: '2026-06-30T10:05:00Z' })
     const knownEntry = createAccessImportRunLogEntry({ accessImportRunId: queuedRun.id, stepCode: 'known_log_step', message: 'Подтверждённая строка лога.' })
-    let resolvePoll!: (runs: AccessImportRunDto[]) => void
-    const pollResult = new Promise<AccessImportRunDto[]>((resolve) => { resolvePoll = resolve })
-    let runRequests = 0
+    let resolvePoll!: (run: AccessImportRunDto) => void
+    const pollResult = new Promise<AccessImportRunDto>((resolve) => { resolvePoll = resolve })
     let logRequests = 0
     let refreshSignal: AbortSignal | undefined
     const importClient = createImportClient({
-      getAccessRuns: () => {
-        runRequests += 1
-        return runRequests === 1 ? Promise.resolve([queuedRun]) : pollResult
-      },
+      getAccessRuns: async () => [queuedRun],
+      getAccessRun: () => pollResult,
       getAccessRunLog: (_token, _runId, _limit, signal) => {
         logRequests += 1
         if (logRequests === 1) {
@@ -19393,7 +19399,7 @@ describe('App', () => {
     const logTable = within(importPanel).getByRole('table', { name: 'Лог запуска Access' })
     expect(await within(logTable).findByText('known_log_step')).toBeInTheDocument()
 
-    await act(async () => resolvePoll([completedRun]))
+    await act(async () => resolvePoll(completedRun))
     await waitFor(() => expect(refreshSignal).toBeDefined(), { timeout: 2500 })
 
     expect(within(logTable).getByText('known_log_step')).toBeInTheDocument()
@@ -19410,16 +19416,13 @@ describe('App', () => {
     const queuedRun = createAccessImportRun({ id: 'background-created-run', status: 'queued', finishedAtUtc: null })
     const completedRun = createAccessImportRun({ ...queuedRun, status: 'completed', finishedAtUtc: '2026-06-30T10:05:00Z' })
     const knownRecord = createAccessImportCreatedRecord({ accessImportRunId: queuedRun.id, targetDisplayName: 'Подтверждённый гараж 88' })
-    let resolvePoll!: (runs: AccessImportRunDto[]) => void
-    const pollResult = new Promise<AccessImportRunDto[]>((resolve) => { resolvePoll = resolve })
-    let runRequests = 0
+    let resolvePoll!: (run: AccessImportRunDto) => void
+    const pollResult = new Promise<AccessImportRunDto>((resolve) => { resolvePoll = resolve })
     let createdRequests = 0
     let refreshSignal: AbortSignal | undefined
     const importClient = createImportClient({
-      getAccessRuns: () => {
-        runRequests += 1
-        return runRequests === 1 ? Promise.resolve([queuedRun]) : pollResult
-      },
+      getAccessRuns: async () => [queuedRun],
+      getAccessRun: () => pollResult,
       getAccessCreatedRecords: (_token, _runId, _limit, signal) => {
         createdRequests += 1
         if (createdRequests === 1) {
@@ -19439,7 +19442,7 @@ describe('App', () => {
     const createdTable = within(importPanel).getByRole('table', { name: 'Созданные импортом записи Access' })
     expect(await within(createdTable).findByText('Подтверждённый гараж 88')).toBeInTheDocument()
 
-    await act(async () => resolvePoll([completedRun]))
+    await act(async () => resolvePoll(completedRun))
     await waitFor(() => expect(refreshSignal).toBeDefined(), { timeout: 2500 })
 
     expect(within(createdTable).getByText('Подтверждённый гараж 88')).toBeInTheDocument()
@@ -24413,6 +24416,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
   return {
     getAccessReaderStatus: async () => createAccessImportReaderStatus(),
     getAccessRuns: async () => [],
+    getAccessRun: async (_token, runId) => createAccessImportRun({ id: runId }),
     getAccessRunLog: async () => [],
     getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],
@@ -24616,6 +24620,7 @@ function createStatefulImportClient(): ImportClient {
   return {
     getAccessReaderStatus: async () => createAccessImportReaderStatus(),
     getAccessRuns: async () => runs,
+    getAccessRun: async (_token, runId) => runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId }),
     getAccessRunLog: async (_token, runId) => logsByRunId.get(runId) ?? [],
     getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],

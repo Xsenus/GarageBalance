@@ -1125,6 +1125,28 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ImportBackgroundPolling_LoadsOnlyTheExactRun()
+    {
+        var serviceSource = ReadApiSource("Application/Import/ImportService.cs");
+        var panelSource = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "frontend",
+            "src",
+            "features",
+            "import",
+            "ImportPanel.tsx"));
+
+        var methodStart = serviceSource.IndexOf("GetAccessImportRunAsync", StringComparison.Ordinal);
+        var methodEnd = serviceSource.IndexOf("GetAccessImportRunLogEntriesAsync", methodStart, StringComparison.Ordinal);
+        var methodSource = serviceSource[methodStart..methodEnd];
+        Assert.Contains("repository.FindRunAsync(runId, false, cancellationToken)", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("repository.GetRunsAsync", methodSource, StringComparison.Ordinal);
+        Assert.Contains("importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal)", panelSource, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(panelSource, "importClient.getAccessRuns("));
+        Assert.Contains("setRuns((items) => items.map((run) => run.id === currentRunId ? updatedRun : run))", panelSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportAuditQuery_CombinesCountersAndKeepsOnlyTwoDatabaseReads()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");

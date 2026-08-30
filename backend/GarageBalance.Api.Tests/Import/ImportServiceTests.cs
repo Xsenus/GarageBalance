@@ -111,6 +111,34 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task GetAccessImportRunAsync_ReturnsExactRunWithChecks()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var first = await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("first.accdb", CreateAccessLikeStream("garage")), null, CancellationToken.None);
+        await service.DryRunAccessImportAsync(new AccessImportDryRunRequest("second.accdb", CreateAccessLikeStream("owner")), null, CancellationToken.None);
+
+        var result = await service.GetAccessImportRunAsync(first.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(first.Value.Id, result.Value!.Id);
+        Assert.Equal("first.accdb", result.Value.OriginalFileName);
+        Assert.NotEmpty(result.Value.Checks);
+    }
+
+    [Fact]
+    public async Task GetAccessImportRunAsync_ReturnsNotFoundForMissingRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetAccessImportRunAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_not_found", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task ExportAccessImportRunReportAsync_ReturnsJsonReportFile()
     {
         await using var database = await TestDatabase.CreateAsync();

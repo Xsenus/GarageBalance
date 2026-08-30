@@ -11,6 +11,45 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class PostgreSqlImportPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task ExactRunLookupLoadsOnlyRequestedRunInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var requestedRun = new AccessImportRun
+        {
+            OriginalFileName = "requested.accdb",
+            ReportJson = "[{\"code\":\"requested\",\"title\":\"Requested\",\"status\":\"passed\",\"message\":\"Ready\"}]"
+        };
+        var otherRun = new AccessImportRun
+        {
+            OriginalFileName = "other.accdb",
+            ReportJson = "[{\"code\":\"other\",\"title\":\"Other\",\"status\":\"passed\",\"message\":\"Ignore\"}]"
+        };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.AddRange(requestedRun, otherRun);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .FindRunAsync(requestedRun.Id, false, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("requested.accdb", result.OriginalFileName);
+        Assert.Single(commandCapture.Commands);
+        Assert.Contains("WHERE", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("access_import_runs", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
     public async Task RunLogListLoadsRunAndBoundedEntriesInOneSelect()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

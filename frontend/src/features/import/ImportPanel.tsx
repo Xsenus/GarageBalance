@@ -215,26 +215,23 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     let ignore = false
     const controller = new AbortController()
     let timer: number | undefined
-    const pollRuns = () => {
-      void importClient.getAccessRuns(auth.accessToken, undefined, controller.signal).then((loadedRuns) => {
+    const pollRun = () => {
+      void importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal).then((updatedRun) => {
         if (ignore) {
           return
         }
 
-        setRuns(loadedRuns)
-        const updatedRun = loadedRuns.find((run) => run.id === currentRunId)
-        if (updatedRun) {
-          setCurrentRun(updatedRun)
-        }
+        setRuns((items) => items.map((run) => run.id === currentRunId ? updatedRun : run))
+        setCurrentRun((run) => run?.id === currentRunId ? updatedRun : run)
       }).catch((caught) => {
         if (!ignore) {
           setError(caught instanceof Error ? caught.message : 'Не удалось обновить состояние фоновой проверки.')
         }
       }).finally(() => {
-        if (!ignore) timer = window.setTimeout(pollRuns, 1000)
+        if (!ignore) timer = window.setTimeout(pollRun, 1000)
       })
     }
-    timer = window.setTimeout(pollRuns, 1000)
+    timer = window.setTimeout(pollRun, 1000)
 
     return () => {
       ignore = true

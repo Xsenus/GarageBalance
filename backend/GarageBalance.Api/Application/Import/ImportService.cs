@@ -33,6 +33,14 @@ public sealed class ImportService(
         return runs.Select(ToDto).ToList();
     }
 
+    public async Task<ImportResult<AccessImportRunDto>> GetAccessImportRunAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        var run = await repository.FindRunAsync(runId, false, cancellationToken);
+        return run is null
+            ? ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+            : ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
     public async Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)
     {
         var limit = QueryLimits.NormalizeListSize(request.Limit, 100);

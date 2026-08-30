@@ -76,6 +76,17 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public void GetAccessImportRun_UsesExactRunEndpoint()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.GetAccessImportRun))!;
+        var attributes = method.GetCustomAttributes(inherit: false);
+
+        var getAttribute = Assert.Single(attributes.OfType<HttpGetAttribute>());
+        Assert.Equal("runs/{id:guid}", getAttribute.Template);
+        Assert.Empty(attributes.OfType<HttpPostAttribute>());
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsBadRequestWhenFileMissing()
     {
         var controller = CreateController(new FakeImportService());
@@ -128,7 +139,8 @@ public sealed class ImportControllerTests
 
         var result = await controller.DryRunAccessImport(file, CancellationToken.None);
 
-        Assert.IsType<CreatedAtActionResult>(result.Result);
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(nameof(ImportController.GetAccessImportRun), created.ActionName);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal("ГСК.accdb", service.LastFileName);
     }
@@ -162,6 +174,7 @@ public sealed class ImportControllerTests
 
         var accepted = Assert.IsType<AcceptedAtActionResult>(result.Result);
         Assert.Equal(run.Id, Assert.IsType<AccessImportRunDto>(accepted.Value).Id);
+        Assert.Equal(nameof(ImportController.GetAccessImportRun), accepted.ActionName);
         Assert.Equal("archive.accdb", dispatcher.FileName);
     }
 
@@ -431,6 +444,39 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public async Task GetAccessImportRun_ReturnsExactRun()
+    {
+        var run = CreateRun();
+        var service = new FakeImportService
+        {
+            RunResult = ImportResult<AccessImportRunDto>.Success(run)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportRun(run.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(run.Id, Assert.IsType<AccessImportRunDto>(ok.Value).Id);
+        Assert.Equal(run.Id, service.LastRunId);
+    }
+
+    [Fact]
+    public async Task GetAccessImportRun_ReturnsNotFoundForMissingRun()
+    {
+        var service = new FakeImportService
+        {
+            RunResult = ImportResult<AccessImportRunDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetAccessImportRun(Guid.NewGuid(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("import_run_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task GetAccessImportRunLog_ReturnsLogEntries()
     {
         var runId = Guid.NewGuid();
@@ -678,11 +724,13 @@ public sealed class ImportControllerTests
         public AccessImportApplyCancelRequest? LastApplyCancelRequest { get; private set; }
         public Guid? LastLogRunId { get; private set; }
         public Guid? LastCreatedRecordsRunId { get; private set; }
+        public Guid? LastRunId { get; private set; }
         public AccessImportRunListRequest? LastRunRequest { get; private set; }
         public AccessImportRunLogListRequest? LastLogRequest { get; private set; }
         public AccessImportCreatedRecordListRequest? LastCreatedRecordsRequest { get; private set; }
         public bool ReaderStatusWasRequested { get; private set; }
         public IReadOnlyList<AccessImportRunDto> Runs { get; init; } = [];
+        public ImportResult<AccessImportRunDto> RunResult { get; init; } = ImportResult<AccessImportRunDto>.Failure("not_configured", "Not configured.");
         public AccessImportReaderStatusDto ReaderStatus { get; init; } = new(
             "disabled",
             "Reader Access",
@@ -705,6 +753,12 @@ public sealed class ImportControllerTests
         {
             LastRunRequest = request;
             return Task.FromResult(Runs);
+        }
+
+        public Task<ImportResult<AccessImportRunDto>> GetAccessImportRunAsync(Guid runId, CancellationToken cancellationToken)
+        {
+            LastRunId = runId;
+            return Task.FromResult(RunResult);
         }
 
         public Task<AccessImportReaderStatusDto> GetAccessImportReaderStatusAsync(CancellationToken cancellationToken)

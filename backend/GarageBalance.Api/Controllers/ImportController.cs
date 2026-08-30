@@ -30,6 +30,17 @@ public sealed class ImportController(
         return Ok(await importService.GetAccessImportRunsAsync(request, cancellationToken));
     }
 
+    [HttpGet("runs/{id:guid}")]
+    [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AccessImportRunDto>> GetAccessImportRun(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await importService.GetAccessImportRunAsync(id, cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
+    }
+
     [HttpGet("quarantine")]
     [ProducesResponseType<IReadOnlyList<AccessImportQuarantineItemDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccessImportQuarantineItemDto>>> GetOpenQuarantineItems(
@@ -168,7 +179,7 @@ public sealed class ImportController(
                 GetActorUserId(),
                 cancellationToken);
             return queued.Succeeded
-                ? AcceptedAtAction(nameof(GetAccessImportRuns), new { id = queued.Value!.Id }, queued.Value)
+                ? AcceptedAtAction(nameof(GetAccessImportRun), new { id = queued.Value!.Id }, queued.Value)
                 : BadRequest(ApiProblemDetails.Create(queued.ErrorCode, queued.ErrorMessage, StatusCodes.Status400BadRequest));
         }
 
@@ -177,7 +188,7 @@ public sealed class ImportController(
             GetActorUserId(),
             cancellationToken);
         return result.Succeeded
-            ? CreatedAtAction(nameof(GetAccessImportRuns), new { id = result.Value!.Id }, result.Value)
+            ? CreatedAtAction(nameof(GetAccessImportRun), new { id = result.Value!.Id }, result.Value)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 

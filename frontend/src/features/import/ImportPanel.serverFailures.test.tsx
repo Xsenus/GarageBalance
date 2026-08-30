@@ -81,6 +81,7 @@ function createClient(overrides: Partial<ImportClient> = {}): ImportClient {
   return {
     getAccessReaderStatus: async () => createReaderStatus(),
     getAccessRuns: async () => [run],
+    getAccessRun: async (_token, runId) => createRun({ id: runId }),
     getAccessRunLog: async () => [],
     getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],
@@ -95,6 +96,21 @@ function createClient(overrides: Partial<ImportClient> = {}): ImportClient {
 }
 
 describe('ImportPanel server failures', () => {
+  it('reports an exact-run polling failure without reloading the run list', async () => {
+    const queuedRun = createRun({ status: 'queued', finishedAtUtc: null })
+    const getAccessRuns = vi.fn(async () => [queuedRun])
+    const getAccessRun = vi.fn(async () => {
+      throw new Error('Точечное обновление запуска недоступно.')
+    })
+
+    render(<ImportPanel auth={auth} importClient={createClient({ getAccessRuns, getAccessRun })} />)
+
+    expect(await screen.findByText('Reader не настроен.')).toBeInTheDocument()
+    expect(await screen.findByText('Точечное обновление запуска недоступно.', {}, { timeout: 2500 })).toHaveAttribute('role', 'alert')
+    expect(getAccessRuns).toHaveBeenCalledTimes(1)
+    expect(getAccessRun).toHaveBeenCalledWith(auth.accessToken, queuedRun.id, expect.any(AbortSignal))
+  })
+
   it('loads hidden import lists only when their tabs open and reuses successful results', async () => {
     const user = userEvent.setup()
     const getAccessRunLog = vi.fn(async () => [])
