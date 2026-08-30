@@ -131,7 +131,10 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             CancellationToken.None);
         Assert.Equal(2, garagePage.Items.Count);
         Assert.Equal(2, garagePage.TotalCount);
-        Assert.Equal(2, capture.TakeCountAndClear());
+        var garageCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", garageCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", garageCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", garageCommand, StringComparison.OrdinalIgnoreCase);
 
         var supplierPage = await new EfSupplierRepository(context).GetPageAsync(
             null, "%", false, 0, 10, "name", false, CancellationToken.None);

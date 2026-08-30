@@ -79,6 +79,18 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         {
             query = ApplyDebtorsFilter(query);
         }
+        if (IsNpgsqlProvider())
+        {
+            return await GetPostgresPageAsync(
+                query,
+                normalizedSearch,
+                offset,
+                limit,
+                sortBy,
+                sortDescending,
+                cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var orderedPageQuery = normalizedSearch is { } rankingSearch && sortBy == "number" && !sortDescending
             ? ApplySearchRanking(query, rankingSearch)
@@ -88,6 +100,106 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 .Skip(offset)
                 .Take(limit))
             .ToListAsync(cancellationToken);
+        return new GaragePageData(items, totalCount);
+    }
+
+    private async Task<GaragePageData> GetPostgresPageAsync(
+        IQueryable<Garage> query,
+        string? normalizedSearch,
+        int offset,
+        int limit,
+        string sortBy,
+        bool sortDescending,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var today = Today;
+        var calculateOverdueDebt = sortBy == "overdueDebt";
+        var rowsQuery = query.Select(garage => new GaragePageRow
+        {
+            Category = PageCategory,
+            Id = (Guid?)garage.Id,
+            Number = garage.Number,
+            PeopleCount = (int?)garage.PeopleCount,
+            FloorCount = (int?)garage.FloorCount,
+            OwnerId = garage.OwnerId,
+            OwnerName = garage.Owner == null
+                ? null
+                : (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).Trim(),
+            OwnerPhone = garage.Owner == null ? null : garage.Owner.Phone,
+            StartingBalance = (decimal?)garage.StartingBalance,
+            StartingOverdueDebt = garage.StartingOverdueDebt,
+            InitialWaterMeterValue = garage.InitialWaterMeterValue,
+            InitialElectricityMeterValue = garage.InitialElectricityMeterValue,
+            Comment = garage.Comment,
+            IsArchived = (bool?)garage.IsArchived,
+            Version = (Guid?)garage.Version,
+            OverdueDebtSort = calculateOverdueDebt
+                ? Math.Max(
+                    (garage.StartingOverdueDebt ?? (garage.StartingBalance > 0m ? garage.StartingBalance : 0m)) +
+                    (dbContext.Accruals.Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled && !accrual.DueDateNeedsReview && accrual.OverdueFromDate <= today).Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
+                    (dbContext.FinancialOperations.Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m) +
+                    (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
+                    (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.Accrual.DueDateNeedsReview && allocation.Accrual.OverdueFromDate <= today && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
+                    0m)
+                : 0m,
+            TotalCount = 0
+        });
+        var orderedRows = ApplyPostgresPageRowSorting(
+            rowsQuery,
+            normalizedSearch,
+            sortBy,
+            sortDescending);
+        var pageRows = orderedRows.Skip(offset).Take(limit);
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new GaragePageRow
+            {
+                Category = TotalsCategory,
+                Id = null,
+                Number = null,
+                PeopleCount = null,
+                FloorCount = null,
+                OwnerId = null,
+                OwnerName = null,
+                OwnerPhone = null,
+                StartingBalance = null,
+                StartingOverdueDebt = null,
+                InitialWaterMeterValue = null,
+                InitialElectricityMeterValue = null,
+                Comment = null,
+                IsArchived = null,
+                Version = null,
+                OverdueDebtSort = 0m,
+                TotalCount = query.Count()
+            });
+        var rows = await ApplyPostgresPageRowSorting(
+                pageRows.Concat(totalsRow),
+                normalizedSearch,
+                sortBy,
+                sortDescending,
+                orderByCategory: true)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new GarageListItemData(
+                row.Id!.Value,
+                row.Number!,
+                row.PeopleCount!.Value,
+                row.FloorCount!.Value,
+                row.OwnerId,
+                row.OwnerName,
+                row.OwnerPhone,
+                row.StartingBalance!.Value,
+                row.StartingOverdueDebt,
+                row.InitialWaterMeterValue,
+                row.InitialElectricityMeterValue,
+                row.Comment,
+                row.IsArchived!.Value,
+                row.Version!.Value))
+            .ToList();
         return new GaragePageData(items, totalCount);
     }
 
@@ -366,6 +478,92 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         };
     }
 
+    private static IOrderedQueryable<GaragePageRow> ApplyPostgresPageRowSorting(
+        IQueryable<GaragePageRow> query,
+        string? normalizedSearch,
+        string sortBy,
+        bool descending,
+        bool orderByCategory = false)
+    {
+        IOrderedQueryable<GaragePageRow> ordered;
+        if (orderByCategory)
+        {
+            ordered = query.OrderBy(row => row.Category);
+            return ApplyPostgresPageRowSecondarySorting(ordered, normalizedSearch, sortBy, descending);
+        }
+
+        if (normalizedSearch is { } search && sortBy == "number" && !descending)
+        {
+            return query
+                .OrderBy(row => row.Number!.ToLower() == search
+                    ? 0
+                    : row.Number.ToLower().StartsWith(search)
+                        ? 1
+                        : row.Number.ToLower().Contains(search)
+                            ? 2
+                            : 3)
+                .ThenBy(row => row.Number!.Length)
+                .ThenBy(row => row.Number!.ToLower())
+                .ThenBy(row => row.Id);
+        }
+
+        return (sortBy, descending) switch
+        {
+            ("peopleCount", true) => query.OrderByDescending(row => row.PeopleCount).ThenBy(row => row.Id),
+            ("peopleCount", false) => query.OrderBy(row => row.PeopleCount).ThenBy(row => row.Id),
+            ("floorCount", true) => query.OrderByDescending(row => row.FloorCount).ThenBy(row => row.Id),
+            ("floorCount", false) => query.OrderBy(row => row.FloorCount).ThenBy(row => row.Id),
+            ("owner", true) => query.OrderByDescending(row => row.OwnerName).ThenBy(row => row.Id),
+            ("owner", false) => query.OrderBy(row => row.OwnerName).ThenBy(row => row.Id),
+            ("phone", true) => query.OrderByDescending(row => row.OwnerPhone).ThenBy(row => row.Id),
+            ("phone", false) => query.OrderBy(row => row.OwnerPhone).ThenBy(row => row.Id),
+            ("overdueDebt", true) => query.OrderByDescending(row => row.OverdueDebtSort).ThenBy(row => row.Id),
+            ("overdueDebt", false) => query.OrderBy(row => row.OverdueDebtSort).ThenBy(row => row.Id),
+            (_, true) => query.OrderByDescending(row => row.Number).ThenBy(row => row.Id),
+            _ => query.OrderBy(row => row.Number).ThenBy(row => row.Id)
+        };
+    }
+
+    private static IOrderedQueryable<GaragePageRow> ApplyPostgresPageRowSecondarySorting(
+        IOrderedQueryable<GaragePageRow> query,
+        string? normalizedSearch,
+        string sortBy,
+        bool descending)
+    {
+        if (normalizedSearch is { } search && sortBy == "number" && !descending)
+        {
+            return query
+                .ThenBy(row => row.Number == null
+                    ? 0
+                    : row.Number.ToLower() == search
+                        ? 0
+                        : row.Number.ToLower().StartsWith(search)
+                            ? 1
+                            : row.Number.ToLower().Contains(search)
+                                ? 2
+                                : 3)
+                .ThenBy(row => row.Number == null ? 0 : row.Number.Length)
+                .ThenBy(row => row.Number == null ? string.Empty : row.Number.ToLower())
+                .ThenBy(row => row.Id);
+        }
+
+        return (sortBy, descending) switch
+        {
+            ("peopleCount", true) => query.ThenByDescending(row => row.PeopleCount).ThenBy(row => row.Id),
+            ("peopleCount", false) => query.ThenBy(row => row.PeopleCount).ThenBy(row => row.Id),
+            ("floorCount", true) => query.ThenByDescending(row => row.FloorCount).ThenBy(row => row.Id),
+            ("floorCount", false) => query.ThenBy(row => row.FloorCount).ThenBy(row => row.Id),
+            ("owner", true) => query.ThenByDescending(row => row.OwnerName).ThenBy(row => row.Id),
+            ("owner", false) => query.ThenBy(row => row.OwnerName).ThenBy(row => row.Id),
+            ("phone", true) => query.ThenByDescending(row => row.OwnerPhone).ThenBy(row => row.Id),
+            ("phone", false) => query.ThenBy(row => row.OwnerPhone).ThenBy(row => row.Id),
+            ("overdueDebt", true) => query.ThenByDescending(row => row.OverdueDebtSort).ThenBy(row => row.Id),
+            ("overdueDebt", false) => query.ThenBy(row => row.OverdueDebtSort).ThenBy(row => row.Id),
+            (_, true) => query.ThenByDescending(row => row.Number).ThenBy(row => row.Id),
+            _ => query.ThenBy(row => row.Number).ThenBy(row => row.Id)
+        };
+    }
+
     private static IQueryable<Garage> ApplyColumnFilters(
         IQueryable<Garage> query,
         GarageColumnFilters filters,
@@ -468,4 +666,25 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
     private static bool GarageMatchesSearch(GarageListItemData garage, string normalizedSearch) =>
         garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
         (garage.OwnerName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private sealed class GaragePageRow
+    {
+        public int Category { get; init; }
+        public Guid? Id { get; init; }
+        public string? Number { get; init; }
+        public int? PeopleCount { get; init; }
+        public int? FloorCount { get; init; }
+        public Guid? OwnerId { get; init; }
+        public string? OwnerName { get; init; }
+        public string? OwnerPhone { get; init; }
+        public decimal? StartingBalance { get; init; }
+        public decimal? StartingOverdueDebt { get; init; }
+        public decimal? InitialWaterMeterValue { get; init; }
+        public decimal? InitialElectricityMeterValue { get; init; }
+        public string? Comment { get; init; }
+        public bool? IsArchived { get; init; }
+        public Guid? Version { get; init; }
+        public decimal OverdueDebtSort { get; init; }
+        public int TotalCount { get; init; }
+    }
 }

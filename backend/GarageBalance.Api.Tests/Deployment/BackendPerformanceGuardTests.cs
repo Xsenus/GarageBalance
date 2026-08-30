@@ -262,6 +262,16 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2);
         Assert.Contains("GetActiveIdsAsync", source, StringComparison.Ordinal);
         Assert.Contains(".Select(garage => garage.Id)", source, StringComparison.Ordinal);
+        var postgresPage = ExtractMethodSource(
+            source,
+            "private async Task<GaragePageData> GetPostgresPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("garage.Owner.Address", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.Owner.MeterNotes", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.CreatedAtUtc", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.UpdatedAtUtc", postgresPage, StringComparison.Ordinal);
         var balanceMethod = source[
             source.IndexOf("public async Task<GarageBalanceTotalsData> GetBalanceTotalsAsync", StringComparison.Ordinal)..source.IndexOf("public Task<Garage?> FindActiveWithOwnerAsync", StringComparison.Ordinal)];
         Assert.Contains("accrualQuery", balanceMethod, StringComparison.Ordinal);
