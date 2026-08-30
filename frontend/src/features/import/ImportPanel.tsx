@@ -216,13 +216,22 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     const controller = new AbortController()
     let timer: number | undefined
     const pollRun = () => {
-      void importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal).then((updatedRun) => {
+      void importClient.getAccessRunStatus(auth.accessToken, currentRunId, controller.signal).then(async (status) => {
         if (ignore) {
           return
         }
 
-        setRuns((items) => items.map((run) => run.id === currentRunId ? updatedRun : run))
-        setCurrentRun((run) => run?.id === currentRunId ? updatedRun : run)
+        if (status.status === 'queued' || status.status === 'processing') {
+          const mergeStatus = (run: AccessImportRunDto): AccessImportRunDto => ({ ...run, ...status })
+          setRuns((items) => items.map((run) => run.id === currentRunId ? mergeStatus(run) : run))
+          setCurrentRun((run) => run?.id === currentRunId ? mergeStatus(run) : run)
+          return
+        }
+
+        const completedRun = await importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal)
+        if (ignore) return
+        setRuns((items) => items.map((run) => run.id === currentRunId ? completedRun : run))
+        setCurrentRun((run) => run?.id === currentRunId ? completedRun : run)
       }).catch((caught) => {
         if (!ignore) {
           setError(caught instanceof Error ? caught.message : 'Не удалось обновить состояние фоновой проверки.')

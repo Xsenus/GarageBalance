@@ -41,6 +41,22 @@ public sealed class ImportService(
             : ImportResult<AccessImportRunDto>.Success(ToDto(run));
     }
 
+    public async Task<ImportResult<AccessImportRunStatusDto>> GetAccessImportRunStatusAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        var status = await repository.FindRunStatusAsync(runId, cancellationToken);
+        return status is null
+            ? ImportResult<AccessImportRunStatusDto>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.")
+            : ImportResult<AccessImportRunStatusDto>.Success(new AccessImportRunStatusDto(
+                status.Id,
+                status.Status,
+                status.FinishedAtUtc,
+                status.TotalChecks,
+                status.PassedChecks,
+                status.WarningCount,
+                status.ErrorCount,
+                status.Summary));
+    }
+
     public async Task<ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>> GetAccessImportRunLogEntriesAsync(Guid runId, AccessImportRunLogListRequest request, CancellationToken cancellationToken)
     {
         var limit = QueryLimits.NormalizeListSize(request.Limit, 100);

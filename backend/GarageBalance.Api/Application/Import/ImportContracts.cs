@@ -98,6 +98,16 @@ public sealed record AccessImportRunDto(
     string Summary,
     IReadOnlyList<AccessImportCheckDto> Checks);
 
+public sealed record AccessImportRunStatusDto(
+    Guid Id,
+    string Status,
+    DateTimeOffset? FinishedAtUtc,
+    int TotalChecks,
+    int PassedChecks,
+    int WarningCount,
+    int ErrorCount,
+    string Summary);
+
 public sealed record AccessImportRunLogEntryDto(
     Guid Id,
     Guid AccessImportRunId,

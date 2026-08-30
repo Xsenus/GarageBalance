@@ -42,6 +42,7 @@ describe('importApi', () => {
     ['reader status', (signal: AbortSignal) => importApi.getAccessReaderStatus('token', signal), '/api/import/access/reader/status'],
     ['runs', (signal: AbortSignal) => importApi.getAccessRuns('token', 25, signal), '/api/import/access/runs?limit=25'],
     ['exact run', (signal: AbortSignal) => importApi.getAccessRun('token', 'run 42', signal), '/api/import/access/runs/run%2042'],
+    ['run status', (signal: AbortSignal) => importApi.getAccessRunStatus('token', 'run 42', signal), '/api/import/access/runs/run%2042/status'],
     ['run log', (signal: AbortSignal) => importApi.getAccessRunLog('token', 'run-42', 25, signal), '/api/import/access/runs/run-42/log?limit=25'],
     ['created records', (signal: AbortSignal) => importApi.getAccessCreatedRecords('token', 'run-42', 25, signal), '/api/import/access/runs/run-42/created-records?limit=25'],
     ['quarantine', (signal: AbortSignal) => importApi.getOpenQuarantineItems('token', 'run-42', 25, signal), '/api/import/access/quarantine?accessImportRunId=run-42&limit=25'],

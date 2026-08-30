@@ -50,6 +50,47 @@ public sealed class PostgreSqlImportPerformanceTests
     }
 
     [PostgreSqlFact]
+    public async Task RunStatusLookupProjectsOnlyLightweightColumnsInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var run = new AccessImportRun
+        {
+            Status = "processing",
+            OriginalFileName = "large-status.accdb",
+            ContentSha256 = new string('a', 64),
+            Summary = "Фоновая проверка выполняется.",
+            ReportJson = $"[{{\"message\":\"{new string('x', 20_000)}\"}}]"
+        };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.Add(run);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .FindRunStatusAsync(run.Id, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("processing", result.Status);
+        Assert.Equal("Фоновая проверка выполняется.", result.Summary);
+        var command = Assert.Single(commandCapture.Commands);
+        Assert.Contains("access_import_runs", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WHERE", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ReportJson", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContentSha256", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("OriginalFileName", command, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
     public async Task RunLogListLoadsRunAndBoundedEntriesInOneSelect()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

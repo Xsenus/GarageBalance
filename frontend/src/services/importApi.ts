@@ -25,6 +25,9 @@ export type AccessImportRunDto = {
   checks: AccessImportCheckDto[]
 }
 
+export type AccessImportRunStatusDto = Pick<AccessImportRunDto,
+  'id' | 'status' | 'finishedAtUtc' | 'totalChecks' | 'passedChecks' | 'warningCount' | 'errorCount' | 'summary'>
+
 export type AccessImportQuarantineItemDto = {
   id: string
   accessImportRunId: string | null
@@ -84,6 +87,7 @@ export type ImportClient = {
   getAccessReaderStatus(accessToken: string, signal?: AbortSignal): Promise<AccessImportReaderStatusDto>
   getAccessRuns(accessToken: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunDto[]>
   getAccessRun(accessToken: string, runId: string, signal?: AbortSignal): Promise<AccessImportRunDto>
+  getAccessRunStatus(accessToken: string, runId: string, signal?: AbortSignal): Promise<AccessImportRunStatusDto>
   getAccessRunLog(accessToken: string, runId: string, limit?: number, signal?: AbortSignal): Promise<AccessImportRunLogEntryDto[]>
   getAccessCreatedRecords(accessToken: string, runId: string, limit?: number, signal?: AbortSignal): Promise<AccessImportCreatedRecordDto[]>
   getOpenQuarantineItems(accessToken: string, accessImportRunId?: string, limit?: number, signal?: AbortSignal): Promise<AccessImportQuarantineItemDto[]>
@@ -124,6 +128,9 @@ export const importApi: ImportClient = {
   },
   getAccessRun(accessToken, runId, signal) {
     return requestJson(accessToken, `/api/import/access/runs/${encodeURIComponent(runId)}`, signal ? { signal } : undefined)
+  },
+  getAccessRunStatus(accessToken, runId, signal) {
+    return requestJson(accessToken, `/api/import/access/runs/${encodeURIComponent(runId)}/status`, signal ? { signal } : undefined)
   },
   getAccessRunLog(accessToken, runId, limit = 100, signal) {
     return requestJson(accessToken, `/api/import/access/runs/${runId}/log?limit=${encodeURIComponent(limit)}`, signal ? { signal } : undefined)

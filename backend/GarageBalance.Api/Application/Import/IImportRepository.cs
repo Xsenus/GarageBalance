@@ -6,6 +6,7 @@ public interface IImportRepository
 {
     Task<IReadOnlyList<AccessImportRun>> GetRunsAsync(int limit, CancellationToken cancellationToken);
     Task<bool> RunExistsAsync(Guid runId, CancellationToken cancellationToken);
+    Task<AccessImportRunStatusData?> FindRunStatusAsync(Guid runId, CancellationToken cancellationToken);
     Task<AccessImportRunLogEntryListData> GetRunLogEntryListDataAsync(Guid runId, int limit, CancellationToken cancellationToken);
     Task<AccessImportCreatedRecordListData> GetCreatedRecordListDataAsync(Guid runId, int limit, CancellationToken cancellationToken);
     Task<AccessImportRun?> FindRunAsync(Guid runId, bool trackChanges, CancellationToken cancellationToken);
@@ -21,6 +22,16 @@ public sealed record PreviousAccessImportRunData(
     Guid Id,
     string OriginalFileName,
     DateTimeOffset StartedAtUtc);
+
+public sealed record AccessImportRunStatusData(
+    Guid Id,
+    string Status,
+    DateTimeOffset? FinishedAtUtc,
+    int TotalChecks,
+    int PassedChecks,
+    int WarningCount,
+    int ErrorCount,
+    string Summary);
 
 public sealed record AccessImportRunLogEntryListData(
     bool RunExists,

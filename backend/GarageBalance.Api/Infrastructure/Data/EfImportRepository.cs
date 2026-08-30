@@ -19,6 +19,23 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
         return dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
     }
 
+    public Task<AccessImportRunStatusData?> FindRunStatusAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        return dbContext.AccessImportRuns
+            .AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => new AccessImportRunStatusData(
+                run.Id,
+                run.Status,
+                run.FinishedAtUtc,
+                run.TotalChecks,
+                run.PassedChecks,
+                run.WarningCount,
+                run.ErrorCount,
+                run.Summary))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<AccessImportRunLogEntryListData> GetRunLogEntryListDataAsync(
         Guid runId,
         int limit,

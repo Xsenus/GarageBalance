@@ -1125,9 +1125,10 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void ImportBackgroundPolling_LoadsOnlyTheExactRun()
+    public void ImportBackgroundPolling_UsesLightweightStatusUntilTerminalState()
     {
         var serviceSource = ReadApiSource("Application/Import/ImportService.cs");
+        var repositorySource = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
         var panelSource = File.ReadAllText(Path.Combine(
             FindRepositoryRoot(),
             "frontend",
@@ -1136,14 +1137,21 @@ public sealed class BackendPerformanceGuardTests
             "import",
             "ImportPanel.tsx"));
 
-        var methodStart = serviceSource.IndexOf("GetAccessImportRunAsync", StringComparison.Ordinal);
+        var methodStart = serviceSource.IndexOf("GetAccessImportRunStatusAsync", StringComparison.Ordinal);
         var methodEnd = serviceSource.IndexOf("GetAccessImportRunLogEntriesAsync", methodStart, StringComparison.Ordinal);
         var methodSource = serviceSource[methodStart..methodEnd];
-        Assert.Contains("repository.FindRunAsync(runId, false, cancellationToken)", methodSource, StringComparison.Ordinal);
+        Assert.Contains("repository.FindRunStatusAsync(runId, cancellationToken)", methodSource, StringComparison.Ordinal);
         Assert.DoesNotContain("repository.GetRunsAsync", methodSource, StringComparison.Ordinal);
-        Assert.Contains("importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal)", panelSource, StringComparison.Ordinal);
+        var repositoryMethodStart = repositorySource.IndexOf("FindRunStatusAsync", StringComparison.Ordinal);
+        var repositoryMethodEnd = repositorySource.IndexOf("GetRunLogEntryListDataAsync", repositoryMethodStart, StringComparison.Ordinal);
+        var repositoryMethodSource = repositorySource[repositoryMethodStart..repositoryMethodEnd];
+        Assert.Contains("Select(run => new AccessImportRunStatusData", repositoryMethodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReportJson", repositoryMethodSource, StringComparison.Ordinal);
+        Assert.Contains("importClient.getAccessRunStatus(auth.accessToken, currentRunId, controller.signal)", panelSource, StringComparison.Ordinal);
+        Assert.Contains("const completedRun = await importClient.getAccessRun(auth.accessToken, currentRunId, controller.signal)", panelSource, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(panelSource, "importClient.getAccessRuns("));
-        Assert.Contains("setRuns((items) => items.map((run) => run.id === currentRunId ? updatedRun : run))", panelSource, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(panelSource, "importClient.getAccessRun("));
+        Assert.Contains("status.status === 'queued' || status.status === 'processing'", panelSource, StringComparison.Ordinal);
     }
 
     [Fact]

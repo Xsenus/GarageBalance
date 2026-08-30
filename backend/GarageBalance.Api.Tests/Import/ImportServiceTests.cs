@@ -139,6 +139,41 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task GetAccessImportRunStatusAsync_ReturnsLightweightStatus()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var run = new AccessImportRun
+        {
+            Status = "processing",
+            OriginalFileName = "status.accdb",
+            Summary = "Фоновая проверка выполняется.",
+            ReportJson = "[{\"code\":\"large-report\"}]"
+        };
+        database.Context.AccessImportRuns.Add(run);
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetAccessImportRunStatusAsync(run.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(run.Id, result.Value!.Id);
+        Assert.Equal("processing", result.Value.Status);
+        Assert.Equal("Фоновая проверка выполняется.", result.Value.Summary);
+    }
+
+    [Fact]
+    public async Task GetAccessImportRunStatusAsync_ReturnsNotFoundForMissingRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetAccessImportRunStatusAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("import_run_not_found", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task ExportAccessImportRunReportAsync_ReturnsJsonReportFile()
     {
         await using var database = await TestDatabase.CreateAsync();

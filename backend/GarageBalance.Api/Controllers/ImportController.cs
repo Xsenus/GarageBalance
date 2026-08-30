@@ -41,6 +41,17 @@ public sealed class ImportController(
             : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
     }
 
+    [HttpGet("runs/{id:guid}/status")]
+    [ProducesResponseType<AccessImportRunStatusDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AccessImportRunStatusDto>> GetAccessImportRunStatus(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await importService.GetAccessImportRunStatusAsync(id, cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound));
+    }
+
     [HttpGet("quarantine")]
     [ProducesResponseType<IReadOnlyList<AccessImportQuarantineItemDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AccessImportQuarantineItemDto>>> GetOpenQuarantineItems(

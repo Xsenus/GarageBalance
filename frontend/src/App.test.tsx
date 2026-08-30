@@ -19330,20 +19330,28 @@ describe('App', () => {
     })
     const historicalRun = createAccessImportRun({ id: 'historical-import-run', originalFileName: 'history.accdb' })
     let runListRequests = 0
+    let statusRequests = 0
     let exactRunRequests = 0
-    const pollSignals: Array<AbortSignal | undefined> = []
+    const statusSignals: Array<AbortSignal | undefined> = []
+    let exactRunSignal: AbortSignal | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => {
         runListRequests += 1
         return [historicalRun]
       },
-      getAccessRun: async (_accessToken, runId, signal) => {
-        exactRunRequests += 1
-        pollSignals.push(signal)
+      getAccessRunStatus: async (_accessToken, runId, signal) => {
+        statusRequests += 1
+        statusSignals.push(signal)
         expect(runId).toBe(queuedRun.id)
-        return exactRunRequests === 1
+        return statusRequests === 1
           ? { ...queuedRun, summary: 'Фоновая проверка продолжается.' }
           : completedRun
+      },
+      getAccessRun: async (_accessToken, runId, signal) => {
+        exactRunRequests += 1
+        exactRunSignal = signal
+        expect(runId).toBe(queuedRun.id)
+        return completedRun
       },
       dryRunAccess: async () => queuedRun,
     })
@@ -19361,9 +19369,11 @@ describe('App', () => {
     expect(within(importPanel).getByRole('tab', { name: /История/ })).toBeEnabled()
     expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.', {}, { timeout: 3500 })).toBeInTheDocument()
     expect(runListRequests).toBe(1)
-    expect(exactRunRequests).toBe(2)
-    expect(pollSignals).toHaveLength(2)
-    expect(pollSignals[1]).toBe(pollSignals[0])
+    expect(statusRequests).toBe(2)
+    expect(exactRunRequests).toBe(1)
+    expect(statusSignals).toHaveLength(2)
+    expect(statusSignals[1]).toBe(statusSignals[0])
+    expect(exactRunSignal).toBe(statusSignals[1])
     await user.click(within(importPanel).getByRole('tab', { name: /История/ }))
     expect(within(importPanel).getByText('history.accdb')).toBeInTheDocument()
   })
@@ -19379,7 +19389,8 @@ describe('App', () => {
     let refreshSignal: AbortSignal | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => [queuedRun],
-      getAccessRun: () => pollResult,
+      getAccessRunStatus: () => pollResult,
+      getAccessRun: async () => completedRun,
       getAccessRunLog: (_token, _runId, _limit, signal) => {
         logRequests += 1
         if (logRequests === 1) {
@@ -19422,7 +19433,8 @@ describe('App', () => {
     let refreshSignal: AbortSignal | undefined
     const importClient = createImportClient({
       getAccessRuns: async () => [queuedRun],
-      getAccessRun: () => pollResult,
+      getAccessRunStatus: () => pollResult,
+      getAccessRun: async () => completedRun,
       getAccessCreatedRecords: (_token, _runId, _limit, signal) => {
         createdRequests += 1
         if (createdRequests === 1) {
@@ -24417,6 +24429,7 @@ function createImportClient(overrides: Partial<ImportClient> = {}): ImportClient
     getAccessReaderStatus: async () => createAccessImportReaderStatus(),
     getAccessRuns: async () => [],
     getAccessRun: async (_token, runId) => createAccessImportRun({ id: runId }),
+    getAccessRunStatus: async (_token, runId) => createAccessImportRun({ id: runId }),
     getAccessRunLog: async () => [],
     getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],
@@ -24621,6 +24634,7 @@ function createStatefulImportClient(): ImportClient {
     getAccessReaderStatus: async () => createAccessImportReaderStatus(),
     getAccessRuns: async () => runs,
     getAccessRun: async (_token, runId) => runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId }),
+    getAccessRunStatus: async (_token, runId) => runs.find((item) => item.id === runId) ?? createAccessImportRun({ id: runId }),
     getAccessRunLog: async (_token, runId) => logsByRunId.get(runId) ?? [],
     getAccessCreatedRecords: async () => [],
     getOpenQuarantineItems: async () => [],
