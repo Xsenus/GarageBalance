@@ -49,14 +49,13 @@ public sealed class ImportService(
     public async Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken)
     {
         var limit = QueryLimits.NormalizeListSize(request.Limit, 100);
-        var runExists = await repository.RunExistsAsync(runId, cancellationToken);
-        if (!runExists)
+        var data = await repository.GetCreatedRecordListDataAsync(runId, limit, cancellationToken);
+        if (!data.RunExists)
         {
             return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
         }
 
-        var records = await repository.GetCreatedRecordsAsync(runId, limit, cancellationToken);
-        return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success(records.Select(ToCreatedRecordDto).ToList());
+        return ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>.Success(data.Records.Select(ToCreatedRecordDto).ToList());
     }
 
     public async Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken)

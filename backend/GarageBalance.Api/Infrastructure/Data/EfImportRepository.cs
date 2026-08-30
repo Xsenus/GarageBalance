@@ -31,7 +31,7 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
             : await query.OrderBy(entry => entry.CreatedAtUtc).ThenBy(entry => entry.Id).Take(limit).ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AccessImportCreatedRecord>> GetCreatedRecordsAsync(
+    public async Task<AccessImportCreatedRecordListData> GetCreatedRecordListDataAsync(
         Guid runId,
         int limit,
         CancellationToken cancellationToken)
@@ -40,20 +40,36 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
             .Where(record => record.AccessImportRunId == runId);
         if (dbContext.Database.IsNpgsql())
         {
-            return await query
+            var orderedRecords = query
                 .OrderByDescending(record => record.CreatedAtUtc)
                 .ThenBy(record => record.TargetEntityType)
                 .ThenBy(record => record.TargetEntityId)
-                .Take(limit)
+                .Take(limit);
+            var rows = await dbContext.AccessImportRuns
+                .AsNoTracking()
+                .Where(run => run.Id == runId)
+                .SelectMany(
+                    _ => orderedRecords.DefaultIfEmpty(),
+                    (_, record) => record)
                 .ToListAsync(cancellationToken);
+
+            return new AccessImportCreatedRecordListData(
+                rows.Count > 0,
+                rows.Where(record => record is not null).Select(record => record!).ToList());
         }
 
-        return (await query.ToListAsync(cancellationToken))
+        if (!await RunExistsAsync(runId, cancellationToken))
+        {
+            return new AccessImportCreatedRecordListData(false, []);
+        }
+
+        var records = (await query.ToListAsync(cancellationToken))
             .OrderByDescending(record => record.CreatedAtUtc)
             .ThenBy(record => record.TargetEntityType, StringComparer.Ordinal)
             .ThenBy(record => record.TargetEntityId, StringComparer.Ordinal)
             .Take(limit)
             .ToList();
+        return new AccessImportCreatedRecordListData(true, records);
     }
 
     public Task<AccessImportRun?> FindRunAsync(

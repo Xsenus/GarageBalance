@@ -1088,17 +1088,19 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization()
+    public void ImportCreatedRecordsQuery_CombinesRunExistenceAndBoundedPostgresMaterialization()
     {
         var serviceSource = ReadApiSource("Application/Import/ImportService.cs");
         var repositorySource = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
 
         Assert.Contains("var limit = QueryLimits.NormalizeListSize(request.Limit, 100)", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("repository.GetCreatedRecordListDataAsync(runId, limit, cancellationToken)", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("repository.RunExistsAsync(runId", serviceSource[serviceSource.IndexOf("GetAccessImportCreatedRecordsAsync", StringComparison.Ordinal)..serviceSource.IndexOf("ExportAccessImportRunReportAsync", StringComparison.Ordinal)], StringComparison.Ordinal);
         Assert.Matches(
-            BoundedQueryRegex(@"GetCreatedRecordsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetCreatedRecordListDataAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.SelectMany\([\s\S]*?DefaultIfEmpty\(\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             repositorySource);
         Assert.Matches(
-            BoundedQueryRegex(@"GetCreatedRecordsAsync[\s\S]*?return \(await query\.ToListAsync\(cancellationToken\)\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToList\(\)"),
+            BoundedQueryRegex(@"GetCreatedRecordListDataAsync[\s\S]*?RunExistsAsync\(runId[\s\S]*?\(await query\.ToListAsync\(cancellationToken\)\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToList\(\)"),
             repositorySource);
     }
 

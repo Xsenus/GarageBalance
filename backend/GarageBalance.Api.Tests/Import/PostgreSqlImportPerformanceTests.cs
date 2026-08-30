@@ -11,6 +11,88 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class PostgreSqlImportPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task CreatedRecordListLoadsRunAndBoundedRecordsInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var run = new AccessImportRun { OriginalFileName = "created-records.accdb" };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.Add(run);
+            seedContext.AccessImportCreatedRecords.AddRange(
+                CreateRecord(run.Id, "garage", "garage-1", new string('a', 64), "created", 1),
+                CreateRecord(run.Id, "garage", "garage-3", new string('c', 64), "created", 3),
+                CreateRecord(run.Id, "garage", "garage-2", new string('b', 64), "created", 2));
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .GetCreatedRecordListDataAsync(run.Id, 2, CancellationToken.None);
+
+        Assert.True(result.RunExists);
+        Assert.Equal(["garage-3", "garage-2"], result.Records.Select(record => record.TargetEntityId));
+        Assert.Single(commandCapture.Commands);
+        Assert.Contains("JOIN", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("access_import_runs", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("access_import_created_records", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task CreatedRecordListDistinguishesEmptyRunInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var run = new AccessImportRun { OriginalFileName = "empty.accdb" };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.Add(run);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .GetCreatedRecordListDataAsync(run.Id, 100, CancellationToken.None);
+
+        Assert.True(result.RunExists);
+        Assert.Empty(result.Records);
+        Assert.Single(commandCapture.Commands);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task CreatedRecordListReturnsMissingRunInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .GetCreatedRecordListDataAsync(Guid.NewGuid(), 100, CancellationToken.None);
+
+        Assert.False(result.RunExists);
+        Assert.Empty(result.Records);
+        Assert.Single(commandCapture.Commands);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
     public async Task ImportAuditCombinesAllCountersAndKeepsSamplesBounded()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
