@@ -18570,7 +18570,7 @@ describe('App', () => {
     await user.click(within(incomeForm).getByRole('button', { name: 'Провести' }))
 
     expect(await within(financePanel).findByText('+700.00')).toBeInTheDocument()
-    expect(within(financePanel).getByText('1 операций')).toBeInTheDocument()
+    expect(within(financePanel).getByText('1 операция')).toBeInTheDocument()
     expect(within(financePanel).queryByRole('button', { name: /Отменить операцию/i })).not.toBeInTheDocument()
     const operationRow = within(financePanel).getByText('PKO-cancel').closest('tr')
     if (!operationRow) {
