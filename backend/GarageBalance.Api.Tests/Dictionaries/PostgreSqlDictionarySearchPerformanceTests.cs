@@ -106,9 +106,18 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
         await using var context = new GarageBalanceDbContext(options);
 
         var ownerPage = await new EfOwnerRepository(context).GetPageAsync("%", false, 0, 10, CancellationToken.None);
-        Assert.Single(ownerPage.Items);
+        var owner = Assert.Single(ownerPage.Items);
         Assert.Equal(1, ownerPage.TotalCount);
-        Assert.Equal(3, capture.TakeCountAndClear());
+        Assert.Equal("0073", Assert.Single(owner.Garages).Number);
+        var ownerCommand = Assert.Single(capture.TakeCommandsAndClear());
+        Assert.Contains("COUNT(*)", ownerCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", ownerCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", ownerCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PeopleCount", ownerCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("FloorCount", ownerCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitialWaterMeterValue", ownerCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitialElectricityMeterValue", ownerCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("Comment", ownerCommand, StringComparison.Ordinal);
 
         var garagePage = await new EfGarageRepository(context).GetPageAsync(
             "%",
@@ -141,6 +150,46 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
         Assert.Single(staffPage.Items);
         Assert.Equal(1, staffPage.TotalCount);
         Assert.Equal(2, capture.TakeCountAndClear());
+    }
+
+    [PostgreSqlFact]
+    public async Task OwnerPagePreservesOwnersWithoutActiveGaragesAndAnEmptySlice()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var archivedGarageOwner = new Owner { LastName = "Архивный", FirstName = "Гараж" };
+        var ownerWithoutGarage = new Owner { LastName = "Без", FirstName = "Гаража" };
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.AddRange(archivedGarageOwner, ownerWithoutGarage);
+            setupContext.Garages.Add(new Garage
+            {
+                Number = "АРХ-1",
+                Owner = archivedGarageOwner,
+                IsArchived = true
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        var capture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        var repository = new EfOwnerRepository(context);
+
+        var firstPage = await repository.GetPageAsync(null, false, 0, 2, CancellationToken.None);
+        var emptyPage = await repository.GetPageAsync(null, false, 2, 2, CancellationToken.None);
+
+        Assert.Equal(2, firstPage.TotalCount);
+        Assert.Equal(2, firstPage.Items.Count);
+        Assert.All(firstPage.Items, owner => Assert.Empty(owner.Garages));
+        Assert.Equal(2, emptyPage.TotalCount);
+        Assert.Empty(emptyPage.Items);
+        var commands = capture.TakeCommandsAndClear();
+        Assert.Equal(2, commands.Count);
+        Assert.All(commands, command => Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(context.ChangeTracker.Entries());
     }
 
     [PostgreSqlFact]

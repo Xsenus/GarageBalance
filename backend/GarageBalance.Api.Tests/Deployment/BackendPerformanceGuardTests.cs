@@ -236,6 +236,15 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
+        var postgresPage = ExtractMethodSource(
+            source,
+            "private async Task<OwnerPageData> GetPostgresPageAsync");
+        Assert.Contains(".Concat(totalsRow)", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", postgresPage, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("garage.PeopleCount", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.FloorCount", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.Comment", postgresPage, StringComparison.Ordinal);
     }
 
     [Fact]
