@@ -11,6 +11,88 @@ namespace GarageBalance.Api.Tests.Import;
 public sealed class PostgreSqlImportPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task RunLogListLoadsRunAndBoundedEntriesInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var run = new AccessImportRun { OriginalFileName = "run-log.accdb" };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.Add(run);
+            seedContext.AccessImportRunLogEntries.AddRange(
+                CreateLogEntry(run.Id, "third", 3),
+                CreateLogEntry(run.Id, "first", 1),
+                CreateLogEntry(run.Id, "second", 2));
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .GetRunLogEntryListDataAsync(run.Id, 2, CancellationToken.None);
+
+        Assert.True(result.RunExists);
+        Assert.Equal(["first", "second"], result.Entries.Select(entry => entry.StepCode));
+        Assert.Single(commandCapture.Commands);
+        Assert.Contains("JOIN", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("access_import_runs", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("access_import_run_log_entries", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", commandCapture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task RunLogListDistinguishesEmptyRunInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var run = new AccessImportRun { OriginalFileName = "empty-log.accdb" };
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AccessImportRuns.Add(run);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .GetRunLogEntryListDataAsync(run.Id, 100, CancellationToken.None);
+
+        Assert.True(result.RunExists);
+        Assert.Empty(result.Entries);
+        Assert.Single(commandCapture.Commands);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task RunLogListReturnsMissingRunInOneSelect()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var commandCapture = new SelectCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(commandCapture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var result = await new EfImportRepository(context)
+            .GetRunLogEntryListDataAsync(Guid.NewGuid(), 100, CancellationToken.None);
+
+        Assert.False(result.RunExists);
+        Assert.Empty(result.Entries);
+        Assert.Single(commandCapture.Commands);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
     public async Task CreatedRecordListLoadsRunAndBoundedRecordsInOneSelect()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -323,6 +405,15 @@ public sealed class PostgreSqlImportPerformanceTests
             TargetEntityType = targetEntityType,
             TargetEntityId = targetEntityId,
             RollbackStatus = rollbackStatus,
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 30, 1, minuteOffset, 0, TimeSpan.Zero)
+        };
+
+    private static AccessImportRunLogEntry CreateLogEntry(Guid runId, string stepCode, int minuteOffset) =>
+        new()
+        {
+            AccessImportRunId = runId,
+            StepCode = stepCode,
+            Message = stepCode,
             CreatedAtUtc = new DateTimeOffset(2026, 8, 30, 1, minuteOffset, 0, TimeSpan.Zero)
         };
 

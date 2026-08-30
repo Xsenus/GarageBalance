@@ -555,6 +555,21 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task GetAccessImportRunLogEntriesAsync_ReturnsEmptyListForExistingRunWithoutLog()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var run = new AccessImportRun { OriginalFileName = "empty-log.accdb" };
+        database.Context.AccessImportRuns.Add(run);
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetAccessImportRunLogEntriesAsync(run.Id, new AccessImportRunLogListRequest(), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Value!);
+    }
+
+    [Fact]
     public async Task GetAccessImportCreatedRecordsAsync_ReturnsNotFoundForMissingRun()
     {
         await using var database = await TestDatabase.CreateAsync();

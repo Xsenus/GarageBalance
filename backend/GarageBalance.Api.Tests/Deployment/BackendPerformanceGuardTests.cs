@@ -1105,6 +1105,26 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ImportRunLogQuery_CombinesRunExistenceAndBoundedPostgresMaterialization()
+    {
+        var serviceSource = ReadApiSource("Application/Import/ImportService.cs");
+        var repositorySource = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
+        var methodStart = serviceSource.IndexOf("GetAccessImportRunLogEntriesAsync", StringComparison.Ordinal);
+        var methodEnd = serviceSource.IndexOf("GetAccessImportCreatedRecordsAsync", methodStart, StringComparison.Ordinal);
+        var methodSource = serviceSource[methodStart..methodEnd];
+
+        Assert.Contains("var limit = QueryLimits.NormalizeListSize(request.Limit, 100)", methodSource, StringComparison.Ordinal);
+        Assert.Contains("repository.GetRunLogEntryListDataAsync(runId, limit, cancellationToken)", methodSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("repository.RunExistsAsync(runId", methodSource, StringComparison.Ordinal);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetRunLogEntryListDataAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.SelectMany\([\s\S]*?DefaultIfEmpty\(\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            repositorySource);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetRunLogEntryListDataAsync[\s\S]*?RunExistsAsync\(runId[\s\S]*?\(await query\.ToListAsync\(cancellationToken\)\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToList\(\)"),
+            repositorySource);
+    }
+
+    [Fact]
     public void ImportAuditQuery_CombinesCountersAndKeepsOnlyTwoDatabaseReads()
     {
         var source = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");

@@ -19,16 +19,43 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
         return dbContext.AccessImportRuns.AsNoTracking().AnyAsync(run => run.Id == runId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AccessImportRunLogEntry>> GetRunLogEntriesAsync(
+    public async Task<AccessImportRunLogEntryListData> GetRunLogEntryListDataAsync(
         Guid runId,
         int limit,
         CancellationToken cancellationToken)
     {
         var query = dbContext.AccessImportRunLogEntries.AsNoTracking()
             .Where(entry => entry.AccessImportRunId == runId);
-        return IsSqliteProvider()
-            ? (await query.ToListAsync(cancellationToken)).OrderBy(entry => entry.CreatedAtUtc).ThenBy(entry => entry.Id).Take(limit).ToList()
-            : await query.OrderBy(entry => entry.CreatedAtUtc).ThenBy(entry => entry.Id).Take(limit).ToListAsync(cancellationToken);
+        if (dbContext.Database.IsNpgsql())
+        {
+            var orderedEntries = query
+                .OrderBy(entry => entry.CreatedAtUtc)
+                .ThenBy(entry => entry.Id)
+                .Take(limit);
+            var rows = await dbContext.AccessImportRuns
+                .AsNoTracking()
+                .Where(run => run.Id == runId)
+                .SelectMany(
+                    _ => orderedEntries.DefaultIfEmpty(),
+                    (_, entry) => entry)
+                .ToListAsync(cancellationToken);
+
+            return new AccessImportRunLogEntryListData(
+                rows.Count > 0,
+                rows.Where(entry => entry is not null).Select(entry => entry!).ToList());
+        }
+
+        if (!await RunExistsAsync(runId, cancellationToken))
+        {
+            return new AccessImportRunLogEntryListData(false, []);
+        }
+
+        var entries = (await query.ToListAsync(cancellationToken))
+            .OrderBy(entry => entry.CreatedAtUtc)
+            .ThenBy(entry => entry.Id)
+            .Take(limit)
+            .ToList();
+        return new AccessImportRunLogEntryListData(true, entries);
     }
 
     public async Task<AccessImportCreatedRecordListData> GetCreatedRecordListDataAsync(
