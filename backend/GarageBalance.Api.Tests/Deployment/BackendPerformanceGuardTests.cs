@@ -1514,8 +1514,18 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Concat(totalsRow)", postgresUserPage, StringComparison.Ordinal);
         Assert.Contains("TotalCount = query.Count()", postgresUserPage, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(postgresUserPage, ".ToListAsync(cancellationToken)"));
-        Assert.DoesNotContain("user.PasswordHash", postgresUserPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("user.SessionVersion", postgresUserPage, StringComparison.Ordinal);
+        var boundedUserList = ExtractMethodSource(
+            users,
+            "public async Task<IReadOnlyList<AppUser>> GetUsersAsync");
+        Assert.Contains("BuildPostgresUserRows(boundedUsers", boundedUserList, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(boundedUserList, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("CountAsync", boundedUserList, StringComparison.Ordinal);
+        var postgresUserRows = ExtractMethodSource(
+            users,
+            "private IQueryable<UserListRow> BuildPostgresUserRows");
+        Assert.DoesNotContain("user.PasswordHash", postgresUserRows, StringComparison.Ordinal);
+        Assert.DoesNotContain("user.SessionVersion", postgresUserRows, StringComparison.Ordinal);
+        Assert.DoesNotContain("user.NormalizedEmail", postgresUserRows, StringComparison.Ordinal);
         Assert.Contains("EF.Functions.ILike(user.DisplayName", users, StringComparison.Ordinal);
         Assert.Contains("ThenBy(user => user.Id)", users, StringComparison.Ordinal);
         Assert.Contains("GetPostgresEventsPageAsync", audit, StringComparison.Ordinal);

@@ -16,6 +16,22 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
 
     public async Task<IReadOnlyList<AppUser>> GetUsersAsync(string? normalizedSearch, int limit, CancellationToken cancellationToken)
     {
+        var query = BuildUserFilterQuery(normalizedSearch);
+        if (IsNpgsqlProvider())
+        {
+            var boundedUsers = query
+                .OrderBy(user => user.DisplayName)
+                .ThenBy(user => user.Id)
+                .Take(limit);
+            var rows = await BuildPostgresUserRows(boundedUsers, category: 1)
+                .OrderBy(row => row.DisplayName)
+                .ThenBy(row => row.UserId)
+                .ThenBy(row => row.RoleName)
+                .ThenBy(row => row.RoleId)
+                .ToListAsync(cancellationToken);
+            return MaterializeUsers(rows, category: 1);
+        }
+
         return await BuildUsersQuery(normalizedSearch)
             .OrderBy(user => user.DisplayName)
             .ThenBy(user => user.Id)
@@ -61,46 +77,23 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
             .ThenBy(user => user.Id)
             .Skip(offset)
             .Take(limit);
-        var pageRows =
-            from user in pageUsers
-            join userRole in dbContext.UserRoles.AsNoTracking()
-                on user.Id equals userRole.UserId into userRoles
-            from userRole in userRoles.DefaultIfEmpty()
-            join role in dbContext.Roles.AsNoTracking()
-                on userRole.RoleId equals role.Id into roles
-            from role in roles.DefaultIfEmpty()
-            select new
-            {
-                Category = PageCategory,
-                UserId = (Guid?)user.Id,
-                Email = (string?)user.Email,
-                DisplayName = (string?)user.DisplayName,
-                IsActive = (bool?)user.IsActive,
-                CreatedAtUtc = (DateTimeOffset?)user.CreatedAtUtc,
-                LastLoginAtUtc = user.LastLoginAtUtc,
-                Version = (Guid?)user.Version,
-                RoleId = role == null ? null : (Guid?)role.Id,
-                RoleCode = role == null ? null : role.Code,
-                RoleName = role == null ? null : role.Name,
-                Permissions = role == null ? null : role.Permissions,
-                TotalCount = 0
-            };
+        var pageRows = BuildPostgresUserRows(pageUsers, PageCategory);
         var totalsRow = dbContext.Database
             .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
-            .Select(_ => new
+            .Select(_ => new UserListRow
             {
                 Category = TotalsCategory,
-                UserId = (Guid?)null,
-                Email = (string?)null,
-                DisplayName = (string?)null,
-                IsActive = (bool?)null,
-                CreatedAtUtc = (DateTimeOffset?)null,
-                LastLoginAtUtc = (DateTimeOffset?)null,
-                Version = (Guid?)null,
-                RoleId = (Guid?)null,
-                RoleCode = (string?)null,
-                RoleName = (string?)null,
-                Permissions = (List<string>?)null,
+                UserId = null,
+                Email = null,
+                DisplayName = null,
+                IsActive = null,
+                CreatedAtUtc = null,
+                LastLoginAtUtc = null,
+                Version = null,
+                RoleId = null,
+                RoleCode = null,
+                RoleName = null,
+                Permissions = null,
                 TotalCount = query.Count()
             });
         var rows = await pageRows
@@ -112,8 +105,36 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
             .ThenBy(row => row.RoleId)
             .ToListAsync(cancellationToken);
         var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
-        var users = rows
-            .Where(row => row.Category == PageCategory)
+        return new UserManagementUsersPageData(MaterializeUsers(rows, PageCategory), totalCount);
+    }
+
+    private IQueryable<UserListRow> BuildPostgresUserRows(IQueryable<AppUser> users, int category) =>
+        from user in users
+        join userRole in dbContext.UserRoles.AsNoTracking()
+            on user.Id equals userRole.UserId into userRoles
+        from userRole in userRoles.DefaultIfEmpty()
+        join role in dbContext.Roles.AsNoTracking()
+            on userRole.RoleId equals role.Id into roles
+        from role in roles.DefaultIfEmpty()
+        select new UserListRow
+        {
+            Category = category,
+            UserId = user.Id,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            IsActive = user.IsActive,
+            CreatedAtUtc = user.CreatedAtUtc,
+            LastLoginAtUtc = user.LastLoginAtUtc,
+            Version = user.Version,
+            RoleId = role == null ? null : role.Id,
+            RoleCode = role == null ? null : role.Code,
+            RoleName = role == null ? null : role.Name,
+            Permissions = role == null ? null : role.Permissions,
+            TotalCount = 0
+        };
+
+    private static IReadOnlyList<AppUser> MaterializeUsers(IEnumerable<UserListRow> rows, int category) =>
+        rows.Where(row => row.Category == category)
             .GroupBy(row => row.UserId!.Value)
             .Select(group =>
             {
@@ -151,8 +172,6 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
                 return user;
             })
             .ToList();
-        return new UserManagementUsersPageData(users, totalCount);
-    }
 
     public Task<bool> EmailExistsAsync(string normalizedEmail, CancellationToken cancellationToken)
     {
@@ -260,4 +279,21 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
         value.Replace(@"\", @"\\", StringComparison.Ordinal)
             .Replace("%", @"\%", StringComparison.Ordinal)
             .Replace("_", @"\_", StringComparison.Ordinal);
+
+    private sealed class UserListRow
+    {
+        public int Category { get; init; }
+        public Guid? UserId { get; init; }
+        public string? Email { get; init; }
+        public string? DisplayName { get; init; }
+        public bool? IsActive { get; init; }
+        public DateTimeOffset? CreatedAtUtc { get; init; }
+        public DateTimeOffset? LastLoginAtUtc { get; init; }
+        public Guid? Version { get; init; }
+        public Guid? RoleId { get; init; }
+        public string? RoleCode { get; init; }
+        public string? RoleName { get; init; }
+        public List<string>? Permissions { get; init; }
+        public int TotalCount { get; init; }
+    }
 }

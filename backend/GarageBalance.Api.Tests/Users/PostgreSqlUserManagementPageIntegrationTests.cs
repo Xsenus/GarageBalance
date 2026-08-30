@@ -97,6 +97,46 @@ public sealed class PostgreSqlUserManagementPageIntegrationTests
         Assert.Empty(context.ChangeTracker.Entries());
     }
 
+    [PostgreSqlFact]
+    public async Task BoundedUserListLoadsRolesWithoutProtectedUserFields()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var role = new AppRole
+        {
+            Code = "accounting",
+            Name = "Бухгалтерия",
+            Permissions = ["payments.read", "reports.read"]
+        };
+        var first = CreateUser("a@example.test", "Анна");
+        var second = CreateUser("b@example.test", "Борис");
+        var third = CreateUser("c@example.test", "Вера");
+        second.UserRoles.Add(new AppUserRole { User = second, Role = role });
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AddRange(first, second, third);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+
+        var users = await new EfUserManagementRepository(context)
+            .GetUsersAsync(normalizedSearch: null, limit: 2, CancellationToken.None);
+
+        Assert.Equal([first.Id, second.Id], users.Select(user => user.Id).ToArray());
+        Assert.Empty(users[0].UserRoles);
+        Assert.Equal("accounting", Assert.Single(users[1].UserRoles).Role.Code);
+        var command = Assert.Single(capture.Commands);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PasswordHash", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("SessionVersion", command, StringComparison.Ordinal);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
     private static AppUser CreateUser(string email, string displayName) =>
         new()
         {
