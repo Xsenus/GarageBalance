@@ -9498,29 +9498,49 @@ describe('App', () => {
           incomeAmount: 1000,
           debt: 4674,
           calculationDetails: {
-            version: 1,
+            version: 3,
             accountingMonth: '2026-06-01',
             previousMeterValue: 68,
             currentMeterValue: 86,
             meterConsumption: 18,
             requiresMeter: true,
-            volumeAllocationRule: 'Расход распределён пропорционально календарным дням.',
+            volumeAllocationRule: null,
+            averageRate: 315.2222,
+            rateAveragingRule: 'Средняя ставка за месяц: (300 + 330,4444) / 2 = 315,2222. Количество дней действия ставок на среднее не влияет.',
+            monthlyCalculationFormula: 'Расчёт за месяц: 18 кВт·ч × 315,2222 = 5 674,00.',
             totalAmount: 5674,
-            lines: [{
-              effectiveFrom: '2026-06-01',
-              effectiveTo: '2026-06-15',
-              days: 15,
-              monthDays: 30,
-              calculationBase: 'meter_electricity',
-              calculationMode: 'metered',
-              unitName: 'кВт·ч',
-              rate: 630.4444,
-              quantity: 9,
-              amount: 5674,
-              tiers: [],
-              formula: '9 × 630,4444 = 5 674,00',
-              hasTariff: true,
-            }],
+            lines: [
+              {
+                effectiveFrom: '2026-06-01',
+                effectiveTo: '2026-06-15',
+                days: 15,
+                monthDays: 30,
+                calculationBase: 'meter_electricity',
+                calculationMode: 'metered',
+                unitName: 'кВт·ч',
+                rate: 300,
+                quantity: 9,
+                amount: 2700,
+                tiers: [],
+                formula: 'Равный вес 1/2: 18 × 300 / 2 = 2 700,00',
+                hasTariff: true,
+              },
+              {
+                effectiveFrom: '2026-06-16',
+                effectiveTo: '2026-06-30',
+                days: 15,
+                monthDays: 30,
+                calculationBase: 'meter_electricity',
+                calculationMode: 'metered',
+                unitName: 'кВт·ч',
+                rate: 330.4444,
+                quantity: 9,
+                amount: 2974,
+                tiers: [],
+                formula: 'Равный вес 1/2: 18 × 330,4444 / 2 = 2 974,00',
+                hasTariff: true,
+              },
+            ],
           },
         },
       ],
@@ -9562,7 +9582,7 @@ describe('App', () => {
     const payableLayout = calculationButton.closest('.payments-prototype-payable') as HTMLElement
     expect(payableLayout.firstElementChild).toContainElement(calculationButton)
     expect(payableLayout.firstElementChild).toHaveClass('field-help')
-    expect(within(payableLayout).getByText('9 × 630,4444 = 5 674,00')).toHaveClass('field-help__tooltip', 'payments-prototype-calculation-tooltip')
+    expect(within(payableLayout).getByText('Расчёт за месяц: 18 кВт·ч × 315,2222 = 5 674,00.')).toHaveClass('field-help__tooltip', 'payments-prototype-calculation-tooltip')
     expect(payableLayout.lastElementChild).toHaveClass('payments-prototype-payable-amount')
     expect(payableLayout.lastElementChild).toHaveTextContent('5 674.00')
     await user.click(calculationButton)
@@ -9570,7 +9590,9 @@ describe('App', () => {
     expect(calculation).toHaveClass('payments-prototype-calculation-dialog')
     expect(calculation).toHaveTextContent('Показания: 68 → 86; расход 18')
     expect(calculation).toHaveTextContent('01.06.2026–15.06.2026')
-    expect(calculation).toHaveTextContent('9 × 630,4444 = 5 674,00')
+    expect(calculation).toHaveTextContent('16.06.2026–30.06.2026')
+    expect(calculation).toHaveTextContent('Средняя ставка за месяц: (300 + 330,4444) / 2 = 315,2222. Количество дней действия ставок на среднее не влияет.')
+    expect(calculation).toHaveTextContent('Расчёт за месяц: 18 кВт·ч × 315,2222 = 5 674,00.')
     expect(within(incomeTable).queryByText('Как рассчитано 5 674.00')).not.toBeInTheDocument()
     await user.click(within(calculation).getByRole('button', { name: 'Закрыть расчёт суммы' }))
     expect(screen.queryByRole('dialog', { name: 'Расчёт суммы: Серверная электроэнергия, июн.26' })).not.toBeInTheDocument()

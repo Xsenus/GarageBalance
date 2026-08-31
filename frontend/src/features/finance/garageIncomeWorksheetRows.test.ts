@@ -66,4 +66,38 @@ describe('getAccrualCalculationSummary', () => {
     expect(getAccrualCalculationSummary(null, 'Сохранённое начисление: 750.00'))
       .toBe('Сохранённое начисление: 750.00')
   })
+
+  it('shows the complete monthly formula for the arithmetic mean calculation', () => {
+    const details: AccrualCalculationDetailsDto = {
+      version: 3,
+      accountingMonth: '2026-08-01',
+      previousMeterValue: 0,
+      currentMeterValue: 8,
+      meterConsumption: 8,
+      requiresMeter: true,
+      volumeAllocationRule: null,
+      averageRate: 2.5,
+      rateAveragingRule: 'Средняя ставка за месяц: (1 + 2 + 3 + 4) / 4 = 2,5. Количество дней действия ставок на среднее не влияет.',
+      monthlyCalculationFormula: 'Расчёт за месяц: 8 м³ × 2,5 = 20,00.',
+      totalAmount: 20,
+      lines: [{
+        effectiveFrom: '2026-08-01',
+        effectiveTo: '2026-08-20',
+        days: 20,
+        monthDays: 31,
+        calculationBase: 'meter_water',
+        calculationMode: 'metered',
+        unitName: 'м³',
+        rate: 1,
+        quantity: 2,
+        amount: 2,
+        tiers: [],
+        formula: 'Равный вес 1/4: 8 × 1 / 4 = 2,00',
+        hasTariff: true,
+      }],
+    }
+
+    expect(getAccrualCalculationSummary(details, 'Сохранённое начисление: 20.00'))
+      .toBe('Расчёт за месяц: 8 м³ × 2,5 = 20,00.')
+  })
 })

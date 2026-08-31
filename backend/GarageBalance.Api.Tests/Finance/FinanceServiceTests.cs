@@ -5722,7 +5722,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CalculateGarageIncomeWorksheetAsync_UsesEveryTariffSegmentInsideSelectedMonth()
+    public async Task CalculateGarageIncomeWorksheetAsync_UsesArithmeticMeanOfEveryTariffInsideSelectedMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -5779,21 +5779,24 @@ public sealed class FinanceServiceTests
 
         Assert.True(result.Succeeded, result.ErrorMessage);
         var row = Assert.Single(result.Value!.Rows, item => item.IncomeTypeId == fixtures.IncomeType.Id);
-        Assert.Equal(470m, row.AccrualAmount);
+        Assert.Equal(465m, row.AccrualAmount);
         Assert.NotNull(row.CalculationDetails);
+        Assert.Equal(465m, row.CalculationDetails!.AverageRate);
+        Assert.Contains("(310 + 620) / 2 = 465", row.CalculationDetails.RateAveragingRule, StringComparison.Ordinal);
+        Assert.Equal("Расчёт за месяц: 1 месяц × 465 = 465,00.", row.CalculationDetails.MonthlyCalculationFormula);
         Assert.Collection(
-            row.CalculationDetails!.Lines,
+            row.CalculationDetails.Lines,
             line =>
             {
                 Assert.Equal(new DateOnly(2026, 8, 1), line.EffectiveFrom);
                 Assert.Equal(new DateOnly(2026, 8, 15), line.EffectiveTo);
-                Assert.Equal(150m, line.Amount);
+                Assert.Equal(155m, line.Amount);
             },
             line =>
             {
                 Assert.Equal(new DateOnly(2026, 8, 16), line.EffectiveFrom);
                 Assert.Equal(new DateOnly(2026, 8, 31), line.EffectiveTo);
-                Assert.Equal(320m, line.Amount);
+                Assert.Equal(310m, line.Amount);
             });
     }
 
@@ -6008,7 +6011,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GenerateRegularCatalogAccrualsAsync_ProreratesFixedToMeteredTransitionAndExposesDetails()
+    public async Task GenerateRegularCatalogAccrualsAsync_SkipsTariffTransitionWithIncompatibleUnits()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -6081,33 +6084,17 @@ public sealed class FinanceServiceTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
             CancellationToken.None);
 
-        Assert.True(generated.Succeeded, generated.ErrorMessage);
-        var accrual = Assert.Single(database.Context.Accruals);
-        Assert.Equal(310m, accrual.Amount);
-        Assert.True(accrual.RequiresMeterReading);
-        Assert.Equal(MeterKinds.Water, accrual.CalculationMeterKind);
-        Assert.NotNull(accrual.CalculationDetailsJson);
+        Assert.False(generated.Succeeded);
+        Assert.Contains("разными единицами нельзя усреднить", generated.ErrorMessage, StringComparison.Ordinal);
+        Assert.Empty(database.Context.Accruals);
         Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
-        var row = Assert.Single(worksheet.Value!.Rows);
-        Assert.Equal(310m, row.PayableAmount);
-        Assert.NotNull(row.CalculationDetails);
-        Assert.Collection(
-            row.CalculationDetails!.Lines,
-            line =>
-            {
-                Assert.Equal("fixed", line.CalculationMode);
-                Assert.Equal(150m, line.Amount);
-            },
-            line =>
-            {
-                Assert.Equal("metered", line.CalculationMode);
-                Assert.Equal(16m, line.Quantity);
-                Assert.Equal(160m, line.Amount);
-            });
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.IncomeTypeId == fixtures.IncomeType.Id);
+        Assert.Equal(0m, row.AccrualAmount);
+        Assert.Null(row.CalculationDetails);
     }
 
     [Fact]
-    public async Task GenerateRegularCatalogAccrualsAsync_CreatesPartialAccrualWhenFirstTariffStartsMidMonth()
+    public async Task GenerateRegularCatalogAccrualsAsync_AppliesFirstAvailableRateToEntireMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -6164,7 +6151,7 @@ public sealed class FinanceServiceTests
 
         Assert.True(generated.Succeeded, generated.ErrorMessage);
         var accrual = Assert.Single(database.Context.Accruals);
-        Assert.Equal(160m, accrual.Amount);
+        Assert.Equal(310m, accrual.Amount);
         var details = RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson);
         Assert.NotNull(details);
         Assert.Collection(
@@ -6181,8 +6168,8 @@ public sealed class FinanceServiceTests
                 Assert.True(line.HasTariff);
                 Assert.Equal(new DateOnly(2026, 8, 16), line.EffectiveFrom);
                 Assert.Equal(new DateOnly(2026, 8, 31), line.EffectiveTo);
-                Assert.Equal(16m, line.Quantity);
-                Assert.Equal(160m, line.Amount);
+                Assert.Equal(31m, line.Quantity);
+                Assert.Equal(310m, line.Amount);
             });
     }
 

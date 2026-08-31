@@ -9,7 +9,7 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task MidMonthTariffChange_PersistsCalendarDayProrationAndTwoCalculationSegments()
+    public async Task MidMonthTariffChange_PersistsArithmeticMeanAndTwoCalculationSegments()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid garageId;
@@ -43,7 +43,7 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
             };
             var setting = new ChargeServiceSetting
             {
-                Name = "Приемочная услуга с посуточным расчетом",
+                Name = "Приемочная услуга со средней месячной ставкой",
                 IsRegular = true,
                 PeriodicityMonths = 1,
                 AccrualStartMonth = 1,
@@ -88,17 +88,20 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
             var row = Assert.Single(
                 result.Value!.Rows,
                 item => item.IncomeTypeId == incomeTypeId);
-            Assert.Equal(470m, row.AccrualAmount);
+            Assert.Equal(465m, row.AccrualAmount);
             Assert.NotNull(row.CalculationDetails);
+            Assert.Equal(465m, row.CalculationDetails!.AverageRate);
+            Assert.Contains("(310 + 620) / 2 = 465", row.CalculationDetails.RateAveragingRule, StringComparison.Ordinal);
+            Assert.Contains("Количество дней действия ставок на среднее не влияет", row.CalculationDetails.RateAveragingRule, StringComparison.Ordinal);
             Assert.Collection(
-                row.CalculationDetails!.Lines,
+                row.CalculationDetails.Lines,
                 firstHalf =>
                 {
                     Assert.Equal(new DateOnly(2026, 8, 1), firstHalf.EffectiveFrom);
                     Assert.Equal(new DateOnly(2026, 8, 15), firstHalf.EffectiveTo);
                     Assert.Equal(15, firstHalf.Days);
                     Assert.Equal(31, firstHalf.MonthDays);
-                    Assert.Equal(150m, firstHalf.Amount);
+                    Assert.Equal(155m, firstHalf.Amount);
                 },
                 secondHalf =>
                 {
@@ -106,7 +109,7 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
                     Assert.Equal(new DateOnly(2026, 8, 31), secondHalf.EffectiveTo);
                     Assert.Equal(16, secondHalf.Days);
                     Assert.Equal(31, secondHalf.MonthDays);
-                    Assert.Equal(320m, secondHalf.Amount);
+                    Assert.Equal(310m, secondHalf.Amount);
                 });
         }
 
@@ -116,10 +119,12 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
                 accrual.GarageId == garageId &&
                 accrual.IncomeTypeId == incomeTypeId &&
                 !accrual.IsCanceled);
-        Assert.Equal(470m, persisted.Amount);
+        Assert.Equal(465m, persisted.Amount);
         var persistedDetails = RegularAccrualCalculator.Deserialize(persisted.CalculationDetailsJson);
         Assert.NotNull(persistedDetails);
-        Assert.Equal(470m, persistedDetails!.TotalAmount);
+        Assert.Equal(465m, persistedDetails!.TotalAmount);
+        Assert.Equal(465m, persistedDetails.AverageRate);
+        Assert.Equal("Расчёт за месяц: 1 месяц × 465 = 465,00.", persistedDetails.MonthlyCalculationFormula);
         Assert.Equal([15, 16], persistedDetails.Lines.Select(line => line.Days));
         Assert.Contains(
             await verificationContext.AuditEvents.ToListAsync(),

@@ -4974,6 +4974,8 @@ function PaymentsPrototypePanel({
                     <span>Показания: {calculationDialogRow.calculationDetails.previousMeterValue?.toLocaleString('ru-RU') ?? '—'} → {calculationDialogRow.calculationDetails.currentMeterValue?.toLocaleString('ru-RU') ?? '—'}; расход {calculationDialogRow.calculationDetails.meterConsumption?.toLocaleString('ru-RU') ?? '—'}</span>
                   ) : null}
                 </div>
+                {calculationDialogRow.calculationDetails.rateAveragingRule ? <p>{calculationDialogRow.calculationDetails.rateAveragingRule}</p> : null}
+                {calculationDialogRow.calculationDetails.monthlyCalculationFormula ? <p>{calculationDialogRow.calculationDetails.monthlyCalculationFormula}</p> : null}
                 {calculationDialogRow.calculationDetails.volumeAllocationRule ? <p>{calculationDialogRow.calculationDetails.volumeAllocationRule}</p> : null}
                 <div className="payments-prototype-calculation-lines">
                   {calculationDialogRow.calculationDetails.lines.map((line, lineIndex) => (

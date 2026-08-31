@@ -360,6 +360,9 @@ export type AccrualCalculationDetailsDto = {
   volumeAllocationRule: string | null
   lines: AccrualCalculationLineDto[]
   totalAmount: number
+  averageRate?: number | null
+  rateAveragingRule?: string | null
+  monthlyCalculationFormula?: string | null
 }
 
 export type GarageIncomeWorksheetDto = {

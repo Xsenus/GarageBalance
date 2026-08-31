@@ -48,7 +48,10 @@ public sealed record AccrualCalculationDetailsDto(
     bool RequiresMeter,
     string? VolumeAllocationRule,
     IReadOnlyList<AccrualCalculationLineDto> Lines,
-    decimal TotalAmount);
+    decimal TotalAmount,
+    decimal? AverageRate = null,
+    string? RateAveragingRule = null,
+    string? MonthlyCalculationFormula = null);
 
 public sealed record RegularAccrualCalculationResult(
     bool Succeeded,
@@ -85,34 +88,78 @@ public static class RegularAccrualCalculator
             .Where(definition => definition.EffectiveFrom <= definition.EffectiveTo)
             .OrderBy(definition => definition.EffectiveFrom)
             .ToList();
-        var requiresMeter = ordered.Any(IsMetered);
+        var activeDefinitions = ordered
+            .Where(definition => definition.CalculationBase is not null)
+            .ToList();
+        var calculationBases = activeDefinitions
+            .Select(definition => definition.CalculationBase!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (calculationBases.Length > 1)
+        {
+            return RegularAccrualCalculationResult.Failure(
+                "в течение месяца менялся способ расчёта тарифа. Ставки с разными единицами нельзя усреднить.");
+        }
+
+        var requiresMeter = activeDefinitions.Any(IsMetered);
         if (requiresMeter && meterReading is null)
         {
             return RegularAccrualCalculationResult.Failure("нет показания счетчика за месяц.");
         }
 
+        var calculationBase = calculationBases.SingleOrDefault();
+        var monthlyQuantity = calculationBase switch
+        {
+            TariffCalculationBases.Fixed => 1m,
+            TariffCalculationBases.People => garage.PeopleCount,
+            TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity =>
+                MoneyMath.RoundMeterValue(meterReading!.Consumption),
+            _ => 0m
+        };
+        var resolvedRates = activeDefinitions
+            .Select(definition => ResolveRate(definition, meterReading?.CurrentValue))
+            .ToArray();
+        var averageRate = resolvedRates.Length == 0
+            ? (decimal?)null
+            : resolvedRates.Average(item => item.Rate);
+        var total = averageRate.HasValue
+            ? MoneyMath.RoundMoney(monthlyQuantity * averageRate.Value)
+            : 0m;
         var lines = new List<AccrualCalculationLineDto>(ordered.Count);
+        var activeIndex = 0;
+        var accumulatedAmount = 0m;
         foreach (var definition in ordered)
         {
             var days = definition.EffectiveTo.DayNumber - definition.EffectiveFrom.DayNumber + 1;
-            var dayShare = days / (decimal)monthDays;
-            var calculationBase = definition.CalculationBase;
-            var quantity = calculationBase switch
+            if (definition.CalculationBase is null)
             {
-                TariffCalculationBases.Fixed => dayShare,
-                TariffCalculationBases.People => garage.PeopleCount * dayShare,
-                TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity =>
-                    MoneyMath.RoundMeterValue(meterReading!.Consumption * dayShare),
-                _ => 0m
-            };
-            var tierLines = IsMetered(definition) && definition.Tiers.Count > 0
-                ? CalculateTierLines(quantity, meterReading!.CurrentValue, definition.Tiers)
-                : [];
-            var unroundedAmount = tierLines.Count > 0
-                ? tierLines.Sum(tier => tier.Amount)
-                : quantity * definition.Rate;
-            var amount = MoneyMath.RoundMoney(unroundedAmount);
-            var mode = calculationBase switch
+                lines.Add(new AccrualCalculationLineDto(
+                    definition.EffectiveFrom,
+                    definition.EffectiveTo,
+                    days,
+                    monthDays,
+                    null,
+                    "no_tariff",
+                    definition.UnitName,
+                    0m,
+                    0m,
+                    0m,
+                    [],
+                    "Тариф на этот участок не задан и в среднюю ставку месяца не входит: 0,00",
+                    false,
+                    definition.Tiers));
+                continue;
+            }
+
+            var resolved = resolvedRates[activeIndex];
+            var isLastActive = activeIndex == resolvedRates.Length - 1;
+            var amount = isLastActive
+                ? MoneyMath.RoundMoney(total - accumulatedAmount)
+                : MoneyMath.RoundMoney(monthlyQuantity * resolved.Rate / resolvedRates.Length);
+            accumulatedAmount += amount;
+            activeIndex++;
+            var allocatedQuantity = monthlyQuantity / resolvedRates.Length;
+            var mode = definition.CalculationBase switch
             {
                 TariffCalculationBases.Fixed => "fixed",
                 TariffCalculationBases.People => "people",
@@ -120,37 +167,47 @@ public static class RegularAccrualCalculator
                 TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity => "metered",
                 _ => "no_tariff"
             };
-            var effectiveRate = tierLines.Count > 0 ? tierLines[0].Rate : definition.Rate;
+            var tierLines = resolved.IsTiered
+                ? new[]
+                {
+                    new AccrualCalculationTierDto(
+                        resolved.LowerBound,
+                        resolved.UpperBound,
+                        allocatedQuantity,
+                        resolved.Rate,
+                        amount)
+                }
+                : [];
             lines.Add(new AccrualCalculationLineDto(
                 definition.EffectiveFrom,
                 definition.EffectiveTo,
                 days,
                 monthDays,
-                calculationBase,
+                definition.CalculationBase,
                 mode,
                 definition.UnitName,
-                definition.Rate,
-                quantity,
+                resolved.Rate,
+                allocatedQuantity,
                 amount,
                 tierLines,
-                BuildFormula(mode, quantity, effectiveRate, days, monthDays, amount, meterReading?.CurrentValue),
-                calculationBase is not null,
+                BuildSegmentFormula(mode, monthlyQuantity, resolved.Rate, resolvedRates.Length, amount, meterReading?.CurrentValue),
+                true,
                 definition.Tiers));
         }
 
-        var total = MoneyMath.RoundMoney(lines.Sum(line => line.Amount));
         var details = new AccrualCalculationDetailsDto(
-            2,
+            3,
             month,
             meterReading?.PreviousValue,
             meterReading?.CurrentValue,
             meterReading?.Consumption,
             requiresMeter,
-            requiresMeter && ordered.Count > 1
-                ? "Расход за месяц распределён между участками пропорционально календарным дням их действия."
-                : null,
+            null,
             lines,
-            total);
+            total,
+            averageRate,
+            averageRate.HasValue ? BuildRateAveragingRule(resolvedRates.Select(item => item.Rate).ToArray(), averageRate.Value) : null,
+            averageRate.HasValue ? BuildMonthlyCalculationFormula(calculationBase!, monthlyQuantity, averageRate.Value, total, activeDefinitions[0].UnitName) : null);
         return RegularAccrualCalculationResult.Success(details);
     }
 
@@ -188,48 +245,57 @@ public static class RegularAccrualCalculator
     private static bool IsMetered(RegularAccrualSegmentDefinition definition) =>
         definition.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity;
 
-    private static IReadOnlyList<AccrualCalculationTierDto> CalculateTierLines(
-        decimal consumption,
-        decimal currentMeterValue,
-        IReadOnlyList<RegularAccrualTariffTier> tiers)
+    private static ResolvedRate ResolveRate(
+        RegularAccrualSegmentDefinition definition,
+        decimal? currentMeterValue)
     {
-        var lowerBound = 0m;
-        foreach (var tier in tiers)
+        if (!IsMetered(definition) || definition.Tiers.Count == 0)
         {
-            if (!tier.UpperBound.HasValue || currentMeterValue <= tier.UpperBound.Value)
+            return new ResolvedRate(definition.Rate, false, 0m, null);
+        }
+
+        var lowerBound = 0m;
+        foreach (var tier in definition.Tiers)
+        {
+            if (!tier.UpperBound.HasValue || currentMeterValue!.Value <= tier.UpperBound.Value)
             {
-                return
-                [
-                    new AccrualCalculationTierDto(
-                    lowerBound,
-                    tier.UpperBound,
-                    consumption,
-                    tier.Rate,
-                    MoneyMath.RoundMoney(consumption * tier.Rate))
-                ];
+                return new ResolvedRate(tier.Rate, true, lowerBound, tier.UpperBound);
             }
 
             lowerBound = tier.UpperBound.Value;
         }
 
-        var fallback = tiers[^1];
-        return
-        [
-            new AccrualCalculationTierDto(
-                lowerBound,
-                fallback.UpperBound,
-                consumption,
-                fallback.Rate,
-                MoneyMath.RoundMoney(consumption * fallback.Rate))
-        ];
+        var fallback = definition.Tiers[^1];
+        return new ResolvedRate(fallback.Rate, true, lowerBound, fallback.UpperBound);
     }
 
-    private static string BuildFormula(string mode, decimal quantity, decimal rate, int days, int monthDays, decimal amount, decimal? currentMeterValue) => mode switch
+    private static string BuildRateAveragingRule(IReadOnlyList<decimal> rates, decimal averageRate) =>
+        $"Средняя ставка за месяц: ({string.Join(" + ", rates.Select(rate => rate.ToString("0.####", RussianCulture)))}) / {rates.Count} = {averageRate.ToString("0.####", RussianCulture)}. Количество дней действия ставок на среднее не влияет.";
+
+    private static string BuildMonthlyCalculationFormula(
+        string calculationBase,
+        decimal monthlyQuantity,
+        decimal averageRate,
+        decimal amount,
+        string unitName)
     {
-        "fixed" => $"{rate.ToString("0.####", RussianCulture)} × {days}/{monthDays} = {amount.ToString("0.00", RussianCulture)}",
-        "people" => $"{rate.ToString("0.####", RussianCulture)} × {quantity.ToString("0.####", RussianCulture)} чел. = {amount.ToString("0.00", RussianCulture)}",
-        "metered" => $"{quantity.ToString("0.###", RussianCulture)} × {rate.ToString("0.####", RussianCulture)} = {amount.ToString("0.00", RussianCulture)}",
-        "metered_tiered" => $"{quantity.ToString("0.###", RussianCulture)} × {rate.ToString("0.####", RussianCulture)} (текущее показание {currentMeterValue?.ToString("0.###", RussianCulture) ?? "—"}) = {amount.ToString("0.00", RussianCulture)}",
-        _ => "Тариф на этот участок не задан: 0,00"
+        var quantity = calculationBase switch
+        {
+            TariffCalculationBases.Fixed => "1 месяц",
+            TariffCalculationBases.People => $"{monthlyQuantity.ToString("0.####", RussianCulture)} чел.",
+            _ => $"{monthlyQuantity.ToString("0.###", RussianCulture)} {unitName}"
+        };
+        return $"Расчёт за месяц: {quantity} × {averageRate.ToString("0.####", RussianCulture)} = {amount.ToString("0.00", RussianCulture)}.";
+    }
+
+    private static string BuildSegmentFormula(string mode, decimal monthlyQuantity, decimal rate, int rateCount, decimal amount, decimal? currentMeterValue) => mode switch
+    {
+        "fixed" => $"Равный вес 1/{rateCount}: 1 месяц × {rate.ToString("0.####", RussianCulture)} / {rateCount} = {amount.ToString("0.00", RussianCulture)}",
+        "people" => $"Равный вес 1/{rateCount}: {monthlyQuantity.ToString("0.####", RussianCulture)} чел. × {rate.ToString("0.####", RussianCulture)} / {rateCount} = {amount.ToString("0.00", RussianCulture)}",
+        "metered" => $"Равный вес 1/{rateCount}: {monthlyQuantity.ToString("0.###", RussianCulture)} × {rate.ToString("0.####", RussianCulture)} / {rateCount} = {amount.ToString("0.00", RussianCulture)}",
+        "metered_tiered" => $"Равный вес 1/{rateCount}: {monthlyQuantity.ToString("0.###", RussianCulture)} × {rate.ToString("0.####", RussianCulture)} / {rateCount} (текущее показание {currentMeterValue?.ToString("0.###", RussianCulture) ?? "—"}) = {amount.ToString("0.00", RussianCulture)}",
+        _ => "Тариф на этот участок не задан и в среднюю ставку месяца не входит: 0,00"
     };
+
+    private sealed record ResolvedRate(decimal Rate, bool IsTiered, decimal LowerBound, decimal? UpperBound);
 }

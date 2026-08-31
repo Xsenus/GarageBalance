@@ -9,7 +9,7 @@ public sealed class RegularAccrualCalculatorTests
     private static readonly DateOnly August = new(2026, 8, 1);
 
     [Fact]
-    public void Calculate_FixedRateChangeInsideMonth_ProreratesEverySegment()
+    public void Calculate_FixedRateChangeInsideMonth_UsesArithmeticMeanWithoutDayWeight()
     {
         var result = RegularAccrualCalculator.Calculate(
             Garage(),
@@ -21,71 +21,73 @@ public sealed class RegularAccrualCalculatorTests
             ]);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(470m, result.Amount);
+        Assert.Equal(465m, result.Amount);
+        Assert.Equal(465m, result.Details!.AverageRate);
+        Assert.Contains("(310 + 620) / 2 = 465", result.Details.RateAveragingRule, StringComparison.Ordinal);
+        Assert.Contains("Количество дней действия ставок на среднее не влияет", result.Details.RateAveragingRule, StringComparison.Ordinal);
+        Assert.Equal("Расчёт за месяц: 1 месяц × 465 = 465,00.", result.Details.MonthlyCalculationFormula);
         Assert.Collection(
-            result.Details!.Lines,
-            line => Assert.Equal(150m, line.Amount),
-            line => Assert.Equal(320m, line.Amount));
+            result.Details.Lines,
+            line => Assert.Equal(155m, line.Amount),
+            line => Assert.Equal(310m, line.Amount));
     }
 
     [Fact]
-    public void Calculate_FixedToMetered_ProreratesRateAndConsumptionByCalendarDays()
+    public void Calculate_FourMeteredRates_UsesSimpleAverageForEntireMonthlyConsumption()
     {
         var result = RegularAccrualCalculator.Calculate(
             Garage(),
             August,
-            Reading(previous: 100m, current: 131m),
+            Reading(previous: 100m, current: 108m),
             [
-                Segment(1, 15, TariffCalculationBases.Fixed, 310m),
-                Segment(16, 31, TariffCalculationBases.MeterWater, 10m)
+                Segment(1, 20, TariffCalculationBases.MeterWater, 1m),
+                Segment(21, 25, TariffCalculationBases.MeterWater, 2m),
+                Segment(26, 30, TariffCalculationBases.MeterWater, 3m),
+                Segment(31, 31, TariffCalculationBases.MeterWater, 4m)
             ]);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(310m, result.Amount);
-        Assert.Equal(16m, result.Details!.Lines[1].Quantity);
-        Assert.Equal(160m, result.Details.Lines[1].Amount);
-        Assert.NotNull(result.Details.VolumeAllocationRule);
+        Assert.Equal(20m, result.Amount);
+        Assert.Equal(2.5m, result.Details!.AverageRate);
+        Assert.Equal("Средняя ставка за месяц: (1 + 2 + 3 + 4) / 4 = 2,5. Количество дней действия ставок на среднее не влияет.", result.Details.RateAveragingRule);
+        Assert.Equal("Расчёт за месяц: 8 м³ × 2,5 = 20,00.", result.Details.MonthlyCalculationFormula);
+        Assert.Null(result.Details.VolumeAllocationRule);
+        Assert.All(result.Details.Lines, line => Assert.Equal(2m, line.Quantity));
+        Assert.Equal([2m, 4m, 6m, 8m], result.Details.Lines.Select(line => line.Amount));
     }
 
     [Fact]
-    public void Calculate_MeteredToFixed_UsesTheHistoricalOrderOfModes()
+    public void Calculate_PeopleRates_UsesAverageRateForAllPeople()
     {
         var result = RegularAccrualCalculator.Calculate(
             Garage(),
             August,
-            Reading(previous: 100m, current: 131m),
+            null,
             [
-                Segment(1, 15, TariffCalculationBases.MeterWater, 10m),
-                Segment(16, 31, TariffCalculationBases.Fixed, 310m)
+                Segment(1, 30, TariffCalculationBases.People, 100m),
+                Segment(31, 31, TariffCalculationBases.People, 200m)
             ]);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(310m, result.Amount);
-        Assert.Equal(15m, result.Details!.Lines[0].Quantity);
-        Assert.Equal(150m, result.Details.Lines[0].Amount);
-        Assert.Equal(160m, result.Details.Lines[1].Amount);
+        Assert.Equal(300m, result.Amount);
+        Assert.Equal(150m, result.Details!.AverageRate);
+        Assert.Equal("Расчёт за месяц: 2 чел. × 150 = 300,00.", result.Details.MonthlyCalculationFormula);
     }
 
     [Fact]
-    public void Calculate_MultipleModeTransitions_CombinesFixedMeteredAndTieredSegments()
+    public void Calculate_ChangedCalculationBase_ReturnsFailureInsteadOfAveragingDifferentUnits()
     {
         var result = RegularAccrualCalculator.Calculate(
             Garage(),
             August,
             Reading(previous: 0m, current: 31m),
             [
-                Segment(1, 5, TariffCalculationBases.Fixed, 310m),
-                Segment(6, 10, TariffCalculationBases.MeterWater, 10m),
-                Segment(11, 20, TariffCalculationBases.Fixed, 310m),
-                Segment(21, 31, TariffCalculationBases.MeterWater, 0m,
-                    new RegularAccrualTariffTier(5m, 10m),
-                    new RegularAccrualTariffTier(null, 20m))
+                Segment(1, 15, TariffCalculationBases.Fixed, 310m),
+                Segment(16, 31, TariffCalculationBases.MeterWater, 10m)
             ]);
 
-        Assert.True(result.Succeeded);
-        Assert.Equal(420m, result.Amount);
-        Assert.Equal(new[] { "fixed", "metered", "fixed", "metered_tiered" }, result.Details!.Lines.Select(line => line.CalculationMode));
-        Assert.Single(result.Details.Lines[3].Tiers);
+        Assert.False(result.Succeeded);
+        Assert.Contains("разными единицами нельзя усреднить", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -142,9 +144,12 @@ public sealed class RegularAccrualCalculatorTests
             ]);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(100m, result.Amount);
-        Assert.False(result.Details!.Lines[1].HasTariff);
+        Assert.Equal(310m, result.Amount);
+        Assert.Equal(310m, result.Details!.AverageRate);
+        Assert.Equal("Расчёт за месяц: 1 месяц × 310 = 310,00.", result.Details.MonthlyCalculationFormula);
+        Assert.False(result.Details.Lines[1].HasTariff);
         Assert.Equal("no_tariff", result.Details.Lines[1].CalculationMode);
+        Assert.Contains("в среднюю ставку месяца не входит", result.Details.Lines[1].Formula, StringComparison.Ordinal);
     }
 
     [Fact]
