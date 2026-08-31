@@ -256,6 +256,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(supplier => supplier.Phone).HasMaxLength(80);
             entity.Property(supplier => supplier.Email).HasMaxLength(320);
             entity.Property(supplier => supplier.StartingBalance).HasPrecision(18, 2);
+            entity.Property(supplier => supplier.StartingDebt).HasPrecision(18, 2);
             entity.Property(supplier => supplier.Comment).HasMaxLength(1000);
             entity.Property(supplier => supplier.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(supplier => supplier.Name);
@@ -266,6 +267,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(supplier => supplier.ChargeServiceSettingId);
             entity.HasIndex(supplier => supplier.ExpenseTypeId);
             entity.HasIndex(supplier => supplier.ExpenseFundId);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_suppliers_StartingDebt",
+                "\"StartingDebt\" IS NULL OR (CAST(\"StartingDebt\" AS NUMERIC) >= 0 AND CAST(\"StartingDebt\" AS NUMERIC) <= CASE WHEN CAST(\"StartingBalance\" AS NUMERIC) > 0 THEN CAST(\"StartingBalance\" AS NUMERIC) ELSE 0 END)"));
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
                 .HasForeignKey(supplier => supplier.GroupId)

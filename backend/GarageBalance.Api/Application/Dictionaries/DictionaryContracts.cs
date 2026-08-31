@@ -85,7 +85,8 @@ public sealed record SupplierDto(
     string? ExpenseTypeName = null,
     Guid? ExpenseFundId = null,
     string? ExpenseFundName = null,
-    decimal? ExpenseFundBalance = null);
+    decimal? ExpenseFundBalance = null,
+    decimal StartingDebt = 0);
 
 public sealed record UpsertSupplierRequest(
     [Required, MaxLength(240)] string Name,
@@ -100,7 +101,8 @@ public sealed record UpsertSupplierRequest(
     Guid? ChargeServiceSettingId = null,
     Guid? Version = null,
     Guid? ExpenseTypeId = null,
-    Guid? ExpenseFundId = null);
+    Guid? ExpenseFundId = null,
+    [Range(0, 999999999)] decimal? StartingDebt = null);
 
 public sealed record CreateOpeningBalanceAdjustmentRequest(
     DateOnly EffectiveDate,

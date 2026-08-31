@@ -755,6 +755,18 @@ public sealed class DictionaryService(
         }
         var expenseType = expenseTypeResult.Value;
 
+        var requestedStartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var startingDebt = request.StartingDebt.HasValue
+            ? MoneyMath.RoundMoney(request.StartingDebt.Value)
+            : Math.Max(requestedStartingBalance, 0m);
+        var startingBalance = NormalizeSupplierStartingBalance(requestedStartingBalance, startingDebt);
+        if (startingDebt < 0m || startingDebt > Math.Max(startingBalance, 0m))
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_starting_debt_invalid",
+                "Начальная задолженность поставщику не может превышать общий начальный долг.");
+        }
+
         var supplier = new Supplier
         {
             Name = name,
@@ -771,7 +783,8 @@ public sealed class DictionaryService(
             ContactPerson = NormalizeOptional(request.ContactPerson),
             Phone = phone,
             Email = NormalizeOptional(request.Email),
-            StartingBalance = MoneyMath.RoundMoney(request.StartingBalance),
+            StartingBalance = startingBalance,
+            StartingDebt = startingDebt,
             Comment = NormalizeOptional(request.Comment)
         };
 
@@ -833,13 +846,23 @@ public sealed class DictionaryService(
             return InvalidPhone<SupplierDto>();
         }
         var email = NormalizeOptional(request.Email);
-        var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var requestedStartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var startingDebt = request.StartingDebt.HasValue
+            ? MoneyMath.RoundMoney(request.StartingDebt.Value)
+            : GetSupplierStartingDebt(supplier.StartingBalance, supplier.StartingDebt);
+        var startingBalance = NormalizeSupplierStartingBalance(requestedStartingBalance, startingDebt);
         var comment = NormalizeOptional(request.Comment);
-        if (supplier.StartingBalance != startingBalance && await supplierRepository.HasFinancialHistoryAsync(supplier.Id, cancellationToken))
+        if (startingDebt < 0m || startingDebt > Math.Max(startingBalance, 0m))
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_starting_debt_invalid",
+                "Начальная задолженность поставщику не может превышать общий начальный долг.");
+        }
+        if (supplier.StartingBalance != startingBalance || GetSupplierStartingDebt(supplier.StartingBalance, supplier.StartingDebt) != startingDebt)
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_starting_balance_locked",
-                "Стартовый баланс поставщика нельзя менять после появления начислений или выплат. Оформите отдельную финансовую корректировку.");
+                "Начальный баланс и задолженность поставщика нельзя менять после создания. Оформите отдельную финансовую корректировку.");
         }
 
         if (await supplierRepository.ActiveDuplicateExistsAsync(id, group.Id, name, cancellationToken))
@@ -859,7 +882,7 @@ public sealed class DictionaryService(
         }
         var expenseType = expenseTypeResult.Value;
 
-        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, expenseType?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
+        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, expenseType?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, startingDebt, comment))
         {
             return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
         }
@@ -877,6 +900,7 @@ public sealed class DictionaryService(
             ["phone"] = supplier.Phone,
             ["email"] = supplier.Email,
             ["startingBalance"] = supplier.StartingBalance,
+            ["startingDebt"] = supplier.StartingDebt,
             ["comment"] = supplier.Comment
         };
         var newValues = new Dictionary<string, object?>
@@ -892,6 +916,7 @@ public sealed class DictionaryService(
             ["phone"] = phone,
             ["email"] = email,
             ["startingBalance"] = startingBalance,
+            ["startingDebt"] = startingDebt,
             ["comment"] = comment
         };
 
@@ -910,6 +935,7 @@ public sealed class DictionaryService(
         supplier.Phone = phone;
         supplier.Email = email;
         supplier.StartingBalance = startingBalance;
+        supplier.StartingDebt = startingDebt;
         supplier.Comment = comment;
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -1002,7 +1028,11 @@ public sealed class DictionaryService(
             supplier.StartingBalance,
             request,
             actorUserId,
-            amount => supplier.StartingBalance = amount,
+            amount =>
+            {
+                supplier.StartingBalance = amount;
+                supplier.StartingDebt = Math.Max(amount, 0m);
+            },
             () => supplier.UpdatedAtUtc = DateTimeOffset.UtcNow,
             cancellationToken);
     }
@@ -4637,7 +4667,7 @@ public sealed class DictionaryService(
         return DictionaryResult<ExpenseType?>.Success(created);
     }
 
-    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, Guid? expenseTypeId, Guid? expenseFundId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)
+    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, Guid? expenseTypeId, Guid? expenseFundId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, decimal startingDebt, string? comment)
     {
         return StringEquals(supplier.Name, name) &&
             supplier.GroupId == groupId &&
@@ -4650,6 +4680,7 @@ public sealed class DictionaryService(
             StringEquals(supplier.Phone, phone) &&
             StringEquals(supplier.Email, email) &&
             supplier.StartingBalance == startingBalance &&
+            GetSupplierStartingDebt(supplier.StartingBalance, supplier.StartingDebt) == startingDebt &&
             StringEquals(supplier.Comment, comment);
     }
 
@@ -4813,6 +4844,24 @@ public sealed class DictionaryService(
         return Math.Abs(requestedStartingBalance);
     }
 
+    private static decimal GetSupplierStartingDebt(decimal startingBalance, decimal? startingDebt) =>
+        startingDebt ?? Math.Max(startingBalance, 0m);
+
+    private static decimal NormalizeSupplierStartingBalance(decimal requestedStartingBalance, decimal startingDebt)
+    {
+        if (startingDebt <= 0m || requestedStartingBalance > 0m)
+        {
+            return requestedStartingBalance;
+        }
+
+        if (requestedStartingBalance == 0m)
+        {
+            return startingDebt;
+        }
+
+        return Math.Abs(requestedStartingBalance);
+    }
+
     private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {
         return new SupplierDto(
@@ -4836,7 +4885,8 @@ public sealed class DictionaryService(
             supplier.ExpenseType?.Name,
             supplier.ExpenseFundId,
             supplier.ExpenseFund?.Name,
-            supplier.ExpenseFund?.Balance);
+            supplier.ExpenseFund?.Balance,
+            GetSupplierStartingDebt(supplier.StartingBalance, supplier.StartingDebt));
     }
 
     private async Task<SupplierDto> ToSupplierDtoWithDebtAsync(Supplier supplier, CancellationToken cancellationToken)

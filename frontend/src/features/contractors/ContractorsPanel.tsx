@@ -29,6 +29,7 @@ import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
+import { supplierBalanceWithDebtHelp, supplierStartingDebtHelp, syncDisplayedSupplierBalanceWithDebt, toDisplayedSupplierStartingBalance, toStoredSupplierStartingBalance } from '../../shared/supplierOpeningBalance'
 
 const AddServicePrototypeDialog = lazy(createRetryableLazyLoader(() =>
   import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.AddServicePrototypeDialog }))))
@@ -140,6 +141,7 @@ type ContractorSupplierRow = {
   email: string
   contacts: ContractorSupplierContact[]
   startingBalance: string
+  startingDebt: string
   debt: string
   comment: string
   isDeleted: boolean
@@ -618,7 +620,8 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
     phone: supplier.phone ?? '',
     email: supplier.email ?? '',
     contacts: supplierContacts,
-    startingBalance: formatPrototypeMoney(supplier.startingBalance),
+    startingBalance: formatPrototypeMoney(toDisplayedSupplierStartingBalance(supplier.startingBalance)),
+    startingDebt: formatPrototypeMoney(supplier.startingDebt ?? Math.max(supplier.startingBalance, 0)),
     debt: formatPrototypeMoney(supplier.debt),
     comment: supplier.comment ?? '',
     isDeleted: supplier.isArchived,
@@ -670,7 +673,11 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     contactPerson: normalized.contactPerson.trim(),
     phone: normalized.phone.trim(),
     email: normalized.email.trim() || null,
-    startingBalance: parsePrototypeMoney(normalized.startingBalance),
+    startingBalance: toStoredSupplierStartingBalance(
+      parsePrototypeMoney(normalized.startingBalance),
+      parsePrototypeMoney(normalized.startingDebt),
+    ),
+    startingDebt: parsePrototypeMoney(normalized.startingDebt),
     comment: normalized.comment.trim(),
     chargeServiceSettingId: normalized.serviceId,
     expenseTypeId: normalized.expenseTypeId,
@@ -2145,7 +2152,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   function openSupplierOpeningBalanceAdjustment(row: ContractorSupplierRow) {
     setModal(null)
-    setOpeningBalanceAdjustmentTarget({ type: 'supplier', id: row.id, name: row.name, currentAmount: Number(row.startingBalance || 0) })
+    setOpeningBalanceAdjustmentTarget({ type: 'supplier', id: row.id, name: row.name, currentAmount: parsePrototypeMoney(row.startingBalance) })
   }
 
   function handleOpeningBalanceAdjusted() {
@@ -3143,6 +3150,7 @@ function createEmptySupplierPrototype(): ContractorSupplierRow {
     email: '',
     contacts: [],
     startingBalance: '',
+    startingDebt: '',
     debt: '',
     comment: '',
     isDeleted: false,
@@ -3199,7 +3207,8 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
     createPrototypeChangeEntry('Фонд расходования', previous.expenseFundId ?? '', next.expenseFundId ?? ''),
     createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
     createPrototypeChangeEntry('Стартовый баланс', previous.startingBalance, next.startingBalance),
-    createPrototypeChangeEntry('Задолженность', previous.debt, next.debt),
+    createPrototypeChangeEntry('Начальная задолженность', previous.startingDebt, next.startingDebt),
+    createPrototypeChangeEntry('Текущая задолженность', previous.debt, next.debt),
     createPrototypeChangeEntry('Юридический адрес', previous.legalAddress, next.legalAddress),
     createPrototypeChangeEntry('Контакты', formatSupplierContactSummary(previous.contacts), formatSupplierContactSummary(next.contacts)),
     createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
@@ -3465,7 +3474,9 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
     setSaving(true)
     setError(null)
     try {
-      const storedAmount = target.type === 'garage' ? toStoredGarageStartingBalance(parsedAmount) : parsedAmount
+      const storedAmount = target.type === 'garage'
+        ? toStoredGarageStartingBalance(parsedAmount)
+        : toStoredSupplierStartingBalance(parsedAmount)
       await save(accessToken, target.id, { effectiveDate, newAmount: storedAmount, reason: reason.trim() })
       onSaved()
     } catch (saveError) {
@@ -3877,11 +3888,30 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                 </div>
                 <SuggestionStatus id="supplier-party-suggestions-status" message={partySuggestionStatus} />
               </FormField>
-              <FormField label="Начальная задолженность" help={item ? 'Исходная сумма на момент начала учёта. Текущая задолженность с учётом начислений и выплат показана в основной таблице поставщиков.' : undefined}>
+              <FormField label="Начальный баланс" help={supplierBalanceWithDebtHelp}>
                 <MoneyTextInput
-                  aria-label="Начальная задолженность"
+                  aria-label="Начальный баланс поставщика"
+                  readOnly={Boolean(item)}
                   value={form.startingBalance}
                   onValueChange={(startingBalance) => setForm({ ...form, startingBalance })}
+                />
+              </FormField>
+              <FormField label="Начальная задолженность" help={supplierStartingDebtHelp}>
+                <MoneyTextInput
+                  aria-label="Начальная задолженность"
+                  readOnly={Boolean(item)}
+                  value={form.startingDebt}
+                  onValueChange={(startingDebt) => {
+                    const previousDebt = parsePrototypeMoney(form.startingDebt)
+                    const nextDebt = parsePrototypeMoney(startingDebt)
+                    const currentStartingBalance = parsePrototypeMoney(form.startingBalance)
+                    const nextStartingBalance = syncDisplayedSupplierBalanceWithDebt(currentStartingBalance, previousDebt, nextDebt)
+                    setForm({
+                      ...form,
+                      startingBalance: nextStartingBalance === currentStartingBalance ? form.startingBalance : formatPrototypeMoney(nextStartingBalance),
+                      startingDebt,
+                    })
+                  }}
                 />
               </FormField>
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />

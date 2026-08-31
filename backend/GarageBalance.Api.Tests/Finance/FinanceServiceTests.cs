@@ -12467,6 +12467,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.Supplier.StartingBalance = 2000m;
+        fixtures.Supplier.StartingDebt = 2000m;
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 6, 1);

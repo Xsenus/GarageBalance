@@ -2361,6 +2361,7 @@ describe('App', () => {
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' }))
     const supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
     expect(within(supplierDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+    expect(within(supplierDialog).getByLabelText('Начальный баланс поставщика')).toBeEnabled()
     expect(within(supplierDialog).getByLabelText('Начальная задолженность')).toBeEnabled()
     expect(within(supplierDialog).queryByLabelText('Задолженность поставщика')).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -2713,6 +2714,7 @@ describe('App', () => {
           phone: request.phone ?? null,
           email: request.email ?? null,
           startingBalance: request.startingBalance,
+          startingDebt: request.startingDebt ?? 0,
           comment: request.comment ?? null,
         })
       },
@@ -2734,6 +2736,7 @@ describe('App', () => {
           phone: request.phone ?? null,
           email: request.email ?? null,
           startingBalance: request.startingBalance,
+          startingDebt: request.startingDebt ?? 0,
           comment: request.comment ?? null,
         })
       },
@@ -3171,8 +3174,11 @@ describe('App', () => {
     expect(within(supplierDialog).getByLabelText('Почта поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByText('Телефон и почта берутся из первого действующего контакта. Изменение здесь сразу обновляет ту же строку в таблице контактов.')).toBeInTheDocument()
     const initialSupplierDebt = within(supplierDialog).getByLabelText('Начальная задолженность')
+    const initialSupplierBalance = within(supplierDialog).getByLabelText('Начальный баланс поставщика')
     expect(initialSupplierDebt).toBeEnabled()
     await user.type(initialSupplierDebt, '350')
+    expect(initialSupplierBalance).toHaveValue('-350.00')
+    expect(within(supplierDialog).getByRole('tooltip', { name: /задолженность входит во входящий баланс поставщика/i })).toBeInTheDocument()
     await user.type(within(supplierDialog).getByLabelText('Телефон поставщика'), '+7 900 111-22-33')
     await user.type(within(supplierDialog).getByLabelText('Почта поставщика'), 'guard@example.test')
     expect(within(supplierDialog).getByLabelText('Контакт 1: телефон')).toHaveValue('+7 (900) 111-22-33')
@@ -3203,6 +3209,7 @@ describe('App', () => {
       phone: '+7 (900) 111-22-33',
       email: 'guard@example.test',
       startingBalance: 350,
+      startingDebt: 350,
     })
     expect(addSupplierButton).toHaveFocus()
 
@@ -3221,7 +3228,10 @@ describe('App', () => {
     expect(getContractorSupplierContacts).not.toHaveBeenCalled()
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
     expect(within(editSupplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })).toHaveTextContent('Водоснабжение')
-    expect(within(editSupplierDialog).getByLabelText('Начальная задолженность')).toBeInTheDocument()
+    expect(within(editSupplierDialog).getByLabelText('Начальный баланс поставщика')).toHaveValue('-350.00')
+    expect(within(editSupplierDialog).getByLabelText('Начальный баланс поставщика')).toHaveAttribute('readonly')
+    expect(within(editSupplierDialog).getByLabelText('Начальная задолженность')).toHaveValue('350.00')
+    expect(within(editSupplierDialog).getByLabelText('Начальная задолженность')).toHaveAttribute('readonly')
     expect(within(editSupplierDialog).queryByLabelText('Задолженность поставщика')).not.toBeInTheDocument()
     expect(within(editSupplierDialog).getByLabelText('Наименование поставщика').closest('.contractors-supplier-primary-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Юридический адрес поставщика').closest('.contractors-supplier-lookup-grid')).not.toBeNull()
@@ -3696,10 +3706,10 @@ describe('App', () => {
 
   it('creates an auditable supplier opening-balance adjustment from the contractor card', async () => {
     const user = userEvent.setup()
-    let supplier = createSupplier({ id: 'supplier-opening-adjustment', name: 'Водоканал', startingBalance: 200, debt: 200 })
+    let supplier = createSupplier({ id: 'supplier-opening-adjustment', name: 'Водоканал', startingBalance: 200, startingDebt: 200, debt: 200 })
     const adjustSupplierOpeningBalance = vi.fn(async (_token: string, id: string, request: { effectiveDate: string; newAmount: number; reason: string }) => {
       const previousAmount = supplier.startingBalance
-      supplier = createSupplier({ ...supplier, startingBalance: request.newAmount, debt: request.newAmount })
+      supplier = createSupplier({ ...supplier, startingBalance: request.newAmount, startingDebt: Math.max(request.newAmount, 0), debt: request.newAmount })
       return { id: 'adjustment-new', targetKind: 'supplier' as const, targetId: id, effectiveDate: request.effectiveDate, previousAmount, newAmount: request.newAmount, reason: request.reason, createdByUserId: null, createdAtUtc: '2026-07-01T00:00:00Z' }
     })
     const dictionaryClient = createDictionaryClient({
@@ -3720,8 +3730,9 @@ describe('App', () => {
 
     const adjustmentDialog = await screen.findByRole('dialog', { name: 'Корректировка: Водоканал' })
     expect(within(adjustmentDialog).getByText(/История изменений/)).toBeInTheDocument()
+    expect(within(adjustmentDialog).getByLabelText('Действующий начальный баланс')).toHaveValue('-200.00')
     await user.clear(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'))
-    await user.type(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'), '250')
+    await user.type(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'), '-250')
     await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начального баланса'), 'Исправление акта сверки')
     await user.click(within(adjustmentDialog).getByRole('button', { name: 'Сохранить корректировку' }))
 
@@ -4939,7 +4950,7 @@ describe('App', () => {
     expect(within(dialog).getByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
   })
 
-  it('keeps the full supplier debt after editing the starting balance', async () => {
+  it('keeps supplier opening balance and debt read-only after creation', async () => {
     const user = userEvent.setup()
     const group = createGroup({ id: 'group-water', name: 'Коммунальные услуги' })
     let supplier = createSupplier({
@@ -4948,6 +4959,7 @@ describe('App', () => {
       groupId: group.id,
       groupName: group.name,
       startingBalance: 100,
+      startingDebt: 100,
       debt: 750,
     })
     const updateSupplier = vi.fn(async (_token: string, id: string, request: UpsertSupplierRequest) => {
@@ -4974,7 +4986,7 @@ describe('App', () => {
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
-    let supplierRow = within(suppliersTable).getByText('Водоканал').closest('[role="row"]')
+    const supplierRow = within(suppliersTable).getByText('Водоканал').closest('[role="row"]')
     if (!supplierRow) {
       throw new Error('Строка поставщика Водоканал не найдена.')
     }
@@ -4982,21 +4994,14 @@ describe('App', () => {
 
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
     const supplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
-    await user.clear(within(supplierDialog).getByLabelText('Начальная задолженность'))
-    await user.type(within(supplierDialog).getByLabelText('Начальная задолженность'), '200')
+    expect(within(supplierDialog).getByLabelText('Начальный баланс поставщика')).toHaveValue('-100.00')
+    expect(within(supplierDialog).getByLabelText('Начальный баланс поставщика')).toHaveAttribute('readonly')
+    expect(within(supplierDialog).getByLabelText('Начальная задолженность')).toHaveValue('100.00')
+    expect(within(supplierDialog).getByLabelText('Начальная задолженность')).toHaveAttribute('readonly')
     await user.click(within(supplierDialog).getByRole('button', { name: 'Сохранить' }))
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения поставщика' })).not.toBeInTheDocument()
-
-    await waitFor(() => expect(updateSupplier).toHaveBeenCalledWith('token', supplier.id, expect.objectContaining({ startingBalance: 200 })))
-    supplierRow = within(suppliersTable).getByText('Водоканал').closest('[role="row"]')
-    if (!supplierRow) {
-      throw new Error('Строка поставщика Водоканал не найдена после сохранения.')
-    }
-    expect(within(supplierRow as HTMLElement).getByText('850.00')).toBeInTheDocument()
-    expect(within(supplierRow as HTMLElement).queryByText('200.00')).not.toBeInTheDocument()
-    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
-    const reopenedSupplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
-    expect(within(reopenedSupplierDialog).getByLabelText('Начальная задолженность')).toHaveValue('200.00')
+    expect(updateSupplier).not.toHaveBeenCalled()
+    expect(within(supplierRow as HTMLElement).getByText('750.00')).toBeInTheDocument()
   })
 
   it('loads contacts only for the selected supplier and reuses them on the next opening', async () => {

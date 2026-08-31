@@ -13,6 +13,7 @@ public sealed class Supplier : IOptimisticConcurrencyEntity
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public decimal StartingBalance { get; set; }
+    public decimal? StartingDebt { get; set; }
     public string? Comment { get; set; }
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

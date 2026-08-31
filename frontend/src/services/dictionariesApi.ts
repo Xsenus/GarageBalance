@@ -65,6 +65,7 @@ export type SupplierDto = {
   phone: string | null
   email: string | null
   startingBalance: number
+  startingDebt?: number
   debt: number
   chargeServiceSettingId?: string | null
   chargeServiceSettingName?: string | null
@@ -252,6 +253,7 @@ export type UpsertSupplierRequest = {
   phone?: string
   email?: string | null
   startingBalance: number
+  startingDebt?: number | null
   comment?: string
   chargeServiceSettingId?: string | null
   expenseTypeId?: string | null

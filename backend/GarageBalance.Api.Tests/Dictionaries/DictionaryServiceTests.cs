@@ -1540,6 +1540,38 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateSupplierAsync_DerivesOpeningBalanceFromDebtAndValidatesItsLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Начальные остатки"), null, CancellationToken.None);
+
+        var derived = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Производный долг", group.Value!.Id, null, null, null, null, null, 0m, null, StartingDebt: 125m),
+            null,
+            CancellationToken.None);
+        var displayedNegative = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Отрицательный баланс", group.Value.Id, null, null, null, null, null, -250m, null, StartingDebt: 125m),
+            null,
+            CancellationToken.None);
+        var insufficient = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Недостаточный баланс", group.Value.Id, null, null, null, null, null, -100m, null, StartingDebt: 125m),
+            null,
+            CancellationToken.None);
+
+        Assert.True(derived.Succeeded);
+        Assert.Equal(125m, derived.Value!.StartingBalance);
+        Assert.Equal(125m, derived.Value.StartingDebt);
+        Assert.True(displayedNegative.Succeeded);
+        Assert.Equal(250m, displayedNegative.Value!.StartingBalance);
+        Assert.Equal(125m, displayedNegative.Value.StartingDebt);
+        Assert.False(insufficient.Succeeded);
+        Assert.Equal("supplier_starting_debt_invalid", insufficient.ErrorCode);
+        Assert.Equal("Начальная задолженность поставщику не может превышать общий начальный долг.", insufficient.ErrorMessage);
+        Assert.Equal(2, await database.Context.Suppliers.CountAsync());
+    }
+
+    [Fact]
     public async Task CreateSupplierAsync_RejectsMissingExpenseType()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1651,7 +1683,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task UpdateSupplierAsync_LocksStartingBalanceAfterFinancialHistoryExists()
+    public async Task UpdateSupplierAsync_LocksStartingBalanceAndDebtImmediatelyAfterCreation()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1661,27 +1693,23 @@ public sealed class DictionaryServiceTests
             null,
             CancellationToken.None);
         var supplier = await database.Context.Suppliers.SingleAsync(item => item.Id == supplierResult.Value!.Id);
-        var expenseType = new ExpenseType { Name = "Водоснабжение", Code = "water_supply" };
-        database.Context.ExpenseTypes.Add(expenseType);
-        database.Context.SupplierAccruals.Add(new SupplierAccrual
-        {
-            Supplier = supplier,
-            ExpenseType = expenseType,
-            AccountingMonth = new DateOnly(2026, 7, 1),
-            Amount = 50m,
-            Source = "manual"
-        });
-        await database.Context.SaveChangesAsync();
-
-        var result = await service.UpdateSupplierAsync(
+        var changedBalance = await service.UpdateSupplierAsync(
             supplier.Id,
             new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 101m, null),
             null,
             CancellationToken.None);
+        var changedDebt = await service.UpdateSupplierAsync(
+            supplier.Id,
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 100m, null, StartingDebt: 90m),
+            null,
+            CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("supplier_starting_balance_locked", result.ErrorCode);
+        Assert.False(changedBalance.Succeeded);
+        Assert.Equal("supplier_starting_balance_locked", changedBalance.ErrorCode);
+        Assert.False(changedDebt.Succeeded);
+        Assert.Equal("supplier_starting_balance_locked", changedDebt.ErrorCode);
         Assert.Equal(100m, supplier.StartingBalance);
+        Assert.Equal(100m, supplier.StartingDebt);
     }
 
     [Fact]
@@ -1727,7 +1755,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(200m, supplierAdjustment.Value!.PreviousAmount);
         Assert.Equal(180m, supplierAdjustment.Value.NewAmount);
         Assert.Equal(125.56m, (await database.Context.Garages.FindAsync(garage.Value.Id))!.StartingBalance);
-        Assert.Equal(180m, (await database.Context.Suppliers.FindAsync(supplier.Value.Id))!.StartingBalance);
+        var adjustedSupplier = (await database.Context.Suppliers.FindAsync(supplier.Value.Id))!;
+        Assert.Equal(180m, adjustedSupplier.StartingBalance);
+        Assert.Equal(180m, adjustedSupplier.StartingDebt);
         Assert.Single(await service.GetGarageOpeningBalanceAdjustmentsAsync(garage.Value.Id, CancellationToken.None));
         Assert.Single(await service.GetSupplierOpeningBalanceAdjustmentsAsync(supplier.Value.Id, CancellationToken.None));
         Assert.Equal(2, await database.Context.OpeningBalanceAdjustments.CountAsync());
