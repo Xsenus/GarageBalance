@@ -33,6 +33,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
 import { getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors } from '../../shared/validation'
+import { garageBalanceSignHelp, garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
 
 function getDictionaryRestoreErrorMessage(caught: unknown) {
   if (caught instanceof DictionaryApiError) {
@@ -653,7 +654,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       peopleCount: garageForm.peopleCount,
       floorCount: garageForm.floorCount,
       ownerId: garageForm.ownerId || null,
-      startingBalance: garageForm.startingBalance,
+      startingBalance: toStoredGarageStartingBalance(garageForm.startingBalance, garageForm.startingOverdueDebt),
       startingOverdueDebt: garageForm.startingOverdueDebt,
       initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
       initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
@@ -735,7 +736,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         peopleCount: ownerGarageLinkForm.peopleCount,
         floorCount: ownerGarageLinkForm.floorCount,
         ownerId,
-        startingBalance: ownerGarageLinkForm.startingBalance,
+        startingBalance: toStoredGarageStartingBalance(ownerGarageLinkForm.startingBalance),
         initialWaterMeterValue: ownerGarageLinkForm.initialWaterMeterValue === '' ? null : Number(ownerGarageLinkForm.initialWaterMeterValue),
         initialElectricityMeterValue: ownerGarageLinkForm.initialElectricityMeterValue === '' ? null : Number(ownerGarageLinkForm.initialElectricityMeterValue),
         comment: ownerGarageLinkForm.comment.trim() || undefined,
@@ -930,7 +931,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       addDictionaryChange(changes, 'Количество людей', formatChangeNumber(garage.peopleCount), formatChangeNumber(request.peopleCount))
       addDictionaryChange(changes, 'Количество этажей', formatChangeNumber(garage.floorCount), formatChangeNumber(request.floorCount))
       addDictionaryChange(changes, 'Владелец', formatOwnerLabel(garage.ownerId), formatOwnerLabel(request.ownerId))
-      addDictionaryChange(changes, 'Стартовый баланс', formatChangeMoney(garage.startingBalance), formatChangeMoney(request.startingBalance))
+      addDictionaryChange(changes, 'Стартовый баланс', formatChangeMoney(toDisplayedGarageStartingBalance(garage.startingBalance)), formatChangeMoney(garageForm.startingBalance))
       addDictionaryChange(changes, 'Стартовый счетчик воды', formatChangeNumber(garage.initialWaterMeterValue), formatChangeNumber(request.initialWaterMeterValue))
       addDictionaryChange(changes, 'Стартовый счетчик электроэнергии', formatChangeNumber(garage.initialElectricityMeterValue), formatChangeNumber(request.initialElectricityMeterValue))
       addDictionaryChange(changes, 'Комментарий', formatChangeText(garage.comment), formatChangeText(request.comment))
@@ -1051,7 +1052,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               {dictionaryField('ownerNewGarageFloorCount', <input aria-label={fieldMeta('ownerNewGarageFloorCount').ariaLabel} type="number" min="0" value={ownerGarageLinkForm.floorCount} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, floorCount: Number(event.target.value) })} />)}
             </div>
             <div className="inline-fields">
-              {dictionaryField('ownerNewGarageStartingBalance', <MoneyInput aria-label={fieldMeta('ownerNewGarageStartingBalance').ariaLabel} value={ownerGarageLinkForm.startingBalance} onValueChange={(startingBalance) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, startingBalance })} />, { help: 'Долг на начало учета укажите положительным числом, переплату — отрицательным.' })}
+              {dictionaryField('ownerNewGarageStartingBalance', <MoneyInput aria-label={fieldMeta('ownerNewGarageStartingBalance').ariaLabel} value={ownerGarageLinkForm.startingBalance} onValueChange={(startingBalance) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, startingBalance })} />, { help: garageBalanceSignHelp })}
               {dictionaryField('ownerNewGarageInitialWaterMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialWaterMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialWaterMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialWaterMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика воды на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
               {dictionaryField('ownerNewGarageInitialElectricityMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialElectricityMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialElectricityMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialElectricityMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика электроэнергии на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
             </div>
@@ -1076,8 +1077,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               onChange={(value) => setGarageForm({ ...garageForm, ownerId: value })}
             />
           ))}
-          {dictionaryField('garageStartingBalance', <MoneyInput aria-label={fieldMeta('garageStartingBalance').ariaLabel} value={garageForm.startingBalance} onValueChange={(startingBalance) => setGarageForm({ ...garageForm, startingBalance })} />, { help: 'Долг на начало учета укажите положительным числом, переплату — отрицательным.' })}
-          {dictionaryField('garageStartingOverdueDebt', <MoneyInput aria-label={fieldMeta('garageStartingOverdueDebt').ariaLabel} value={garageForm.startingOverdueDebt} onValueChange={(startingOverdueDebt) => setGarageForm({ ...garageForm, startingOverdueDebt })} />)}
+          {dictionaryField('garageStartingBalance', <MoneyInput aria-label={fieldMeta('garageStartingBalance').ariaLabel} value={garageForm.startingBalance} onValueChange={(startingBalance) => setGarageForm({ ...garageForm, startingBalance })} />, { help: garageBalanceWithOverdueHelp })}
+          {dictionaryField('garageStartingOverdueDebt', <MoneyInput aria-label={fieldMeta('garageStartingOverdueDebt').ariaLabel} value={garageForm.startingOverdueDebt} onValueChange={(startingOverdueDebt) => setGarageForm({
+            ...garageForm,
+            startingBalance: syncDisplayedGarageBalanceWithOverdue(garageForm.startingBalance, garageForm.startingOverdueDebt, startingOverdueDebt),
+            startingOverdueDebt,
+          })} />, { help: garageOverdueHelp })}
           <div className="inline-fields">
             {dictionaryField('garageInitialWaterMeterValue', <input aria-label={fieldMeta('garageInitialWaterMeterValue').ariaLabel} type="number" min="0" step="0.001" value={garageForm.initialWaterMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialWaterMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика воды на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
             {dictionaryField('garageInitialElectricityMeterValue', <input aria-label={fieldMeta('garageInitialElectricityMeterValue').ariaLabel} type="number" min="0" step="0.001" value={garageForm.initialElectricityMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialElectricityMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика электроэнергии на момент начала учета. Оставьте поле пустым, если показаний нет.' })}

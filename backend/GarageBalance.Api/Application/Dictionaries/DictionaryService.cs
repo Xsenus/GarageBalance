@@ -326,15 +326,16 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Failure("owner_not_found", "Владелец гаража не найден.");
         }
 
-        var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var requestedStartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         var startingOverdueDebt = request.StartingOverdueDebt.HasValue
             ? MoneyMath.RoundMoney(request.StartingOverdueDebt.Value)
-            : Math.Max(startingBalance, 0m);
-        if (startingOverdueDebt > Math.Max(startingBalance, 0m))
+            : Math.Max(requestedStartingBalance, 0m);
+        var startingBalance = NormalizeGarageStartingBalance(requestedStartingBalance, startingOverdueDebt);
+        if (startingOverdueDebt < 0m || startingOverdueDebt > Math.Max(startingBalance, 0m))
         {
             return DictionaryResult<GarageDto>.Failure(
                 "garage_starting_overdue_debt_invalid",
-                "Начальная просроченная задолженность не может превышать положительный стартовый баланс.");
+                "Начальная просроченная задолженность не может превышать общую начальную задолженность.");
         }
 
         var garage = new Garage
@@ -379,15 +380,16 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Failure("owner_not_found", "Владелец гаража не найден.");
         }
 
-        var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var requestedStartingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         var startingOverdueDebt = request.StartingOverdueDebt.HasValue
             ? MoneyMath.RoundMoney(request.StartingOverdueDebt.Value)
             : GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt);
-        if (startingOverdueDebt > Math.Max(startingBalance, 0m))
+        var startingBalance = NormalizeGarageStartingBalance(requestedStartingBalance, startingOverdueDebt);
+        if (startingOverdueDebt < 0m || startingOverdueDebt > Math.Max(startingBalance, 0m))
         {
             return DictionaryResult<GarageDto>.Failure(
                 "garage_starting_overdue_debt_invalid",
-                "Начальная просроченная задолженность не может превышать положительный стартовый баланс.");
+                "Начальная просроченная задолженность не может превышать общую начальную задолженность.");
         }
         var initialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
         var initialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
@@ -4795,6 +4797,21 @@ public sealed class DictionaryService(
 
     private static decimal GetStartingOverdueDebt(decimal startingBalance, decimal? startingOverdueDebt) =>
         startingOverdueDebt ?? Math.Max(startingBalance, 0m);
+
+    private static decimal NormalizeGarageStartingBalance(decimal requestedStartingBalance, decimal startingOverdueDebt)
+    {
+        if (startingOverdueDebt <= 0m || requestedStartingBalance > 0m)
+        {
+            return requestedStartingBalance;
+        }
+
+        if (requestedStartingBalance == 0m)
+        {
+            return startingOverdueDebt;
+        }
+
+        return Math.Abs(requestedStartingBalance);
+    }
 
     private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {

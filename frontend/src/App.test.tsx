@@ -2370,6 +2370,49 @@ describe('App', () => {
     expect(within(employeeDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
   }, 20000)
 
+  it('creates a garage with overdue debt and derives the negative opening balance', async () => {
+    const user = userEvent.setup()
+    const createGarageRequest = vi.fn(async (_token: string, request: UpsertGarageRequest) => createGarage({
+      id: 'garage-with-opening-overdue',
+      number: request.number,
+      peopleCount: request.peopleCount,
+      floorCount: request.floorCount,
+      ownerId: request.ownerId,
+      startingBalance: request.startingBalance,
+      startingOverdueDebt: request.startingOverdueDebt ?? 0,
+      balance: request.startingBalance,
+      overdueDebt: request.startingOverdueDebt ?? 0,
+    }))
+    const dictionaryClient = createDictionaryClient({ createGarage: createGarageRequest })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+
+    await user.type(within(dialog).getByLabelText('Номер гаража'), '125-ПРОСРОЧКА')
+    const balanceInput = within(dialog).getByLabelText('Начальный баланс гаража')
+    const overdueInput = within(dialog).getByLabelText('Начальная просрочка')
+    await user.type(overdueInput, '125')
+
+    expect(balanceInput).toHaveValue('-125.00')
+    const balanceHelp = within(dialog).getByLabelText('Справка: Начальный баланс')
+    expect(balanceHelp).toHaveAttribute('tabindex', '0')
+    expect(within(dialog).getByRole('tooltip', { name: /Долг вводится со знаком минус/ })).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(createGarageRequest).toHaveBeenCalledWith('token', expect.objectContaining({
+      number: '125-ПРОСРОЧКА',
+      startingBalance: 125,
+      startingOverdueDebt: 125,
+    })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый гараж' })).not.toBeInTheDocument())
+  }, 20000)
+
   it('keeps contractor editors open and preserves drafts when saving fails', async () => {
     const user = userEvent.setup()
     let releaseGarageSave!: () => void
@@ -3614,6 +3657,41 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Гараж 106' })).not.toBeInTheDocument()
     expect(screen.queryByText('Не удалось загрузить финансовый отчет гаража.')).not.toBeInTheDocument()
   })
+
+  it('keeps the accounting sign when adjusting a garage opening balance', async () => {
+    const user = userEvent.setup()
+    let garage = createGarage({ id: 'garage-opening-adjustment', number: '125', startingBalance: 125, startingOverdueDebt: 125, balance: 125, overdueDebt: 125 })
+    const adjustGarageOpeningBalance = vi.fn(async (_token: string, id: string, request: { effectiveDate: string; newAmount: number; reason: string }) => {
+      const previousAmount = garage.startingBalance
+      garage = createGarage({ ...garage, startingBalance: request.newAmount, startingOverdueDebt: request.newAmount, balance: request.newAmount, overdueDebt: request.newAmount })
+      return { id: 'garage-adjustment-new', targetKind: 'garage' as const, targetId: id, effectiveDate: request.effectiveDate, previousAmount, newAmount: request.newAmount, reason: request.reason, createdByUserId: null, createdAtUtc: '2026-07-01T00:00:00Z' }
+    })
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [garage],
+      adjustGarageOpeningBalance,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 125' }))
+    const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 125' })
+    await user.click(within(garageDialog).getByRole('button', { name: 'Корректировать начальный баланс' }))
+    const adjustmentDialog = await screen.findByRole('dialog', { name: 'Корректировка: Гараж 125' })
+    expect(within(adjustmentDialog).getByLabelText('Действующий начальный баланс')).toHaveValue('-125.00')
+    const newAmount = within(adjustmentDialog).getByLabelText('Новое значение начального баланса')
+    await user.clear(newAmount)
+    await user.type(newAmount, '-200')
+    await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начального баланса'), 'Уточнение входящего долга')
+    await user.click(within(adjustmentDialog).getByRole('button', { name: 'Сохранить корректировку' }))
+
+    await waitFor(() => expect(adjustGarageOpeningBalance).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({
+      newAmount: 200,
+      reason: 'Уточнение входящего долга',
+    })))
+  }, 20000)
 
   it('creates an auditable supplier opening-balance adjustment from the contractor card', async () => {
     const user = userEvent.setup()
@@ -15948,7 +16026,7 @@ describe('App', () => {
     garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
     await selectStyledOption(user, garageDialog, 'Владелец гаража', 'Петров Петр')
     await user.clear(within(garageDialog).getByLabelText('Стартовый баланс гаража'))
-    await user.type(within(garageDialog).getByLabelText('Стартовый баланс гаража'), '350')
+    await user.type(within(garageDialog).getByLabelText('Стартовый баланс гаража'), '-350')
     const saveButton = within(garageDialog).getByRole('button', { name: 'Сохранить' })
     await user.click(saveButton)
 
@@ -15958,8 +16036,8 @@ describe('App', () => {
     expect(changeList).toHaveTextContent('Иванов Иван')
     expect(changeList).toHaveTextContent('Петров Петр')
     expect(changeList).toHaveTextContent('Стартовый баланс')
-    expect(changeList).toHaveTextContent('100.00')
-    expect(changeList).toHaveTextContent('350.00')
+    expect(changeList).toHaveTextContent('-100.00')
+    expect(changeList).toHaveTextContent('-350.00')
     expect(updateGarage).not.toHaveBeenCalled()
     await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
@@ -15977,7 +16055,7 @@ describe('App', () => {
       startingBalance: 350,
     })))
     expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('350.00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('-350.00')).toBeInTheDocument()
     expect(getOwners).toHaveBeenCalledTimes(2)
     expect(getGarages).toHaveBeenCalledTimes(2)
 
@@ -16368,7 +16446,7 @@ describe('App', () => {
     await user.clear(within(validationDialog).getByLabelText('Начальная просрочка'))
     await user.type(within(validationDialog).getByLabelText('Начальная просрочка'), '600')
     await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(within(validationDialog).getByText('Просрочка недопустима')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Начальная просрочка не может превышать общую начальную задолженность.')).toBeInTheDocument()
     expect(createGarageCalled).toBe(false)
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гаражи' })).not.toBeInTheDocument())
@@ -16392,6 +16470,46 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Укажите номер гаража.')).toBeInTheDocument()
     expect(createGarageCalled).toBe(false)
   })
+
+  it('derives opening debt from overdue in the garage dictionary editor', async () => {
+    const user = userEvent.setup()
+    const createGarageRequest = vi.fn(async (_token: string, request: UpsertGarageRequest) => createGarage({
+      id: 'dictionary-garage-with-opening-overdue',
+      number: request.number,
+      peopleCount: request.peopleCount,
+      floorCount: request.floorCount,
+      ownerId: request.ownerId,
+      startingBalance: request.startingBalance,
+      startingOverdueDebt: request.startingOverdueDebt ?? 0,
+      balance: request.startingBalance,
+      overdueDebt: request.startingOverdueDebt ?? 0,
+    }))
+    const dictionaryClient = createDictionaryClient({ createGarage: createGarageRequest })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    const dialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    await user.type(within(dialog).getByLabelText('Номер гаража'), '126-ПРОСРОЧКА')
+    const overdueInput = within(dialog).getByLabelText('Начальная просрочка')
+    await user.clear(overdueInput)
+    await user.type(overdueInput, '125')
+
+    expect(within(dialog).getByLabelText('Стартовый баланс гаража')).toHaveValue('-125.00')
+    expect(within(dialog).getByRole('tooltip', { name: /Просрочка входит в общий долг/ })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createGarageRequest).toHaveBeenCalledWith('token', expect.objectContaining({
+      number: '126-ПРОСРОЧКА',
+      startingBalance: 125,
+      startingOverdueDebt: 125,
+    })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гаражи' })).not.toBeInTheDocument())
+  }, 20000)
 
   it('searches garages by number or owner from dictionaries workspace', async () => {
     const user = userEvent.setup()
@@ -17057,7 +17175,7 @@ describe('App', () => {
     expect(startingBalanceHelp).toHaveAttribute('tabindex', '0')
     await act(() => startingBalanceHelp.focus())
     expect(startingBalanceHelp).toHaveFocus()
-    const startingBalanceTooltip = within(editorDialog).getByRole('tooltip', { name: /Долг на начало учета/ })
+    const startingBalanceTooltip = within(editorDialog).getByRole('tooltip', { name: /Долг вводится со знаком минус/ })
     expect(startingBalanceHelp).toHaveAttribute('aria-describedby', startingBalanceTooltip.id)
     expect(within(editorDialog).getByLabelText('Справка: Старт воды')).toHaveAttribute('tabindex', '0')
     expect(within(editorDialog).getByLabelText('Справка: Старт электричества')).toHaveAttribute('tabindex', '0')

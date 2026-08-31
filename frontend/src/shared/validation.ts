@@ -191,7 +191,7 @@ export function getGarageValidationErrors(form: UpsertGarageRequest) {
 
   const startingOverdueDebt = form.startingOverdueDebt ?? 0
   if (!Number.isFinite(startingOverdueDebt) || startingOverdueDebt < 0 || startingOverdueDebt > Math.max(form.startingBalance, 0)) {
-    errors.push('Просрочка недопустима')
+    errors.push('Начальная просрочка не может превышать общую начальную задолженность.')
   }
 
   if (form.initialWaterMeterValue != null && (!Number.isFinite(form.initialWaterMeterValue) || form.initialWaterMeterValue < 0)) {

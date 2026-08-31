@@ -1,6 +1,7 @@
 import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto } from '../services/dictionariesApi'
 import { formatMoney } from './formatters'
 import type { OwnerGarageLinkForm } from './validation'
+import { garageBalanceSignHelp, toDisplayedGarageStartingBalance } from './garageOpeningBalance'
 
 export type DictionarySectionKey = 'owners' | 'garages' | 'incomeTypes' | 'expenseTypes' | 'measurementUnits'
 export type DictionarySectionGroupKey = 'counterparties' | 'operations' | 'tariffs'
@@ -129,7 +130,7 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   garagePeopleCount: { label: 'Людей', ariaLabel: 'Количество людей' },
   garageFloorCount: { label: 'Этажей', ariaLabel: 'Количество этажей' },
   garageOwner: { label: 'Владелец', ariaLabel: 'Владелец гаража' },
-  garageStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс гаража', hint: 'Долг положительным числом, переплата отрицательным.' },
+  garageStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс гаража', hint: garageBalanceSignHelp },
   garageStartingOverdueDebt: { label: 'Начальная просрочка', ariaLabel: 'Начальная просрочка' },
   garageInitialWaterMeterValue: { label: 'Старт воды', ariaLabel: 'Стартовый счетчик воды' },
   garageInitialElectricityMeterValue: { label: 'Старт электричества', ariaLabel: 'Стартовый счетчик электричества' },
@@ -197,7 +198,7 @@ export function createGarageFormFromDto(garage: GarageDto): DictionaryGarageForm
     peopleCount: garage.peopleCount,
     floorCount: garage.floorCount,
     ownerId: garage.ownerId ?? '',
-    startingBalance: garage.startingBalance,
+    startingBalance: toDisplayedGarageStartingBalance(garage.startingBalance),
     startingOverdueDebt: garage.startingOverdueDebt,
     initialWaterMeterValue: garage.initialWaterMeterValue?.toString() ?? '',
     initialElectricityMeterValue: garage.initialElectricityMeterValue?.toString() ?? '',
@@ -291,7 +292,7 @@ export function getDictionaryRecordCells(section: DictionarySectionKey, item: Di
 
   if (section === 'garages') {
     const garage = item as GarageDto
-    return [garage.number, garage.ownerName ?? 'без владельца', garage.peopleCount, garage.floorCount, formatMoney(garage.startingBalance)]
+    return [garage.number, garage.ownerName ?? 'без владельца', garage.peopleCount, garage.floorCount, formatMoney(toDisplayedGarageStartingBalance(garage.startingBalance))]
   }
 
   if (section === 'measurementUnits') {

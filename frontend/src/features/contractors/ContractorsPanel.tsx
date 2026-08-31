@@ -28,6 +28,7 @@ import { createRetryableLazyLoader } from '../../shared/retryableLazyLoader'
 import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
 
 const AddServicePrototypeDialog = lazy(createRetryableLazyLoader(() =>
   import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.AddServicePrototypeDialog }))))
@@ -527,7 +528,7 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
     owner: garage.ownerName ?? owner?.fullName ?? '',
     phone: owner?.phone ?? '',
     address: owner?.address ?? '',
-    startingBalance: formatPrototypeMoney(garage.startingBalance),
+    startingBalance: formatPrototypeMoney(toDisplayedGarageStartingBalance(garage.startingBalance)),
     startingOverdueDebt: formatPrototypeMoney(garage.startingOverdueDebt),
     balance: formatPrototypeMoney(balance),
     overdueDebt: overdueDebt > 0 ? `${formatMoney(overdueDebt)} руб.` : '',
@@ -545,7 +546,10 @@ function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | 
     peopleCount: parsePrototypeInteger(row.peopleCount, 0),
     floorCount: parsePrototypeInteger(row.floorCount, 0),
     ownerId,
-    startingBalance: parsePrototypeMoney(row.startingBalance ?? row.balance),
+    startingBalance: toStoredGarageStartingBalance(
+      parsePrototypeMoney(row.startingBalance ?? row.balance),
+      parsePrototypeMoney(row.startingOverdueDebt ?? ''),
+    ),
     startingOverdueDebt: parsePrototypeMoney(row.startingOverdueDebt ?? ''),
     initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
     initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
@@ -2136,7 +2140,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   function openGarageOpeningBalanceAdjustment(row: ContractorGarageRow) {
     setModal(null)
-    setOpeningBalanceAdjustmentTarget({ type: 'garage', id: row.id, name: `Гараж ${row.number}`, currentAmount: Number(row.startingBalance ?? 0) })
+    setOpeningBalanceAdjustmentTarget({ type: 'garage', id: row.id, name: `Гараж ${row.number}`, currentAmount: parsePrototypeMoney(row.startingBalance ?? '') })
   }
 
   function openSupplierOpeningBalanceAdjustment(row: ContractorSupplierRow) {
@@ -3461,7 +3465,8 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
     setSaving(true)
     setError(null)
     try {
-      await save(accessToken, target.id, { effectiveDate, newAmount: parsedAmount, reason: reason.trim() })
+      const storedAmount = target.type === 'garage' ? toStoredGarageStartingBalance(parsedAmount) : parsedAmount
+      await save(accessToken, target.id, { effectiveDate, newAmount: storedAmount, reason: reason.trim() })
       onSaved()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить корректировку.')
@@ -3567,11 +3572,21 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {!item ? (
                   <>
-                    <FormField label="Начальный баланс">
+                    <FormField label="Начальный баланс" help={garageBalanceWithOverdueHelp}>
                       <MoneyTextInput aria-label="Начальный баланс гаража" value={form.startingBalance ?? ''} onValueChange={(startingBalance) => setForm({ ...form, startingBalance })} />
                     </FormField>
-                    <FormField label="Начальная просрочка">
-                      <MoneyTextInput aria-label="Начальная просрочка" value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => setForm({ ...form, startingOverdueDebt })} />
+                    <FormField label="Начальная просрочка" help={garageOverdueHelp}>
+                      <MoneyTextInput aria-label="Начальная просрочка" value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => {
+                        const previousOverdueDebt = parsePrototypeMoney(form.startingOverdueDebt ?? '')
+                        const nextOverdueDebt = parsePrototypeMoney(startingOverdueDebt)
+                        const currentStartingBalance = parsePrototypeMoney(form.startingBalance ?? '')
+                        const nextStartingBalance = syncDisplayedGarageBalanceWithOverdue(currentStartingBalance, previousOverdueDebt, nextOverdueDebt)
+                        setForm({
+                          ...form,
+                          startingBalance: nextStartingBalance === currentStartingBalance ? form.startingBalance : formatPrototypeMoney(nextStartingBalance),
+                          startingOverdueDebt,
+                        })
+                      }} />
                     </FormField>
                   </>
                 ) : (

@@ -1462,6 +1462,61 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateGarageAsync_DerivesDebtFromOverdueAndAcceptsDisplayedNegativeBalance()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var derived = await service.CreateGarageAsync(
+            new UpsertGarageRequest("OPEN-DERIVED", 1, 1, null, 0m, null, null, null, StartingOverdueDebt: 125m),
+            null,
+            CancellationToken.None);
+        var negative = await service.CreateGarageAsync(
+            new UpsertGarageRequest("OPEN-NEGATIVE", 1, 1, null, -125m, null, null, null, StartingOverdueDebt: 125m),
+            null,
+            CancellationToken.None);
+        var insufficient = await service.CreateGarageAsync(
+            new UpsertGarageRequest("OPEN-INSUFFICIENT", 1, 1, null, -100m, null, null, null, StartingOverdueDebt: 125m),
+            null,
+            CancellationToken.None);
+
+        Assert.True(derived.Succeeded);
+        Assert.Equal(125m, derived.Value!.StartingBalance);
+        Assert.Equal(125m, derived.Value.StartingOverdueDebt);
+        Assert.Equal(125m, derived.Value.Balance);
+        Assert.Equal(125m, derived.Value.OverdueDebt);
+        Assert.True(negative.Succeeded);
+        Assert.Equal(125m, negative.Value!.StartingBalance);
+        Assert.Equal(125m, negative.Value.StartingOverdueDebt);
+        Assert.False(insufficient.Succeeded);
+        Assert.Equal("garage_starting_overdue_debt_invalid", insufficient.ErrorCode);
+        Assert.Equal("Начальная просроченная задолженность не может превышать общую начальную задолженность.", insufficient.ErrorMessage);
+        Assert.Equal(2, await database.Context.Garages.CountAsync());
+    }
+
+    [Fact]
+    public async Task UpdateGarageAsync_AcceptsDisplayedNegativeOpeningDebtWithoutCreatingAChange()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var created = await service.CreateGarageAsync(
+            new UpsertGarageRequest("OPEN-UPDATE", 1, 1, null, 125m, null, null, null, StartingOverdueDebt: 125m),
+            null,
+            CancellationToken.None);
+
+        var updated = await service.UpdateGarageAsync(
+            created.Value!.Id,
+            new UpsertGarageRequest("OPEN-UPDATE", 1, 1, null, -125m, null, null, null, created.Value.Version, 125m),
+            null,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Equal(125m, updated.Value!.StartingBalance);
+        Assert.Equal(125m, updated.Value.StartingOverdueDebt);
+        Assert.Equal(created.Value.Version, updated.Value.Version);
+    }
+
+    [Fact]
     public async Task CreateSupplierAsync_RequiresExpenseFundForChargeService()
     {
         await using var database = await TestDatabase.CreateAsync();

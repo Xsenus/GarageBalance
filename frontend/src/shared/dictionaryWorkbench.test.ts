@@ -109,7 +109,8 @@ describe('dictionary workbench metadata', () => {
 
     expect(createGarageFormFromDto(createGarage({
       ownerId: 'owner-1',
-      startingBalance: -150,
+      startingBalance: 150,
+      startingOverdueDebt: 75,
       initialWaterMeterValue: 12.5,
       initialElectricityMeterValue: 1024,
       comment: 'угловой',
@@ -119,6 +120,7 @@ describe('dictionary workbench metadata', () => {
       floorCount: 1,
       ownerId: 'owner-1',
       startingBalance: -150,
+      startingOverdueDebt: 75,
       initialWaterMeterValue: '12.5',
       initialElectricityMeterValue: '1024',
       comment: 'угловой',
@@ -163,7 +165,7 @@ describe('dictionary workbench metadata', () => {
   it('returns table cell values for every dictionary section', () => {
     expect(getDictionaryRecordCells('owners', createOwner({ garageNumbers: ['1', '2'] }))).toEqual(['Иванов Иван', '1, 2', 'не указан', 'не указан'])
     expect(getDictionaryRecordCells('owners', createOwner({ phone: '+79990000000', address: 'ул. Ленина, 1' }))).toEqual(['Иванов Иван', 'без гаража', '+79990000000', 'ул. Ленина, 1'])
-    expect(getDictionaryRecordCells('garages', createGarage({ ownerName: 'Иванов Иван', startingBalance: 350 }))).toEqual(['42', 'Иванов Иван', 1, 1, '350.00'])
+    expect(getDictionaryRecordCells('garages', createGarage({ ownerName: 'Иванов Иван', startingBalance: 350 }))).toEqual(['42', 'Иванов Иван', 1, 1, '-350.00'])
     expect(getDictionaryRecordCells('garages', createGarage())).toEqual(['42', 'без владельца', 1, 1, '0.00'])
     expect(getDictionaryRecordCells('incomeTypes', createAccountingType({ code: 'MEMBER_FEE', isSystem: true }))).toEqual(['Членский взнос', 'MEMBER_FEE', 'Системный'])
     expect(getDictionaryRecordCells('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toEqual(['Вывоз мусора', 'не указан', 'Пользовательский'])
@@ -245,12 +247,14 @@ function createGarage(overrides: Partial<GarageDto> = {}): GarageDto {
     ownerName: null,
     ownerPhone: null,
     startingBalance: 0,
+    startingOverdueDebt: 0,
     balance: 0,
     overdueDebt: 0,
     initialWaterMeterValue: null,
     initialElectricityMeterValue: null,
     comment: null,
     isArchived: false,
+    version: '00000000-0000-0000-0000-000000000001',
     ...overrides,
   }
 

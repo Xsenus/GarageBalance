@@ -166,6 +166,31 @@ describe('shared validation helpers', () => {
     ])
   })
 
+  it('validates the overdue portion against the normalized garage opening debt', () => {
+    const validGarage = {
+      number: '125',
+      peopleCount: 1,
+      floorCount: 1,
+      ownerId: null,
+      startingBalance: 125,
+      startingOverdueDebt: 125,
+      initialWaterMeterValue: null,
+      initialElectricityMeterValue: null,
+      comment: null,
+    }
+
+    expect(getGarageValidationErrors(validGarage)).toEqual([])
+    expect(getGarageValidationErrors({ ...validGarage, startingOverdueDebt: 126 })).toEqual([
+      'Начальная просрочка не может превышать общую начальную задолженность.',
+    ])
+    expect(getGarageValidationErrors({ ...validGarage, startingOverdueDebt: -1 })).toEqual([
+      'Начальная просрочка не может превышать общую начальную задолженность.',
+    ])
+    expect(getGarageValidationErrors({ ...validGarage, startingOverdueDebt: Number.NaN })).toEqual([
+      'Начальная просрочка не может превышать общую начальную задолженность.',
+    ])
+  })
+
   it('validates tariff tiers and transforms tariff forms', () => {
     expect(getTariffValidationErrors({ name: '', calculationBase: 'bad', rate: 0, effectiveFrom: '', comment: '' })).toEqual([
       'Укажите название тарифа.',
