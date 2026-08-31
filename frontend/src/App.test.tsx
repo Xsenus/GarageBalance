@@ -7884,6 +7884,7 @@ describe('App', () => {
     const penaltyIncomeType = createAccountingType({ id: 'income-penalty', name: 'Штраф', code: 'penalty', isSystem: true })
     const incomeTypes = [incomeType, waterIncomeType, otherPaymentsIncomeType, penaltyIncomeType]
     const irregularPayment = createIrregularPayment({ id: 'irregular-access-card', name: 'Карта доступа', amount: 750 })
+    const secondIrregularPayment = createIrregularPayment({ id: 'irregular-snow-removal', name: 'Вывоз снега', amount: 1500 })
     const electricityExpenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
     const advanceExpenseType = createAccountingType({ id: 'expense-advance', name: 'Авансовые выплаты', code: 'advance_payment' })
     const noReceiptExpenseType = createAccountingType({ id: 'expense-no-receipt', name: 'Выплата без чека', code: 'no_receipt' })
@@ -7953,7 +7954,7 @@ describe('App', () => {
       getGaragesPage: searchGaragesPage,
       getIncomeTypes: async () => incomeTypes,
       getExpenseTypes: async () => expenseTypes,
-      getIrregularPayments: async () => [irregularPayment],
+      getIrregularPayments: async () => [irregularPayment, secondIrregularPayment],
     })
     const financeClient = createFinanceClient({
       getIncomePaymentWarning,
@@ -8626,9 +8627,18 @@ describe('App', () => {
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
     const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Основание начисления гаража' })
+    const garageAccrualAmount = within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')
+    expect(garageIncomeTypeCombobox).toHaveValue('')
+    expect(garageIncomeTypeCombobox).toHaveAttribute('placeholder', 'Выберите готовое основание или введите своё')
+    expect(garageAccrualAmount).toHaveValue('')
+    expect(garageAccrualAmount).not.toHaveAttribute('readonly')
+    expect(Array.from(garageAccrualDialog.querySelectorAll('datalist option'), (option) => option.getAttribute('value'))).toEqual([
+      irregularPayment.name,
+      secondIrregularPayment.name,
+    ])
+    await user.type(garageIncomeTypeCombobox, irregularPayment.name)
     expect(garageIncomeTypeCombobox).toHaveValue(irregularPayment.name)
-    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toHaveValue('750.00')
-    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).not.toHaveAttribute('readonly')
+    expect(garageAccrualAmount).toHaveValue('750.00')
     const garageAccrualMonth = within(garageAccrualDialog).getByLabelText('Месяц начисления гаража')
     expect(garageAccrualMonth).toHaveValue('06.2026')
     expect(garageAccrualMonth.closest('.localized-date-picker')).not.toBeNull()
