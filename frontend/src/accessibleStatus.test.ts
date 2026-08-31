@@ -43,9 +43,22 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps shared form errors and validation summaries exposed as alerts', () => {
-    expect(financePanelSource).toContain("import { FormError, FormValidationSummary } from '../../shared/formFeedback'")
+    expect(financePanelSource).toContain("FormError, FormValidationSummary } from '../../shared/formFeedback'")
     expect(formFeedbackSource).toContain('<div className="form-error" id={id} role="alert">')
     expect(formFeedbackSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
+  })
+
+  it('keeps error surfaces in the foreground modal dialog', () => {
+    expect(formFeedbackSource).toContain('export function ForegroundDialogError')
+    expect(formFeedbackSource).toContain('const observer = new MutationObserver(synchronize)')
+    expect(formFeedbackSource).toContain("host.className = 'foreground-dialog-error-host'")
+    expect(formFeedbackSource).toContain('return portalHost ? createPortal(surface, portalHost) : surface')
+    expect(workspacePanelSource).toContain('<ForegroundDialogError>')
+    expect(reportPanelSource).toContain('<ForegroundDialogError><span className="report-filter-search-error" role="alert">')
+    expect(financePanelSource).toContain('<ForegroundDialogError><span className="payments-prototype-search-empty" role="alert">')
+    expect(tariffsPanelSource).toContain('<ForegroundDialogError><small className="contractors-field-error" role="alert">')
+    expect(meterReadingsPanelSource).not.toContain('<div className="form-error" role="alert">')
+    expect(appCss).toContain('.foreground-dialog-error-host')
   })
 
   it('keeps a missing required meter reading visibly and accessibly highlighted', () => {

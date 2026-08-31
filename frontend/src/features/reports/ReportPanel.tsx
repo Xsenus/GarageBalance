@@ -7,7 +7,7 @@ import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto,
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
-import { FormError } from '../../shared/formFeedback'
+import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
 import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
 import { formatCount, formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -190,7 +190,7 @@ function ReportCheckboxMultiSelect({
         <span className="report-workbook-multi-select-status" id={statusId} role="status" aria-live="polite">{allLabel}</span>
       ) : null}
       {remoteLoading ? <span className="report-filter-search-status" role="status">Ищем…</span> : null}
-      {remoteError ? <span className="report-filter-search-error" role="alert">{remoteError}</span> : null}
+      {remoteError ? <ForegroundDialogError><span className="report-filter-search-error" role="alert">{remoteError}</span></ForegroundDialogError> : null}
       {selectedOptions.length > 0 ? (
         <div className="payments-prototype-selected-garages report-checkbox-picker-selected" aria-label={selectedAriaLabel}>
           <div className="payments-prototype-selected-heading">

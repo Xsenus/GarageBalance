@@ -8312,6 +8312,16 @@ button.operation-row:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.foreground-dialog-error-host {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.foreground-dialog-error-surface {
+  display: contents;
+}
+
 .garage-balance-dialog {
   width: min(920px, 100%);
 }

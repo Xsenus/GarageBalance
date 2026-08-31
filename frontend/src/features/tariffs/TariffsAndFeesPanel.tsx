@@ -12,7 +12,7 @@ import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
-import { FormError } from '../../shared/formFeedback'
+import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { EditableCombobox } from '../../shared/EditableCombobox'
 import { getTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
@@ -2546,7 +2546,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                           />
                         )}
                         <span className="tariffs-threshold-range__unit">{row.unit}</span>
-                        {thresholdRangeErrors[row.id] ? <small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small> : null}
+                        {thresholdRangeErrors[row.id] ? <ForegroundDialogError><small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small></ForegroundDialogError> : null}
                       </div>
                     ) : row.serviceSettingKind !== 'main' && row.title !== (row.group ?? row.category) && (
                       <span>{row.title}</span>
@@ -2595,7 +2595,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                             }}
                           />
                         ) : <span className="contractors-date-suffix">числа следующего месяца</span>}
-                        {tariffDateErrors[row.id] ? <span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span> : null}
+                        {tariffDateErrors[row.id] ? <ForegroundDialogError><span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span></ForegroundDialogError> : null}
                       </div>
                     ) : isTariffMoneyAmount(row) ? (
                       <MoneyTextInput
@@ -2679,7 +2679,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                             />
                           ) : <span className="contractors-date-suffix">следующего месяца</span>}
                         </span>
-                        {tariffDateErrors[dueDateRow.id] ? <small id={`${dueDateRow.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[dueDateRow.id]}</small> : null}
+                        {tariffDateErrors[dueDateRow.id] ? <ForegroundDialogError><small id={`${dueDateRow.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[dueDateRow.id]}</small></ForegroundDialogError> : null}
                       </div>
                     ) : null}
                   </span>
@@ -2839,7 +2839,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           >
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Нерегулярные платежи">
               <div className="contractors-mini-title">Нерегулярные платежи</div>
-              {oneTimeActionMessage ? <p className="contractors-action-message" role="alert">{oneTimeActionMessage}</p> : null}
+              {oneTimeActionMessage ? <ForegroundDialogError><p className="contractors-action-message" role="alert">{oneTimeActionMessage}</p></ForegroundDialogError> : null}
               <div className="contractors-mini-header contractors-mini-header--editable">
                 <span>Основание</span>
                 <span>Сумма, руб.</span>
@@ -2921,7 +2921,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Объявленные сборы">
               <div className="contractors-mini-title">Объявленные сборы</div>
-              {feeCampaignActionMessage ? <p className="contractors-action-message" role="alert">{feeCampaignActionMessage}</p> : null}
+              {feeCampaignActionMessage ? <ForegroundDialogError><p className="contractors-action-message" role="alert">{feeCampaignActionMessage}</p></ForegroundDialogError> : null}
               <div className="fee-campaign-table-scroll">
                 <div className="contractors-mini-header contractors-mini-header--fees">
                   <span>Наименование</span>

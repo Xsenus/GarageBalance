@@ -15,6 +15,7 @@ import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { diagnosticsApi } from '../../services/diagnosticsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorBoundary, TableLoadingState } from '../../shared/AsyncState'
+import { ForegroundDialogError } from '../../shared/formFeedback'
 import { isLazyChunkLoadError, recoverFromLazyChunkError } from '../../shared/lazyChunkRecovery'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
@@ -40,22 +41,24 @@ export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken 
       fallback={(error, reset, errorId) => {
         const chunkError = isLazyChunkLoadError(error)
         return (
-          <section className="section-load-error" role="alert" aria-label="Не удалось загрузить раздел">
-            <span className="section-load-error__icon" aria-hidden="true"><AlertTriangle size={22} /></span>
-            <p className="eyebrow">{chunkError ? 'Обновление приложения' : 'Ошибка загрузки'}</p>
-            <h2>{chunkError ? 'Приложение было обновлено' : 'Не удалось открыть раздел'}</h2>
-            <p>{chunkError
-              ? 'Открыта предыдущая версия страницы. Обновите приложение, чтобы безопасно продолжить работу.'
-              : 'Возникла временная ошибка. Повторите загрузку раздела — данные в других разделах не изменены.'}</p>
-            <p className="form-hint">Код ошибки: <strong>{errorId}</strong>. Сообщите его администратору.</p>
-            <div className="section-load-error__actions">
-              {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>На главную</button> : null}
-              <button className="primary-button" type="button" onClick={chunkError ? () => window.location.reload() : reset}>
-                <RotateCw size={16} aria-hidden="true" />
-                <span>{chunkError ? 'Обновить приложение' : 'Повторить загрузку'}</span>
-              </button>
-            </div>
-          </section>
+          <ForegroundDialogError>
+            <section className="section-load-error" role="alert" aria-label="Не удалось загрузить раздел">
+              <span className="section-load-error__icon" aria-hidden="true"><AlertTriangle size={22} /></span>
+              <p className="eyebrow">{chunkError ? 'Обновление приложения' : 'Ошибка загрузки'}</p>
+              <h2>{chunkError ? 'Приложение было обновлено' : 'Не удалось открыть раздел'}</h2>
+              <p>{chunkError
+                ? 'Открыта предыдущая версия страницы. Обновите приложение, чтобы безопасно продолжить работу.'
+                : 'Возникла временная ошибка. Повторите загрузку раздела — данные в других разделах не изменены.'}</p>
+              <p className="form-hint">Код ошибки: <strong>{errorId}</strong>. Сообщите его администратору.</p>
+              <div className="section-load-error__actions">
+                {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>На главную</button> : null}
+                <button className="primary-button" type="button" onClick={chunkError ? () => window.location.reload() : reset}>
+                  <RotateCw size={16} aria-hidden="true" />
+                  <span>{chunkError ? 'Обновить приложение' : 'Повторить загрузку'}</span>
+                </button>
+              </div>
+            </section>
+          </ForegroundDialogError>
         )
       }}
     >

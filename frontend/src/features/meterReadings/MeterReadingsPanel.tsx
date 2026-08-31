@@ -5,6 +5,7 @@ import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
+import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -603,7 +604,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         </div>
       </div>
 
-      {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
+      {!yearIsValid ? <FormError>Введите год четырьмя цифрами от 1900 до 9999.</FormError> : null}
       {error && !pendingReadingChange ? <AsyncErrorState message={error} onRetry={() => {
         setLoading(true)
         if (availableMeterTypes?.length === 0) {
@@ -694,7 +695,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
             {pendingReadingChange.isOutsideCurrentMonth && !pendingReadingChange.suggestsReplacement ? (
               <p className="form-hint">Для другого месяца комментарий не требуется: действие будет автоматически записано в историю изменений.</p>
             ) : null}
-            {readingChangeError ? <div className="form-error" role="alert">{readingChangeError}</div> : null}
+            {readingChangeError ? <FormError>{readingChangeError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={readingChangeCancelRef} className="ghost-button" type="button" disabled={pendingReadingSaving} onClick={cancelPendingReadingChange}>Отмена</button>
               <button className="secondary-button" type="button" aria-busy={pendingReadingSaving} disabled={pendingReadingSaving} onClick={confirmPendingReadingChange}>

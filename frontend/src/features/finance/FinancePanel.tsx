@@ -15,7 +15,7 @@ import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGar
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
-import { FormError, FormValidationSummary } from '../../shared/formFeedback'
+import { ForegroundDialogError, FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatCount, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -4336,7 +4336,7 @@ function PaymentsPrototypePanel({
           {shouldShowGarageResults ? (
             <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи" aria-busy={garageSearchLoading}>
               {garageSearchLoading && garageSearchResults.length === 0 ? <span className="payments-prototype-search-empty" role="status">Ищем гаражи...</span> : null}
-              {garageSearchError ? <span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span> : null}
+              {garageSearchError ? <ForegroundDialogError><span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span></ForegroundDialogError> : null}
               {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
                 <button
                   className="payments-prototype-search-option"
@@ -4466,10 +4466,12 @@ function PaymentsPrototypePanel({
                 {overdueDebtDetailsExpanded && (overdueDebtLoading ? (
                   <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />
                 ) : overdueDebtError ? (
-                  <div className="form-error payments-prototype-overdue-error" role="alert">
-                    <span>{overdueDebtError}</span>
-                    <button className="secondary-button" type="button" onClick={() => setOverdueDebtRefresh((value) => value + 1)}>Повторить</button>
-                  </div>
+                  <ForegroundDialogError>
+                    <div className="form-error payments-prototype-overdue-error" role="alert">
+                      <span>{overdueDebtError}</span>
+                      <button className="secondary-button" type="button" onClick={() => setOverdueDebtRefresh((value) => value + 1)}>Повторить</button>
+                    </div>
+                  </ForegroundDialogError>
                 ) : overdueDebtDetails && overdueDebtDetails.rows.length > 0 ? (
                   <div className="table-scroll">
                     <table aria-label="Расшифровка просроченной задолженности">
@@ -4682,7 +4684,7 @@ function PaymentsPrototypePanel({
                                   </button>
                                   {savingMeterRowId === row.id
                                     ? <span className="payments-prototype-meter-status" role="status" aria-live="polite">Сохраняем показание…</span>
-                                    : row.meterError ? <span className="payments-prototype-meter-error" role="alert">{row.meterError}</span> : null}
+                                    : row.meterError ? <ForegroundDialogError><span className="payments-prototype-meter-error" role="alert">{row.meterError}</span></ForegroundDialogError> : null}
                                 </div>
                               ) : row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}
                               {row.meterRequired && row.meter === null ? (

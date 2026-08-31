@@ -2015,7 +2015,7 @@ describe('App', () => {
     await user.click(within(conflictPaymentRow).getByRole('button', { name: 'Вернуть' }))
     const conflictRestoreDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
     await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Вернуть' }))
-    expect(await within(oneTimeTable).findByRole('alert')).toHaveTextContent('Восстановление недоступно')
+    expect(await within(conflictRestoreDialog).findByRole('alert')).toHaveTextContent('Восстановление недоступно')
     await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Отмена' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
 

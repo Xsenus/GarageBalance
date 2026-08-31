@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
+import { ForegroundDialogError } from './formFeedback'
 
 type LoadingSkeletonProps = {
   label: string
@@ -62,12 +63,14 @@ export function AsyncErrorState({
   className = '',
 }: AsyncErrorStateProps) {
   return (
-    <div className={`async-error-state ${className}`.trim()}>
-      <div className="form-error" role="alert">{message}</div>
-      <button className="ghost-button" type="button" onClick={onRetry} disabled={retrying}>
-        <span>{retrying ? 'Загружаем…' : retryLabel}</span>
-      </button>
-    </div>
+    <ForegroundDialogError>
+      <div className={`async-error-state ${className}`.trim()}>
+        <div className="form-error" role="alert">{message}</div>
+        <button className="ghost-button" type="button" onClick={onRetry} disabled={retrying}>
+          <span>{retrying ? 'Загружаем…' : retryLabel}</span>
+        </button>
+      </div>
+    </ForegroundDialogError>
   )
 }
 
