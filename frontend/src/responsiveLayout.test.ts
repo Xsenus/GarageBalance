@@ -255,7 +255,10 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps the signed garage balance column and four period totals readable', () => {
-    expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 860px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 1260px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(2) {\n  width: 32%;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(7), :nth-child(8)) {')
+    expect(normalizedAppCss).toContain('white-space: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(112px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: 1fr;')

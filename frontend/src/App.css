@@ -4353,7 +4353,15 @@ h1 {
 }
 
 .payments-prototype-table--garage {
-  min-width: 860px;
+  min-width: 1260px;
+}
+
+.payments-prototype-table--garage th:nth-child(2) {
+  width: 32%;
+}
+
+.payments-prototype-table--garage :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(7), :nth-child(8)) {
+  white-space: nowrap;
 }
 
 .payments-prototype-table th,
@@ -4376,12 +4384,7 @@ h1 {
   font-weight: 750;
 }
 
-.payments-prototype-table th:first-child,
-.payments-prototype-table td:first-child,
-.payments-prototype-table th:nth-child(2),
-.payments-prototype-table td:nth-child(2),
-.payments-prototype-table th:nth-child(3),
-.payments-prototype-table td:nth-child(3) {
+.payments-prototype-table :is(th, td):is(:first-child, :nth-child(2), :nth-child(3)) {
   text-align: left;
 }
 
@@ -4682,8 +4685,7 @@ h1 {
   background: #eef4ff;
 }
 
-.payments-prototype-table td:last-child,
-.payments-prototype-table th:last-child {
+.payments-prototype-table :is(td, th):last-child {
   border-right: 0;
 }
 
