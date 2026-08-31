@@ -37,9 +37,11 @@ public interface IExpenseFundDisbursementService
 public sealed record ExpenseFundDisbursementResult(
     bool Succeeded,
     string? ErrorCode = null,
-    string? ErrorMessage = null)
+    string? ErrorMessage = null,
+    bool NegativeBalanceConfirmed = false)
 {
-    public static ExpenseFundDisbursementResult Success() => new(true);
+    public static ExpenseFundDisbursementResult Success(bool negativeBalanceConfirmed = false) =>
+        new(true, NegativeBalanceConfirmed: negativeBalanceConfirmed);
 
     public static ExpenseFundDisbursementResult Failure(string errorCode, string errorMessage) =>
         new(false, errorCode, errorMessage);

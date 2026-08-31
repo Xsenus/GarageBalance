@@ -450,17 +450,17 @@ public sealed class FinanceService(
             .ToDictionary(group => group.Key, group => group.First().MeterKind);
 
         var accrualLookup = worksheetData.AccrualBuckets
-            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName))
+            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName, bucket.FeeCampaignId))
             .ToDictionary(
                 group => group.Key,
                 group => group.First() with { Amount = MoneyMath.RoundMoney(group.Sum(bucket => bucket.Amount)) });
         var calculationLookup = (worksheetData.Calculations ?? [])
-            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName))
+            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName, item.FeeCampaignId))
             .ToDictionary(
                 group => group.Key,
                 group => RegularAccrualCalculator.Deserialize(group.First().CalculationDetailsJson));
         var reasonLookup = (worksheetData.Reasons ?? [])
-            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName))
+            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName, item.FeeCampaignId))
             .ToDictionary(group => group.Key, group => string.Join("; ", group.Select(item => item.Reason).Distinct()));
         var appliedIncomeLookup = worksheetData.Allocations
             .Where(allocation =>
@@ -470,13 +470,14 @@ public sealed class FinanceService(
             .GroupBy(allocation => (
                 allocation.AccrualAccountingMonth,
                 allocation.IncomeTypeId,
-                allocation.IncomeTypeName))
+                allocation.IncomeTypeName,
+                allocation.FeeCampaignId))
             .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
         var appliedPaymentLookup = worksheetData.Allocations
             .Where(allocation =>
                 allocation.PaymentAccountingMonth >= monthFrom &&
                 allocation.PaymentAccountingMonth <= monthTo)
-            .GroupBy(allocation => (allocation.PaymentAccountingMonth, allocation.IncomeTypeId))
+            .GroupBy(allocation => (allocation.PaymentAccountingMonth, allocation.PaymentIncomeTypeId))
             .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
         var advanceLookup = worksheetData.IncomeBuckets.ToDictionary(
             bucket => (bucket.AccountingMonth, bucket.IncomeTypeId),
@@ -509,7 +510,8 @@ public sealed class FinanceService(
                 bucket.IncomeTypeId,
                 bucket.IncomeTypeName,
                 bucket.IrregularPaymentId,
-                bucket.IrregularPaymentIsAvailable))
+                bucket.IrregularPaymentIsAvailable,
+                bucket.FeeCampaignId))
             .Select(group => group.First())
             .OrderByDescending(bucket => bucket.AccountingMonth)
             .ThenBy(bucket => bucket.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
@@ -518,9 +520,9 @@ public sealed class FinanceService(
         var rows = keys.Select(key =>
         {
             var accrualAmount = MoneyMath.RoundMoney(accrualLookup
-                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName))?.Amount ?? 0m);
+                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId))?.Amount ?? 0m);
             var incomeAmount = appliedIncomeLookup
-                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName));
+                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId));
             var advanceAmount = advanceDisplayKeys.Contains((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName))
                 ? advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))
                 : 0m;
@@ -544,10 +546,11 @@ public sealed class FinanceService(
                 incomeAmount,
                 advanceAmount,
                 debt,
+                FeeCampaignId: key.FeeCampaignId,
                 IrregularPaymentId: key.IrregularPaymentId,
                 IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
-                CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName)),
-                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName)));
+                CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)),
+                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)));
         }).ToList();
 
         foreach (var annualAccrual in worksheetData.AnnualAccruals)
@@ -595,23 +598,61 @@ public sealed class FinanceService(
             }
         }
 
-        rows = rows
-            .Select(row =>
+        foreach (var option in feeCampaignOptions)
+        {
+            var campaign = option.Campaign;
+            var accrual = option.Accrual;
+            if (accrual is not null)
             {
-                var option = feeCampaignOptions.FirstOrDefault(item =>
-                    item.Accrual is not null &&
-                    item.Accrual.AccountingMonth == row.AccountingMonth &&
-                    item.Campaign.IncomeTypeId == row.IncomeTypeId &&
-                    string.Equals(item.Campaign.Name, row.IncomeTypeName, StringComparison.Ordinal));
-                return option is null
-                    ? row
-                    : row with
-                    {
-                        FeeCampaignId = option.Campaign.Id,
-                        FeeCampaignRemainingAmount = MoneyMath.RoundMoney(Math.Max(option.Campaign.TargetAmount - option.CollectedAmount, 0m))
-                    };
-            })
-            .Where(row => !row.FeeCampaignId.HasValue || row.FeeCampaignRemainingAmount > 0m)
+                rows.RemoveAll(row => row.FeeCampaignId == campaign.Id);
+            }
+
+            if (campaign.ClosedAtUtc.HasValue || accrual is null)
+            {
+                continue;
+            }
+
+            var campaignRemaining = MoneyMath.RoundMoney(Math.Max(campaign.TargetAmount - option.CollectedAmount, 0m));
+            var allocations = worksheetData.Allocations
+                .Where(allocation => allocation.AccrualId == accrual.Id && allocation.PaymentAccountingMonth <= monthTo)
+                .ToList();
+            var paidBeforePeriod = MoneyMath.RoundMoney(allocations
+                .Where(allocation => allocation.PaymentAccountingMonth < monthFrom)
+                .Sum(allocation => allocation.Amount));
+            var paidInPeriod = MoneyMath.RoundMoney(allocations
+                .Where(allocation => allocation.PaymentAccountingMonth >= monthFrom)
+                .Sum(allocation => allocation.Amount));
+            var payable = MoneyMath.RoundMoney(Math.Max(accrual.Amount - paidBeforePeriod, 0m));
+            var debt = MoneyMath.RoundMoney(Math.Max(payable - paidInPeriod, 0m));
+            if (campaignRemaining <= 0m || debt <= 0m)
+            {
+                continue;
+            }
+
+            rows.Add(new GarageIncomeWorksheetRowDto(
+                monthTo,
+                accrual.IncomeTypeId,
+                campaign.Name,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                accrual.AccountingMonth >= monthFrom && accrual.AccountingMonth <= monthTo
+                    ? MoneyMath.RoundMoney(accrual.Amount)
+                    : 0m,
+                payable,
+                paidInPeriod,
+                0m,
+                debt,
+                FeeCampaignId: campaign.Id,
+                FeeCampaignRemainingAmount: campaignRemaining,
+                Reason: accrual.Comment));
+        }
+
+        rows = rows
             .Where(row => !row.IrregularPaymentId.HasValue ||
                 (worksheetData.AccrualBuckets.Any(bucket =>
                      bucket.AccountingMonth == row.AccountingMonth &&
@@ -1471,6 +1512,10 @@ public sealed class FinanceService(
             ? await feeCampaignRepository.AcquirePaymentLockAsync(request.FeeCampaignId.Value, cancellationToken)
             : null;
         FeeCampaign? feeCampaign = null;
+        IReadOnlyList<Accrual> feeCampaignAccruals = [];
+        IReadOnlyDictionary<Guid, decimal> feeCampaignPaidAmounts = new Dictionary<Guid, decimal>();
+        decimal feeCampaignRequiredGarageAmount = 0m;
+        var shouldAutomaticallyCloseFeeCampaign = false;
         decimal collectedBefore = 0m;
         if (request.FeeCampaignId.HasValue)
         {
@@ -1484,22 +1529,73 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure("fee_campaign_payment_invalid", "Сбор недоступен выбранному гаражу.");
             }
-            collectedBefore = MoneyMath.RoundMoney(await feeCampaignRepository.GetCollectedAmountAsync(feeCampaign.Id, cancellationToken));
+            feeCampaignAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(feeCampaign.Id, cancellationToken);
+        }
+
+        await using var receiptBatchLock = request.ReceiptBatchId is Guid directReceiptBatchId
+            ? await financialOperationRepository.AcquireReceiptBatchLockAsync(
+                directReceiptBatchId,
+                cancellationToken)
+            : null;
+
+        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            FinanceBalanceAccounts.Cash,
+            cancellationToken);
+        var paymentAllocationKey = new AccrualPaymentAllocationKey(garage.Id, incomeType.Id);
+        var lockedAllocationKeys = (feeCampaign is null
+                ? []
+                : FeeCampaignAccrualSettlement.BuildCampaignWideAllocationKeys(
+                    feeCampaignAccruals,
+                    [incomeType.Id],
+                    [garage.Id]))
+            .Append(paymentAllocationKey)
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            lockedAllocationKeys,
+            cancellationToken);
+
+        IReadOnlyList<Accrual> feeCampaignAccrualsToNormalize = [];
+        Accrual? garageFeeCampaignAccrual = null;
+        if (feeCampaign is not null)
+        {
+            collectedBefore = MoneyMath.RoundMoney(
+                await feeCampaignRepository.GetCollectedAmountAsync(feeCampaign.Id, cancellationToken));
             var available = MoneyMath.RoundMoney(Math.Max(feeCampaign.TargetAmount - collectedBefore, 0m));
             if (available <= 0m || MoneyMath.RoundMoney(request.Amount) > available)
             {
-                return FinanceResult<FinancialOperationDto>.Failure("fee_campaign_amount_exceeds_remaining", $"По сбору осталось оплатить не более {MoneyFormatting.Format(available)}.");
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "fee_campaign_amount_exceeds_remaining",
+                    $"По сбору осталось оплатить не более {MoneyFormatting.Format(available)}.");
             }
 
-            var accruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(feeCampaign.Id, cancellationToken);
-            var garageAccrual = accruals.FirstOrDefault(item => item.GarageId == garage.Id);
-            var paidByGarage = await feeCampaignRepository.GetPaidAmountsByGarageAsync(feeCampaign.Id, cancellationToken);
-            var requiredAmount = MoneyMath.RoundMoney(paidByGarage.GetValueOrDefault(garage.Id) + request.Amount);
-            if (garageAccrual is null)
+            feeCampaignPaidAmounts = await feeCampaignRepository.GetPaidAmountsByGarageAsync(
+                feeCampaign.Id,
+                cancellationToken);
+            feeCampaignRequiredGarageAmount = MoneyMath.RoundMoney(
+                feeCampaignPaidAmounts.GetValueOrDefault(garage.Id) + request.Amount);
+            shouldAutomaticallyCloseFeeCampaign =
+                MoneyMath.RoundMoney(collectedBefore + request.Amount) >= feeCampaign.TargetAmount;
+            feeCampaignAccrualsToNormalize = shouldAutomaticallyCloseFeeCampaign
+                ? feeCampaignAccruals
+                : feeCampaignAccruals.Where(accrual => accrual.GarageId == garage.Id).ToArray();
+
+            var changedAtUtc = timeProvider.GetUtcNow();
+            foreach (var accrual in feeCampaignAccrualsToNormalize.Where(accrual => accrual.IncomeTypeId != incomeType.Id))
+            {
+                accrual.IncomeTypeId = incomeType.Id;
+                accrual.IncomeType = incomeType;
+                accrual.UpdatedAtUtc = changedAtUtc;
+            }
+            garageFeeCampaignAccrual = FeeCampaignAccrualSettlement.CollapseOpenGarageAccruals(
+                feeCampaignAccruals.Where(accrual => accrual.GarageId == garage.Id),
+                changedAtUtc);
+            if (garageFeeCampaignAccrual is null)
             {
                 var month = MonthPeriod.Normalize(request.AccountingMonth);
                 var dueDates = AccrualDueDates.ForFeeCampaign(month, feeCampaign.EndsOn, feeCampaign.OverdueGraceDays);
-                garageAccrual = new Accrual
+                garageFeeCampaignAccrual = new Accrual
                 {
                     GarageId = garage.Id,
                     Garage = garage,
@@ -1510,28 +1606,20 @@ public sealed class FinanceService(
                     AccountingMonth = month,
                     DueDate = dueDates.DueDate,
                     OverdueFromDate = dueDates.OverdueFromDate,
-                    Amount = requiredAmount,
+                    Amount = feeCampaignRequiredGarageAmount,
                     Source = AccrualSources.FeeCampaign,
                     Basis = feeCampaign.Name,
                     Comment = BuildFeeCampaignAccrualComment(feeCampaign, null)
                 };
-                accrualRepository.Add(garageAccrual);
+                accrualRepository.Add(garageFeeCampaignAccrual);
             }
-            else if (garageAccrual.Amount < requiredAmount)
+            else if (garageFeeCampaignAccrual.Amount < feeCampaignRequiredGarageAmount)
             {
-                garageAccrual.Amount = requiredAmount;
-                garageAccrual.Basis = feeCampaign.Name;
-                garageAccrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+                garageFeeCampaignAccrual.Amount = feeCampaignRequiredGarageAmount;
+                garageFeeCampaignAccrual.Basis = feeCampaign.Name;
+                garageFeeCampaignAccrual.UpdatedAtUtc = changedAtUtc;
             }
         }
-
-        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
-        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
-            FinanceBalanceAccounts.Cash,
-            cancellationToken);
-        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            [new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
-            cancellationToken);
 
         if (irregularPayment is not null)
         {
@@ -1594,12 +1682,15 @@ public sealed class FinanceService(
         };
 
         financialOperationRepository.Add(operation);
-        await RebuildPaymentAllocationsAsync(
-            [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
-            actorUserId,
-            "Создание поступления",
-            operation.Id,
-            cancellationToken);
+        if (!shouldAutomaticallyCloseFeeCampaign)
+        {
+            await RebuildPaymentAllocationsAsync(
+                lockedAllocationKeys,
+                actorUserId,
+                "Создание поступления",
+                operation.Id,
+                cancellationToken);
+        }
         AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
         var assignmentResult = await incomeFundAssignmentService.CreateAsync(operation, actorUserId, cancellationToken);
         if (!assignmentResult.Succeeded)
@@ -1610,25 +1701,30 @@ public sealed class FinanceService(
         }
         if (feeCampaign is not null)
         {
-            var paidByGarage = (await feeCampaignRepository.GetPaidAmountsByGarageAsync(feeCampaign.Id, cancellationToken)).ToDictionary(item => item.Key, item => item.Value);
+            var paidByGarage = feeCampaignPaidAmounts.ToDictionary(item => item.Key, item => item.Value);
             paidByGarage[garage.Id] = MoneyMath.RoundMoney(paidByGarage.GetValueOrDefault(garage.Id) + operation.Amount);
-            var settlementAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(feeCampaign.Id, cancellationToken);
-            foreach (var group in settlementAccruals.GroupBy(item => item.GarageId))
+            if (shouldAutomaticallyCloseFeeCampaign)
             {
-                var paid = paidByGarage.GetValueOrDefault(group.Key);
-                var primary = group.First();
-                if (paid <= 0m)
-                {
-                    foreach (var accrual in group) accrual.IsCanceled = true;
-                    continue;
-                }
-                primary.Amount = paid;
-                primary.Basis = feeCampaign.Name;
-                foreach (var duplicateAccrual in group.Skip(1)) duplicateAccrual.IsCanceled = true;
-            }
-            if (MoneyMath.RoundMoney(collectedBefore + operation.Amount) >= feeCampaign.TargetAmount)
-            {
-                feeCampaign.ClosedAtUtc = timeProvider.GetUtcNow();
+                var closedAtUtc = timeProvider.GetUtcNow();
+                var settlementAccruals = feeCampaignAccruals
+                    .Append(garageFeeCampaignAccrual!)
+                    .DistinctBy(accrual => accrual.Id)
+                    .ToArray();
+                var settlementKeys = FeeCampaignAccrualSettlement.SettleClosedCampaign(
+                    settlementAccruals,
+                    paidByGarage,
+                    closedAtUtc)
+                    .Concat(lockedAllocationKeys)
+                    .Distinct()
+                    .ToArray();
+                await RebuildPaymentAllocationsAsync(
+                    settlementKeys,
+                    actorUserId,
+                    "Автоматическое закрытие сбора",
+                    feeCampaign.Id,
+                    cancellationToken);
+
+                feeCampaign.ClosedAtUtc = closedAtUtc;
                 feeCampaign.ClosedByUserId = actorUserId;
                 feeCampaign.IsClosedEarly = false;
                 feeCampaign.ClosureComment = "Сбор закрыт автоматически после достижения полной суммы.";
@@ -1675,6 +1771,15 @@ public sealed class FinanceService(
                 "Строка полной оплаты не может одновременно относиться к сбору и нерегулярному начислению.");
         }
 
+        if (normalizedLines.Any(line =>
+                line.IsOpeningDebt &&
+                (line.FeeCampaignId.HasValue || line.IrregularPaymentId.HasValue)))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_line_kind_invalid",
+                "Оплата входящего долга не может быть связана со сбором или нерегулярным начислением.");
+        }
+
         if (normalizedLines.Any(line => line.IsOpeningDebt == line.IncomeTypeId.HasValue))
         {
             return FinanceResult<FullGaragePaymentDto>.Failure(
@@ -1715,6 +1820,79 @@ public sealed class FinanceService(
             return FinanceResult<FullGaragePaymentDto>.Failure(
                 "income_type_not_found",
                 "Один из видов поступления полной оплаты не найден или архивирован.");
+        }
+
+
+        var receiptBatchId = request.ReceiptBatchId ?? Guid.NewGuid();
+        var feeCampaignIds = normalizedLines
+            .Where(line => line.FeeCampaignId.HasValue)
+            .Select(line => line.FeeCampaignId!.Value)
+            .Distinct()
+            .Order()
+            .ToArray();
+        await using var campaignLocks = await AcquireFeeCampaignLocksAsync(feeCampaignIds, cancellationToken);
+        await using var receiptBatchLock = await financialOperationRepository.AcquireReceiptBatchLockAsync(
+            receiptBatchId,
+            cancellationToken);
+
+        var existingBatch = await financialOperationRepository.GetByReceiptBatchIdAsync(
+            receiptBatchId,
+            cancellationToken);
+        if (existingBatch.Count > 0)
+        {
+            var orderedExistingBatch = MatchFullPaymentBatch(existingBatch, normalizedLines);
+            if (existingBatch.Any(operation =>
+                    operation.GarageId != garage.Id ||
+                    operation.OperationDate != request.OperationDate) ||
+                orderedExistingBatch is null)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "receipt_batch_conflict",
+                    "Пакет единой квитанции уже связан с другой полной оплатой.");
+            }
+
+            var existingOperationDtos = await ToOperationDtosAsync(orderedExistingBatch, cancellationToken);
+            return FinanceResult<FullGaragePaymentDto>.Success(new FullGaragePaymentDto(
+                receiptBatchId,
+                MoneyMath.RoundMoney(orderedExistingBatch.Sum(operation => operation.Amount)),
+                existingOperationDtos));
+        }
+
+        var feeCampaignStates = new Dictionary<Guid, FullPaymentFeeCampaignState>();
+        foreach (var campaignGroup in normalizedLines
+                     .Where(line => line.FeeCampaignId.HasValue)
+                     .GroupBy(line => line.FeeCampaignId!.Value)
+                     .OrderBy(group => group.Key))
+        {
+            var campaign = await feeCampaignRepository.FindActiveForAccrualGenerationAsync(
+                campaignGroup.Key,
+                cancellationToken);
+            if (campaign is null || campaign.IsArchived || campaign.ClosedAtUtc.HasValue)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "fee_campaign_closed",
+                    "Один из сборов уже закрыт. Обновите расчёт полной оплаты.");
+            }
+
+            if (campaignGroup.Any(line => line.IncomeTypeId != campaign.IncomeTypeId) ||
+                (!campaign.AppliesToAllGarages && campaign.ParticipantGarages.All(item => item.GarageId != garage.Id)))
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "fee_campaign_payment_invalid",
+                    "Один из сборов недоступен выбранному гаражу или виду поступления.");
+            }
+
+            var batchAmount = MoneyMath.RoundMoney(campaignGroup.Sum(line => line.Amount));
+            var accruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
+                campaign.Id,
+                cancellationToken);
+            feeCampaignStates.Add(campaign.Id, new FullPaymentFeeCampaignState(
+                campaign,
+                accruals,
+                new Dictionary<Guid, decimal>(),
+                batchAmount,
+                batchAmount,
+                false));
         }
 
         await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
@@ -1761,30 +1939,6 @@ public sealed class FinanceService(
                     "irregular_payment_amount_exceeds_remaining",
                     $"По нерегулярному начислению осталось оплатить не более {MoneyFormatting.Format(remaining)}.");
             }
-        }
-
-        var receiptBatchId = request.ReceiptBatchId ?? Guid.NewGuid();
-        var existingBatch = await financialOperationRepository.GetByReceiptBatchIdAsync(
-            receiptBatchId,
-            cancellationToken);
-        if (existingBatch.Count > 0)
-        {
-            var orderedExistingBatch = MatchFullPaymentBatch(existingBatch, normalizedLines);
-            if (existingBatch.Any(operation =>
-                    operation.GarageId != garage.Id ||
-                    operation.OperationDate != request.OperationDate) ||
-                orderedExistingBatch is null)
-            {
-                return FinanceResult<FullGaragePaymentDto>.Failure(
-                    "receipt_batch_conflict",
-                    "Пакет единой квитанции уже связан с другой полной оплатой.");
-            }
-
-            var existingOperationDtos = await ToOperationDtosAsync(orderedExistingBatch, cancellationToken);
-            return FinanceResult<FullGaragePaymentDto>.Success(new FullGaragePaymentDto(
-                receiptBatchId,
-                MoneyMath.RoundMoney(orderedExistingBatch.Sum(operation => operation.Amount)),
-                existingOperationDtos));
         }
 
         if (await financialOperationRepository.ReceiptBatchConflictExistsAsync(
@@ -1846,6 +2000,9 @@ public sealed class FinanceService(
                 IncomeTypeId = incomeType.Id,
                 IncomeType = incomeType,
                 FeeCampaignId = line.FeeCampaignId,
+                FeeCampaign = line.FeeCampaignId.HasValue
+                    ? feeCampaignStates[line.FeeCampaignId.Value].Campaign
+                    : null,
                 IrregularPaymentId = line.IrregularPaymentId,
                 IrregularPayment = line.IrregularPaymentId.HasValue && irregularPayments.TryGetValue(line.IrregularPaymentId.Value, out var irregularPayment)
                     ? irregularPayment
@@ -1859,11 +2016,124 @@ public sealed class FinanceService(
 
         var allocationKeys = operations
             .Select(operation => new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value))
+            .Concat(feeCampaignStates.Values
+                .SelectMany(state => FeeCampaignAccrualSettlement.BuildCampaignWideAllocationKeys(
+                    state.Accruals,
+                    [state.Campaign.IncomeTypeId],
+                    [garage.Id])))
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             allocationKeys,
             cancellationToken);
+
+        foreach (var campaignId in feeCampaignStates.Keys.Order().ToArray())
+        {
+            var state = feeCampaignStates[campaignId];
+            var collectedBefore = MoneyMath.RoundMoney(
+                await feeCampaignRepository.GetCollectedAmountAsync(campaignId, cancellationToken));
+            var available = MoneyMath.RoundMoney(Math.Max(state.Campaign.TargetAmount - collectedBefore, 0m));
+            if (available <= 0m || state.BatchAmount > available)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "fee_campaign_amount_exceeds_remaining",
+                    $"По сбору {state.Campaign.Name} осталось оплатить не более {MoneyFormatting.Format(available)}.");
+            }
+
+            var paidAmounts = await feeCampaignRepository.GetPaidAmountsByGarageAsync(
+                campaignId,
+                cancellationToken);
+            feeCampaignStates[campaignId] = state with
+            {
+                PaidAmounts = paidAmounts,
+                RequiredGarageAmount = MoneyMath.RoundMoney(
+                    paidAmounts.GetValueOrDefault(garage.Id) + state.BatchAmount),
+                ShouldAutomaticallyClose =
+                    MoneyMath.RoundMoney(collectedBefore + state.BatchAmount) >= state.Campaign.TargetAmount
+            };
+        }
+
+        var feeCampaignPrincipals = new Dictionary<Guid, Accrual>();
+        foreach (var state in feeCampaignStates.Values)
+        {
+            var changedAtUtc = timeProvider.GetUtcNow();
+            var campaignIncomeType = incomeTypes[state.Campaign.IncomeTypeId];
+            IEnumerable<Accrual> accrualsToNormalize = state.ShouldAutomaticallyClose
+                ? state.Accruals
+                : state.Accruals.Where(accrual => accrual.GarageId == garage.Id);
+            foreach (var accrual in accrualsToNormalize.Where(accrual => accrual.IncomeTypeId != campaignIncomeType.Id))
+            {
+                accrual.IncomeTypeId = campaignIncomeType.Id;
+                accrual.IncomeType = campaignIncomeType;
+                accrual.UpdatedAtUtc = changedAtUtc;
+            }
+            var principal = FeeCampaignAccrualSettlement.CollapseOpenGarageAccruals(
+                state.Accruals.Where(accrual => accrual.GarageId == garage.Id),
+                changedAtUtc);
+            if (principal is null)
+            {
+                var month = normalizedLines
+                    .Where(line => line.FeeCampaignId == state.Campaign.Id)
+                    .Min(line => line.AccountingMonth);
+                var dueDates = AccrualDueDates.ForFeeCampaign(
+                    month,
+                    state.Campaign.EndsOn,
+                    state.Campaign.OverdueGraceDays);
+                var incomeType = incomeTypes[state.Campaign.IncomeTypeId];
+                principal = new Accrual
+                {
+                    GarageId = garage.Id,
+                    Garage = garage,
+                    IncomeTypeId = incomeType.Id,
+                    IncomeType = incomeType,
+                    FeeCampaignId = state.Campaign.Id,
+                    FeeCampaign = state.Campaign,
+                    AccountingMonth = month,
+                    DueDate = dueDates.DueDate,
+                    OverdueFromDate = dueDates.OverdueFromDate,
+                    Amount = state.RequiredGarageAmount,
+                    Source = AccrualSources.FeeCampaign,
+                    Basis = state.Campaign.Name,
+                    Comment = BuildFeeCampaignAccrualComment(state.Campaign, null)
+                };
+                accrualRepository.Add(principal);
+            }
+            else if (principal.Amount < state.RequiredGarageAmount)
+            {
+                principal.Amount = state.RequiredGarageAmount;
+                principal.Basis = state.Campaign.Name;
+                principal.UpdatedAtUtc = changedAtUtc;
+            }
+
+            feeCampaignPrincipals.Add(state.Campaign.Id, principal);
+        }
+
+        foreach (var state in feeCampaignStates.Values.Where(state => state.ShouldAutomaticallyClose))
+        {
+            var paidByGarage = state.PaidAmounts.ToDictionary(item => item.Key, item => item.Value);
+            paidByGarage[garage.Id] = MoneyMath.RoundMoney(
+                paidByGarage.GetValueOrDefault(garage.Id) + state.BatchAmount);
+            var closedAtUtc = timeProvider.GetUtcNow();
+            FeeCampaignAccrualSettlement.SettleClosedCampaign(
+                state.Accruals
+                    .Append(feeCampaignPrincipals[state.Campaign.Id])
+                    .DistinctBy(accrual => accrual.Id)
+                    .ToArray(),
+                paidByGarage,
+                closedAtUtc);
+            state.Campaign.ClosedAtUtc = closedAtUtc;
+            state.Campaign.ClosedByUserId = actorUserId;
+            state.Campaign.IsClosedEarly = false;
+            state.Campaign.ClosureComment = "Сбор закрыт автоматически после достижения полной суммы.";
+            state.Campaign.UpdatedAtUtc = closedAtUtc;
+            AddAudit(
+                actorUserId,
+                "dictionary.fee_campaign_closed_automatically",
+                "fee_campaign",
+                state.Campaign.Id,
+                $"Сбор {state.Campaign.Name} закрыт автоматически: собрано {state.Campaign.TargetAmount:F2}.");
+        }
+
         await RebuildPaymentAllocationsAsync(
             allocationKeys,
             actorUserId,
@@ -1945,6 +2215,38 @@ public sealed class FinanceService(
         }
 
         return unmatched.Count == 0 ? orderedMatches : null;
+    }
+
+    private async Task<IAsyncDisposable> AcquireFeeCampaignLocksAsync(
+        IReadOnlyCollection<Guid> feeCampaignIds,
+        CancellationToken cancellationToken)
+    {
+        if (feeCampaignIds.Count == 0)
+        {
+            return CompositeAsyncDisposable.Empty;
+        }
+
+        var leases = new List<IAsyncDisposable>(feeCampaignIds.Count);
+        try
+        {
+            foreach (var feeCampaignId in feeCampaignIds.Distinct().Order())
+            {
+                leases.Add(await feeCampaignRepository.AcquirePaymentLockAsync(
+                    feeCampaignId,
+                    cancellationToken));
+            }
+
+            return new CompositeAsyncDisposable(leases);
+        }
+        catch
+        {
+            for (var index = leases.Count - 1; index >= 0; index--)
+            {
+                await leases[index].DisposeAsync();
+            }
+
+            throw;
+        }
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateGarageDebtPaymentAsync(CreateGarageDebtPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -2142,7 +2444,9 @@ public sealed class FinanceService(
             ExpensePaymentType = expensePaymentType,
             ExpensePaymentSource = expensePaymentSource,
             CounterpartyName = supplier is null ? NormalizeOptional(request.CounterpartyName) : null,
-            NegativeFundBalanceConfirmed = allowNegativeFundBalance,
+            // The request flag is only an authorization for this attempt. Persist it below
+            // only when the completed fund disbursement actually leaves the fund tail negative.
+            NegativeFundBalanceConfirmed = false,
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
             SupplierId = supplier?.Id,
@@ -2172,6 +2476,28 @@ public sealed class FinanceService(
                 DocumentNumber = operation.DocumentNumber,
                 Comment = operation.Comment
             });
+        }
+
+        if (expenseFundId.HasValue)
+        {
+            var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+                operation,
+                supplier?.Name ?? operation.CounterpartyName ?? "получатель",
+                actorUserId,
+                allowNegativeFundBalance,
+                cancellationToken);
+            if (!fundDisbursementResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    fundDisbursementResult.ErrorCode!,
+                    fundDisbursementResult.ErrorMessage!);
+            }
+
+            operation.NegativeFundBalanceConfirmed = fundDisbursementResult.NegativeBalanceConfirmed;
+        }
+
+        if (isCashExpense && supplier is not null)
+        {
             AddAudit(
                 actorUserId,
                 "finance.atomic_cash_expense_created",
@@ -2181,22 +2507,6 @@ public sealed class FinanceService(
         else
         {
             AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
-        }
-
-        if (expenseFundId.HasValue)
-        {
-            var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
-                operation,
-                supplier?.Name ?? operation.CounterpartyName ?? "получатель",
-                actorUserId,
-                operation.NegativeFundBalanceConfirmed,
-                cancellationToken);
-            if (!fundDisbursementResult.Succeeded)
-            {
-                return FinanceResult<FinancialOperationDto>.Failure(
-                    fundDisbursementResult.ErrorCode!,
-                    fundDisbursementResult.ErrorMessage!);
-            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -2515,6 +2825,12 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        var linkedFeeCampaignIds = await financialOperationRepository.GetLinkedFeeCampaignIdsAsync(
+            operationId,
+            cancellationToken);
+        await using var feeCampaignLocks = await AcquireFeeCampaignLocksAsync(
+            linkedFeeCampaignIds,
+            cancellationToken);
         var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
@@ -2524,6 +2840,13 @@ public sealed class FinanceService(
         if (operation.OperationKind != FinancialOperationKinds.Income)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_kind_mismatch", "Эта операция не является поступлением.");
+        }
+
+        if (linkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue || operation.IrregularPaymentId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "targeted_income_update_forbidden",
+                "Целевое поступление нельзя редактировать. Отмените ошибочный платеж, пока обязательство доступно, и создайте новый.");
         }
 
         if (operation.IsCanceled)
@@ -2552,6 +2875,10 @@ public sealed class FinanceService(
         var amount = MoneyMath.RoundMoney(request.Amount);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
         var comment = NormalizeOptional(request.Comment);
+        var oldAllocationKey = new AccrualPaymentAllocationKey(
+            operation.GarageId!.Value,
+            operation.IncomeTypeId!.Value);
+        var newAllocationKey = new AccrualPaymentAllocationKey(garage.Id, incomeType.Id);
         if (IncomeOperationMatches(operation, request.OperationDate, accountingMonth, amount, documentNumber, comment, garage.Id, incomeType.Id))
         {
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -2561,6 +2888,19 @@ public sealed class FinanceService(
         await using var cashBalanceLock = amount < operation.Amount
             ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(FinanceBalanceAccounts.Cash, cancellationToken)
             : null;
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [oldAllocationKey, newAllocationKey],
+            cancellationToken);
+        var refreshedLinkedFeeCampaignIds = await financialOperationRepository.GetLinkedFeeCampaignIdsAsync(
+            operationId,
+            cancellationToken);
+        if (refreshedLinkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "targeted_income_update_forbidden",
+                "Целевое поступление нельзя редактировать. Отмените ошибочный платеж, пока обязательство доступно, и создайте новый.");
+        }
+
         var reductionAmount = MoneyMath.RoundMoney(operation.Amount - amount);
         if (reductionAmount > 0m)
         {
@@ -2587,7 +2927,6 @@ public sealed class FinanceService(
                 assignmentResult.ErrorMessage!);
         }
 
-        var oldAllocationKey = new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value);
         var previousSnapshot = FormatIncomeOperationSnapshot(operation);
         var oldValues = new Dictionary<string, object?>
         {
@@ -2619,11 +2958,8 @@ public sealed class FinanceService(
         operation.IncomeTypeId = incomeType.Id;
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            [oldAllocationKey, new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
-            cancellationToken);
         await RebuildPaymentAllocationsAsync(
-            [oldAllocationKey, new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
+            [oldAllocationKey, newAllocationKey],
             actorUserId,
             "Изменение поступления",
             operation.Id,
@@ -2806,7 +3142,9 @@ public sealed class FinanceService(
         operation.ExpensePaymentType = expensePaymentType;
         operation.ExpensePaymentSource = expensePaymentSource;
         operation.CounterpartyName = null;
-        operation.NegativeFundBalanceConfirmed = allowNegativeFundBalance;
+        // The request flag authorizes a negative result but must not become a durable
+        // restore authorization unless this update really leaves the fund tail negative.
+        operation.NegativeFundBalanceConfirmed = false;
         operation.DocumentNumber = documentNumber;
         operation.Comment = comment;
         operation.SupplierId = supplier.Id;
@@ -2883,6 +3221,8 @@ public sealed class FinanceService(
                 fundDisbursementResult.ErrorMessage!);
         }
 
+        operation.NegativeFundBalanceConfirmed = fundDisbursementResult.NegativeBalanceConfirmed;
+
         AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -2896,10 +3236,22 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_cancel_reason_required", "Для отмены операции нужна причина.");
         }
 
+        var linkedFeeCampaignIds = await financialOperationRepository.GetLinkedFeeCampaignIdsAsync(
+            operationId,
+            cancellationToken);
+        await using var feeCampaignLocks = await AcquireFeeCampaignLocksAsync(
+            linkedFeeCampaignIds,
+            cancellationToken);
         var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
+        }
+        if (linkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "fee_campaign_payment_mutation_forbidden",
+                "Платеж по сбору нельзя отменить вручную. Корректность обязательства фиксируется жизненным циклом сбора.");
         }
 
         if (operation.IsCanceled)
@@ -2921,6 +3273,27 @@ public sealed class FinanceService(
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             balanceAccounts,
             cancellationToken);
+        var incomeAllocationKey = operation.OperationKind == FinancialOperationKinds.Income
+            ? new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)
+            : null;
+        await using var incomeAllocationLock = incomeAllocationKey is not null
+            ? await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                [incomeAllocationKey],
+                cancellationToken)
+            : null;
+        if (incomeAllocationKey is not null)
+        {
+            var refreshedLinkedFeeCampaignIds = await financialOperationRepository.GetLinkedFeeCampaignIdsAsync(
+                operationId,
+                cancellationToken);
+            if (refreshedLinkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "fee_campaign_payment_mutation_forbidden",
+                    "Платеж по сбору нельзя отменить вручную. Корректность обязательства фиксируется жизненным циклом сбора.");
+            }
+        }
+
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
             var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
@@ -2984,11 +3357,8 @@ public sealed class FinanceService(
 
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
-            await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
-                cancellationToken);
             await RebuildPaymentAllocationsAsync(
-                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                [incomeAllocationKey!],
                 actorUserId,
                 "Отмена поступления",
                 operation.Id,
@@ -3001,10 +3371,22 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> RestoreOperationAsync(Guid operationId, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        var linkedFeeCampaignIds = await financialOperationRepository.GetLinkedFeeCampaignIdsAsync(
+            operationId,
+            cancellationToken);
+        await using var feeCampaignLocks = await AcquireFeeCampaignLocksAsync(
+            linkedFeeCampaignIds,
+            cancellationToken);
         var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
+        }
+        if (linkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "fee_campaign_payment_mutation_forbidden",
+                "Платеж по сбору нельзя восстановить вручную. Создайте корректный платеж по актуальному открытому сбору.");
         }
 
         if (!operation.IsCanceled)
@@ -3031,6 +3413,26 @@ public sealed class FinanceService(
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             balanceAccounts,
             cancellationToken);
+        var incomeAllocationKey = operation.OperationKind == FinancialOperationKinds.Income
+            ? new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)
+            : null;
+        await using var incomeAllocationLock = incomeAllocationKey is not null
+            ? await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                [incomeAllocationKey],
+                cancellationToken)
+            : null;
+        if (incomeAllocationKey is not null)
+        {
+            var refreshedLinkedFeeCampaignIds = await financialOperationRepository.GetLinkedFeeCampaignIdsAsync(
+                operationId,
+                cancellationToken);
+            if (refreshedLinkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "fee_campaign_payment_mutation_forbidden",
+                    "Платеж по сбору нельзя восстановить вручную. Создайте корректный платеж по актуальному открытому сбору.");
+            }
+        }
 
         SupplierAccrual? linkedAtomicAccrualToRestore = null;
         if (operation.OperationKind == FinancialOperationKinds.Expense)
@@ -3126,11 +3528,8 @@ public sealed class FinanceService(
 
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
-            await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
-                cancellationToken);
             await RebuildPaymentAllocationsAsync(
-                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                [incomeAllocationKey!],
                 actorUserId,
                 "Восстановление поступления",
                 operation.Id,
@@ -3149,10 +3548,20 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_cancel_reason_required", "Для отмены начисления нужна причина.");
         }
 
+        var feeCampaignId = await accrualRepository.GetFeeCampaignIdAsync(accrualId, cancellationToken);
+        await using var feeCampaignLock = feeCampaignId.HasValue
+            ? await feeCampaignRepository.AcquirePaymentLockAsync(feeCampaignId.Value, cancellationToken)
+            : null;
         var accrual = await accrualRepository.FindForUpdateAsync(accrualId, cancellationToken);
         if (accrual is null)
         {
             return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
+        }
+        if (accrual.FeeCampaignId.HasValue)
+        {
+            return FinanceResult<AccrualDto>.Failure(
+                "fee_campaign_accrual_mutation_forbidden",
+                "Начисление сбора нельзя отменить вручную. Оно изменяется только при расчёте или закрытии сбора.");
         }
 
         if (accrual.IsCanceled)
@@ -3178,10 +3587,31 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<AccrualDto>> RestoreAccrualAsync(Guid accrualId, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        var feeCampaignId = await accrualRepository.GetFeeCampaignIdAsync(accrualId, cancellationToken);
+        await using var feeCampaignLock = feeCampaignId.HasValue
+            ? await feeCampaignRepository.AcquirePaymentLockAsync(feeCampaignId.Value, cancellationToken)
+            : null;
         var accrual = await accrualRepository.FindForUpdateAsync(accrualId, cancellationToken);
         if (accrual is null)
         {
             return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
+        }
+        if (accrual.FeeCampaignId.HasValue)
+        {
+            if (await accrualRepository.ActiveFeeCampaignDuplicateExistsAsync(
+                    accrual.Id,
+                    accrual.GarageId,
+                    accrual.FeeCampaignId.Value,
+                    cancellationToken))
+            {
+                return FinanceResult<AccrualDto>.Failure(
+                    "accrual_duplicate",
+                    "Активное обязательство по этому сбору уже существует.");
+            }
+
+            return FinanceResult<AccrualDto>.Failure(
+                "fee_campaign_accrual_mutation_forbidden",
+                "Начисление сбора нельзя восстановить вручную. Оно изменяется только при расчёте или закрытии сбора.");
         }
 
         if (!accrual.IsCanceled)
@@ -3196,15 +3626,14 @@ public sealed class FinanceService(
                 accrual.IrregularPaymentId.Value,
                 accrual.AccountingMonth,
                 cancellationToken)
-            : accrual.Basis is not null
-                ? false
             : accrual.FeeCampaignId.HasValue
                 ? await accrualRepository.ActiveFeeCampaignDuplicateExistsAsync(
                     accrual.Id,
                     accrual.GarageId,
                     accrual.FeeCampaignId.Value,
-                    accrual.AccountingMonth,
                     cancellationToken)
+            : accrual.Basis is not null
+                ? false
             : await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 accrual.GarageId,
@@ -4168,6 +4597,9 @@ public sealed class FinanceService(
     public async Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
+        await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(
+            request.FeeCampaignId,
+            cancellationToken);
         var campaign = await feeCampaignRepository.FindActiveForAccrualGenerationAsync(request.FeeCampaignId, cancellationToken);
         if (campaign is null)
         {
@@ -4216,11 +4648,22 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");
         }
 
+        var campaignAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
+            campaign.Id,
+            cancellationToken);
+        var generationKeys = FeeCampaignAccrualSettlement.BuildCampaignWideAllocationKeys(
+            campaignAccruals,
+            [campaign.IncomeTypeId, incomeType.Id],
+            garages.Select(garage => garage.Id));
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            garages.Select(garage => new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)).ToArray(),
+            generationKeys,
             cancellationToken);
 
-        var existingGarageIds = await accrualRepository.GetActiveFeeCampaignGarageIdsAsync(campaign.Id, month, cancellationToken);
+        var destinationNormalized = NormalizeFeeCampaignIncomeDestination(
+            campaign,
+            incomeType,
+            actorUserId);
+        var existingGarageIds = await accrualRepository.GetActiveFeeCampaignGarageIdsAsync(campaign.Id, cancellationToken);
         var fullyPaidGarageIds = await accrualRepository.GetFullyPaidFeeCampaignGarageIdsBeforeMonthAsync(
             campaign.Id,
             month,
@@ -4231,7 +4674,9 @@ public sealed class FinanceService(
         {
             if (existingGarageIds.Contains(garage.Id))
             {
-                skipped.Add($"Гараж {garage.Number}: начисление сбора уже есть.");
+                skipped.Add(fullyPaidGarageIds.Contains(garage.Id)
+                    ? $"Гараж {garage.Number}: обязательство по сбору уже полностью оплачено."
+                    : $"Гараж {garage.Number}: непогашенное обязательство по сбору перенесено без повторного начисления.");
                 continue;
             }
 
@@ -4264,9 +4709,13 @@ public sealed class FinanceService(
 
         if (created.Count == 0)
         {
+            if (destinationNormalized)
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure(
                 "fee_campaign_accruals_empty",
-                "Новые начисления по сбору не требуются: выбранный месяц уже обработан или участники полностью оплатили предыдущие начисления.");
+                "Новые начисления по сбору не требуются: непогашенные обязательства перенесены без повторного начисления, а оплаченные обязательства не повторяются.");
         }
 
         AddAudit(
@@ -4344,7 +4793,7 @@ public sealed class FinanceService(
             }
             else if (result.ErrorCode == "fee_campaign_accruals_empty")
             {
-                skippedCampaigns.Add($"{candidate.Name}: новые начисления за {month:MM.yyyy} не требуются — месяц уже обработан или участники полностью оплатили сбор.");
+                skippedCampaigns.Add($"{candidate.Name}: новые начисления за {month:MM.yyyy} не требуются — непогашенные обязательства перенесены без повторного начисления, а оплаченные или закрытые обязательства не повторяются.");
             }
             else
             {
@@ -6888,7 +7337,10 @@ public sealed class FinanceService(
             var allocations = BuildPaymentAllocations(
                 allocationBuckets,
                 calculation.PreviousPaymentTotal + Math.Max(-startingBalance, 0),
-                operation.Amount);
+                operation.Amount,
+                operation.OperationKind == FinancialOperationKinds.Income
+                    ? operation.AccountingMonth
+                    : null);
             result.Add(operation.OperationKind == FinancialOperationKinds.Income
                 ? ToDto(operation, debtBefore, debtBefore - operation.Amount, null, null, allocations)
                 : ToDto(operation, null, null, debtBefore, debtBefore - operation.Amount, allocations));
@@ -6954,7 +7406,11 @@ public sealed class FinanceService(
         }
 
         buckets.AddRange(accrualBuckets);
-        return BuildPaymentAllocations(buckets, previousIncomeTotal + Math.Max(-startingBalance, 0), operation.Amount);
+        return BuildPaymentAllocations(
+            buckets,
+            previousIncomeTotal + Math.Max(-startingBalance, 0),
+            operation.Amount,
+            operation.AccountingMonth);
     }
 
     private async Task<decimal> CalculateSupplierDebtBeforeExpenseAsync(FinancialOperation operation, CancellationToken cancellationToken)
@@ -7002,14 +7458,20 @@ public sealed class FinanceService(
         return BuildPaymentAllocations(buckets, previousExpenseTotal + Math.Max(-startingBalance, 0), operation.Amount);
     }
 
-    private static IReadOnlyList<PaymentAllocationDto> BuildPaymentAllocations(IReadOnlyList<AllocationDebtBucket> buckets, decimal previousPaymentTotal, decimal paymentAmount)
+    private static IReadOnlyList<PaymentAllocationDto> BuildPaymentAllocations(
+        IReadOnlyList<AllocationDebtBucket> buckets,
+        decimal previousPaymentTotal,
+        decimal paymentAmount,
+        DateOnly? preferredAccountingMonth = null)
     {
         var remainingPreviousPayment = MoneyMath.RoundMoney(previousPaymentTotal);
         var remainingPayment = MoneyMath.RoundMoney(paymentAmount);
         var allocations = new List<PaymentAllocationDto>();
+        var currentDebts = new List<(AllocationDebtBucket Bucket, decimal Amount, int Index)>(buckets.Count);
 
-        foreach (var bucket in buckets)
+        for (var index = 0; index < buckets.Count; index++)
         {
+            var bucket = buckets[index];
             var debtBeforeCurrentPayment = MoneyMath.RoundMoney(bucket.Amount);
             if (remainingPreviousPayment > 0)
             {
@@ -7018,6 +7480,18 @@ public sealed class FinanceService(
                 remainingPreviousPayment = MoneyMath.RoundMoney(remainingPreviousPayment - previousPaid);
             }
 
+            currentDebts.Add((bucket, debtBeforeCurrentPayment, index));
+        }
+
+        foreach (var currentDebt in currentDebts
+                     .OrderBy(item => preferredAccountingMonth.HasValue &&
+                         item.Bucket.AccountingMonth == preferredAccountingMonth.Value
+                             ? 0
+                             : 1)
+                     .ThenBy(item => item.Index))
+        {
+            var bucket = currentDebt.Bucket;
+            var debtBeforeCurrentPayment = currentDebt.Amount;
             if (debtBeforeCurrentPayment <= 0 || remainingPayment <= 0)
             {
                 continue;
@@ -7182,10 +7656,58 @@ public sealed class FinanceService(
         DateOnly monthTo,
         CancellationToken cancellationToken)
     {
-        var options = await feeCampaignRepository.GetPaymentOptionsForGarageAsync(garageId, monthFrom, monthTo, cancellationToken);
-        var changedKeys = new List<AccrualPaymentAllocationKey>();
-        foreach (var option in options)
+        var candidates = await feeCampaignRepository.GetPaymentOptionsForGarageAsync(
+            garageId,
+            monthFrom,
+            monthTo,
+            cancellationToken);
+        if (candidates.Count == 0)
         {
+            return candidates;
+        }
+
+        var stableIncomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(
+            OtherIncomeIncomeTypeCode,
+            cancellationToken);
+        if (stableIncomeType is null ||
+            !stableIncomeType.IsSystem ||
+            !stableIncomeType.DestinationFundId.HasValue)
+        {
+            return candidates;
+        }
+
+        var campaignIds = candidates
+            .Select(option => option.Campaign.Id)
+            .Distinct()
+            .Order()
+            .ToArray();
+        foreach (var campaignId in campaignIds)
+        {
+            await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(
+                campaignId,
+                cancellationToken);
+            var campaignAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
+                campaignId,
+                cancellationToken);
+            var allocationKeys = FeeCampaignAccrualSettlement.BuildCampaignWideAllocationKeys(
+                    campaignAccruals,
+                    [stableIncomeType.Id],
+                    [garageId])
+                .ToHashSet();
+            await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                allocationKeys,
+                cancellationToken);
+            var option = await feeCampaignRepository.FindPaymentOptionForGarageForUpdateAsync(
+                campaignId,
+                garageId,
+                monthFrom,
+                monthTo,
+                cancellationToken);
+            if (option is null)
+            {
+                continue;
+            }
+
             if (option.Campaign.ClosedAtUtc.HasValue)
             {
                 continue;
@@ -7203,17 +7725,19 @@ public sealed class FinanceService(
             }
 
             var accrual = option.Accrual;
+            var destinationNormalized = NormalizeFeeCampaignIncomeDestination(
+                option.Campaign,
+                stableIncomeType,
+                null);
             var month = MonthPeriod.Normalize(option.Campaign.StartsOn);
-            if (month < monthFrom) month = monthFrom;
-            if (month > monthTo) month = monthTo;
             var dueDates = AccrualDueDates.ForFeeCampaign(month, option.Campaign.EndsOn, option.Campaign.OverdueGraceDays);
             if (accrual is null)
             {
                 accrual = new Accrual
                 {
                     GarageId = garageId,
-                    IncomeTypeId = option.Campaign.IncomeTypeId,
-                    IncomeType = option.Campaign.IncomeType,
+                    IncomeTypeId = stableIncomeType.Id,
+                    IncomeType = stableIncomeType,
                     FeeCampaignId = option.Campaign.Id,
                     FeeCampaign = option.Campaign,
                     AccountingMonth = month,
@@ -7230,15 +7754,31 @@ public sealed class FinanceService(
             {
                 var unpaidStandardShare = Math.Max(option.Campaign.ContributionAmount - option.PaidAmount, 0m);
                 var desiredAmount = MoneyMath.RoundMoney(option.PaidAmount + Math.Min(unpaidStandardShare, remaining));
-                if (accrual.Amount == desiredAmount && string.Equals(accrual.Basis, option.Campaign.Name, StringComparison.Ordinal))
+                var accrualRouteChanged = false;
+                if (accrual.IncomeTypeId != stableIncomeType.Id)
                 {
+                    allocationKeys.Add(new AccrualPaymentAllocationKey(garageId, accrual.IncomeTypeId));
+                    accrual.IncomeTypeId = stableIncomeType.Id;
+                    accrual.IncomeType = stableIncomeType;
+                    accrualRouteChanged = true;
+                }
+                var accrualChanged = accrual.Amount != desiredAmount ||
+                    !string.Equals(accrual.Basis, option.Campaign.Name, StringComparison.Ordinal) ||
+                    accrualRouteChanged;
+                if (!accrualChanged)
+                {
+                    if (destinationNormalized)
+                    {
+                        await unitOfWork.SaveChangesAsync(cancellationToken);
+                    }
                     continue;
                 }
                 accrual.Amount = desiredAmount;
                 accrual.Basis = option.Campaign.Name;
                 accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
             }
-            changedKeys.Add(new AccrualPaymentAllocationKey(garageId, option.Campaign.IncomeTypeId));
+            var allocationKey = new AccrualPaymentAllocationKey(garageId, stableIncomeType.Id);
+            allocationKeys.Add(allocationKey);
             AddAudit(
                 null,
                 "finance.fee_campaign_payment_calculated",
@@ -7254,17 +7794,61 @@ public sealed class FinanceService(
                     ["feeCampaignRemainingAmount"] = remaining,
                     ["amount"] = accrual.Amount
                 });
+            await RebuildPaymentAllocationsAsync(
+                allocationKeys,
+                null,
+                "Автоматический расчёт объявленного сбора",
+                garageId,
+                cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        if (changedKeys.Count > 0)
+        return await feeCampaignRepository.GetPaymentOptionsForGarageAsync(
+            garageId,
+            monthFrom,
+            monthTo,
+            cancellationToken);
+    }
+
+    private bool NormalizeFeeCampaignIncomeDestination(
+        FeeCampaign campaign,
+        IncomeType destination,
+        Guid? actorUserId)
+    {
+        if (campaign.IncomeTypeId == destination.Id)
         {
-            var keys = changedKeys.Distinct().ToArray();
-            await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(keys, cancellationToken);
-            await RebuildPaymentAllocationsAsync(keys, null, "Автоматический расчёт объявленного сбора", garageId, cancellationToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            options = await feeCampaignRepository.GetPaymentOptionsForGarageAsync(garageId, monthFrom, monthTo, cancellationToken);
+            return false;
         }
-        return options;
+
+        var previousIncomeTypeId = campaign.IncomeTypeId;
+        var previousIncomeTypeName = campaign.IncomeType?.Name;
+        campaign.IncomeTypeId = destination.Id;
+        campaign.IncomeType = destination;
+        campaign.UpdatedAtUtc = timeProvider.GetUtcNow();
+        AddAudit(
+            actorUserId,
+            "dictionary.fee_campaign_income_destination_normalized",
+            "fee_campaign",
+            campaign.Id,
+            $"Назначение сбора {campaign.Name} приведено к системному виду поступления {destination.Name}.",
+            metadata: new Dictionary<string, object?>
+            {
+                ["previousIncomeTypeId"] = previousIncomeTypeId,
+                ["previousIncomeTypeName"] = previousIncomeTypeName,
+                ["incomeTypeId"] = destination.Id,
+                ["incomeTypeName"] = destination.Name
+            },
+            oldValues: new Dictionary<string, object?>
+            {
+                ["incomeTypeId"] = previousIncomeTypeId,
+                ["incomeTypeName"] = previousIncomeTypeName
+            },
+            newValues: new Dictionary<string, object?>
+            {
+                ["incomeTypeId"] = destination.Id,
+                ["incomeTypeName"] = destination.Name
+            });
+        return true;
     }
 
     private static Guid? GetSupplierExpenseFundId(Supplier supplier) => supplier.ExpenseFundId;
@@ -7327,6 +7911,35 @@ public sealed class FinanceService(
     private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
 
     private sealed record AvailableAmounts(decimal BankAmount, decimal CashAmount);
+
+    private sealed record FullPaymentFeeCampaignState(
+        FeeCampaign Campaign,
+        IReadOnlyList<Accrual> Accruals,
+        IReadOnlyDictionary<Guid, decimal> PaidAmounts,
+        decimal BatchAmount,
+        decimal RequiredGarageAmount,
+        bool ShouldAutomaticallyClose);
+
+    private sealed class CompositeAsyncDisposable(IReadOnlyList<IAsyncDisposable> leases) : IAsyncDisposable
+    {
+        public static CompositeAsyncDisposable Empty { get; } = new([]);
+
+        private bool disposed;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+            for (var index = leases.Count - 1; index >= 0; index--)
+            {
+                await leases[index].DisposeAsync();
+            }
+        }
+    }
 
     private sealed record MeterReadingChainChange(
         MeterReading Reading,

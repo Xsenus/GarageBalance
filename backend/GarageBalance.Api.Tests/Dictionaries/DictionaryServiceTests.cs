@@ -225,6 +225,11 @@ public sealed class DictionaryServiceTests
         Assert.True(oldestActive.Succeeded, oldestActive.ErrorMessage);
         Assert.True(archived.Succeeded, archived.ErrorMessage);
         Assert.True(newestActive.Succeeded, newestActive.ErrorMessage);
+        Assert.True((await service.CloseFeeCampaignAsync(
+            archived.Value!.Id,
+            new CloseFeeCampaignRequest("Сбор завершён без начислений"),
+            null,
+            CancellationToken.None)).Succeeded);
         Assert.True((await service.ArchiveFeeCampaignAsync(archived.Value!.Id, "Сбор завершён", null, CancellationToken.None)).Succeeded);
 
         var campaigns = await service.GetFeeCampaignsAsync(null, CancellationToken.None, 2, includeArchived: true);
@@ -3966,6 +3971,11 @@ public sealed class DictionaryServiceTests
             actorUserId,
             CancellationToken.None);
         var emptyReason = await service.ArchiveFeeCampaignAsync(created.Value.Id, " ", actorUserId, CancellationToken.None);
+        var closed = await service.CloseFeeCampaignAsync(
+            created.Value.Id,
+            new CloseFeeCampaignRequest("Кампания завершена перед архивированием"),
+            actorUserId,
+            CancellationToken.None);
         var archived = await service.ArchiveFeeCampaignAsync(created.Value.Id, "No longer used", actorUserId, CancellationToken.None);
         var visibleAfterArchive = await service.GetFeeCampaignsAsync("gate", CancellationToken.None);
         var archivedCampaigns = await service.GetFeeCampaignsAsync("gate", CancellationToken.None, includeArchived: true);
@@ -3983,6 +3993,7 @@ public sealed class DictionaryServiceTests
         Assert.True(noOp.Succeeded);
         Assert.False(emptyReason.Succeeded);
         Assert.Equal("dictionary_archive_reason_required", emptyReason.ErrorCode);
+        Assert.True(closed.Succeeded, closed.ErrorMessage);
         Assert.True(archived.Succeeded);
         Assert.Empty(visibleAfterArchive);
         Assert.True(Assert.Single(archivedCampaigns).IsArchived);
@@ -3991,7 +4002,7 @@ public sealed class DictionaryServiceTests
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_updated" && item.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_archived" && item.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_restored" && item.ActorUserId == actorUserId);
-        Assert.Equal(3, database.Context.AuditEvents.Count());
+        Assert.Equal(4, database.Context.AuditEvents.Count());
     }
 
     [Fact]
@@ -4054,24 +4065,122 @@ public sealed class DictionaryServiceTests
             new UpsertFeeCampaignRequest("Изменённый сбор", otherIncome.Id, null, 500m, 0m, new DateOnly(2026, 7, 1), null, true, 30),
             actorUserId,
             CancellationToken.None);
+        var archived = await service.ArchiveFeeCampaignAsync(
+            campaign.Id,
+            "Проверка сохранения собранной суммы",
+            actorUserId,
+            CancellationToken.None);
+        var restored = await service.RestoreFeeCampaignAsync(
+            campaign.Id,
+            actorUserId,
+            CancellationToken.None);
 
         Assert.True(closed.Succeeded, closed.ErrorMessage);
+        Assert.Equal(500m, closed.Value!.CollectedAmount);
         Assert.NotNull(closed.Value!.ClosedAtUtc);
         Assert.False(closed.Value.IsClosedEarly);
         Assert.Null(closed.Value.ClosureComment);
         Assert.False(repeated.Succeeded);
         Assert.Equal("fee_campaign_already_closed", repeated.ErrorCode);
-        Assert.True(update.Succeeded, update.ErrorMessage);
-        Assert.Equal("Изменённый сбор", update.Value!.Name);
-        Assert.NotNull(update.Value.ClosedAtUtc);
+        Assert.False(update.Succeeded);
+        Assert.Equal("fee_campaign_closed", update.ErrorCode);
+        Assert.True(archived.Succeeded, archived.ErrorMessage);
+        Assert.Equal(500m, archived.Value!.CollectedAmount);
+        Assert.True(restored.Succeeded, restored.ErrorMessage);
+        Assert.Equal(500m, restored.Value!.CollectedAmount);
+        Assert.Equal("Закрываемый сбор", campaign.Name);
+        Assert.NotNull(campaign.ClosedAtUtc);
         Assert.Contains(database.Context.AuditEvents, item =>
             item.Action == "dictionary.fee_campaign_closed" &&
             item.ActorUserId == actorUserId &&
             item.EntityId == campaign.Id.ToString());
-        Assert.Contains(database.Context.AuditEvents, item =>
+        Assert.DoesNotContain(database.Context.AuditEvents, item =>
             item.Action == "dictionary.fee_campaign_updated" &&
-            item.ActorUserId == actorUserId &&
             item.EntityId == campaign.Id.ToString());
+    }
+
+    [Fact]
+    public async Task UpdateFeeCampaignAsync_RejectsTargetAtOrBelowCollectedAndPreservesQuoteAndResponseTotal()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
+        var garage = new Garage { Number = "TARGET-COLLECTED", PeopleCount = 1, FloorCount = 1 };
+        database.Context.Garages.Add(garage);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var originalRequest = new UpsertFeeCampaignRequest(
+            "Сбор с частичной оплатой",
+            otherIncome.Id,
+            null,
+            0m,
+            1000m,
+            new DateOnly(2026, 7, 1),
+            null,
+            false,
+            30,
+            [garage.Id],
+            FeeCampaignAmountCalculationModes.Target);
+        var created = await service.CreateFeeCampaignAsync(
+            originalRequest,
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        var campaign = await database.Context.FeeCampaigns.SingleAsync(item => item.Id == created.Value!.Id);
+        var principal = new Accrual
+        {
+            Garage = garage,
+            IncomeType = otherIncome,
+            FeeCampaign = campaign,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = new DateOnly(2026, 7, 31),
+            OverdueFromDate = new DateOnly(2026, 8, 31),
+            Amount = 500m,
+            Source = AccrualSources.FeeCampaign,
+            Basis = campaign.Name
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 7, 15),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 300m,
+            Garage = garage,
+            IncomeType = otherIncome,
+            FeeCampaign = campaign
+        };
+        database.Context.AddRange(principal, payment);
+        database.Context.AccrualPaymentAllocations.Add(new AccrualPaymentAllocation
+        {
+            Accrual = principal,
+            FinancialOperation = payment,
+            Amount = 300m
+        });
+        await database.Context.SaveChangesAsync();
+
+        var invalid = await service.UpdateFeeCampaignAsync(
+            campaign.Id,
+            originalRequest with { TargetAmount = 100m },
+            null,
+            CancellationToken.None);
+        var noOp = await service.UpdateFeeCampaignAsync(
+            campaign.Id,
+            originalRequest,
+            null,
+            CancellationToken.None);
+        var quote = await FinanceServiceTestFactory.Create(database.Context).GetGarageFullPaymentQuoteAsync(
+            garage.Id,
+            CancellationToken.None);
+
+        Assert.False(invalid.Succeeded);
+        Assert.Equal("fee_campaign_target_not_above_collected", invalid.ErrorCode);
+        Assert.Equal(1000m, campaign.TargetAmount);
+        Assert.Null(campaign.ClosedAtUtc);
+        Assert.True(noOp.Succeeded, noOp.ErrorMessage);
+        Assert.Equal(300m, noOp.Value!.CollectedAmount);
+        Assert.True(quote.Succeeded, quote.ErrorMessage);
+        var campaignLine = Assert.Single(quote.Value!.Lines, line => line.FeeCampaignId == campaign.Id);
+        Assert.Equal(200m, campaignLine.OutstandingAmount);
+        Assert.Equal(200m, quote.Value.TotalAmount);
     }
 
     [Fact]
@@ -4103,6 +4212,56 @@ public sealed class DictionaryServiceTests
         Assert.True(closed.Succeeded, closed.ErrorMessage);
         Assert.True(closed.Value!.IsClosedEarly);
         Assert.Equal("Решение правления", closed.Value.ClosureComment);
+    }
+
+    [Fact]
+    public async Task ArchiveFeeCampaignAsync_RejectsOpenCampaignWithOutstandingPrincipal()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var garage = new Garage { Number = "OPEN-ARCHIVE", PeopleCount = 1, FloorCount = 1 };
+        database.Context.Garages.Add(garage);
+        await database.Context.SaveChangesAsync();
+        var created = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest(
+                "Открытый сбор с долгом",
+                otherIncome.Id,
+                null,
+                500m,
+                500m,
+                new DateOnly(2026, 7, 1),
+                null,
+                true,
+                30),
+            null,
+            CancellationToken.None);
+        var campaign = await database.Context.FeeCampaigns.SingleAsync(item => item.Id == created.Value!.Id);
+        database.Context.Accruals.Add(new Accrual
+        {
+            Garage = garage,
+            IncomeType = otherIncome,
+            FeeCampaign = campaign,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = new DateOnly(2026, 7, 31),
+            OverdueFromDate = new DateOnly(2026, 8, 31),
+            Amount = 500m,
+            Source = AccrualSources.FeeCampaign,
+            Basis = campaign.Name
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ArchiveFeeCampaignAsync(
+            campaign.Id,
+            "Попытка скрыть открытый долг",
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fee_campaign_must_be_closed_before_archive", result.ErrorCode);
+        Assert.False(campaign.IsArchived);
+        Assert.Single(database.Context.Accruals, item => item.FeeCampaignId == campaign.Id && !item.IsCanceled);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_archived");
     }
 
     [Fact]
@@ -4143,6 +4302,11 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
         var archived = await service.CreateFeeCampaignAsync(
             new UpsertFeeCampaignRequest("Gate campaign", otherIncome.Id, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+        await service.CloseFeeCampaignAsync(
+            archived.Value!.Id,
+            new CloseFeeCampaignRequest("Finished before archive"),
             actorUserId,
             CancellationToken.None);
         await service.ArchiveFeeCampaignAsync(archived.Value!.Id, "Finished", actorUserId, CancellationToken.None);

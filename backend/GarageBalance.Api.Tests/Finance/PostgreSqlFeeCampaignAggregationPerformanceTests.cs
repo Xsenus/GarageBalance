@@ -108,8 +108,8 @@ public sealed class PostgreSqlFeeCampaignAggregationPerformanceTests
         Assert.Equal(firstAccrual.Id, firstOption.Accrual?.Id);
         Assert.Equal(40m, firstOption.PaidAmount);
         Assert.Equal(140m, firstOption.CollectedAmount);
-        Assert.Equal(EntityState.Unchanged, context.Entry(firstOption.Campaign).State);
-        Assert.Equal(EntityState.Unchanged, context.Entry(firstOption.Accrual!).State);
+        Assert.Equal(EntityState.Detached, context.Entry(firstOption.Campaign).State);
+        Assert.Equal(EntityState.Detached, context.Entry(firstOption.Accrual!).State);
         Assert.Same(firstOption.Campaign, firstOption.Accrual!.FeeCampaign);
         Assert.Equal(incomeType.Id, firstOption.Campaign.IncomeType.Id);
         Assert.Equal(garage.Id, Assert.Single(firstOption.Campaign.ParticipantGarages).Garage.Id);

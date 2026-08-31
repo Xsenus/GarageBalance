@@ -1,6 +1,6 @@
 import { memo, Suspense, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, ArrowLeft, Bell, LockKeyhole, LogOut, RotateCw, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Bell, LockKeyhole, LogOut, RefreshCw, X } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
@@ -51,7 +51,7 @@ export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken 
             <div className="section-load-error__actions">
               {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>На главную</button> : null}
               <button className="primary-button" type="button" onClick={chunkError ? () => window.location.reload() : reset}>
-                <RotateCw size={16} aria-hidden="true" />
+                <RefreshCw size={16} aria-hidden="true" />
                 <span>{chunkError ? 'Обновить приложение' : 'Повторить загрузку'}</span>
               </button>
             </div>

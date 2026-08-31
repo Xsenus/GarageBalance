@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { DatabaseZap, FileText, RotateCcw, Save, X } from 'lucide-react'
+import { FileText, RotateCcw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunListItemDto, AccessImportRunLogEntryDto, ImportClient } from '../../services/importApi'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
@@ -642,7 +642,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
             <span className="form-hint">Максимальный размер файла — {maximumAccessImportFileSizeMegabytes} МБ.</span>
           </div>
           <button className="secondary-button" type="submit" aria-label={dryRunActionLabel} title={dryRunActionLabel} data-tooltip={dryRunActionLabel} disabled={saving || !selectedFile}>
-            <DatabaseZap size={16} aria-hidden="true" />
+            <FileText size={16} aria-hidden="true" />
             <span>Проверить файл</span>
           </button>
         </form>
@@ -708,7 +708,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   <span>Скачать отчет JSON</span>
                 </button>
                 <button className="secondary-button" type="button" aria-label={applyActionLabel} title={applyActionLabel} data-tooltip={applyActionLabel} disabled={applyDisabled} onClick={() => currentRun ? openApplyDialog(currentRun) : undefined}>
-                  <DatabaseZap size={16} aria-hidden="true" />
+                  <FileText size={16} aria-hidden="true" />
                   <span>Запросить импорт</span>
                 </button>
                 <button className="secondary-button" type="button" aria-label={applyCancelActionLabel} title={applyCancelActionLabel} data-tooltip={applyCancelActionLabel} disabled={applyCancelDisabled} onClick={() => currentRun ? openApplyCancelDialog(currentRun) : undefined}>
@@ -952,7 +952,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeApplyDialog} disabled={applyingRunId !== null}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={applyingRunId !== null}>
-                  <DatabaseZap size={16} aria-hidden="true" />
+                  <FileText size={16} aria-hidden="true" />
                   <span>{applyingRunId === applyTarget.id ? 'Запрашиваем...' : 'Запросить импорт'}</span>
                 </button>
               </div>

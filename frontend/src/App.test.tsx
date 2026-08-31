@@ -760,10 +760,16 @@ describe('App', () => {
       createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
     ]
     const createdRequests: string[] = []
+    let createAttempts = 0
+    let rejectFirstCreate!: (reason?: unknown) => void
+    const firstCreate = new Promise<FeeCampaignDto>((_resolve, reject) => {
+      rejectFirstCreate = reject
+    })
     const updatedRequests: Array<{ id: string; request: unknown }> = []
     const archiveRequests: Array<{ id: string; reason: string }> = []
     const restoredRequests: string[] = []
     const closeRequests: Array<{ id: string; comment?: string | null }> = []
+    let closeAttempts = 0
     const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [participantGarage, otherGarage],
@@ -771,6 +777,11 @@ describe('App', () => {
       getIncomeTypes: async () => [targetIncomeType, alternateIncomeType],
       getFeeCampaigns: async () => campaigns,
       createFeeCampaign: async (_token, request) => {
+        createAttempts += 1
+        if (createAttempts === 1) {
+          return firstCreate
+        }
+
         const campaign = createFeeCampaign({
           id: 'fee-campaign-new',
           name: request.name,
@@ -810,6 +821,10 @@ describe('App', () => {
       },
       closeFeeCampaign: async (_token, id, request) => {
         closeRequests.push({ id, comment: request.comment })
+        closeAttempts += 1
+        if (closeAttempts === 1) {
+          throw new Error('Сбор временно не закрыт.')
+        }
         const currentCampaign = campaigns.find((campaign) => campaign.id === id) ?? createFeeCampaign({ id })
         const closedCampaign = {
           ...currentCampaign,
@@ -897,6 +912,33 @@ describe('App', () => {
     await user.clear(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный'))
     await user.type(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный'), '45')
     await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
+    await waitFor(() => expect(createAttempts).toBe(1))
+    expect(within(createDialog).getByRole('button', { name: 'Объявить сбор' })).toBeDisabled()
+    expect(within(createDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(createDialog).getByRole('button', { name: 'Закрыть форму сбора' })).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Наименование сбора')).toBeDisabled()
+    expect(within(createDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Цель сбора')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Сумма взноса')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Сумма сбора')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Дата начала')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Дата окончания сбора')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Перенос долга по сбору в просроченный')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Все гаражи')).toBeDisabled()
+    expect(within(createDialog).getByLabelText('Гараж 27')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(createDialog).toBeInTheDocument()
+
+    await act(async () => {
+      rejectFirstCreate(new Error('Сбор временно не объявлен.'))
+    })
+
+    expect(await within(createDialog).findByRole('alert')).toHaveTextContent('Сбор временно не объявлен.')
+    expect(within(createDialog).getByLabelText('Наименование сбора')).toHaveValue('Сбор на камеры')
+    expect(within(createDialog).getByLabelText('Сумма сбора')).toHaveValue('700.00')
+    await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
+
+    await waitFor(() => expect(createAttempts).toBe(2))
     await waitFor(() => expect(createdRequests).toHaveLength(1))
     expect(JSON.parse(createdRequests[0])).toMatchObject({
       name: 'Сбор на камеры',
@@ -974,7 +1016,14 @@ describe('App', () => {
     expect(within(closeDialog).getByText(/новые начисления по сбору не создаются/i)).toBeInTheDocument()
     await user.type(within(closeDialog).getByLabelText('Комментарий к закрытию сбора'), 'Решение правления')
     await user.click(within(closeDialog).getByRole('button', { name: 'Закрыть сбор' }))
-    await waitFor(() => expect(closeRequests).toEqual([{ id: 'fee-campaign-new', comment: 'Решение правления' }]))
+    expect(await within(closeDialog).findByRole('alert')).toHaveTextContent('Сбор временно не закрыт.')
+    expect(within(closeDialog).getByLabelText('Комментарий к закрытию сбора')).toHaveValue('Решение правления')
+    await user.click(within(closeDialog).getByRole('button', { name: 'Закрыть сбор' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Закрыть сбор?' })).not.toBeInTheDocument())
+    expect(closeRequests).toEqual([
+      { id: 'fee-campaign-new', comment: 'Решение правления' },
+      { id: 'fee-campaign-new', comment: 'Решение правления' },
+    ])
     expect(await within(feeCampaignsSection).findByText(/Закрыт досрочно · Решение правления/)).toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByRole('button', { name: 'Доначислить сбор Сбор на камеры' })).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByRole('button', { name: 'Изменить сбор Сбор на камеры' })).not.toBeInTheDocument()
@@ -1151,13 +1200,24 @@ describe('App', () => {
       participantGarageIds: [firstGarage.id],
     })
     let updateCalls = 0
+    let rejectFirstUpdate!: (reason?: unknown) => void
+    const firstUpdate = new Promise<FeeCampaignDto>((_resolve, reject) => {
+      rejectFirstUpdate = reject
+    })
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [firstGarage, secondGarage],
       getIncomeTypes: async () => [targetIncomeType],
       getFeeCampaigns: async () => [campaign],
-      updateFeeCampaign: async () => {
+      updateFeeCampaign: async (_token, _id, request) => {
         updateCalls += 1
-        throw new Error('Нельзя изменить состав участников сбора после создания начислений. Исторический состав должен оставаться неизменным.')
+        if (updateCalls === 1) {
+          return firstUpdate
+        }
+
+        return createFeeCampaign({
+          ...campaign,
+          participantGarageIds: request.participantGarageIds ?? [],
+        })
       },
     })
 
@@ -1175,14 +1235,28 @@ describe('App', () => {
     const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения сбора' })
     await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
-    expect(updateCalls).toBe(1)
+    await waitFor(() => expect(updateCalls).toBe(1))
+    expect(within(confirmationDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(confirmationDialog).getByRole('button', { name: 'Отменить подтверждение изменений сбора' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(confirmationDialog).toBeInTheDocument()
+
+    await act(async () => {
+      rejectFirstUpdate(new Error('Нельзя изменить состав участников сбора после создания начислений. Исторический состав должен оставаться неизменным.'))
+    })
+
+    expect(await within(confirmationDialog).findByRole('alert')).toHaveTextContent('Исторический состав должен оставаться неизменным.')
     const reopenedEditDialog = screen.getByRole('dialog', { name: 'Изменить сбор' })
-    expect(await within(reopenedEditDialog).findByRole('alert')).toHaveTextContent('Исторический состав должен оставаться неизменным.')
-    expect(reopenedEditDialog).toBeInTheDocument()
     expect(within(reopenedEditDialog).getByLabelText('Гараж 27')).toBeChecked()
+
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await waitFor(() => expect(updateCalls).toBe(2))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения сбора' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить сбор' })).not.toBeInTheDocument())
   })
 
-  it('removes manual fee completion and hides closing after the campaign end date', async () => {
+  it('keeps explicit closing available for every open campaign after its end date', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     const endedCampaign = createFeeCampaign({ id: 'fee-campaign-ended', name: 'Завершённый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2000-05-01', endsOn: '2000-05-31' })
@@ -1214,7 +1288,8 @@ describe('App', () => {
     expect(displayedCampaignNames.indexOf(`Объявленный сбор ${openEndedCampaign.name}`)).toBeLessThan(displayedCampaignNames.indexOf(`Объявленный сбор ${endedCampaign.name}`))
     expect(endedRow).toHaveClass('contractors-mini-row--deleted')
     expect(endedRow).not.toHaveStyle({ textDecoration: 'line-through' })
-    expect(within(closedRow).getByRole('button', { name: `Изменить закрытый сбор ${closedCampaign.name}` })).toBeInTheDocument()
+    expect(within(closedRow).queryByRole('button', { name: `Изменить закрытый сбор ${closedCampaign.name}` })).not.toBeInTheDocument()
+    expect(within(closedRow).getByRole('button', { name: `Архивировать закрытый сбор ${closedCampaign.name}` })).toBeInTheDocument()
 
     const activePeriod = within(activeRow).getByText('01.08.2026').parentElement
     expect(activePeriod).not.toBeNull()
@@ -1240,32 +1315,41 @@ describe('App', () => {
     const endedPeriod = within(endedRow).getByText('31.05.2000').parentElement
     expect((endedPeriod as HTMLElement).querySelectorAll('.money-income, .money-expense')).toHaveLength(0)
     expect(within(feeCampaignsSection).queryByRole('button', { name: /Доначислить сбор/ })).not.toBeInTheDocument()
-    expect(within(feeCampaignsSection).queryByRole('button', { name: `Закрыть сбор ${endedCampaign.name}` })).not.toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByRole('button', { name: `Закрыть сбор ${endedCampaign.name}` })).toBeInTheDocument()
     expect(within(feeCampaignsSection).getByRole('button', { name: `Закрыть сбор ${activeCampaign.name}` })).toBeInTheDocument()
-    await user.click(within(closedRow).getByRole('button', { name: `Изменить закрытый сбор ${closedCampaign.name}` }))
-    const closedCampaignDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
-    expect(within(closedCampaignDialog).getByLabelText('Наименование сбора')).toHaveValue(closedCampaign.name)
+    expect(screen.queryByRole('dialog', { name: 'Изменить сбор' })).not.toBeInTheDocument()
   })
 
-  it('archives and restores announced fee campaigns from tariffs page', async () => {
+  it('archives only closed announced fee campaigns and restores archived campaigns', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     let campaigns = [
       createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name }),
+      createFeeCampaign({ id: 'fee-campaign-closed', name: 'Закрытый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, closedAtUtc: '2026-06-30T10:00:00Z', isClosedEarly: true }),
       createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
     ]
     const archiveRequests: Array<{ id: string; reason: string }> = []
     const restoredRequests: string[] = []
+    let archiveAttempts = 0
+    let restoreAttempts = 0
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [],
       getIncomeTypes: async () => [targetIncomeType],
       getFeeCampaigns: async () => campaigns,
       archiveFeeCampaign: async (_token, id, reason) => {
         archiveRequests.push({ id, reason })
+        archiveAttempts += 1
+        if (archiveAttempts === 1) {
+          throw new Error('Сбор временно не архивирован.')
+        }
         campaigns = campaigns.map((campaign) => (campaign.id === id ? { ...campaign, isArchived: true } : campaign))
       },
       restoreFeeCampaign: async (_token, id) => {
         restoredRequests.push(id)
+        restoreAttempts += 1
+        if (restoreAttempts === 1) {
+          throw new Error('Сбор временно не восстановлен.')
+        }
         const restoredCampaign = campaigns.find((campaign) => campaign.id === id)!
         campaigns = campaigns.map((campaign) => (campaign.id === id ? { ...campaign, isArchived: false } : campaign))
         return { ...restoredCampaign, isArchived: false }
@@ -1279,8 +1363,9 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
     expect(await within(feeCampaignsSection).findByText('Сбор на ворота')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByRole('button', { name: 'Архивировать сбор Сбор на ворота' })).not.toBeInTheDocument()
 
-    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' }))
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать закрытый сбор Закрытый сбор' }))
     const archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать сбор?' })
     const archiveCancelButton = within(archiveDialog).getByRole('button', { name: 'Отмена' })
     const archiveConfirmButton = within(archiveDialog).getByRole('button', { name: 'Архивировать' })
@@ -1290,14 +1375,21 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Архивировать сбор?' })).not.toBeInTheDocument()
     expect(archiveRequests).toHaveLength(0)
-    expect(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' })).toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать закрытый сбор Закрытый сбор' })).toBeInTheDocument()
 
-    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' }))
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать закрытый сбор Закрытый сбор' }))
     const reopenedArchiveDialog = await screen.findByRole('dialog', { name: 'Архивировать сбор?' })
     expect(within(reopenedArchiveDialog).getByRole('button', { name: 'Архивировать' })).toBeDisabled()
     await user.type(within(reopenedArchiveDialog).getByLabelText('Причина архивации сбора'), 'Сбор закрыт')
     await user.click(within(reopenedArchiveDialog).getByRole('button', { name: 'Архивировать' }))
-    await waitFor(() => expect(archiveRequests).toEqual([{ id: 'fee-campaign-active', reason: 'Сбор закрыт' }]))
+    expect(await within(reopenedArchiveDialog).findByRole('alert')).toHaveTextContent('Сбор временно не архивирован.')
+    expect(within(reopenedArchiveDialog).getByLabelText('Причина архивации сбора')).toHaveValue('Сбор закрыт')
+    await user.click(within(reopenedArchiveDialog).getByRole('button', { name: 'Архивировать' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Архивировать сбор?' })).not.toBeInTheDocument())
+    expect(archiveRequests).toEqual([
+      { id: 'fee-campaign-closed', reason: 'Сбор закрыт' },
+      { id: 'fee-campaign-closed', reason: 'Сбор закрыт' },
+    ])
 
     const archivedCampaignRow = within(feeCampaignsSection).getByText('Старый сбор').closest('.contractors-mini-row')
     expect(archivedCampaignRow).not.toBeNull()
@@ -1317,7 +1409,11 @@ describe('App', () => {
     await user.click(restoreCampaignButton)
     const reopenedRestoreDialog = await screen.findByRole('dialog', { name: 'Вернуть сбор?' })
     await user.click(within(reopenedRestoreDialog).getByRole('button', { name: 'Вернуть' }))
-    await waitFor(() => expect(restoredRequests).toContain('fee-campaign-archived'))
+    expect(await within(reopenedRestoreDialog).findByRole('alert')).toHaveTextContent('Сбор временно не восстановлен.')
+    expect(reopenedRestoreDialog).toBeInTheDocument()
+    await user.click(within(reopenedRestoreDialog).getByRole('button', { name: 'Вернуть' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть сбор?' })).not.toBeInTheDocument())
+    expect(restoredRequests).toEqual(['fee-campaign-archived', 'fee-campaign-archived'])
   })
 
   it('explains charge service deactivation consequences and keeps the reason after a failed attempt', async () => {
@@ -1374,7 +1470,7 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Причина деактивации услуги'), 'Услуга больше не используется')
     await user.click(confirmButton)
 
-    expect(await screen.findByText('Не удалось временно деактивировать услугу.')).toBeInTheDocument()
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Не удалось временно деактивировать услугу.')
     expect(screen.getByRole('dialog', { name: 'Деактивировать услугу?' })).toBeInTheDocument()
     expect(within(dialog).getByLabelText('Причина деактивации услуги')).toHaveValue('Услуга больше не используется')
     await user.click(confirmButton)
@@ -1500,7 +1596,7 @@ describe('App', () => {
     await user.click(restoreButton)
     restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
     await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
-    expect(await screen.findByText('Не удалось временно восстановить услугу.')).toBeInTheDocument()
+    expect(await within(restoreDialog).findByRole('alert')).toHaveTextContent('Не удалось временно восстановить услугу.')
     expect(screen.getByRole('dialog', { name: 'Вернуть услугу?' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toBeDisabled()
 
@@ -1515,6 +1611,81 @@ describe('App', () => {
     expect(restoredRate.closest('[role="row"]')).not.toHaveClass('contractors-sheet-row--deleted')
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeEnabled()
     expect(within(tariffsPanel).getByRole('button', { name: 'Деактивировать услугу Охрана территории' })).toBeEnabled()
+  })
+
+  it('keeps irregular payment archive and restore failures inside their confirmation dialogs', async () => {
+    const user = userEvent.setup()
+    const activePayment = createIrregularPayment({ id: 'irregular-delete-error', name: 'Разовый пропуск', amount: 600 })
+    const archivedPayment = createIrregularPayment({ id: 'irregular-restore-error', name: 'Старый пропуск', amount: 450, isArchived: true })
+    const archiveRequests: Array<{ id: string; reason: string }> = []
+    const restoreRequests: string[] = []
+    let archiveAttempts = 0
+    let restoreAttempts = 0
+    let rejectFirstArchive!: (reason?: unknown) => void
+    const firstArchiveAttempt = new Promise<void>((_resolve, reject) => {
+      rejectFirstArchive = reject
+    })
+    const dictionaryClient = createDictionaryClient({
+      getIrregularPayments: async () => [activePayment, archivedPayment],
+      archiveIrregularPayment: async (_token, id, reason) => {
+        archiveRequests.push({ id, reason })
+        archiveAttempts += 1
+        if (archiveAttempts === 1) {
+          return firstArchiveAttempt
+        }
+      },
+      restoreIrregularPayment: async (_token, id) => {
+        restoreRequests.push(id)
+        restoreAttempts += 1
+        if (restoreAttempts === 1) {
+          throw new Error('Нерегулярный платеж временно не восстановлен.')
+        }
+
+        return { ...archivedPayment, isArchived: false }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const oneTimeTable = within(tariffsPanel).getByRole('region', { name: 'Нерегулярные платежи' })
+
+    const activeRow = await within(oneTimeTable).findByLabelText('Нерегулярный платеж Разовый пропуск')
+    fireEvent.contextMenu(activeRow)
+    const deleteMenu = await screen.findByRole('menu', { name: 'Действия нерегулярного платежа Разовый пропуск' })
+    await user.click(within(deleteMenu).getByRole('menuitem', { name: 'Удалить' }))
+    const deleteDialog = await screen.findByRole('dialog', { name: 'Удалить нерегулярный платеж?' })
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления нерегулярного платежа'), 'Услуга прекращена')
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить' }))
+
+    await waitFor(() => expect(archiveAttempts).toBe(1))
+    expect(within(deleteDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(deleteDialog).getByRole('button', { name: 'Закрыть подтверждение удаления нерегулярного платежа' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(deleteDialog).toBeInTheDocument()
+    rejectFirstArchive(new Error('Нерегулярный платеж временно не удалён.'))
+    expect(await within(deleteDialog).findByRole('alert')).toHaveTextContent('Нерегулярный платеж временно не удалён.')
+    expect(within(deleteDialog).getByLabelText('Причина удаления нерегулярного платежа')).toHaveValue('Услуга прекращена')
+    expect(deleteDialog).toBeInTheDocument()
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить нерегулярный платеж?' })).not.toBeInTheDocument())
+    expect(archiveRequests).toEqual([
+      { id: activePayment.id, reason: 'Услуга прекращена' },
+      { id: activePayment.id, reason: 'Услуга прекращена' },
+    ])
+
+    const archivedRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Старый пропуск')
+    await user.click(within(archivedRow).getByRole('button', { name: 'Вернуть' }))
+    const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
+
+    expect(await within(restoreDialog).findByRole('alert')).toHaveTextContent('Нерегулярный платеж временно не восстановлен.')
+    expect(restoreDialog).toBeInTheDocument()
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
+    expect(restoreRequests).toEqual([archivedPayment.id, archivedPayment.id])
   })
 
   it('does not allow charge service deactivation without tariffs.manage', async () => {
@@ -1601,6 +1772,13 @@ describe('App', () => {
     ]
     const thresholdUpdateRequests: UpsertTariffRequest[] = []
     const directTariffUpdateRequests: UpsertTariffRequest[] = []
+    let waterUpdateAttempts = 0
+    let rejectFirstWaterUpdate!: (reason?: unknown) => void
+    const firstWaterUpdate = new Promise<TariffDto>((_resolve, reject) => {
+      rejectFirstWaterUpdate = reject
+    })
+    let thresholdCreateAttempts = 0
+    let thresholdDeleteAttempts = 0
     const electricityTariff = createTariff({
       id: 'tariff-electricity',
       name: 'Электроэнергия',
@@ -1654,6 +1832,14 @@ describe('App', () => {
             electricityTiers: request.electricityTiers,
             electricityTierChangeReason: request.changeReason,
           })
+        }
+        if (request.changeReason === 'Добавлен числовой диапазон пороговой тарификации.') {
+          thresholdCreateAttempts += 1
+          if (thresholdCreateAttempts === 1) throw new Error('Новый порог временно не сохранён.')
+        }
+        if (request.changeReason === 'Лишний порог добавлен ошибочно') {
+          thresholdDeleteAttempts += 1
+          if (thresholdDeleteAttempts === 1) throw new Error('Порог временно не удалён.')
         }
         const savedTiers = request.tariffMode === 'metered_tiered'
           ? request.electricityTiers?.map((tier, index) => ({
@@ -1727,6 +1913,12 @@ describe('App', () => {
       }),
       updateTariff: async (_token, id, request) => {
         directTariffUpdateRequests.push(request)
+        if (id === waterTariff.id) {
+          waterUpdateAttempts += 1
+          if (waterUpdateAttempts === 1) {
+            return firstWaterUpdate
+          }
+        }
         if (request.calculationBase === 'meter_electricity') {
           thresholdUpdateRequests.push(request)
           electricityTiers = (request.electricityTiers ?? []).map((tier, index) => ({
@@ -1840,6 +2032,33 @@ describe('App', () => {
     await user.type(waterRateInput, '1300{Enter}')
     const reopenedWaterRateConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(reopenedWaterRateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(waterUpdateAttempts).toBe(1))
+    expect(within(reopenedWaterRateConfirmDialog).getByRole('button', { name: 'Сохраняем…' })).toBeDisabled()
+    expect(within(reopenedWaterRateConfirmDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(reopenedWaterRateConfirmDialog).getByRole('button', { name: 'Закрыть подтверждение изменения тарифа' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(reopenedWaterRateConfirmDialog).toBeInTheDocument()
+
+    await act(async () => {
+      rejectFirstWaterUpdate(new Error('Тариф временно не сохранён.'))
+    })
+
+    expect(await within(reopenedWaterRateConfirmDialog).findByRole('alert')).toHaveTextContent('Тариф временно не сохранён.')
+    expect(waterRateInput).toHaveValue('1300')
+    await user.click(within(reopenedWaterRateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(waterUpdateAttempts).toBe(2))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
+    expect(waterRateInput).toHaveValue('1 300.00')
+
+    const tariffUpdatesBeforeInvalidAmount = directTariffUpdateRequests.length
+    await user.clear(waterRateInput)
+    await user.type(waterRateInput, '0{Enter}')
+    const invalidWaterRateConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(invalidWaterRateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(invalidWaterRateConfirmDialog).findByRole('alert')).toHaveTextContent('Укажите сумму тарифа больше нуля.')
+    expect(directTariffUpdateRequests).toHaveLength(tariffUpdatesBeforeInvalidAmount)
+    expect(waterRateInput).toHaveValue('0')
+    await user.click(within(invalidWaterRateConfirmDialog).getByRole('button', { name: 'Отмена' }))
     expect(waterRateInput).toHaveValue('1 300.00')
 
     await user.clear(waterRateInput)
@@ -1943,6 +2162,10 @@ describe('App', () => {
     await user.clear(within(createThresholdDialog).getByLabelText('Ставка нового порога'))
     await user.type(within(createThresholdDialog).getByLabelText('Ставка нового порога'), '7.5')
     await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
+    expect(await within(createThresholdDialog).findByRole('alert')).toHaveTextContent('Новый порог временно не сохранён.')
+    expect(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога')).toHaveValue('5')
+    expect(within(createThresholdDialog).getByLabelText('Ставка нового порога')).toHaveValue('7.50')
+    await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
     const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: 5.00–5.00: значение')
     expect(electricityThresholdInput).toHaveValue('7.50')
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(4)
@@ -1964,6 +2187,9 @@ describe('App', () => {
     await user.click(deleteThresholdButton)
     const reopenedThresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
     await user.type(within(reopenedThresholdDeleteDialog).getByLabelText('Причина удаления порога'), 'Лишний порог добавлен ошибочно')
+    await user.click(within(reopenedThresholdDeleteDialog).getByRole('button', { name: 'Удалить' }))
+    expect(await within(reopenedThresholdDeleteDialog).findByRole('alert')).toHaveTextContent('Порог временно не удалён.')
+    expect(within(reopenedThresholdDeleteDialog).getByLabelText('Причина удаления порога')).toHaveValue('Лишний порог добавлен ошибочно')
     await user.click(within(reopenedThresholdDeleteDialog).getByRole('button', { name: 'Удалить' }))
     await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 5.00–5.00: значение')).not.toBeInTheDocument())
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(3)
@@ -2010,7 +2236,8 @@ describe('App', () => {
     await user.click(within(conflictPaymentRow).getByRole('button', { name: 'Вернуть' }))
     const conflictRestoreDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
     await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Вернуть' }))
-    expect(await within(oneTimeTable).findByRole('alert')).toHaveTextContent('Восстановление недоступно')
+    expect(await within(conflictRestoreDialog).findByRole('alert')).toHaveTextContent('Восстановление недоступно')
+    expect(conflictRestoreDialog).toBeInTheDocument()
     await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Отмена' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
 
@@ -6075,7 +6302,7 @@ describe('App', () => {
     expect(getFundOptions).toHaveBeenCalledTimes(1)
   })
 
-  it('closes a created service immediately and refreshes form references on the next open', async () => {
+  it('keeps a pending service create locked, retries in place, and refreshes references after success', async () => {
     const user = userEvent.setup()
     const initialIncomeType = createAccountingType({
       id: 'income-before-service-create',
@@ -6096,7 +6323,17 @@ describe('App', () => {
     const getIncomeTypes = vi.fn()
       .mockResolvedValueOnce([initialIncomeType])
       .mockReturnValueOnce(refreshedIncomeTypes)
+    let createAttempts = 0
+    let rejectFirstCreate!: (reason?: unknown) => void
+    const firstCreate = new Promise<{ service: ChargeServiceSettingDto; tariff: TariffDto }>((_resolve, reject) => {
+      rejectFirstCreate = reject
+    })
     const createChargeServiceWithTariff = vi.fn(async (_token: string, request: CreateChargeServiceWithTariffRequest) => {
+      createAttempts += 1
+      if (createAttempts === 1) {
+        return firstCreate
+      }
+
       const tariff = createTariff({
         id: 'tariff-created-with-service',
         name: 'Охрана — тариф',
@@ -6137,6 +6374,27 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(createChargeServiceWithTariff).toHaveBeenCalledTimes(1))
+    expect(within(serviceDialog).getByRole('button', { name: 'Сохранить' })).toBeDisabled()
+    expect(within(serviceDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(serviceDialog).getByRole('button', { name: 'Закрыть форму услуги' })).toBeDisabled()
+    expect(within(serviceDialog).getByLabelText('Наименование услуги')).toBeDisabled()
+    expect(within(serviceDialog).getByLabelText('Регулярные платежи')).toBeDisabled()
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toBeDisabled()
+    expect(within(serviceDialog).getByLabelText('Тариф регулярной услуги')).toBeDisabled()
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(serviceDialog).toBeInTheDocument()
+
+    await act(async () => {
+      rejectFirstCreate(new Error('Услуга временно не сохранена.'))
+    })
+
+    expect(await within(serviceDialog).findByRole('alert')).toHaveTextContent('Услуга временно не сохранена.')
+    expect(within(serviceDialog).getByLabelText('Наименование услуги')).toHaveValue('Охрана')
+    expect(within(serviceDialog).getByLabelText('Тариф регулярной услуги')).toHaveValue('1 200.00')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createChargeServiceWithTariff).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
     expect(getIncomeTypes).toHaveBeenCalledTimes(1)
 
@@ -7462,16 +7720,54 @@ describe('App', () => {
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedFullPaymentRequests: CreateFullGaragePaymentRequest[] = []
     const savedAccrualRequests: CreateIrregularAccrualRequest[] = []
+    let irregularAccrualAttemptCount = 0
+    let rejectFirstIrregularAccrual!: (reason?: unknown) => void
+    const firstIrregularAccrual = new Promise<never>((_resolve, reject) => {
+      rejectFirstIrregularAccrual = reject
+    })
     const savedPenaltyAccrualRequests: CreateAccrualRequest[] = []
     let penaltyAccrualAttemptCount = 0
+    let rejectFirstPenaltyAccrual!: (reason?: unknown) => void
+    const firstPenaltyAccrual = new Promise<AccrualDto>((_resolve, reject) => {
+      rejectFirstPenaltyAccrual = reject
+    })
+    let fullPaymentAttemptCount = 0
+    let rejectFirstFullPayment!: (reason?: unknown) => void
+    const firstFullPayment = new Promise<never>((_resolve, reject) => {
+      rejectFirstFullPayment = reject
+    })
     const generateRegularCatalogAccruals = vi.fn(async () => createRegularCatalogAccrualGenerationResult())
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
+    let validExpenseAttemptCount = 0
+    let rejectFirstValidExpense!: (reason?: unknown) => void
+    const firstValidExpense = new Promise<never>((_resolve, reject) => {
+      rejectFirstValidExpense = reject
+    })
     const savedStaffPaymentRequests: CreateStaffPaymentRequest[] = []
+    let staffPaymentAttemptCount = 0
+    let rejectFirstStaffPayment!: (reason?: unknown) => void
+    const firstStaffPayment = new Promise<never>((_resolve, reject) => {
+      rejectFirstStaffPayment = reject
+    })
     const savedStaffSalaryAdjustmentRequests: CreateStaffSalaryAdjustmentRequest[] = []
     let staffSalaryAdjustmentAttemptCount = 0
+    let rejectFirstStaffSalaryAdjustment!: (reason?: unknown) => void
+    const firstStaffSalaryAdjustment = new Promise<never>((_resolve, reject) => {
+      rejectFirstStaffSalaryAdjustment = reject
+    })
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
+    let supplierAccrualAttemptCount = 0
+    let rejectFirstSupplierAccrual!: (reason?: unknown) => void
+    const firstSupplierAccrual = new Promise<never>((_resolve, reject) => {
+      rejectFirstSupplierAccrual = reject
+    })
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
     const savedCashBankTransferRequests: CreateCashBankTransferRequest[] = []
+    let cashBankTransferAttemptCount = 0
+    let rejectFirstCashBankTransfer!: (reason?: unknown) => void
+    const firstCashBankTransfer = new Promise<never>((_resolve, reject) => {
+      rejectFirstCashBankTransfer = reject
+    })
     const searchGaragesPage = vi.fn(async () => ({ items: [garage, secondGarage], totalCount: 2, offset: 0, limit: 20 }))
     const getIncomePaymentWarning = vi.fn(async () => ({
       isElectricityPayment: true,
@@ -7507,6 +7803,11 @@ describe('App', () => {
         })
       },
       createFullGaragePayment: async (_token, request) => {
+        fullPaymentAttemptCount += 1
+        if (fullPaymentAttemptCount === 1) {
+          return firstFullPayment
+        }
+
         savedFullPaymentRequests.push(request)
         return {
           receiptBatchId: request.receiptBatchId ?? 'full-payment-batch',
@@ -7532,6 +7833,11 @@ describe('App', () => {
         }
       },
       createIrregularAccrual: async (_token, request) => {
+        irregularAccrualAttemptCount += 1
+        if (irregularAccrualAttemptCount === 1) {
+          return firstIrregularAccrual
+        }
+
         savedAccrualRequests.push(request)
         return createAccrual({
           id: `garage-accrual-${savedAccrualRequests.length}`,
@@ -7552,7 +7858,7 @@ describe('App', () => {
       createAccrual: async (_token, request) => {
         penaltyAccrualAttemptCount += 1
         if (penaltyAccrualAttemptCount === 1) {
-          throw new Error('Штраф временно не сохранён')
+          return firstPenaltyAccrual
         }
         savedPenaltyAccrualRequests.push(request)
         return createAccrual({
@@ -7579,6 +7885,12 @@ describe('App', () => {
         if (request.expensePaymentSource === 'bank' && request.amount > 100000 && !request.confirmNegativeFundBalance) {
           throw new FinanceApiError('fund_amount_insufficient', 'Подтвердите выплату с отрицательным остатком фонда.', 409)
         }
+        if (request.amount === 1200) {
+          validExpenseAttemptCount += 1
+          if (validExpenseAttemptCount === 1) {
+            return firstValidExpense
+          }
+        }
         savedExpenseRequests.push(request)
         const requestExpenseType = expenseTypes.find((item) => item.id === request.expenseTypeId) ?? electricityExpenseType
         return createFinancialOperation({
@@ -7599,6 +7911,10 @@ describe('App', () => {
         })
       },
       createStaffPayment: async (_token, request) => {
+        staffPaymentAttemptCount += 1
+        if (staffPaymentAttemptCount === 1) {
+          return firstStaffPayment
+        }
         savedStaffPaymentRequests.push(request)
         return createFinancialOperation({
           id: `staff-payment-${savedStaffPaymentRequests.length}`,
@@ -7617,7 +7933,7 @@ describe('App', () => {
       createStaffSalaryAdjustment: async (_token, request) => {
         staffSalaryAdjustmentAttemptCount += 1
         if (staffSalaryAdjustmentAttemptCount === 1) {
-          throw new Error('Премия временно не сохранена')
+          return firstStaffSalaryAdjustment
         }
         savedStaffSalaryAdjustmentRequests.push(request)
         return {
@@ -7632,6 +7948,10 @@ describe('App', () => {
         }
       },
       createCashBankTransfer: async (_token, request) => {
+        cashBankTransferAttemptCount += 1
+        if (cashBankTransferAttemptCount === 1) {
+          return firstCashBankTransfer
+        }
         savedCashBankTransferRequests.push(request)
         return {
           id: `cash-bank-transfer-${savedCashBankTransferRequests.length}`,
@@ -7641,6 +7961,10 @@ describe('App', () => {
         }
       },
       createSupplierAccrual: async (_token, request) => {
+        supplierAccrualAttemptCount += 1
+        if (supplierAccrualAttemptCount === 1) {
+          return firstSupplierAccrual
+        }
         savedSupplierAccrualRequests.push(request)
         return createSupplierAccrual({
           id: `supplier-accrual-${savedSupplierAccrualRequests.length}`,
@@ -8141,6 +8465,23 @@ describe('App', () => {
     await user.click(within(garageAccrualMonthPicker).getByRole('button', { name: 'Июн' }))
     await user.type(within(garageAccrualDialog).getByLabelText('Комментарий к начислению гаража'), 'Доначисление воды')
     await user.click(within(garageAccrualDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(irregularAccrualAttemptCount).toBe(1))
+    expect(within(garageAccrualDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(garageAccrualDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(garageAccrualDialog).getByRole('button', { name: 'Закрыть начисление гаража' })).toBeDisabled()
+    expect(within(garageAccrualDialog).getByLabelText('Основание начисления гаража')).toBeDisabled()
+    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toBeDisabled()
+    expect(within(garageAccrualDialog).getByLabelText('Месяц начисления гаража')).toBeDisabled()
+    expect(within(garageAccrualDialog).getByLabelText('Комментарий к начислению гаража')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(garageAccrualDialog.parentElement!)
+    expect(garageAccrualDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstIrregularAccrual(new Error('Начисление временно не сохранено.'))
+    })
+    expect(await within(garageAccrualDialog).findByRole('alert')).toHaveTextContent('Начисление временно не сохранено.')
+    expect(within(garageAccrualDialog).getByLabelText('Комментарий к начислению гаража')).toHaveValue('Доначисление воды')
+    await user.click(within(garageAccrualDialog).getByRole('button', { name: 'Ок' }))
     await waitFor(() => expect(savedAccrualRequests).toHaveLength(1))
     expect(savedAccrualRequests[0]).toMatchObject({
       garageId: garage.id,
@@ -8184,6 +8525,21 @@ describe('App', () => {
     expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Укажите причину начисления штрафа.')
     await user.type(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа'), 'Нарушение правил проезда')
     await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
+    await waitFor(() => expect(penaltyAccrualAttemptCount).toBe(1))
+    expect(within(penaltyAccrualDialog).getByRole('button', { name: 'Начисляем...' })).toBeDisabled()
+    expect(within(penaltyAccrualDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(penaltyAccrualDialog).getByRole('button', { name: 'Закрыть начисление штрафа' })).toBeDisabled()
+    expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа')).toBeDisabled()
+    expect(within(penaltyAccrualDialog).getByLabelText('Месяц начисления штрафа')).toBeDisabled()
+    expect(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(penaltyAccrualDialog.parentElement!)
+    expect(penaltyAccrualDialog).toBeInTheDocument()
+
+    await act(async () => {
+      rejectFirstPenaltyAccrual(new Error('Штраф временно не сохранён'))
+    })
+
     expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Штраф временно не сохранён')
     expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа')).toHaveValue('1 250.50')
     expect(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа')).toHaveValue('Нарушение правил проезда')
@@ -8231,6 +8587,23 @@ describe('App', () => {
     await user.clear(fullPaymentAmount)
     await user.type(fullPaymentAmount, '5000')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
+    await waitFor(() => expect(fullPaymentAttemptCount).toBe(1))
+    expect(within(fullPaymentDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(fullPaymentDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(fullPaymentDialog).getByRole('button', { name: 'Закрыть полную оплату' })).toBeDisabled()
+    expect(within(fullPaymentDialog).getByRole('combobox', { name: 'Период полной оплаты' })).toBeDisabled()
+    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toBeDisabled()
+    expect(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(fullPaymentDialog.parentElement!)
+    expect(fullPaymentDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstFullPayment(new Error('Полная оплата временно не сохранена.'))
+    })
+    expect(await within(fullPaymentDialog).findByRole('alert')).toHaveTextContent('Полная оплата временно не сохранена.')
+    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('5 000.00')
+    expect(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате')).toHaveValue('Оплата остатка')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
     await waitFor(() => expect(savedFullPaymentRequests).toHaveLength(1))
     expect(savedIncomeRequests).toHaveLength(1)
@@ -8323,6 +8696,28 @@ describe('App', () => {
     expect(within(expenseDialog).queryByLabelText('Подтвердить отрицательный остаток фонда')).not.toBeInTheDocument()
     await user.type(within(expenseDialog).getByLabelText('Документ выплаты'), 'RKO-prototype')
     await user.type(within(expenseDialog).getByLabelText('Комментарий к выплате'), 'Оплата из формы выплат')
+    await user.click(within(expenseDialog).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(validExpenseAttemptCount).toBe(1))
+    expect(within(expenseDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(expenseDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(expenseDialog).getByRole('button', { name: 'Закрыть новую выплату' })).toBeDisabled()
+    expect(within(expenseDialog).getByRole('combobox', { name: 'Источник выплаты' })).toBeDisabled()
+    expect(within(expenseDialog).getByRole('combobox', { name: 'Поставщик выплаты' })).toBeDisabled()
+    expect(within(expenseDialog).getByLabelText('Дата выплаты')).toBeDisabled()
+    expect(within(expenseDialog).getByLabelText('Месяц выплаты')).toBeDisabled()
+    expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toBeDisabled()
+    expect(within(expenseDialog).getByLabelText('Документ выплаты')).toBeDisabled()
+    expect(within(expenseDialog).getByLabelText('Комментарий к выплате')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(expenseDialog.parentElement!)
+    expect(expenseDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstValidExpense(new Error('Выплата временно не сохранена.'))
+    })
+    expect(await within(expenseDialog).findByRole('alert')).toHaveTextContent('Выплата временно не сохранена.')
+    expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('1 200.00')
+    expect(within(expenseDialog).getByLabelText('Документ выплаты')).toHaveValue('RKO-prototype')
+    expect(within(expenseDialog).getByLabelText('Комментарий к выплате')).toHaveValue('Оплата из формы выплат')
     await user.click(within(expenseDialog).getByRole('button', { name: 'Провести' }))
     await waitFor(() => expect(savedExpenseRequests).toHaveLength(1))
     expect(savedExpenseRequests[0]).toMatchObject({
@@ -8428,6 +8823,27 @@ describe('App', () => {
     await user.type(within(staffPaymentDialog).getByLabelText('Документ выплаты сотруднику'), 'STAFF-PAY-prototype')
     await user.type(within(staffPaymentDialog).getByLabelText('Комментарий к выплате сотруднику'), 'Выплата сотруднику из формы')
     await user.click(within(staffPaymentDialog).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(staffPaymentAttemptCount).toBe(1))
+    expect(within(staffPaymentDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(staffPaymentDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(staffPaymentDialog).getByRole('button', { name: 'Закрыть выплату сотруднику' })).toBeDisabled()
+    expect(staffPaymentMember).toBeDisabled()
+    expect(staffPaymentDate).toBeDisabled()
+    expect(staffPaymentMonth).toBeDisabled()
+    expect(staffPaymentAmount).toBeDisabled()
+    expect(within(staffPaymentDialog).getByLabelText('Документ выплаты сотруднику')).toBeDisabled()
+    expect(within(staffPaymentDialog).getByLabelText('Комментарий к выплате сотруднику')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(staffPaymentDialog.parentElement!)
+    expect(staffPaymentDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstStaffPayment(new Error('Выплата сотруднику временно не сохранена.'))
+    })
+    expect(await within(staffPaymentDialog).findByRole('alert')).toHaveTextContent('Выплата сотруднику временно не сохранена.')
+    expect(staffPaymentAmount).toHaveValue('40 000.00')
+    expect(within(staffPaymentDialog).getByLabelText('Документ выплаты сотруднику')).toHaveValue('STAFF-PAY-prototype')
+    expect(within(staffPaymentDialog).getByLabelText('Комментарий к выплате сотруднику')).toHaveValue('Выплата сотруднику из формы')
+    await user.click(within(staffPaymentDialog).getByRole('button', { name: 'Провести' }))
     await waitFor(() => expect(savedStaffPaymentRequests).toHaveLength(1))
     expect(savedStaffPaymentRequests[0]).toMatchObject({
       staffMemberId: 'staff-member-1',
@@ -8461,7 +8877,22 @@ describe('App', () => {
     await user.type(within(bonusDialog).getByLabelText('Документ премии'), 'PR-1')
     await user.type(within(bonusDialog).getByLabelText('Основание премии'), 'За качественную работу')
     await user.click(within(bonusDialog).getByRole('button', { name: 'Начислить премию сотруднику' }))
-    expect(await within(bonusDialog).findByText('Премия временно не сохранена')).toBeInTheDocument()
+    await waitFor(() => expect(staffSalaryAdjustmentAttemptCount).toBe(1))
+    expect(within(bonusDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(bonusDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(bonusDialog).getByRole('button', { name: /Закрыть: начислить премию сотруднику/i })).toBeDisabled()
+    expect(bonusStaffSelect).toBeDisabled()
+    expect(within(bonusDialog).getByLabelText('Месяц премии')).toBeDisabled()
+    expect(within(bonusDialog).getByLabelText('Сумма премии')).toBeDisabled()
+    expect(within(bonusDialog).getByLabelText('Документ премии')).toBeDisabled()
+    expect(within(bonusDialog).getByLabelText('Основание премии')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(bonusDialog.parentElement!)
+    expect(bonusDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstStaffSalaryAdjustment(new Error('Премия временно не сохранена'))
+    })
+    expect(await within(bonusDialog).findByRole('alert')).toHaveTextContent('Премия временно не сохранена')
     expect(within(bonusDialog).getByLabelText('Сумма премии')).toHaveValue('5 000.00')
     expect(within(bonusDialog).getByLabelText('Основание премии')).toHaveValue('За качественную работу')
     await user.click(within(bonusDialog).getByRole('button', { name: 'Начислить премию сотруднику' }))
@@ -8529,6 +8960,26 @@ describe('App', () => {
     await user.type(within(accrualDialog).getByLabelText('Документ начисления поставщику'), 'ACT-prototype')
     await user.type(within(accrualDialog).getByLabelText('Комментарий начисления поставщику'), 'Начисление из формы выплат')
     await user.click(within(accrualDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(supplierAccrualAttemptCount).toBe(1))
+    expect(within(accrualDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(accrualDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(accrualDialog).getByRole('button', { name: 'Закрыть новое начисление' })).toBeDisabled()
+    expect(accrualSupplier).toBeDisabled()
+    expect(accrualMonth).toBeDisabled()
+    expect(within(accrualDialog).getByLabelText('Сумма начисления поставщику')).toBeDisabled()
+    expect(within(accrualDialog).getByLabelText('Документ начисления поставщику')).toBeDisabled()
+    expect(within(accrualDialog).getByLabelText('Комментарий начисления поставщику')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(accrualDialog.parentElement!)
+    expect(accrualDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstSupplierAccrual(new Error('Начисление поставщику временно не сохранено.'))
+    })
+    expect(await within(accrualDialog).findByRole('alert')).toHaveTextContent('Начисление поставщику временно не сохранено.')
+    expect(within(accrualDialog).getByLabelText('Сумма начисления поставщику')).toHaveValue('850.00')
+    expect(within(accrualDialog).getByLabelText('Документ начисления поставщику')).toHaveValue('ACT-prototype')
+    expect(within(accrualDialog).getByLabelText('Комментарий начисления поставщику')).toHaveValue('Начисление из формы выплат')
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Ок' }))
     await waitFor(() => expect(savedSupplierAccrualRequests).toHaveLength(1))
     expect(savedSupplierAccrualRequests[0]).toMatchObject({
       supplierId: 'supplier-1',
@@ -8566,6 +9017,23 @@ describe('App', () => {
     await waitFor(() => expect(bankAmountInput).toHaveValue('12 300.00'))
     await user.type(within(bankDialog).getByLabelText('Комментарий к сумме в банке'), 'Инкассация из формы')
     expect(within(bankDialog).getByLabelText('Комментарий к сумме в банке').closest('.bank-deposit-form__comment')).not.toBeNull()
+    await user.click(within(bankDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(cashBankTransferAttemptCount).toBe(1))
+    expect(within(bankDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(bankDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(bankDialog).getByRole('button', { name: 'Закрыть учет суммы в банке' })).toBeDisabled()
+    expect(bankDateInput).toBeDisabled()
+    expect(bankAmountInput).toBeDisabled()
+    expect(within(bankDialog).getByLabelText('Комментарий к сумме в банке')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    fireEvent.mouseDown(bankDialog.parentElement!)
+    expect(bankDialog).toBeInTheDocument()
+    await act(async () => {
+      rejectFirstCashBankTransfer(new Error('Сдача кассы временно не сохранена.'))
+    })
+    expect(await within(bankDialog).findByRole('alert')).toHaveTextContent('Сдача кассы временно не сохранена.')
+    expect(bankAmountInput).toHaveValue('12 300.00')
+    expect(within(bankDialog).getByLabelText('Комментарий к сумме в банке')).toHaveValue('Инкассация из формы')
     await user.click(within(bankDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(savedCashBankTransferRequests).toHaveLength(1))
     expect(savedCashBankTransferRequests[0]).toMatchObject({

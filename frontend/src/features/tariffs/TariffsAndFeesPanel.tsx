@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent } from 'react'
-import { CalendarPlus, CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, StaffDepartmentSalaryFundDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -35,6 +35,10 @@ const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0
 const defaultTariffPanelsSplitPercent = 40
 const minimumTariffPanelsSplitPercent = 25
 const maximumTariffPanelsSplitPercent = 60
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
 
 type ContractorTariffRow = {
   id: string
@@ -773,6 +777,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [feeCampaignClosureComment, setFeeCampaignClosureComment] = useState('')
   const [feeCampaignRestoreTarget, setFeeCampaignRestoreTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignActionMessage, setFeeCampaignActionMessage] = useState<string | null>(null)
+  const [confirmationError, setConfirmationError] = useState<string | null>(null)
+  const confirmationErrorView = confirmationError ? <FormError>{confirmationError}</FormError> : null
+  const setFeeCampaignConfirmationError = setConfirmationError
   const [chargeServiceEditTarget, setChargeServiceEditTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceTariffSchedule, setChargeServiceTariffSchedule] = useState<ChargeServiceTariffPeriodDto[] | null>(null)
   const [chargeServiceTariffScheduleLoading, setChargeServiceTariffScheduleLoading] = useState(false)
@@ -780,8 +787,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
   const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
+  const setChargeServiceConfirmationError = setConfirmationError
   const [thresholdDeleteTarget, setThresholdDeleteTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteReason, setThresholdDeleteReason] = useState('')
+  const setThresholdDeleteError = setConfirmationError
   const [thresholdCreateOpen, setThresholdCreateOpen] = useState(false)
   const [thresholdCreateTarget, setThresholdCreateTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdCreateUpperBound, setThresholdCreateUpperBound] = useState('')
@@ -794,6 +803,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffDrafts, setTariffDrafts] = useState<Record<string, ContractorTariffDraft>>({})
   const [oneTimeDrafts, setOneTimeDrafts] = useState<Record<string, Partial<ContractorOneTimeRow>>>({})
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
+  const setPendingChangeError = setConfirmationError
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
   const [tariffReloadRevision, setTariffReloadRevision] = useState(0)
@@ -817,6 +827,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [oneTimeRestoreTarget, setOneTimeRestoreTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeContextMenu, setOneTimeContextMenu] = useState<{ row: ContractorOneTimeRow; x: number; y: number } | null>(null)
   const [oneTimeActionMessage, setOneTimeActionMessage] = useState<string | null>(null)
+  const setOneTimeConfirmationError = setConfirmationError
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
 
   useEffect(() => {
@@ -842,7 +853,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         }
       } catch (caught) {
         if (!ignore) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы и услуги.')
+          setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить тарифы и услуги.'))
         }
       } finally {
         if (!ignore) {
@@ -863,7 +874,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         }
       } catch (caught) {
         if (!ignore) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить нерегулярные платежи.')
+          setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить нерегулярные платежи.'))
         }
       } finally {
         if (!ignore) {
@@ -887,7 +898,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         }
       } catch (caught) {
         if (!ignore && feeCampaignMutationVersionRef.current === mutationVersionAtStart) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить объявленные сборы.')
+          setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить объявленные сборы.'))
         }
       } finally {
         if (!ignore) {
@@ -914,15 +925,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
     setOneTimeDeleteReason('')
+    setOneTimeConfirmationError(null)
   }
 
   function closeOneTimeRestoreDialog() {
     setOneTimeRestoreTarget(null)
+    setOneTimeConfirmationError(null)
   }
 
   function closeFeeCampaignArchiveDialog() {
     setFeeCampaignArchiveTarget(null)
     setFeeCampaignArchiveReason('')
+    setFeeCampaignConfirmationError(null)
   }
 
   function closeFeeCampaignEditDialog() {
@@ -956,7 +970,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }).catch((caught: unknown) => {
       if (!controller.signal.aborted) {
         tariffReferencesFailedRef.current = true
-        setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить данные для формы.')
+        setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить данные для формы.'))
       }
       return false
     }).finally(() => {
@@ -973,6 +987,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   function closeFeeCampaignCloseDialog() {
     setFeeCampaignCloseTarget(null)
     setFeeCampaignClosureComment('')
+    setFeeCampaignConfirmationError(null)
   }
 
   function ensureFeeCampaignGarageOptions() {
@@ -1004,7 +1019,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       })
       .catch((caught: unknown) => {
         if (!controller.signal.aborted) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить гаражи для формы сбора.')
+          setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить гаражи для формы сбора.'))
         }
         return false
       })
@@ -1042,20 +1057,24 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   function closeFeeCampaignRestoreDialog() {
     setFeeCampaignRestoreTarget(null)
+    setFeeCampaignConfirmationError(null)
   }
 
   function closeChargeServiceArchiveDialog() {
     setChargeServiceArchiveTarget(null)
     setChargeServiceArchiveReason('')
+    setChargeServiceConfirmationError(null)
   }
 
   function closeChargeServiceRestoreDialog() {
     setChargeServiceRestoreTarget(null)
+    setChargeServiceConfirmationError(null)
   }
 
   function closeThresholdDeleteDialog() {
     setThresholdDeleteTarget(null)
     setThresholdDeleteReason('')
+    setThresholdDeleteError(null)
   }
 
   function closeThresholdCreateDialog() {
@@ -1067,6 +1086,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   function cancelPendingChange() {
+    if (pendingChange && (
+      tariffSavingRowId === pendingChange.rowId ||
+      oneTimeSavingRowId === pendingChange.rowId
+    )) {
+      return
+    }
+
     if (pendingChange?.kind === 'tariff-text') {
       setTariffDrafts((drafts) => ({
         ...drafts,
@@ -1096,6 +1122,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
 
     setPendingChange(null)
+    setPendingChangeError(null)
   }
 
   async function confirmPendingChange() {
@@ -1103,45 +1130,51 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return
     }
 
-    if (pendingChange.kind === 'tariff-text') {
-      const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
-      const nextRows = tariffRows.map((currentRow) => (
-        currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue } : currentRow
-      ))
-      setTariffRows(nextRows)
-      if (sourceRow) {
-        await persistTariffRow(sourceRow, nextRows)
+    const change = pendingChange
+    setPendingChangeError(null)
+    let saved: boolean
+    if (change.kind === 'tariff-text' || change.kind === 'tariff-date') {
+      const sourceRow = tariffRows.find((currentRow) => currentRow.id === change.rowId)
+      if (!sourceRow) {
+        setPendingChangeError('Изменяемая строка тарифа больше не найдена. Обновите страницу и повторите действие.')
+        return
       }
-    } else if (pendingChange.kind === 'tariff-date') {
-      const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
       const nextRows = tariffRows.map((currentRow) => (
-        currentRow.id === pendingChange.rowId ? { ...currentRow, dateDay: pendingChange.nextDay, dateMonth: pendingChange.nextMonth } : currentRow
+        currentRow.id !== change.rowId
+          ? currentRow
+          : change.kind === 'tariff-text'
+            ? { ...currentRow, [change.field]: change.nextValue }
+            : { ...currentRow, dateDay: change.nextDay, dateMonth: change.nextMonth }
       ))
-      setTariffRows(nextRows)
-      setTariffDrafts((drafts) => ({
-        ...drafts,
-        [pendingChange.rowId]: {
-          ...drafts[pendingChange.rowId],
-          dateDay: pendingChange.nextDay,
-          dateMonth: pendingChange.nextMonth,
-        },
-      }))
-      if (sourceRow?.backendServiceSettingId) {
-        await persistTariffRow(sourceRow, nextRows)
-      }
-    } else if (pendingChange.kind === 'one-time-amount') {
-      const sourceRow = oneTimeRows.find((currentRow) => currentRow.id === pendingChange.rowId)
-      if (sourceRow) {
-        await persistOneTimeRow(sourceRow, { amount: pendingChange.nextValue })
+      if (change.kind === 'tariff-text' || sourceRow.backendServiceSettingId) {
+        saved = await persistTariffRow(sourceRow, nextRows, undefined, setPendingChangeError)
+      } else {
+        setTariffRows(nextRows)
+        setTariffDrafts((drafts) => ({
+          ...drafts,
+          [change.rowId]: {
+            ...drafts[change.rowId],
+            dateDay: change.nextDay,
+            dateMonth: change.nextMonth,
+          },
+        }))
+        saved = true
       }
     } else {
-      const sourceRow = oneTimeRows.find((currentRow) => currentRow.id === pendingChange.rowId)
-      if (sourceRow) {
-        await persistOneTimeStatus(sourceRow, pendingChange.nextValue === 'Активен')
+      const sourceRow = oneTimeRows.find((currentRow) => currentRow.id === change.rowId)
+      if (!sourceRow) {
+        setPendingChangeError('Изменяемый нерегулярный платёж больше не найден. Обновите страницу и повторите действие.')
+        return
       }
+      saved = Boolean(change.kind === 'one-time-amount'
+        ? await persistOneTimeRow(sourceRow, { amount: change.nextValue }, setPendingChangeError)
+        : await persistOneTimeStatus(sourceRow, change.nextValue === 'Активен', setPendingChangeError))
     }
 
-    setPendingChange(null)
+    if (saved) {
+      setPendingChange(null)
+      setPendingChangeError(null)
+    }
   }
 
   useRestoreFocusOnClose(Boolean(pendingChange))
@@ -1175,16 +1208,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   useRestoreFocusOnClose(thresholdCreateOpen)
   const thresholdCreateDialogRef = useFocusTrap<HTMLElement>(thresholdCreateOpen)
   const thresholdCreateCancelRef = useFocusOnOpen<HTMLButtonElement>(thresholdCreateOpen)
-  useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
-  useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
-  useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
-  useEscapeKey(Boolean(feeCampaignArchiveTarget), () => closeFeeCampaignArchiveDialog())
-  useEscapeKey(Boolean(feeCampaignCloseTarget), () => closeFeeCampaignCloseDialog())
-  useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
-  useEscapeKey(tariffArchiveDialogOpen, () => closeChargeServiceArchiveDialog())
-  useEscapeKey(Boolean(chargeServiceRestoreTarget), () => closeChargeServiceRestoreDialog())
-  useEscapeKey(Boolean(thresholdDeleteTarget), () => closeThresholdDeleteDialog())
-  useEscapeKey(thresholdCreateOpen, () => closeThresholdCreateDialog())
+  const pendingChangeSaving = Boolean(pendingChange && (
+    tariffSavingRowId === pendingChange.rowId ||
+    oneTimeSavingRowId === pendingChange.rowId
+  ))
+  useEscapeKey(Boolean(pendingChange) && !pendingChangeSaving, () => cancelPendingChange())
+  useEscapeKey(Boolean(oneTimeDeleteTarget) && oneTimeSavingRowId !== oneTimeDeleteTarget?.id, () => closeOneTimeDeleteDialog())
+  useEscapeKey(Boolean(oneTimeRestoreTarget) && oneTimeSavingRowId !== oneTimeRestoreTarget?.id, () => closeOneTimeRestoreDialog())
+  useEscapeKey(Boolean(feeCampaignArchiveTarget) && feeCampaignSavingId !== feeCampaignArchiveTarget?.id, () => closeFeeCampaignArchiveDialog())
+  useEscapeKey(Boolean(feeCampaignCloseTarget) && feeCampaignSavingId !== feeCampaignCloseTarget?.id, () => closeFeeCampaignCloseDialog())
+  useEscapeKey(Boolean(feeCampaignRestoreTarget) && feeCampaignSavingId !== feeCampaignRestoreTarget?.id, () => closeFeeCampaignRestoreDialog())
+  useEscapeKey(tariffArchiveDialogOpen && !tariffSavingRowId, () => closeChargeServiceArchiveDialog())
+  useEscapeKey(Boolean(chargeServiceRestoreTarget) && tariffSavingRowId !== `charge-service-${chargeServiceRestoreTarget?.id}`, () => closeChargeServiceRestoreDialog())
+  useEscapeKey(Boolean(thresholdDeleteTarget) && !tariffSavingRowId, () => closeThresholdDeleteDialog())
+  useEscapeKey(thresholdCreateOpen && !tariffSavingRowId, () => closeThresholdCreateDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
   useEffect(() => {
@@ -1318,7 +1355,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     )
   }
 
-  async function persistServiceSettingRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[]) {
+  async function persistServiceSettingRow(
+    row: ContractorTariffRow,
+    nextRows: ContractorTariffRow[],
+    onPersistenceError?: (message: string) => void,
+  ) {
     if (!canManageTariffs || row.isDeleted || !row.backendServiceSettingId) {
       return false
     }
@@ -1337,7 +1378,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applyTariffRows(backendTariffs, nextSettings)
       return true
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку услуги.')
+      const message = getErrorMessage(caught, 'Не удалось сохранить настройку услуги.')
+      ;(onPersistenceError ?? setTariffPersistenceError)(message)
       return false
     } finally {
       setTariffSavingRowId(null)
@@ -1421,17 +1463,21 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applySavedServiceTariff(saved)
       return true
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сменить режим тарифа.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось сменить режим тарифа.'))
       return false
     } finally {
       setTariffSavingRowId(null)
     }
   }
 
-  async function persistTariffRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[], electricityTierChangeReason?: string) {
+  async function persistTariffRow(
+    row: ContractorTariffRow,
+    nextRows: ContractorTariffRow[],
+    electricityTierChangeReason?: string,
+    onPersistenceError?: (message: string) => void,
+  ) {
     if (row.backendServiceSettingId && !row.threshold && (row.serviceSettingKind !== 'main' || !row.backendTariffId)) {
-      await persistServiceSettingRow(row, nextRows)
-      return true
+      return persistServiceSettingRow(row, nextRows, onPersistenceError)
     }
 
     if (!canManageTariffs || !row.calculationBase) {
@@ -1449,6 +1495,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const effectiveFrom = getInlineTariffChangeEffectiveFrom(backendTariff?.effectiveFrom)
     const amount = parseTariffAmount(targetRow.amount ?? '')
     if (amount == null) {
+      const message = 'Укажите сумму тарифа больше нуля.'
+      ;(onPersistenceError ?? setTariffPersistenceError)(message)
       return false
     }
 
@@ -1527,14 +1575,19 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applyTariffRows(nextTariffs)
       return true
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить тариф.')
+      const message = getErrorMessage(caught, 'Не удалось сохранить тариф.')
+      ;(onPersistenceError ?? setTariffPersistenceError)(message)
       return false
     } finally {
       setTariffSavingRowId(null)
     }
   }
 
-  async function persistOneTimeRow(row: ContractorOneTimeRow, overrides: Partial<Pick<ContractorOneTimeRow, 'amount' | 'isActive'>> = {}) {
+  async function persistOneTimeRow(
+    row: ContractorOneTimeRow,
+    overrides: Partial<Pick<ContractorOneTimeRow, 'amount' | 'isActive'>> = {},
+    onPersistenceError?: (message: string) => void,
+  ) {
     if (!canManageTariffs) {
       return null
     }
@@ -1542,7 +1595,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const amountText = overrides.amount ?? row.amount
     const amount = parsePrototypeAmount(amountText)
     if (amount == null) {
-      setOneTimeActionMessage(`Укажите корректную сумму для нерегулярного платежа "${row.name}".`)
+      const message = `Укажите корректную сумму для нерегулярного платежа "${row.name}".`
+      ;(onPersistenceError ?? setOneTimeActionMessage)(message)
       return null
     }
 
@@ -1575,21 +1629,25 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setOneTimeDrafts(createOneTimeEditableDrafts(nextRows))
       return savedPayment
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Не удалось сохранить нерегулярный платеж.'
-      setOneTimeActionMessage(message)
+      const message = getErrorMessage(caught, 'Не удалось сохранить нерегулярный платеж.')
+      ;(onPersistenceError ?? setOneTimeActionMessage)(message)
       return null
     } finally {
       setOneTimeSavingRowId(null)
     }
   }
 
-  async function persistOneTimeStatus(row: ContractorOneTimeRow, isActive: boolean) {
+  async function persistOneTimeStatus(
+    row: ContractorOneTimeRow,
+    isActive: boolean,
+    onPersistenceError?: (message: string) => void,
+  ) {
     if (!canManageTariffs) {
       return null
     }
 
     if (!row.backendPaymentId) {
-      return persistOneTimeRow(row, { amount: row.amount || '0', isActive })
+      return persistOneTimeRow(row, { amount: row.amount || '0', isActive }, onPersistenceError)
     }
 
     setOneTimeSavingRowId(row.id)
@@ -1615,8 +1673,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setOneTimeDrafts(createOneTimeEditableDrafts(nextRows))
       return savedPayment
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Не удалось изменить статус нерегулярного платежа.'
-      setOneTimeActionMessage(message)
+      const message = getErrorMessage(caught, 'Не удалось изменить статус нерегулярного платежа.')
+      ;(onPersistenceError ?? setOneTimeActionMessage)(message)
       return null
     } finally {
       setOneTimeSavingRowId(null)
@@ -1657,6 +1715,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return
     }
 
+    setPendingChangeError(null)
     setPendingChange({
       kind: 'tariff-text',
       rowId: row.id,
@@ -1723,6 +1782,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return
     }
 
+    setPendingChangeError(null)
     setPendingChange({
       kind: 'tariff-date',
       rowId: row.id,
@@ -1798,6 +1858,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return
     }
 
+    setPendingChangeError(null)
     setPendingChange({
       kind: 'one-time-amount',
       rowId: row.id,
@@ -1820,6 +1881,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   const toggleOneTimeActive = (row: ContractorOneTimeRow) => {
     setOneTimeContextMenu(null)
+    setPendingChangeError(null)
     setPendingChange({
       kind: 'one-time-active',
       rowId: row.id,
@@ -1842,6 +1904,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
 
     setOneTimeActionMessage(null)
+    setOneTimeConfirmationError(null)
     setOneTimeDeleteTarget(row)
     setOneTimeDeleteReason('')
   }
@@ -1859,6 +1922,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setOneTimeSavingRowId(oneTimeDeleteTarget.id)
     setOneTimeActionMessage(null)
+    setOneTimeConfirmationError(null)
     try {
       await dictionaryClient.archiveIrregularPayment(auth.accessToken, oneTimeDeleteTarget.backendPaymentId, oneTimeDeleteReason.trim())
       setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
@@ -1869,7 +1933,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       const message = caught instanceof DictionaryApiError && caught.code === 'irregular_payment_used'
         ? 'Удаление недоступно: нерегулярный платеж уже используется в платежах или начислениях.'
         : caught instanceof Error ? caught.message : 'Не удалось удалить нерегулярный платеж.'
-      setOneTimeActionMessage(message)
+      setOneTimeConfirmationError(message)
     } finally {
       setOneTimeSavingRowId(null)
     }
@@ -1883,6 +1947,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setOneTimeSavingRowId(oneTimeRestoreTarget.id)
     setOneTimeActionMessage(null)
+    setOneTimeConfirmationError(null)
     try {
       const restoredPayment = await dictionaryClient.restoreIrregularPayment(auth.accessToken, oneTimeRestoreTarget.backendPaymentId)
       const nextRows = oneTimeRows.map((currentRow) => (
@@ -1905,7 +1970,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       const message = caught instanceof DictionaryApiError && caught.code === 'irregular_payment_duplicate'
         ? 'Восстановление недоступно: активный нерегулярный платеж с таким наименованием уже существует.'
         : caught instanceof Error ? caught.message : 'Не удалось восстановить нерегулярный платеж.'
-      setOneTimeActionMessage(message)
+      setOneTimeConfirmationError(message)
     } finally {
       setOneTimeSavingRowId(null)
     }
@@ -1926,7 +1991,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       tariffReferencesLoadedRef.current = false
       setModal(null)
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось добавить услугу.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось добавить услугу.'))
       throw caught
     } finally {
       setTariffSavingRowId(null)
@@ -1950,7 +2015,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applySavedServiceTariff(saved)
       closeChargeServiceEditor()
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось изменить услугу.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось изменить услугу.'))
       throw caught
     } finally {
       setTariffSavingRowId(null)
@@ -1979,7 +2044,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setChargeServiceTariffSchedule(schedule)
     } catch (caught) {
       if (controller.signal.aborted) return
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить тарифы.'))
       setChargeServiceTariffSchedule([])
     } finally {
       if (!controller.signal.aborted) {
@@ -2018,7 +2083,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setOneTimeDrafts(createOneTimeEditableDrafts(nextRows))
       setModal(null)
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось добавить нерегулярную услугу.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось добавить нерегулярную услугу.'))
       throw caught
     } finally {
       setTariffSavingRowId(null)
@@ -2040,7 +2105,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setFeeCampaignsLoading(false)
       setModal(null)
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось объявить сбор.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось объявить сбор.'))
       throw caught
     } finally {
       setFeeCampaignSavingId(null)
@@ -2054,6 +2119,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setTariffSavingRowId(`charge-service-${chargeServiceArchiveTarget.id}`)
     setTariffPersistenceError(null)
+    setChargeServiceConfirmationError(null)
     try {
       await dictionaryClient.archiveChargeServiceSetting(auth.accessToken, chargeServiceArchiveTarget.id, chargeServiceArchiveReason.trim())
       const nextSettings = backendChargeServices.map((setting) => (
@@ -2065,7 +2131,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setTariffDrafts(createEditableDrafts(nextRows))
       closeChargeServiceArchiveDialog()
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось архивировать услугу.')
+      setChargeServiceConfirmationError(getErrorMessage(caught, 'Не удалось архивировать услугу.'))
     } finally {
       setTariffSavingRowId(null)
     }
@@ -2078,6 +2144,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setTariffSavingRowId(`charge-service-${chargeServiceRestoreTarget.id}`)
     setTariffPersistenceError(null)
+    setChargeServiceConfirmationError(null)
     try {
       const restoredSetting = await dictionaryClient.restoreChargeServiceSetting(auth.accessToken, chargeServiceRestoreTarget.id)
       const nextSettings = backendChargeServices.map((setting) => (
@@ -2091,7 +2158,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setTariffPageNumber(1)
       closeChargeServiceRestoreDialog()
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось восстановить услугу.')
+      setChargeServiceConfirmationError(getErrorMessage(caught, 'Не удалось восстановить услугу.'))
     } finally {
       setTariffSavingRowId(null)
     }
@@ -2113,7 +2180,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       )))
       closeFeeCampaignEditDialog()
     } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось изменить сбор.')
+      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось изменить сбор.'))
       throw caught
     } finally {
       setFeeCampaignSavingId(null)
@@ -2127,6 +2194,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setFeeCampaignSavingId(feeCampaignArchiveTarget.id)
     setFeeCampaignActionMessage(null)
+    setFeeCampaignConfirmationError(null)
     try {
       await dictionaryClient.archiveFeeCampaign(auth.accessToken, feeCampaignArchiveTarget.id, feeCampaignArchiveReason.trim())
       feeCampaignMutationVersionRef.current += 1
@@ -2135,7 +2203,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       )))
       closeFeeCampaignArchiveDialog()
     } catch (caught) {
-      setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось архивировать сбор.')
+      setFeeCampaignConfirmationError(getErrorMessage(caught, 'Не удалось архивировать сбор.'))
     } finally {
       setFeeCampaignSavingId(null)
     }
@@ -2148,6 +2216,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setFeeCampaignSavingId(feeCampaignRestoreTarget.id)
     setFeeCampaignActionMessage(null)
+    setFeeCampaignConfirmationError(null)
     try {
       const restoredCampaign = await dictionaryClient.restoreFeeCampaign(auth.accessToken, feeCampaignRestoreTarget.id)
       feeCampaignMutationVersionRef.current += 1
@@ -2156,7 +2225,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       )))
       closeFeeCampaignRestoreDialog()
     } catch (caught) {
-      setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось восстановить сбор.')
+      setFeeCampaignConfirmationError(getErrorMessage(caught, 'Не удалось восстановить сбор.'))
     } finally {
       setFeeCampaignSavingId(null)
     }
@@ -2167,13 +2236,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return
     }
 
+    setThresholdDeleteError(null)
     const currentThresholdRows = getElectricityThresholdRows(tariffRows, thresholdDeleteTarget)
     if (currentThresholdRows.length <= 2) {
-      setThresholdRangeErrors((errors) => ({
-        ...errors,
-        [thresholdDeleteTarget.id]: 'Должен остаться минимум один порог и две тарифные ступени.',
-      }))
-      closeThresholdDeleteDialog()
+      setThresholdDeleteError('Должен остаться минимум один порог и две тарифные ступени.')
       return
     }
     const deletingLastTier = currentThresholdRows.at(-1)?.id === thresholdDeleteTarget.id
@@ -2184,7 +2250,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       .map((row) => deletingLastTier && row.id === nextLastTierId
         ? { ...row, electricityUpperBound: null }
         : row))
-    const saved = await persistTariffRow(thresholdDeleteTarget, nextRows, thresholdDeleteReason.trim())
+    const saved = await persistTariffRow(
+      thresholdDeleteTarget,
+      nextRows,
+      thresholdDeleteReason.trim(),
+      setThresholdDeleteError,
+    )
     if (saved) {
       closeThresholdDeleteDialog()
     }
@@ -2248,6 +2319,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     setFeeCampaignSavingId(feeCampaignCloseTarget.id)
     setFeeCampaignActionMessage(null)
+    setFeeCampaignConfirmationError(null)
     try {
       const closedCampaign = await dictionaryClient.closeFeeCampaign(auth.accessToken, feeCampaignCloseTarget.id, {
         comment: feeCampaignClosureComment.trim() || null,
@@ -2261,7 +2333,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         : `Сбор «${closedCampaign.name}» закрыт после выполнения плана.`)
       closeFeeCampaignCloseDialog()
     } catch (caught) {
-      setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось закрыть сбор.')
+      setFeeCampaignConfirmationError(getErrorMessage(caught, 'Не удалось закрыть сбор.'))
     } finally {
       setFeeCampaignSavingId(null)
     }
@@ -2270,6 +2342,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   async function confirmThresholdCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!thresholdCreateTarget) return
+    setThresholdCreateError(null)
     const electricityThresholdRows = getElectricityThresholdRows(tariffRows, thresholdCreateTarget)
     const lastRow = electricityThresholdRows.at(-1)
     const upperBound = parseTariffAmount(thresholdCreateUpperBound, true)
@@ -2315,7 +2388,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       nextRow,
       ...tariffRows.slice(lastRowIndex),
     ])
-    const saved = await persistTariffRow(nextRow, nextRows, 'Добавлен числовой диапазон пороговой тарификации.')
+    const saved = await persistTariffRow(
+      nextRow,
+      nextRows,
+      'Добавлен числовой диапазон пороговой тарификации.',
+      setThresholdCreateError,
+    )
     if (saved) {
       closeThresholdCreateDialog()
     }
@@ -2744,6 +2822,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                             disabled={!canManageTariffs || isRowDisabled}
                             onClick={() => {
                               setTariffPersistenceError(null)
+                              setChargeServiceConfirmationError(null)
                               setChargeServiceArchiveReason('')
                               setChargeServiceArchiveTarget(serviceSetting)
                             }}
@@ -2761,6 +2840,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                           disabled={!canManageTariffs || tariffsLoading || isServiceSaving}
                           onClick={() => {
                             setTariffPersistenceError(null)
+                            setChargeServiceConfirmationError(null)
                             setChargeServiceRestoreTarget(serviceSetting)
                           }}
                         >
@@ -2775,6 +2855,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                           title="Удалить порог"
                           disabled={!canManageTariffs || isRowDisabled}
                           onClick={() => {
+                            setThresholdDeleteError(null)
                             setThresholdDeleteTarget(row)
                             setThresholdDeleteReason('')
                           }}
@@ -2863,7 +2944,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     {row.isDeleted ? (
                       <span className="contractors-mini-actions">
                         <span>{row.amount}</span>
-                        <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeLoading || oneTimeSavingRowId === row.id} onClick={() => setOneTimeRestoreTarget(row)}>
+                        <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeLoading || oneTimeSavingRowId === row.id} onClick={() => {
+                          setOneTimeConfirmationError(null)
+                          setOneTimeRestoreTarget(row)
+                        }}>
                           <RotateCcw size={16} />
                           <span>Вернуть</span>
                         </button>
@@ -2965,40 +3049,32 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     </span>
                     <span className="contractors-mini-actions">
                     {campaign.isArchived ? (
-                      <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignRestoreTarget(campaign)}>
+                      <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
+                        setFeeCampaignConfirmationError(null)
+                        setFeeCampaignRestoreTarget(campaign)
+                      }}>
                         <RotateCcw size={16} />
                         <span>Вернуть</span>
                       </button>
                     ) : campaign.closedAtUtc ? (
-                      <>
-                        <button className="icon-button" type="button" aria-label={`Изменить закрытый сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
-                          <Pencil size={16} />
-                        </button>
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
-                          setFeeCampaignArchiveTarget(campaign)
-                          setFeeCampaignArchiveReason('')
-                        }}>
-                          <Trash2 size={16} />
-                        </button>
-                      </>
+                      <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
+                        setFeeCampaignConfirmationError(null)
+                        setFeeCampaignArchiveTarget(campaign)
+                        setFeeCampaignArchiveReason('')
+                      }}>
+                        <Trash2 size={16} />
+                      </button>
                     ) : (
                       <>
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} aria-busy={tariffReferencesLoading || feeCampaignGarageOptionsLoading} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id || tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
-                        {!campaign.endsOn || campaign.endsOn > currentBusinessDate ? (
-                            <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
-                            setFeeCampaignCloseTarget(campaign)
-                            setFeeCampaignClosureComment('')
-                          }}>
-                            <CircleCheck size={16} />
-                          </button>
-                        ) : null}
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
-                          setFeeCampaignArchiveTarget(campaign)
-                          setFeeCampaignArchiveReason('')
+                        <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
+                          setFeeCampaignConfirmationError(null)
+                          setFeeCampaignCloseTarget(campaign)
+                          setFeeCampaignClosureComment('')
                         }}>
-                          <Trash2 size={16} />
+                          <CircleCheck size={16} aria-hidden="true" />
                         </button>
                       </>
                     )}
@@ -3048,7 +3124,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {pendingChange ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingChange}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={pendingChangeSaving ? undefined : cancelPendingChange}>
           <section ref={changeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="tariff-prototype-change-title" aria-describedby="tariff-prototype-change-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3056,7 +3132,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <h3 id="tariff-prototype-change-title">Подтвердить изменение?</h3>
                 <p>{pendingChange.objectName}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение изменения тарифа" onClick={cancelPendingChange}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение изменения тарифа" onClick={cancelPendingChange} disabled={pendingChangeSaving}>
                 <X size={18} />
               </button>
             </div>
@@ -3077,19 +3153,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 </div>
               </div>
             </div>
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button className="secondary-button" type="button" onClick={confirmPendingChange} disabled={oneTimeSavingRowId === pendingChange.rowId || tariffSavingRowId === pendingChange.rowId}>
+              <button className="secondary-button" type="button" onClick={confirmPendingChange} disabled={pendingChangeSaving}>
                 <Save size={16} />
-                <span>Сохранить</span>
+                <span>{pendingChangeSaving ? 'Сохраняем…' : 'Сохранить'}</span>
               </button>
-              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange}>Отмена</button>
+              <button ref={changeCancelRef} className="ghost-button" type="button" onClick={cancelPendingChange} disabled={pendingChangeSaving}>Отмена</button>
             </div>
           </section>
         </div>
       ) : null}
 
       {thresholdCreateOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeThresholdCreateDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={tariffSavingRowId ? undefined : closeThresholdCreateDialog}>
           <section ref={thresholdCreateDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="threshold-create-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3097,7 +3174,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <h3 id="threshold-create-title">Добавить тарифный порог</h3>
                 <p>Новая ступень будет сохранена перед тарифом без верхней границы.</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть добавление порога" onClick={closeThresholdCreateDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть добавление порога" onClick={closeThresholdCreateDialog} disabled={Boolean(tariffSavingRowId)}>
                 <X size={18} />
               </button>
             </div>
@@ -3111,11 +3188,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   />
                 </FormField>
                 <FormField label={`До, ${thresholdCreateTarget?.unit ?? 'ед.'}`}>
-                  <MeterReadingInput aria-label="Верхняя граница нового порога" value={thresholdCreateUpperBound} onChange={(event) => setThresholdCreateUpperBound(event.target.value)} />
+                  <MeterReadingInput aria-label="Верхняя граница нового порога" value={thresholdCreateUpperBound} onChange={(event) => setThresholdCreateUpperBound(event.target.value)} disabled={Boolean(tariffSavingRowId)} />
                   <small className="form-field-hint">Единица: {thresholdCreateTarget?.unit ?? 'по выбранному счетчику'}</small>
                 </FormField>
                 <FormField label="Ставка, руб.">
-                  <MoneyTextInput aria-label="Ставка нового порога" value={thresholdCreateRate} onValueChange={setThresholdCreateRate} />
+                  <MoneyTextInput aria-label="Ставка нового порога" value={thresholdCreateRate} onValueChange={setThresholdCreateRate} disabled={Boolean(tariffSavingRowId)} />
                 </FormField>
               </div>
               {thresholdCreateError ? <FormError>{thresholdCreateError}</FormError> : null}
@@ -3132,7 +3209,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {thresholdDeleteTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeThresholdDeleteDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={tariffSavingRowId ? undefined : closeThresholdDeleteDialog}>
           <section ref={thresholdDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="threshold-delete-title" aria-describedby="threshold-delete-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3140,7 +3217,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <h3 id="threshold-delete-title">Удалить порог тарификации?</h3>
                 <p>{thresholdDeleteTarget.title}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления порога" onClick={closeThresholdDeleteDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления порога" onClick={closeThresholdDeleteDialog} disabled={Boolean(tariffSavingRowId)}>
                 <X size={18} />
               </button>
             </div>
@@ -3153,10 +3230,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               value={thresholdDeleteReason}
               onChange={(event) => setThresholdDeleteReason(event.target.value)}
               placeholder="Например: лишний порог добавлен ошибочно"
+              disabled={Boolean(tariffSavingRowId)}
               required
             />
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={thresholdDeleteCancelRef} className="ghost-button" type="button" onClick={closeThresholdDeleteDialog}>Отмена</button>
+              <button ref={thresholdDeleteCancelRef} className="ghost-button" type="button" onClick={closeThresholdDeleteDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmThresholdDelete} disabled={!thresholdDeleteReason.trim() || Boolean(tariffSavingRowId)}>
                 <Trash2 size={16} />
                 <span>{tariffSavingRowId ? 'Удаляем…' : 'Удалить'}</span>
@@ -3167,7 +3246,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {oneTimeDeleteTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeOneTimeDeleteDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={oneTimeSavingRowId === oneTimeDeleteTarget.id ? undefined : closeOneTimeDeleteDialog}>
           <section ref={oneTimeDeleteDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="one-time-delete-title" aria-describedby="one-time-delete-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3175,7 +3254,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <h3 id="one-time-delete-title">Удалить нерегулярный платеж?</h3>
                 <p>{oneTimeDeleteTarget.name}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления нерегулярного платежа" onClick={closeOneTimeDeleteDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления нерегулярного платежа" onClick={closeOneTimeDeleteDialog} disabled={oneTimeSavingRowId === oneTimeDeleteTarget.id}>
                 <X size={18} />
               </button>
             </div>
@@ -3188,10 +3267,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               value={oneTimeDeleteReason}
               onChange={(event) => setOneTimeDeleteReason(event.target.value)}
               placeholder="Например: платеж больше не используется"
+              disabled={oneTimeSavingRowId === oneTimeDeleteTarget.id}
               required
             />
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog}>Отмена</button>
+              <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog} disabled={oneTimeSavingRowId === oneTimeDeleteTarget.id}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim() || oneTimeSavingRowId === oneTimeDeleteTarget.id}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
@@ -3202,7 +3283,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {oneTimeRestoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeOneTimeRestoreDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={oneTimeSavingRowId === oneTimeRestoreTarget.id ? undefined : closeOneTimeRestoreDialog}>
           <section ref={oneTimeRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="one-time-restore-title" aria-describedby="one-time-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3215,6 +3296,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               </button>
             </div>
             <p className="confirmation-text" id="one-time-restore-description">Платеж снова появится в рабочих списках. Действие будет записано в историю изменений.</p>
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={oneTimeRestoreCancelRef} className="ghost-button" type="button" onClick={closeOneTimeRestoreDialog} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmOneTimeRestore} disabled={oneTimeSavingRowId === oneTimeRestoreTarget.id}>
@@ -3227,7 +3309,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {tariffArchiveDialogOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeChargeServiceArchiveDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={tariffSavingRowId ? undefined : closeChargeServiceArchiveDialog}>
           <section ref={chargeServiceArchiveDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-archive-title" aria-describedby="charge-service-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3255,6 +3337,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               disabled={Boolean(tariffSavingRowId)}
               required
             />
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || Boolean(tariffSavingRowId)}>
@@ -3267,7 +3350,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {chargeServiceRestoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeChargeServiceRestoreDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}` ? undefined : closeChargeServiceRestoreDialog}>
           <section ref={chargeServiceRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-restore-title" aria-describedby="charge-service-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3280,6 +3363,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               </button>
             </div>
             <p className="confirmation-text" id="charge-service-restore-description">Услуга снова станет доступной для редактирования и будущих начислений. Уже проведённые начисления и платежи не изменятся, прошлые периоды автоматически не пересчитаются. Действие будет записано в историю изменений.</p>
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceRestoreCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceRestoreDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>Отмена</button>
               <button className="secondary-button" type="button" onClick={restoreChargeServiceSetting} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>
@@ -3292,7 +3376,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {feeCampaignArchiveTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignArchiveDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={feeCampaignSavingId === feeCampaignArchiveTarget.id ? undefined : closeFeeCampaignArchiveDialog}>
           <section ref={feeCampaignArchiveDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-archive-title" aria-describedby="fee-campaign-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3300,7 +3384,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <h3 id="fee-campaign-archive-title">Архивировать сбор?</h3>
                 <p>{feeCampaignArchiveTarget.name}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение архивации сбора" onClick={closeFeeCampaignArchiveDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение архивации сбора" onClick={closeFeeCampaignArchiveDialog} disabled={feeCampaignSavingId === feeCampaignArchiveTarget.id}>
                 <X size={18} />
               </button>
             </div>
@@ -3313,10 +3397,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               value={feeCampaignArchiveReason}
               onChange={(event) => setFeeCampaignArchiveReason(event.target.value)}
               placeholder="Например: сбор больше не используется"
+              disabled={feeCampaignSavingId === feeCampaignArchiveTarget.id}
               required
             />
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog}>Отмена</button>
+              <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog} disabled={feeCampaignSavingId === feeCampaignArchiveTarget.id}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={archiveFeeCampaign} disabled={!feeCampaignArchiveReason.trim() || feeCampaignSavingId === feeCampaignArchiveTarget.id}>
                 <Trash2 size={16} />
                 <span>Архивировать</span>
@@ -3327,7 +3413,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {feeCampaignCloseTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignCloseDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={feeCampaignSavingId === feeCampaignCloseTarget.id ? undefined : closeFeeCampaignCloseDialog}>
           <section ref={feeCampaignCloseDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-close-title" aria-describedby="fee-campaign-close-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3350,10 +3436,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}
               />
             </FormField>
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={feeCampaignCloseCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignCloseDialog} disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}>Отмена</button>
               <button className="secondary-button" type="button" onClick={closeFeeCampaign} disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}>
-                <CircleCheck size={16} />
+                <CircleCheck size={16} aria-hidden="true" />
                 <span>Закрыть сбор</span>
               </button>
             </div>
@@ -3362,7 +3449,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
 
       {feeCampaignRestoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignRestoreDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={feeCampaignSavingId === feeCampaignRestoreTarget.id ? undefined : closeFeeCampaignRestoreDialog}>
           <section ref={feeCampaignRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-restore-title" aria-describedby="fee-campaign-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -3377,6 +3464,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             <p className="confirmation-text" id="fee-campaign-restore-description">{feeCampaignRestoreTarget.closedAtUtc
               ? 'Закрытый сбор снова появится в рабочем списке, но новые начисления по нему останутся запрещены. Действие будет записано в историю изменений.'
               : 'Сбор снова появится как активный и будет доступен для начислений. Действие будет записано в историю изменений.'}</p>
+            {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={feeCampaignRestoreCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignRestoreDialog} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>Отмена</button>
               <button className="secondary-button" type="button" onClick={restoreFeeCampaign} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>
@@ -3521,9 +3609,10 @@ export function AddServicePrototypeDialog({
     && (effectiveCalculationBase === 'meter_water' || effectiveCalculationBase === 'meter_electricity')
   const isMonthly = periodicityMonths === '1'
   const canChooseRegularity = !regularOnly && !initialSetting
+  const dialogBusy = isSaving || scheduleSaving
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!dialogBusy, onClose)
 
   async function saveTariffSchedule() {
     if (!onUpdateTariffSchedule || !initialSetting) {
@@ -3574,7 +3663,7 @@ export function AddServicePrototypeDialog({
       setScheduleDraft(saved.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
       setScheduleMessage('Тарифная сетка сохранена.')
     } catch (caught) {
-      setScheduleMessage(caught instanceof Error ? caught.message : 'Не удалось сохранить тарифную сетку.')
+      setScheduleMessage(getErrorMessage(caught, 'Не удалось сохранить тарифную сетку.'))
     } finally {
       setScheduleSaving(false)
     }
@@ -3678,7 +3767,7 @@ export function AddServicePrototypeDialog({
           isActive: true,
         })
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'Не удалось сохранить услугу.')
+        setError(getErrorMessage(caught, 'Не удалось сохранить услугу.'))
       }
       return
     }
@@ -3746,12 +3835,12 @@ export function AddServicePrototypeDialog({
         await onSave(serviceRequest)
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось сохранить услугу.')
+      setError(getErrorMessage(caught, 'Не удалось сохранить услугу.'))
     }
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={dialogBusy ? undefined : onClose}>
       <section
         ref={dialogRef}
         className={`detail-dialog contractors-dialog contractors-tariff-dialog contractors-service-dialog ${isRegular ? 'contractors-service-dialog--regular' : 'contractors-service-dialog--compact'}`}
@@ -3763,7 +3852,7 @@ export function AddServicePrototypeDialog({
         <div className="detail-dialog-header">
           <h3 id="contractor-service-title">{title}</h3>
           <div className="contractors-service-header-actions">
-            <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
+            <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose} disabled={dialogBusy}>
               <X size={18} />
             </button>
           </div>
@@ -3774,7 +3863,7 @@ export function AddServicePrototypeDialog({
           {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
           <div className="contractors-service-heading-grid contractors-service-heading-grid--name-only">
             <FormField label="Наименование услуги">
-              <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
+              <input aria-label="Наименование услуги" value={name} disabled={dialogBusy} onChange={(event) => setName(event.target.value)} />
             </FormField>
           </div>
           {isRegular ? (
@@ -3788,6 +3877,7 @@ export function AddServicePrototypeDialog({
                       { value: '', label: 'Выберите фонд поступления' },
                       ...funds.map((fund) => ({ value: fund.id, label: fund.name })),
                     ]}
+                    disabled={dialogBusy}
                     onChange={(nextIncomeFundId) => {
                       setIncomeFundId(nextIncomeFundId)
                       setError(null)
@@ -3806,7 +3896,7 @@ export function AddServicePrototypeDialog({
                       className="secondary-button create-action-button"
                       type="button"
                       aria-label="Добавить период тарифа"
-                      disabled={scheduleSaving || scheduleDraft.length === 120}
+                      disabled={dialogBusy || scheduleDraft.length === 120}
                       onClick={() => setScheduleDraft((current) => [...current, {
                         key: `new-${Date.now()}`,
                         tariffId: '',
@@ -3817,7 +3907,7 @@ export function AddServicePrototypeDialog({
                         rateText: regularRate || '1',
                       }])}
                     >
-                      <CalendarPlus size={16} aria-hidden="true" />
+                      <FileSpreadsheet size={16} aria-hidden="true" />
                       <span>Добавить период</span>
                     </button>
                   </div>
@@ -3838,6 +3928,7 @@ export function AddServicePrototypeDialog({
                               ariaLabel={periodIndex === 0 ? 'Ставка с' : 'Начальная дата тарифа'}
                               mode="date"
                               value={period.effectiveFrom ?? ''}
+                              disabled={dialogBusy}
                               onChange={(value) => {
                                 const normalizedValue = value || null
                                 if (periodIndex === 0 && normalizedValue) {
@@ -3854,6 +3945,7 @@ export function AddServicePrototypeDialog({
                               ariaLabel="Конечная дата тарифа"
                               mode="date"
                               value={period.effectiveTo ?? ''}
+                              disabled={dialogBusy}
                               onChange={(value) => setScheduleDraft((current) => current.map((item) => item.key === period.key
                                 ? { ...item, effectiveTo: value || null }
                                 : item))}
@@ -3864,6 +3956,7 @@ export function AddServicePrototypeDialog({
                               <MoneyTextInput
                                 aria-label="Тариф регулярной услуги"
                                 value={period.rateText}
+                                disabled={dialogBusy}
                                 onValueChange={(value) => {
                                   setRegularRate(value)
                                   setScheduleDraft((current) => current.map((item) => item.key === period.key
@@ -3878,7 +3971,7 @@ export function AddServicePrototypeDialog({
                               className="icon-button danger-icon-button"
                               type="button"
                               aria-label="Удалить период тарифа"
-                              disabled={scheduleDraft.length <= 1 || scheduleSaving}
+                              disabled={scheduleDraft.length <= 1 || dialogBusy}
                               onClick={() => setScheduleDraft((current) => current.filter((item) => item.key !== period.key))}
                             ><Trash2 size={16} aria-hidden="true" /></button>
                           </span>
@@ -3888,7 +3981,7 @@ export function AddServicePrototypeDialog({
                   )}
                   {scheduleMessage ? <p className="tariff-schedule-message" role="status">{scheduleMessage}</p> : null}
                   <div className="tariff-schedule-footer tariff-schedule-footer--actions-only">
-                    <button className="secondary-button" type="button" disabled={scheduleSaving || tariffScheduleLoading} onClick={() => void saveTariffSchedule()}>
+                    <button className="secondary-button" type="button" disabled={dialogBusy || tariffScheduleLoading} onClick={() => void saveTariffSchedule()}>
                       <Save size={16} aria-hidden="true" />
                       <span>{scheduleSaving ? 'Сохраняем…' : 'Сохранить тарифную сетку'}</span>
                     </button>
@@ -3905,12 +3998,13 @@ export function AddServicePrototypeDialog({
                   </div>
                   <div className="tariff-schedule-row tariff-schedule-row--initial">
                     <FormField label="Начальная дата">
-                      <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} onChange={setTariffEffectiveFrom} />
+                      <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} disabled={dialogBusy} onChange={setTariffEffectiveFrom} />
                     </FormField>
                     <FormField label="Тариф" help="Ставка начисления.">
                       <MoneyTextInput
                         aria-label="Тариф регулярной услуги"
                         value={regularRate}
+                        disabled={dialogBusy}
                         onValueChange={(nextRate) => {
                           setRegularRate(nextRate)
                           setError(null)
@@ -3923,22 +4017,22 @@ export function AddServicePrototypeDialog({
               {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
               <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
                 <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
-                  <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} onChange={setPeriodicityMonths} />
+                  <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} disabled={dialogBusy} onChange={setPeriodicityMonths} />
                 </FormField>
                 {!isMonthly ? <FormField label="Месяц начисления" help="В этом месяце ежегодная услуга попадёт в начисления.">
-                  <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} onChange={setAccrualStartMonth} />
+                  <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setAccrualStartMonth} />
                 </FormField> : null}
                 <FormField label="Оплатить до" help={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
                   <div className="contractors-inline-field contractors-inline-field--date">
-                    <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} onChange={(event) => setPaymentDueDay(event.target.value)} />
+                    <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} disabled={dialogBusy} onChange={(event) => setPaymentDueDay(event.target.value)} />
                     {!isMonthly
-                      ? <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} onChange={setPaymentDueMonth} />
+                      ? <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setPaymentDueMonth} />
                       : <span className="contractors-date-suffix">числа следующего месяца</span>}
                   </div>
                 </FormField>
                 <FormField label="Перенос долга в просроченный" help="Количество дней после срока оплаты до переноса задолженности в просроченную.">
                   <div className="contractors-inline-field">
-                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} disabled={dialogBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
                     <span>дн.</span>
                   </div>
                 </FormField>
@@ -3949,6 +4043,7 @@ export function AddServicePrototypeDialog({
                     placement="above"
                     value={unitName}
                     options={measurementUnits.map((unit) => ({ value: unit.name, label: unit.name }))}
+                    disabled={dialogBusy}
                     onChange={(nextUnitName) => {
                       setUnitName(nextUnitName)
                       setError(null)
@@ -3962,6 +4057,7 @@ export function AddServicePrototypeDialog({
                     type="checkbox"
                     aria-label="По счетчику"
                     checked={isByMeter}
+                    disabled={dialogBusy}
                     onChange={(event) => changeMeterMode(event.target.checked)}
                   />
                   <span>По счетчику</span>
@@ -3971,7 +4067,7 @@ export function AddServicePrototypeDialog({
                     type="checkbox"
                     aria-label="Пороговая тарификация"
                     checked={isTiered}
-                    disabled={!canUseTieredTariff}
+                    disabled={dialogBusy || !canUseTieredTariff}
                     onChange={(event) => {
                       const nextTiered = event.target.checked
                       setIsTiered(nextTiered)
@@ -4014,7 +4110,7 @@ export function AddServicePrototypeDialog({
                                 aria-label={`${tier.name}: верхняя граница`}
                                 value={tier.upperBound ?? ''}
                                 placeholder="Без верхней границы"
-                                disabled={index === tariffTiers.length - 1}
+                                disabled={dialogBusy || index === tariffTiers.length - 1}
                                 onChange={(event) => {
                                   const nextValue = event.target.value === '' ? null : Number(event.target.value)
                                   setTariffTiers((current) => current.map((item) => item.id === tier.id
@@ -4031,6 +4127,7 @@ export function AddServicePrototypeDialog({
                               <MoneyInput
                                 aria-label={`${tier.name}: цена за единицу`}
                                 value={tier.rate}
+                                disabled={dialogBusy}
                                 onValueChange={(parsedRate) => {
                                   setTariffTiers((current) => current.map((item) => item.id === tier.id
                                     ? { ...item, rate: parsedRate }
@@ -4044,7 +4141,7 @@ export function AddServicePrototypeDialog({
                             className="icon-button danger-icon-button contractors-threshold-delete"
                             type="button"
                             aria-label={`Удалить порог ${index + 1}`}
-                            disabled={tariffTiers.length <= 2}
+                            disabled={dialogBusy || tariffTiers.length <= 2}
                             onClick={() => setTariffTiers((current) => {
                               const remaining = current.filter((item) => item.id !== tier.id)
                               return remaining.map((item, remainingIndex) => remainingIndex === remaining.length - 1
@@ -4060,7 +4157,7 @@ export function AddServicePrototypeDialog({
                       <button
                         className="ghost-button contractors-threshold-add"
                         type="button"
-                        disabled={tariffTiers.length >= 20}
+                        disabled={dialogBusy || tariffTiers.length >= 20}
                         onClick={() => {
                           const baseRate = parsePrototypeAmount(regularRate) ?? 1
                           setTariffTiers((current) => {
@@ -4092,6 +4189,7 @@ export function AddServicePrototypeDialog({
                   <MoneyTextInput
                     aria-label="Стоимость услуги"
                     value={cost}
+                    disabled={dialogBusy}
                     onValueChange={setCost}
                   />
                   <span>руб.</span>
@@ -4109,16 +4207,17 @@ export function AddServicePrototypeDialog({
                     type="checkbox"
                     aria-label="Регулярные платежи"
                     checked={isRegular}
+                    disabled={dialogBusy}
                     onChange={(event) => changeRegularity(event.target.checked)}
                   />
                 </span>
               </label>
             ) : <span aria-hidden="true" />}
-            <button className="secondary-button" type="submit" disabled={isSaving}>
+            <button className="secondary-button" type="submit" disabled={dialogBusy}>
               <Save size={17} />
               <span>{submitLabel}</span>
             </button>
-            <button className="ghost-button" type="button" onClick={onClose}>
+            <button className="ghost-button" type="button" onClick={onClose} disabled={dialogBusy}>
               Отмена
             </button>
           </div>
@@ -4173,13 +4272,14 @@ function AddFeePrototypeDialog({
   const [overdueGraceDays, setOverdueGraceDays] = useState(String(initialCampaign?.overdueGraceDays ?? 30))
   const [error, setError] = useState<string | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState<{ request: UpsertFeeCampaignRequest; changes: ChangePreview[] } | null>(null)
+  const [pendingConfirmationError, setPendingConfirmationError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useRestoreFocusOnClose(Boolean(pendingConfirmation))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingConfirmation))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingConfirmation))
-  useEscapeKey(!pendingConfirmation, onClose)
-  useEscapeKey(Boolean(pendingConfirmation), () => setPendingConfirmation(null))
+  useEscapeKey(!pendingConfirmation && !isSaving, onClose)
+  useEscapeKey(Boolean(pendingConfirmation) && !isSaving, closePendingConfirmation)
   const participantCount = appliesToAllGarages ? activeGarageCount : participantGarageIds.length
   const parsedContributionInput = parsePrototypeAmount(contributionAmount)
   const parsedTargetAmountInput = parsePrototypeAmount(targetAmountInput)
@@ -4190,6 +4290,15 @@ function AddFeePrototypeDialog({
     ? parsedTargetAmountInput ?? 0
     : calculateFeeCampaignTargetAmount(parsedContributionInput, participantCount)
   const lastContributionAmount = calculateFeeCampaignLastContribution(targetAmount, parsedContributionAmount ?? 0, participantCount)
+
+  function closePendingConfirmation() {
+    if (isSaving) {
+      return
+    }
+
+    setPendingConfirmation(null)
+    setPendingConfirmationError(null)
+  }
 
   function toggleParticipantGarage(garageId: string, checked: boolean) {
     setParticipantGarageIds((currentIds) => {
@@ -4270,6 +4379,7 @@ function AddFeePrototypeDialog({
         return
       }
 
+      setPendingConfirmationError(null)
       setPendingConfirmation({ request, changes })
       return
     }
@@ -4277,7 +4387,7 @@ function AddFeePrototypeDialog({
     try {
       await onSave(request)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось объявить сбор.')
+      setError(getErrorMessage(caught, 'Не удалось объявить сбор.'))
     }
   }
 
@@ -4286,22 +4396,24 @@ function AddFeePrototypeDialog({
       return
     }
 
+    setPendingConfirmationError(null)
     try {
       await onSave(pendingConfirmation.request)
       setPendingConfirmation(null)
     } catch (caught) {
-      setPendingConfirmation(null)
-      setError(caught instanceof Error ? caught.message : 'Не удалось сохранить изменения сбора.')
+      setPendingConfirmationError(getErrorMessage(caught, 'Не удалось сохранить изменения сбора.'))
     }
   }
 
+  const formBusy = isSaving || Boolean(pendingConfirmation)
+
   return (
     <>
-      <div className="modal-backdrop" role="presentation" onMouseDown={pendingConfirmation ? undefined : onClose}>
+      <div className="modal-backdrop" role="presentation" onMouseDown={formBusy ? undefined : onClose}>
         <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog contractors-fee-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="contractor-fee-title">{title}</h3>
-            <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose} disabled={Boolean(pendingConfirmation)}>
+            <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose} disabled={formBusy}>
               <X size={18} />
             </button>
           </div>
@@ -4312,7 +4424,7 @@ function AddFeePrototypeDialog({
               <section className="contractors-fee-card" aria-labelledby="fee-settings-title">
                 <h4 id="fee-settings-title">Настройки сбора</h4>
                 <FormField label="Наименование сбора">
-                  <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
+                  <input aria-label="Наименование сбора" value={name} disabled={formBusy} onChange={(event) => setName(event.target.value)} />
                 </FormField>
                 <FormField label="Назначение поступления">
                   <SelectControl
@@ -4325,6 +4437,7 @@ function AddFeePrototypeDialog({
                         : `${incomeType.name} → фонд не назначен`,
                     }))}
                     maxVisibleOptions={6}
+                    disabled={formBusy}
                     onChange={setIncomeTypeId}
                   />
                 </FormField>
@@ -4332,7 +4445,7 @@ function AddFeePrototypeDialog({
                   Фонд назначения: {incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.destinationFundName ?? 'не назначен'}
                 </p>
                 <FormField label="Цель">
-                  <input aria-label="Цель сбора" value={goal} onChange={(event) => setGoal(event.target.value)} />
+                  <input aria-label="Цель сбора" value={goal} disabled={formBusy} onChange={(event) => setGoal(event.target.value)} />
                 </FormField>
                 <label className="contractors-switch-row contractors-fee-participant-switch">
                   <span className="contractors-fee-participant-label">
@@ -4340,7 +4453,7 @@ function AddFeePrototypeDialog({
                     <small>все гаражи</small>
                   </span>
                   <span className="contractors-switch-control">
-                    <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
+                    <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} disabled={formBusy} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
                   </span>
                 </label>
               </section>
@@ -4352,6 +4465,7 @@ function AddFeePrototypeDialog({
                       <MoneyTextInput
                         aria-label="Сумма взноса"
                         value={amountCalculationMode === 'target' ? formatTariffDecimal(parsedContributionAmount ?? 0) : contributionAmount}
+                        disabled={formBusy}
                         onValueChange={(value) => {
                           const nextAmount = parsePrototypeAmount(value)
                           if (amountCalculationMode !== 'target' || !areFeeCampaignAmountsEqual(nextAmount, parsedContributionAmount)) {
@@ -4368,6 +4482,7 @@ function AddFeePrototypeDialog({
                       <MoneyTextInput
                         aria-label="Сумма сбора"
                         value={amountCalculationMode === 'contribution' ? formatTariffDecimal(targetAmount) : targetAmountInput}
+                        disabled={formBusy}
                         onValueChange={(value) => {
                           const nextAmount = parsePrototypeAmount(value)
                           if (amountCalculationMode !== 'contribution' || !areFeeCampaignAmountsEqual(nextAmount, targetAmount)) {
@@ -4387,15 +4502,15 @@ function AddFeePrototypeDialog({
                 </small>
                 <div className="contractors-fee-date-grid">
                   <FormField label="Дата начала">
-                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" value={startsOn} onChange={setStartsOn} />
+                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" value={startsOn} disabled={formBusy} onChange={setStartsOn} />
                   </FormField>
                   <FormField label="Дата окончания сбора">
-                    <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" value={endsOn} onChange={setEndsOn} />
+                    <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" value={endsOn} disabled={formBusy} onChange={setEndsOn} />
                   </FormField>
                 </div>
                 <FormField label="Перенос долга по сбору в просроченный">
                   <div className="contractors-inline-field">
-                    <input aria-label="Перенос долга по сбору в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <input aria-label="Перенос долга по сбору в просроченный" inputMode="numeric" value={overdueGraceDays} disabled={formBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
                     <span>дн.</span>
                   </div>
                 </FormField>
@@ -4410,6 +4525,7 @@ function AddFeePrototypeDialog({
                         type="checkbox"
                         aria-label={`Гараж ${garage.number}`}
                         checked={participantGarageIds.includes(garage.id)}
+                        disabled={formBusy}
                         onChange={(event) => toggleParticipantGarage(garage.id, event.target.checked)}
                       />
                       <span>
@@ -4423,10 +4539,10 @@ function AddFeePrototypeDialog({
             </div>
 
             <div className="detail-dialog-actions">
-              <button className="secondary-button" type="submit" disabled={isSaving || Boolean(pendingConfirmation)}>
+              <button className="secondary-button" type="submit" disabled={formBusy}>
                 {submitLabel}
               </button>
-              <button className="ghost-button" type="button" onClick={onClose} disabled={Boolean(pendingConfirmation)}>
+              <button className="ghost-button" type="button" onClick={onClose} disabled={formBusy}>
                 Отмена
               </button>
             </div>
@@ -4435,7 +4551,7 @@ function AddFeePrototypeDialog({
       </div>
 
       {pendingConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingConfirmation(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={isSaving ? undefined : closePendingConfirmation}>
           <section ref={confirmationDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-edit-confirmation-title" aria-describedby="fee-campaign-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -4443,14 +4559,15 @@ function AddFeePrototypeDialog({
                 <h3 id="fee-campaign-edit-confirmation-title">Подтвердите изменения сбора</h3>
                 <p>{initialCampaign?.name ?? pendingConfirmation.request.name}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменений сбора" onClick={() => setPendingConfirmation(null)} disabled={isSaving}>
+              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменений сбора" onClick={closePendingConfirmation} disabled={isSaving}>
                 <X size={18} />
               </button>
             </div>
             <p className="confirmation-text" id="fee-campaign-edit-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
             <ChangePreviewList ariaLabel="Изменяемые поля сбора" changes={pendingConfirmation.changes} />
+            {pendingConfirmationError ? <FormError>{pendingConfirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingConfirmation(null)} disabled={isSaving}>Отмена</button>
+              <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={closePendingConfirmation} disabled={isSaving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmFeeChanges()} disabled={isSaving}>
                 <Save size={16} />
                 <span>{isSaving ? 'Сохраняем...' : 'Сохранить изменения'}</span>

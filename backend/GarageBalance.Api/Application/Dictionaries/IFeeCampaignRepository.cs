@@ -15,6 +15,7 @@ public interface IFeeCampaignRepository
     Task<decimal> GetCollectedAmountAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<Guid, decimal>> GetCollectedAmountsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
+    Task<FeeCampaignPaymentOption?> FindPaymentOptionForGarageForUpdateAsync(Guid id, Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<IAsyncDisposable> AcquirePaymentLockAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Accrual>> GetAccrualsForSettlementAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<Guid, decimal>> GetPaidAmountsByGarageAsync(Guid id, CancellationToken cancellationToken);

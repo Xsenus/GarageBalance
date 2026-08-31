@@ -841,6 +841,9 @@ public sealed class BackendPerformanceGuardTests
         var paymentOptions = ExtractMethodSource(
             source,
             "public async Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync");
+        var paymentOptionRows = ExtractMethodSource(
+            source,
+            "private IQueryable<FeeCampaignPaymentOptionQueryRow> BuildPaymentOptionRows");
         var paidByGarage = ExtractMethodSource(
             source,
             "public async Task<IReadOnlyDictionary<Guid, decimal>> GetPaidAmountsByGarageAsync");
@@ -852,15 +855,17 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(singleAmount, ".SumAsync("));
         Assert.Contains("BuildCollectedAmountsQuery(ids)", amountPage, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(amountPage, ".ToDictionaryAsync("));
-        Assert.Contains("FeeCampaignPaymentOptionQueryRow", paymentOptions, StringComparison.Ordinal);
-        Assert.Contains("dbContext.Accruals", paymentOptions, StringComparison.Ordinal);
-        Assert.Contains("dbContext.FinancialOperations", paymentOptions, StringComparison.Ordinal);
-        Assert.Contains("dbContext.AccrualPaymentAllocations", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains("BuildPaymentOptionRows(campaigns, garageId)", paymentOptions, StringComparison.Ordinal);
+        Assert.Contains("FeeCampaignPaymentOptionQueryRow", paymentOptionRows, StringComparison.Ordinal);
+        Assert.Contains("dbContext.Accruals", paymentOptionRows, StringComparison.Ordinal);
+        Assert.Contains("dbContext.FinancialOperations", paymentOptionRows, StringComparison.Ordinal);
+        Assert.Contains("dbContext.AccrualPaymentAllocations", paymentOptionRows, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(paymentOptions, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain(".ToDictionaryAsync(", paymentOptions, StringComparison.Ordinal);
         Assert.DoesNotContain("BuildCollectedAmountsQuery", paymentOptions, StringComparison.Ordinal);
         Assert.DoesNotContain("paidByAccrual", paymentOptions, StringComparison.Ordinal);
         Assert.DoesNotContain("legacyCollected", paymentOptions, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToListAsync", paymentOptionRows, StringComparison.Ordinal);
         Assert.Contains(".Concat(legacy)", paidByGarage, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(paidByGarage, ".ToDictionaryAsync("));
         Assert.Contains(".Concat(legacy)", combinedAmounts, StringComparison.Ordinal);

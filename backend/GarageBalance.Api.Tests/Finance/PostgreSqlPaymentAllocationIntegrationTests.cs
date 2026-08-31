@@ -481,6 +481,109 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task PeriodPayment_PersistsSelectedMonthBeforeOlderOrdinaryDebt()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var ledger = await SeedLedgerAsync(database, "PG-SELECTED-MONTH", [300m, 300m]);
+        Guid paymentId;
+        await using (var paymentContext = database.CreateContext())
+        {
+            var payment = await FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    ledger.GarageId,
+                    ledger.IncomeTypeId,
+                    new DateOnly(2026, 2, 20),
+                    new DateOnly(2026, 2, 1),
+                    100m,
+                    "PG-SELECTED-MONTH-100",
+                    "Оплата за выбранный средний месяц"),
+                null,
+                CancellationToken.None);
+            Assert.True(payment.Succeeded, payment.ErrorMessage);
+            paymentId = payment.Value!.Id;
+        }
+
+        await using var assertionContext = database.CreateContext();
+        var allocation = await assertionContext.AccrualPaymentAllocations
+            .AsNoTracking()
+            .SingleAsync(item => item.IsActive && item.FinancialOperationId == paymentId);
+
+        Assert.Equal(ledger.AccrualIds[1], allocation.AccrualId);
+        Assert.Equal(100m, allocation.Amount);
+    }
+
+    [PostgreSqlFact]
+    public async Task PrincipalMigration_RebuildsLegacyFifoAllocationToSelectedAccountingMonth()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync(
+            "20260831014500_OptimizeMeterReadingYearGrid");
+        var ledger = await SeedLedgerAsync(
+            database,
+            "PG-SELECTED-MONTH-MIGRATION",
+            [300m, 300m, 300m],
+            new DateOnly(2026, 6, 1));
+        Guid paymentId;
+        Guid legacyAllocationId;
+        await using (var legacyContext = database.CreateContext())
+        {
+            var payment = new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 7, 20),
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                Amount = 100m,
+                GarageId = ledger.GarageId,
+                IncomeTypeId = ledger.IncomeTypeId,
+                DocumentNumber = "PG-LEGACY-FIFO-BEFORE-MIGRATION"
+            };
+            var legacyAllocation = new AccrualPaymentAllocation
+            {
+                FinancialOperation = payment,
+                // Mirrors the deployed anomaly: a July payment was historically
+                // attached to August while the July principal remained unpaid.
+                AccrualId = ledger.AccrualIds[2],
+                Amount = 100m
+            };
+            legacyContext.AddRange(payment, legacyAllocation);
+            await legacyContext.SaveChangesAsync();
+            paymentId = payment.Id;
+            legacyAllocationId = legacyAllocation.Id;
+        }
+
+        await using (var migrationContext = database.CreateContext())
+        {
+            await migrationContext.Database.MigrateAsync();
+        }
+
+        await using var verificationContext = database.CreateContext();
+        Assert.False((await verificationContext.AccrualPaymentAllocations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == legacyAllocationId)).IsActive);
+        var repairedAllocation = Assert.Single(await verificationContext.AccrualPaymentAllocations
+            .AsNoTracking()
+            .Where(item => item.IsActive && item.FinancialOperationId == paymentId)
+            .ToArrayAsync());
+        Assert.Equal(ledger.AccrualIds[1], repairedAllocation.AccrualId);
+        Assert.Equal(100m, repairedAllocation.Amount);
+        var preservedPayment = await verificationContext.FinancialOperations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == paymentId);
+        Assert.Equal(new DateOnly(2026, 7, 1), preservedPayment.AccountingMonth);
+        Assert.Equal(100m, preservedPayment.Amount);
+        var preservedAccruals = await verificationContext.Accruals
+            .AsNoTracking()
+            .Where(item => ledger.AccrualIds.Contains(item.Id))
+            .OrderBy(item => item.AccountingMonth)
+            .ToArrayAsync();
+        Assert.Equal(3, preservedAccruals.Length);
+        Assert.All(preservedAccruals, item =>
+        {
+            Assert.False(item.IsCanceled);
+            Assert.Equal(300m, item.Amount);
+        });
+    }
+
+    [PostgreSqlFact]
     public async Task IncomeWorksheet_CapsEveryAccrualAndShowsUnallocatedRemainderAsAdvance()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

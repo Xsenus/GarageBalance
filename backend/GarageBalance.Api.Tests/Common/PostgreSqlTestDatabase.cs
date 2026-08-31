@@ -21,7 +21,12 @@ internal sealed class PostgreSqlTestDatabase : IAsyncDisposable
 
     public string ConnectionString { get; }
 
-    public static async Task<PostgreSqlTestDatabase> CreateAsync(CancellationToken cancellationToken = default)
+    public static Task<PostgreSqlTestDatabase> CreateAsync(CancellationToken cancellationToken = default) =>
+        CreateAsync(targetMigration: null, cancellationToken);
+
+    public static async Task<PostgreSqlTestDatabase> CreateAsync(
+        string? targetMigration,
+        CancellationToken cancellationToken = default)
     {
         var baseConnectionString = Environment.GetEnvironmentVariable(
             PostgreSqlFactAttribute.ConnectionStringEnvironmentVariable);
@@ -58,7 +63,14 @@ internal sealed class PostgreSqlTestDatabase : IAsyncDisposable
         try
         {
             await using var context = database.CreateContext();
-            await context.Database.MigrateAsync(cancellationToken);
+            if (targetMigration is null)
+            {
+                await context.Database.MigrateAsync(cancellationToken);
+            }
+            else
+            {
+                await context.Database.MigrateAsync(targetMigration, cancellationToken);
+            }
             return database;
         }
         catch

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookOpenCheck } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AppReleaseDto, ReleaseClient } from '../../services/releasesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -216,7 +216,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
               {canManageReleases && release.isPublished === false ? (
                 <div className="inline-actions release-entry__actions">
                   <button className="secondary-button" type="button" onClick={() => void publishRelease(release)} disabled={saving}>
-                    <BookOpenCheck size={16} />
+                    <FileText size={16} aria-hidden="true" />
                     <span>Опубликовать</span>
                   </button>
                 </div>

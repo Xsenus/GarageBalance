@@ -111,56 +111,15 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         DateOnly monthTo,
         CancellationToken cancellationToken)
     {
-        var periodStart = monthFrom;
         var periodEnd = monthTo.AddMonths(1).AddDays(-1);
-        var campaigns = WithDetails(dbContext.FeeCampaigns)
+        var campaigns = WithDetails(dbContext.FeeCampaigns.AsNoTrackingWithIdentityResolution())
             .Where(item =>
                 !item.IsArchived &&
                 item.StartsOn <= periodEnd &&
-                (!item.EndsOn.HasValue || item.EndsOn.Value >= periodStart) &&
                 (item.AppliesToAllGarages || item.ParticipantGarages.Any(link => link.GarageId == garageId)))
             .OrderBy(item => item.StartsOn)
             .ThenBy(item => item.Id);
-        var rows = await campaigns
-            .Select(campaign => new FeeCampaignPaymentOptionQueryRow(
-                campaign,
-                dbContext.Accruals
-                    .Where(accrual =>
-                        !accrual.IsCanceled &&
-                        accrual.GarageId == garageId &&
-                        accrual.FeeCampaignId == campaign.Id)
-                    .OrderBy(accrual => accrual.AccountingMonth)
-                    .ThenBy(accrual => accrual.Id)
-                    .FirstOrDefault(),
-                dbContext.AccrualPaymentAllocations
-                    .Where(allocation =>
-                        allocation.IsActive &&
-                        !allocation.FinancialOperation.IsCanceled &&
-                        allocation.AccrualId == dbContext.Accruals
-                            .Where(accrual =>
-                                !accrual.IsCanceled &&
-                                accrual.GarageId == garageId &&
-                                accrual.FeeCampaignId == campaign.Id)
-                            .OrderBy(accrual => accrual.AccountingMonth)
-                            .ThenBy(accrual => accrual.Id)
-                            .Select(accrual => accrual.Id)
-                            .FirstOrDefault())
-                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m,
-                (dbContext.FinancialOperations
-                    .Where(operation =>
-                        !operation.IsCanceled &&
-                        operation.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income &&
-                        operation.FeeCampaignId == campaign.Id)
-                    .Sum(operation => (decimal?)operation.Amount) ?? 0m) +
-                (dbContext.AccrualPaymentAllocations
-                    .Where(allocation =>
-                        allocation.IsActive &&
-                        !allocation.Accrual.IsCanceled &&
-                        allocation.Accrual.FeeCampaignId == campaign.Id &&
-                        !allocation.FinancialOperation.IsCanceled &&
-                        allocation.FinancialOperation.FeeCampaignId == null)
-                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m)))
-            .ToListAsync(cancellationToken);
+        var rows = await BuildPaymentOptionRows(campaigns, garageId).ToListAsync(cancellationToken);
 
         return rows
             .Select(row => new FeeCampaignPaymentOption(
@@ -169,6 +128,26 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
                 row.PaidAmount,
                 row.CollectedAmount))
             .ToList();
+    }
+
+    public async Task<FeeCampaignPaymentOption?> FindPaymentOptionForGarageForUpdateAsync(
+        Guid id,
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        var periodEnd = monthTo.AddMonths(1).AddDays(-1);
+        var campaigns = WithDetails(dbContext.FeeCampaigns)
+            .Where(item =>
+                item.Id == id &&
+                !item.IsArchived &&
+                item.StartsOn <= periodEnd &&
+                (item.AppliesToAllGarages || item.ParticipantGarages.Any(link => link.GarageId == garageId)));
+        var row = await BuildPaymentOptionRows(campaigns, garageId).SingleOrDefaultAsync(cancellationToken);
+        return row is null
+            ? null
+            : new FeeCampaignPaymentOption(row.Campaign, row.Accrual, row.PaidAmount, row.CollectedAmount);
     }
 
     public async Task<IAsyncDisposable> AcquirePaymentLockAsync(Guid id, CancellationToken cancellationToken)
@@ -323,6 +302,48 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
                 .ThenInclude(item => item.DestinationFund)
             .Include(item => item.ParticipantGarages)
                 .ThenInclude(item => item.Garage);
+
+    private IQueryable<FeeCampaignPaymentOptionQueryRow> BuildPaymentOptionRows(
+        IQueryable<FeeCampaign> campaigns,
+        Guid garageId) =>
+        campaigns.Select(campaign => new FeeCampaignPaymentOptionQueryRow(
+            campaign,
+            dbContext.Accruals
+                .Where(accrual =>
+                    !accrual.IsCanceled &&
+                    accrual.GarageId == garageId &&
+                    accrual.FeeCampaignId == campaign.Id)
+                .OrderBy(accrual => accrual.AccountingMonth)
+                .ThenBy(accrual => accrual.Id)
+                .FirstOrDefault(),
+            dbContext.AccrualPaymentAllocations
+                .Where(allocation =>
+                    allocation.IsActive &&
+                    !allocation.FinancialOperation.IsCanceled &&
+                    allocation.AccrualId == dbContext.Accruals
+                        .Where(accrual =>
+                            !accrual.IsCanceled &&
+                            accrual.GarageId == garageId &&
+                            accrual.FeeCampaignId == campaign.Id)
+                        .OrderBy(accrual => accrual.AccountingMonth)
+                        .ThenBy(accrual => accrual.Id)
+                        .Select(accrual => accrual.Id)
+                        .FirstOrDefault())
+                .Sum(allocation => (decimal?)allocation.Amount) ?? 0m,
+            (dbContext.FinancialOperations
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income &&
+                    operation.FeeCampaignId == campaign.Id)
+                .Sum(operation => (decimal?)operation.Amount) ?? 0m) +
+            (dbContext.AccrualPaymentAllocations
+                .Where(allocation =>
+                    allocation.IsActive &&
+                    !allocation.Accrual.IsCanceled &&
+                    allocation.Accrual.FeeCampaignId == campaign.Id &&
+                    !allocation.FinancialOperation.IsCanceled &&
+                    allocation.FinancialOperation.FeeCampaignId == null)
+                .Sum(allocation => (decimal?)allocation.Amount) ?? 0m)));
 
     private IQueryable<FeeCampaignAmountRow> BuildCollectedAmountsQuery(IReadOnlyCollection<Guid> ids)
     {

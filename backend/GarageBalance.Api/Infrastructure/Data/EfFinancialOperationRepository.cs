@@ -2,11 +2,16 @@ using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using System.Buffers.Binary;
+using System.Data;
+using System.Security.Cryptography;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbContext) : IFinancialOperationRepository
 {
+    private static readonly byte[] ReceiptBatchLockNamespace = "receipt-batch"u8.ToArray();
+
     public async Task<IReadOnlyList<FinancialOperation>> GetListAsync(
         DateOnly? dateFrom,
         DateOnly? dateTo,
@@ -252,6 +257,54 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
     public Task<FinancialOperation?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         Aggregate(dbContext.FinancialOperations)
             .SingleOrDefaultAsync(operation => operation.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>> GetLinkedFeeCampaignIdsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var directlyTaggedCampaigns = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => operation.Id == id && operation.FeeCampaignId != null)
+            .Select(operation => operation.FeeCampaignId!.Value);
+        var allocationLinkedCampaigns = dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.FinancialOperationId == id &&
+                allocation.Accrual.FeeCampaignId != null)
+            .Select(allocation => allocation.Accrual.FeeCampaignId!.Value);
+
+        // Allocation history is intentional here: once an untagged legacy payment has
+        // been earmarked for a campaign, restoring or editing it must not bypass the
+        // campaign lifecycle merely because a later rebuild deactivated the row.
+        return await directlyTaggedCampaigns
+            .Concat(allocationLinkedCampaigns)
+            .Distinct()
+            .OrderBy(campaignId => campaignId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IAsyncDisposable> AcquireReceiptBatchLockAsync(
+        Guid receiptBatchId,
+        CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsNpgsql())
+        {
+            return NoOpAsyncDisposable.Instance;
+        }
+
+        var connection = dbContext.Database.GetDbConnection();
+        var closeConnection = connection.State == ConnectionState.Closed;
+        if (closeConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var lockKey = CreateReceiptBatchLockKey(receiptBatchId);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT pg_advisory_lock(@lock_key)";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "lock_key";
+        parameter.Value = lockKey;
+        command.Parameters.Add(parameter);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        return new AdvisoryLockLease(connection, lockKey, closeConnection);
+    }
 
     public async Task<IReadOnlyList<FinancialOperation>> GetByReceiptBatchIdAsync(
         Guid receiptBatchId,
@@ -677,4 +730,47 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static long CreateReceiptBatchLockKey(Guid receiptBatchId)
+    {
+        Span<byte> source = stackalloc byte[16 + ReceiptBatchLockNamespace.Length];
+        receiptBatchId.TryWriteBytes(source[..16]);
+        ReceiptBatchLockNamespace.CopyTo(source[16..]);
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(source, hash);
+        return BinaryPrimitives.ReadInt64BigEndian(hash);
+    }
+
+    private sealed class AdvisoryLockLease(
+        System.Data.Common.DbConnection connection,
+        long lockKey,
+        bool closeConnection) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "SELECT pg_advisory_unlock(@lock_key)";
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = "lock_key";
+                parameter.Value = lockKey;
+                command.Parameters.Add(parameter);
+                await command.ExecuteNonQueryAsync();
+            }
+            finally
+            {
+                if (closeConnection)
+                {
+                    await connection.CloseAsync();
+                }
+            }
+        }
+    }
+
+    private sealed class NoOpAsyncDisposable : IAsyncDisposable
+    {
+        public static readonly NoOpAsyncDisposable Instance = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 }

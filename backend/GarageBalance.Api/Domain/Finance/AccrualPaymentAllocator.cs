@@ -33,9 +33,12 @@ public static class AccrualPaymentAllocator
                         : payment.IrregularPaymentId.HasValue
                             ? accrual.IrregularPaymentId == payment.IrregularPaymentId
                             : true)
-                .OrderBy(accrual => payment.FeeCampaignId.HasValue || payment.IrregularPaymentId.HasValue
-                    ? 0
-                    : accrual.FeeCampaignId.HasValue || accrual.IrregularPaymentId.HasValue ? 1 : 0)
+                .OrderBy(accrual =>
+                    payment.FeeCampaignId.HasValue || payment.IrregularPaymentId.HasValue
+                        ? 0
+                        : accrual.FeeCampaignId.HasValue || accrual.IrregularPaymentId.HasValue
+                            ? 2
+                            : accrual.AccountingMonth == payment.AccountingMonth ? 0 : 1)
                 .ThenBy(accrual => accrual.DueDate)
                 .ThenBy(accrual => accrual.AccountingMonth)
                 .ThenBy(accrual => accrual.CreatedAtUtc)
@@ -77,6 +80,7 @@ public sealed record AccrualPaymentAllocationAccrual(
 public sealed record AccrualPaymentAllocationPayment(
     Guid Id,
     DateOnly OperationDate,
+    DateOnly AccountingMonth,
     decimal Amount,
     DateTimeOffset CreatedAtUtc,
     Guid? FeeCampaignId = null,

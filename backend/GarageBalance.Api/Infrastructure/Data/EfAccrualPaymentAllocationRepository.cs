@@ -94,6 +94,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         var rows = await BuildLedgerQuery(distinctKeys).ToListAsync(cancellationToken);
 
         OverlayTrackedAccruals(rows, garageIds, incomeTypeIds, keySet);
+        await OverlayCampaignPaymentsForNormalizedTrackedAccrualsAsync(rows, keySet, cancellationToken);
         OverlayTrackedPayments(rows, garageIds, incomeTypeIds, keySet);
         var previousActiveAllocationCount = rows.Count(row =>
             row.Kind == AllocationRowKind && keySet.Contains(row.Key));
@@ -125,7 +126,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                         !row.IsCanceled &&
                         row.OperationKind == FinancialOperationKinds.Income)
                     .Select(row => new AccrualPaymentAllocationPayment(
-                        row.Id, row.SortDate, row.Amount, row.CreatedAtUtc, row.FeeCampaignId, row.IrregularPaymentId)));
+                        row.Id, row.SortDate, row.AccountingMonth, row.Amount, row.CreatedAtUtc, row.FeeCampaignId, row.IrregularPaymentId)));
 
             dbContext.AccrualPaymentAllocations.AddRange(plan.Select(item => new AccrualPaymentAllocation
             {
@@ -202,10 +203,11 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.FeeCampaignId,
                 item.IrregularPaymentId
             });
-        var paymentRows = dbContext.FinancialOperations.AsNoTracking()
+        var untaggedPaymentRows = dbContext.FinancialOperations.AsNoTracking()
             .Where(item =>
                 !item.IsCanceled &&
                 item.OperationKind == FinancialOperationKinds.Income &&
+                item.FeeCampaignId == null &&
                 item.GarageId.HasValue && garageIds.Contains(item.GarageId.Value) &&
                 item.IncomeTypeId.HasValue && incomeTypeIds.Contains(item.IncomeTypeId.Value))
             .Where(BuildExactKeyPredicate<FinancialOperation>(
@@ -220,13 +222,117 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 IncomeTypeId = item.IncomeTypeId!.Value,
                 SortDate = item.OperationDate,
                 item.AccountingMonth,
-                item.Amount,
+                Amount = item.Amount -
+                    (dbContext.AccrualPaymentAllocations
+                        .Where(allocation =>
+                            allocation.IsActive &&
+                            allocation.FinancialOperationId == item.Id &&
+                            !allocation.Accrual.IsCanceled &&
+                            allocation.Accrual.FeeCampaignId.HasValue)
+                        .Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
                 item.CreatedAtUtc,
                 item.IsCanceled,
                 item.OperationKind,
                 item.FeeCampaignId,
                 item.IrregularPaymentId
             });
+        var campaignAccrualRoutes = dbContext.Accruals.AsNoTracking()
+            .Where(item =>
+                !item.IsCanceled &&
+                !item.DueDateNeedsReview &&
+                item.FeeCampaignId.HasValue &&
+                garageIds.Contains(item.GarageId) &&
+                incomeTypeIds.Contains(item.IncomeTypeId))
+            .Where(BuildExactKeyPredicate<Accrual>(
+                keys,
+                item => item.GarageId,
+                item => item.IncomeTypeId))
+            .Select(item => new
+            {
+                item.GarageId,
+                item.IncomeTypeId,
+                FeeCampaignId = item.FeeCampaignId!.Value
+            })
+            .Distinct();
+        var campaignPaymentRows =
+            from item in dbContext.FinancialOperations.AsNoTracking()
+            where !item.IsCanceled &&
+                item.OperationKind == FinancialOperationKinds.Income &&
+                item.FeeCampaignId.HasValue &&
+                item.GarageId.HasValue
+            join route in campaignAccrualRoutes
+                on new
+                {
+                    GarageId = item.GarageId!.Value,
+                    FeeCampaignId = item.FeeCampaignId!.Value
+                }
+                equals new
+                {
+                    route.GarageId,
+                    route.FeeCampaignId
+                }
+            select new
+            {
+                Kind = PaymentRowKind,
+                item.Id,
+                route.GarageId,
+                route.IncomeTypeId,
+                SortDate = item.OperationDate,
+                item.AccountingMonth,
+                item.Amount,
+                item.CreatedAtUtc,
+                item.IsCanceled,
+                item.OperationKind,
+                item.FeeCampaignId,
+                item.IrregularPaymentId
+            };
+        var migratedCampaignPaymentRows = dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.IsActive &&
+                !allocation.Accrual.IsCanceled &&
+                !allocation.Accrual.DueDateNeedsReview &&
+                allocation.Accrual.FeeCampaignId.HasValue &&
+                allocation.FinancialOperation.FeeCampaignId == null &&
+                !allocation.FinancialOperation.IsCanceled &&
+                allocation.FinancialOperation.OperationKind == FinancialOperationKinds.Income &&
+                allocation.FinancialOperation.IncomeTypeId.HasValue &&
+                garageIds.Contains(allocation.Accrual.GarageId) &&
+                incomeTypeIds.Contains(allocation.Accrual.IncomeTypeId))
+            .Where(BuildExactKeyPredicate<AccrualPaymentAllocation>(
+                keys,
+                allocation => allocation.Accrual.GarageId,
+                allocation => allocation.Accrual.IncomeTypeId))
+            .GroupBy(allocation => new
+            {
+                allocation.FinancialOperation.Id,
+                allocation.Accrual.GarageId,
+                allocation.Accrual.IncomeTypeId,
+                allocation.FinancialOperation.OperationDate,
+                allocation.FinancialOperation.AccountingMonth,
+                allocation.FinancialOperation.CreatedAtUtc,
+                allocation.FinancialOperation.IsCanceled,
+                allocation.FinancialOperation.OperationKind,
+                allocation.Accrual.FeeCampaignId,
+                allocation.FinancialOperation.IrregularPaymentId
+            })
+            .Select(group => new
+            {
+                Kind = PaymentRowKind,
+                group.Key.Id,
+                group.Key.GarageId,
+                group.Key.IncomeTypeId,
+                SortDate = group.Key.OperationDate,
+                group.Key.AccountingMonth,
+                Amount = group.Sum(allocation => allocation.Amount),
+                group.Key.CreatedAtUtc,
+                group.Key.IsCanceled,
+                group.Key.OperationKind,
+                group.Key.FeeCampaignId,
+                group.Key.IrregularPaymentId
+            });
+        var paymentRows = untaggedPaymentRows
+            .Concat(campaignPaymentRows)
+            .Concat(migratedCampaignPaymentRows);
         var allocationRows = dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(item =>
                 item.IsActive &&
@@ -427,15 +533,23 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         foreach (var payment in dbContext.ChangeTracker.Entries<FinancialOperation>().Select(entry => entry.Entity))
         {
             rows.RemoveAll(row => row.Kind == PaymentRowKind && row.Id == payment.Id);
-            if (payment.GarageId.HasValue && payment.IncomeTypeId.HasValue &&
-                garageIds.Contains(payment.GarageId.Value) && incomeTypeIds.Contains(payment.IncomeTypeId.Value) &&
-                keys.Contains(new AccrualPaymentAllocationKey(payment.GarageId.Value, payment.IncomeTypeId.Value)))
+            var campaignRoute = payment.GarageId.HasValue && payment.FeeCampaignId.HasValue
+                ? rows.FirstOrDefault(row =>
+                    row.Kind == AccrualRowKind &&
+                    !row.IsCanceled &&
+                    row.GarageId == payment.GarageId.Value &&
+                    row.FeeCampaignId == payment.FeeCampaignId.Value)
+                : null;
+            var routedIncomeTypeId = campaignRoute?.IncomeTypeId ?? payment.IncomeTypeId;
+            if (payment.GarageId.HasValue && routedIncomeTypeId.HasValue &&
+                garageIds.Contains(payment.GarageId.Value) && incomeTypeIds.Contains(routedIncomeTypeId.Value) &&
+                keys.Contains(new AccrualPaymentAllocationKey(payment.GarageId.Value, routedIncomeTypeId.Value)))
             {
                 rows.Add(new AllocationLedgerRow(
                     PaymentRowKind,
                     payment.Id,
                     payment.GarageId.Value,
-                    payment.IncomeTypeId.Value,
+                    routedIncomeTypeId.Value,
                     payment.OperationDate,
                     payment.AccountingMonth,
                     payment.Amount,
@@ -445,6 +559,76 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                     payment.FeeCampaignId,
                     payment.IrregularPaymentId));
             }
+        }
+    }
+
+    private async Task OverlayCampaignPaymentsForNormalizedTrackedAccrualsAsync(
+        List<AllocationLedgerRow> rows,
+        IReadOnlySet<AccrualPaymentAllocationKey> keys,
+        CancellationToken cancellationToken)
+    {
+        var routes = dbContext.ChangeTracker.Entries<Accrual>()
+            .Where(entry =>
+                entry.State == EntityState.Modified &&
+                entry.Property(nameof(Accrual.IncomeTypeId)).IsModified)
+            .Select(entry => entry.Entity)
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                !accrual.DueDateNeedsReview &&
+                accrual.FeeCampaignId.HasValue &&
+                keys.Contains(new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)))
+            .GroupBy(accrual => (accrual.GarageId, FeeCampaignId: accrual.FeeCampaignId!.Value))
+            .ToDictionary(group => group.Key, group => group.First().IncomeTypeId);
+        if (routes.Count == 0)
+        {
+            return;
+        }
+
+        var garageIds = routes.Keys.Select(key => key.GarageId).Distinct().ToArray();
+        var campaignIds = routes.Keys.Select(key => key.FeeCampaignId).Distinct().ToArray();
+        var payments = await dbContext.FinancialOperations.AsNoTracking()
+            .Where(payment =>
+                !payment.IsCanceled &&
+                payment.OperationKind == FinancialOperationKinds.Income &&
+                payment.GarageId.HasValue &&
+                payment.FeeCampaignId.HasValue &&
+                garageIds.Contains(payment.GarageId.Value) &&
+                campaignIds.Contains(payment.FeeCampaignId.Value))
+            .Select(payment => new
+            {
+                payment.Id,
+                GarageId = payment.GarageId!.Value,
+                FeeCampaignId = payment.FeeCampaignId!.Value,
+                payment.OperationDate,
+                payment.AccountingMonth,
+                payment.Amount,
+                payment.CreatedAtUtc,
+                payment.IsCanceled,
+                payment.OperationKind,
+                payment.IrregularPaymentId
+            })
+            .ToListAsync(cancellationToken);
+        foreach (var payment in payments)
+        {
+            if (!routes.TryGetValue((payment.GarageId, payment.FeeCampaignId), out var routedIncomeTypeId))
+            {
+                continue;
+            }
+
+            rows.RemoveAll(row => row.Kind == PaymentRowKind && row.Id == payment.Id);
+            rows.Add(new AllocationLedgerRow(
+                PaymentRowKind,
+                payment.Id,
+                payment.GarageId,
+                routedIncomeTypeId,
+                payment.OperationDate,
+                payment.AccountingMonth,
+                payment.Amount,
+                payment.CreatedAtUtc,
+                payment.IsCanceled,
+                payment.OperationKind,
+                payment.FeeCampaignId,
+                payment.IrregularPaymentId));
         }
     }
 

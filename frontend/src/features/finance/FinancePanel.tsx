@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { Award, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
+import { CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
@@ -500,7 +500,6 @@ export function FinancePanel({
   useEscapeKey(Boolean(restoreFinanceTarget) && !saving?.startsWith('restore-finance'), () => closeRestoreFinanceDialog())
   useEscapeKey(Boolean(financeContextMenu), () => setFinanceContextMenu(null))
   useDismissOnWindowClick(Boolean(financeContextMenu), setFinanceContextMenu)
-  useEscapeKey(Boolean(paymentsPrototypeDialog), () => closePaymentsPrototypeDialog())
   const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
   const visibleOperations = operations.slice(0, 8)
   const visibleAccruals = accruals.slice(0, 8)
@@ -4793,7 +4792,7 @@ function PaymentsPrototypePanel({
               <span>Выплатить оклад</span>
             </button>
             <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'bonus')}>
-              <Award size={16} aria-hidden="true" />
+              <UserRound size={16} aria-hidden="true" />
               <span>Начислить премию</span>
             </button>
             <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'penalty')}>
@@ -5379,7 +5378,7 @@ function BankDepositPrototypeDialog({
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -5409,13 +5408,13 @@ function BankDepositPrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog bank-deposit-dialog" role="dialog" aria-modal="true" aria-labelledby="bank-deposit-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="bank-deposit-title">Учет суммы на счете в банке</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть учет суммы в банке" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть учет суммы в банке" onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -5495,7 +5494,7 @@ function NewExpensePrototypeDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -5557,13 +5556,13 @@ function NewExpensePrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="new-expense-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="new-expense-title">Добавить выплату</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть новую выплату" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть новую выплату" onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -5664,7 +5663,7 @@ function NewExpensePrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма выплаты" value={amount} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма выплаты" value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setConfirmNegativeFundBalance(false)
               setError(null)
@@ -5689,10 +5688,10 @@ function NewExpensePrototypeDialog({
             </label>
           ) : null}
           <FormField label="Документ">
-            <input aria-label="Документ выплаты" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
+            <input aria-label="Документ выплаты" value={documentNumber} disabled={saving} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
           <FormField className="full-payment-field" label="Комментарий">
-            <textarea aria-label="Комментарий к выплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
+            <textarea aria-label="Комментарий к выплате" rows={4} value={comment} disabled={saving} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
@@ -5732,7 +5731,7 @@ function StaffPaymentPrototypeDialog({
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -5783,13 +5782,13 @@ function StaffPaymentPrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-payment-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="staff-payment-title">Выплата сотруднику</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть выплату сотруднику" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть выплату сотруднику" onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -5822,16 +5821,16 @@ function StaffPaymentPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма выплаты сотруднику" value={amount} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма выплаты сотруднику" value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
           <FormField label="Документ">
-            <input aria-label="Документ выплаты сотруднику" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
+            <input aria-label="Документ выплаты сотруднику" value={documentNumber} disabled={saving} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к выплате сотруднику" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
+            <textarea aria-label="Комментарий к выплате сотруднику" rows={4} value={comment} disabled={saving} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
@@ -5866,7 +5865,7 @@ function StaffSalaryAdjustmentPrototypeDialog({
   const isBonus = preset.adjustmentType === 'bonus'
   const actionName = isBonus ? 'премию' : 'штраф'
   const selectedStaffMember = staffMembers.find((member) => member.id === staffMemberId)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -5913,13 +5912,13 @@ function StaffSalaryAdjustmentPrototypeDialog({
 
   const title = isBonus ? 'Начислить премию сотруднику' : 'Начислить штраф сотруднику'
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-salary-adjustment-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="staff-salary-adjustment-title">{title}</h3>
           </div>
-          <button className="icon-button" type="button" aria-label={`Закрыть: ${title.toLocaleLowerCase('ru-RU')}`} onClick={onClose}>
+          <button className="icon-button" type="button" aria-label={`Закрыть: ${title.toLocaleLowerCase('ru-RU')}`} onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -5946,7 +5945,7 @@ function StaffSalaryAdjustmentPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label={`Сумма ${isBonus ? 'премии' : 'штрафа'}`} value={amount} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label={`Сумма ${isBonus ? 'премии' : 'штрафа'}`} value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
@@ -5994,7 +5993,7 @@ function NewAccrualPrototypeDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -6044,13 +6043,13 @@ function NewAccrualPrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="new-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="new-accrual-title">Новое начисление</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть новое начисление" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть новое начисление" onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -6097,16 +6096,16 @@ function NewAccrualPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма начисления поставщику" value={amount} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма начисления поставщику" value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
           <FormField label="Документ">
-            <input aria-label="Документ начисления поставщику" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
+            <input aria-label="Документ начисления поставщику" value={documentNumber} disabled={saving} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий начисления поставщику" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
+            <textarea aria-label="Комментарий начисления поставщику" rows={5} value={comment} disabled={saving} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
@@ -6133,7 +6132,7 @@ function PenaltyAccrualPrototypeDialog({
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -6172,32 +6171,32 @@ function PenaltyAccrualPrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="penalty-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="penalty-accrual-title">Начислить штраф</h3>
             <p>Сумма может быть произвольной. Причина сохранится в истории изменений.</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть начисление штрафа" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть начисление штрафа" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Сумма штрафа">
-            <MoneyTextInput aria-label="Сумма штрафа" value={amount} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма штрафа" value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц начисления штрафа" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц начисления штрафа" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Причина">
-            <textarea aria-label="Причина начисления штрафа" rows={5} value={reason} onChange={(event) => {
+            <textarea aria-label="Причина начисления штрафа" rows={5} value={reason} disabled={saving} onChange={(event) => {
               setReason(event.target.value)
               setError(null)
             }} />
@@ -6231,7 +6230,7 @@ function GarageAccrualPrototypeDialog({
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -6270,13 +6269,13 @@ function GarageAccrualPrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="garage-accrual-title">Новое начисление</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть начисление гаража" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть начисление гаража" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
@@ -6287,6 +6286,7 @@ function GarageAccrualPrototypeDialog({
               list={basisOptionsId}
               maxLength={200}
               value={basis}
+              disabled={saving}
               placeholder="Выберите готовое основание или введите своё"
               onChange={(event) => {
                 const nextBasis = event.target.value
@@ -6306,6 +6306,7 @@ function GarageAccrualPrototypeDialog({
             <MoneyTextInput
               aria-label="Сумма нерегулярного начисления гаража"
               value={amount}
+              disabled={saving}
               onValueChange={(nextAmount) => {
                 setAmount(nextAmount)
                 setError(null)
@@ -6313,13 +6314,13 @@ function GarageAccrualPrototypeDialog({
             />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц начисления гаража" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц начисления гаража" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к начислению гаража" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
+            <textarea aria-label="Комментарий к начислению гаража" rows={5} value={comment} disabled={saving} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
@@ -6348,7 +6349,7 @@ function FullPaymentPrototypeDialog({
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
+  useEscapeKey(!saving, onClose)
 
   const selectedDebt = periodOptions.find((option) => option.value === period)?.debt ?? 0
   const hasDebt = periodOptions.some((option) => option.debt > 0)
@@ -6381,14 +6382,14 @@ function FullPaymentPrototypeDialog({
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog full-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="full-payment-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="full-payment-title">Полная оплата</h3>
             <p>Выберите расчетный период и укажите сумму оплаты задолженности.</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть полную оплату" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Закрыть полную оплату" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>

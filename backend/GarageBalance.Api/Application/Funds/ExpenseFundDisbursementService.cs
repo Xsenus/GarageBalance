@@ -66,8 +66,9 @@ public sealed class ExpenseFundDisbursementService(
         fund.Balance = disbursement.BalanceAfter;
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
         repository.AddOperation(disbursement);
-        AddAudit("fund.expense_disbursement_created", "create", disbursement, actorUserId, null, negativeBalanceConfirmed: allowNegativeBalance && disbursement.BalanceAfter < 0m);
-        return ExpenseFundDisbursementResult.Success();
+        var negativeBalanceConfirmed = allowNegativeBalance && disbursement.BalanceAfter < 0m;
+        AddAudit("fund.expense_disbursement_created", "create", disbursement, actorUserId, null, negativeBalanceConfirmed: negativeBalanceConfirmed);
+        return ExpenseFundDisbursementResult.Success(negativeBalanceConfirmed);
     }
 
     public async Task<ExpenseFundDisbursementResult> UpdateAsync(
@@ -139,8 +140,9 @@ public sealed class ExpenseFundDisbursementService(
             destinationFund,
             destinationOperations,
             destinationOpeningBalance);
-        AddAudit("fund.expense_disbursement_updated", "update", disbursement, actorUserId, null, oldValues, allowNegativeBalance && disbursement.BalanceAfter < 0m);
-        return ExpenseFundDisbursementResult.Success();
+        var negativeBalanceConfirmed = allowNegativeBalance && disbursement.BalanceAfter < 0m;
+        AddAudit("fund.expense_disbursement_updated", "update", disbursement, actorUserId, null, oldValues, negativeBalanceConfirmed);
+        return ExpenseFundDisbursementResult.Success(negativeBalanceConfirmed);
     }
 
     public async Task<ExpenseFundDisbursementResult> CancelAsync(
@@ -188,7 +190,8 @@ public sealed class ExpenseFundDisbursementService(
             return ExpenseFundDisbursementResult.Success();
         }
 
-        if (disbursement.Amount > disbursement.Fund.Balance)
+        if (disbursement.Amount > disbursement.Fund.Balance &&
+            !sourceOperation.NegativeFundBalanceConfirmed)
         {
             return InsufficientBalance(disbursement.Fund.Balance);
         }
@@ -201,7 +204,13 @@ public sealed class ExpenseFundDisbursementService(
             disbursement.CreatedAtUtc,
             cancellationToken);
         RecalculateTail(disbursement.Fund, operations, disbursement.BalanceBefore);
-        AddAudit("fund.expense_disbursement_restored", "restore", disbursement, actorUserId, null);
+        AddAudit(
+            "fund.expense_disbursement_restored",
+            "restore",
+            disbursement,
+            actorUserId,
+            null,
+            negativeBalanceConfirmed: sourceOperation.NegativeFundBalanceConfirmed && disbursement.Fund.Balance < 0m);
         return ExpenseFundDisbursementResult.Success();
     }
 

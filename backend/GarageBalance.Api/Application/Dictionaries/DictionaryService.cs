@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -26,6 +27,7 @@ public sealed class DictionaryService(
     IFeeCampaignRepository feeCampaignRepository,
     IFundRepository fundRepository,
     IOpeningBalanceAdjustmentRepository openingBalanceAdjustmentRepository,
+    IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     IBusinessDateProvider businessDateProvider) : IDictionaryService
@@ -3229,7 +3231,6 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_participants_required", "Для расчёта суммы сбора нужен хотя бы один действующий гараж.");
         }
-
         var campaign = new FeeCampaign { Name = name };
         ApplyFeeCampaign(campaign, request, incomeType.Id, amounts.ContributionAmount, amounts.TargetAmount);
         campaign.IncomeType = incomeType;
@@ -3248,10 +3249,17 @@ public sealed class DictionaryService(
             return validationError;
         }
 
+        await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(id, cancellationToken);
         var campaign = await feeCampaignRepository.FindActiveWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
+        }
+        if (campaign.ClosedAtUtc.HasValue)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_closed",
+                "Закрытый сбор нельзя изменять: его условия и итог уже зафиксированы.");
         }
 
         var name = request.Name.Trim();
@@ -3286,11 +3294,40 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_participants_required", "Для расчёта суммы сбора нужен хотя бы один действующий гараж.");
         }
+        var campaignAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
+            campaign.Id,
+            cancellationToken);
+        var participantGarageIds = campaign.ParticipantGarages
+            .Select(participant => participant.GarageId)
+            .Concat(participants.Value!.Select(garage => garage.Id))
+            .Distinct()
+            .ToArray();
+        var campaignAllocationKeys = FeeCampaignAccrualSettlement.BuildCampaignWideAllocationKeys(
+            campaignAccruals,
+            [campaign.IncomeTypeId, incomeType.Id],
+            participantGarageIds);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            campaignAllocationKeys,
+            cancellationToken);
+        var collectedAmount = decimal.Round(
+            await feeCampaignRepository.GetCollectedAmountAsync(campaign.Id, cancellationToken),
+            2,
+            MidpointRounding.AwayFromZero);
+        if (FeeCampaignMatches(campaign, request, participants.Value!, incomeType.Id, amounts.ContributionAmount, amounts.TargetAmount))
+        {
+            return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign, collectedAmount));
+        }
+
+        if (amounts.TargetAmount <= collectedAmount)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_target_not_above_collected",
+                $"Новая плановая сумма должна быть больше уже собранной суммы {collectedAmount:F2}. Для завершения используйте закрытие сбора.");
+        }
 
         var participantsChanged = !FeeCampaignParticipantsMatch(campaign, request, participants.Value!);
         var incomeTypeChanged = campaign.IncomeTypeId != incomeType.Id;
-        var hasAccruals = (participantsChanged || incomeTypeChanged) &&
-            await feeCampaignRepository.HasAccrualsAsync(campaign.Id, cancellationToken);
+        var hasAccruals = (participantsChanged || incomeTypeChanged) && campaignAccruals.Count > 0;
         if (participantsChanged && hasAccruals)
         {
             return DictionaryResult<FeeCampaignDto>.Failure(
@@ -3304,11 +3341,6 @@ public sealed class DictionaryService(
                 "Нельзя изменить назначение поступления после создания начислений по сбору. Исторические проводки должны оставаться в прежнем фонде.");
         }
 
-        if (FeeCampaignMatches(campaign, request, participants.Value!, incomeType.Id, amounts.ContributionAmount, amounts.TargetAmount))
-        {
-            return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
-        }
-
         var oldValues = ToFeeCampaignAuditValues(campaign);
         ApplyFeeCampaign(campaign, request, incomeType.Id, amounts.ContributionAmount, amounts.TargetAmount);
         campaign.IncomeType = incomeType;
@@ -3318,7 +3350,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.fee_campaign_updated", "fee_campaign", campaign.Id, $"Изменен сбор {campaign.Name}.", oldValues: oldValues, newValues: newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign, collectedAmount));
     }
 
     public async Task<DictionaryResult<FeeCampaignDto>> CloseFeeCampaignAsync(
@@ -3327,6 +3359,7 @@ public sealed class DictionaryService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(id, cancellationToken);
         var campaign = await feeCampaignRepository.FindActiveWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
@@ -3344,6 +3377,14 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_closure_comment_too_long", "Комментарий не должен превышать 1000 символов.");
         }
 
+        var accruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(id, cancellationToken);
+        var settlementKeys = FeeCampaignAccrualSettlement.BuildCampaignWideAllocationKeys(
+            accruals,
+            [campaign.IncomeTypeId]);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            settlementKeys,
+            cancellationToken);
+
         var collectedAmount = decimal.Round(
             await feeCampaignRepository.GetCollectedAmountAsync(id, cancellationToken),
             2,
@@ -3356,11 +3397,18 @@ public sealed class DictionaryService(
                 "Для досрочного закрытия сбора укажите обязательный комментарий.");
         }
 
+        var paidAmountsByGarage = await feeCampaignRepository.GetPaidAmountsByGarageAsync(id, cancellationToken);
         campaign.ClosedAtUtc = DateTimeOffset.UtcNow;
         campaign.ClosedByUserId = actorUserId;
         campaign.IsClosedEarly = isClosedEarly;
         campaign.ClosureComment = comment;
         campaign.UpdatedAtUtc = campaign.ClosedAtUtc.Value;
+        settlementKeys = FeeCampaignAccrualSettlement.SettleClosedCampaign(
+                accruals,
+                paidAmountsByGarage,
+                campaign.ClosedAtUtc.Value)
+            .ToArray();
+        await accrualPaymentAllocationRepository.RebuildAsync(settlementKeys, cancellationToken);
 
         AddAudit(
             actorUserId,
@@ -3373,7 +3421,7 @@ public sealed class DictionaryService(
             comment,
             newValues: ToFeeCampaignAuditValues(campaign));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign, collectedAmount));
     }
 
     public async Task<DictionaryResult<FeeCampaignDto>> ArchiveFeeCampaignAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
@@ -3383,22 +3431,35 @@ public sealed class DictionaryService(
             return reasonError;
         }
 
+        await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(id, cancellationToken);
         var campaign = await feeCampaignRepository.FindActiveWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
+        if (!campaign.ClosedAtUtc.HasValue)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_must_be_closed_before_archive",
+                "Открытый сбор нельзя архивировать. Сначала закройте сбор, чтобы зафиксировать расчёты участников.");
+        }
+
+        var collectedAmount = decimal.Round(
+            await feeCampaignRepository.GetCollectedAmountAsync(id, cancellationToken),
+            2,
+            MidpointRounding.AwayFromZero);
 
         campaign.IsArchived = true;
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.fee_campaign_archived", "fee_campaign", campaign.Id, $"Архивирован сбор {campaign.Name}.", archiveReason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign, collectedAmount));
     }
 
     public async Task<DictionaryResult<FeeCampaignDto>> RestoreFeeCampaignAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(id, cancellationToken);
         var campaign = await feeCampaignRepository.FindArchivedWithDetailsAsync(id, cancellationToken);
         if (campaign is null)
         {
@@ -3410,12 +3471,17 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
+        var collectedAmount = decimal.Round(
+            await feeCampaignRepository.GetCollectedAmountAsync(id, cancellationToken),
+            2,
+            MidpointRounding.AwayFromZero);
+
         campaign.IsArchived = false;
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         AddAudit(actorUserId, "dictionary.fee_campaign_restored", "fee_campaign", campaign.Id, $"Восстановлен сбор {campaign.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign, collectedAmount));
     }
 
     private async Task<Owner?> FindOwnerOrNullAsync(Guid? ownerId, CancellationToken cancellationToken)
