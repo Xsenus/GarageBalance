@@ -13,12 +13,13 @@ public sealed class EfSupplierContactRepository(GarageBalanceDbContext dbContext
         int limit,
         CancellationToken cancellationToken)
     {
-        return await IncludeSupplier(ApplyFilters(supplierId, normalizedSearch, includeArchived))
-            .OrderBy(contact => contact.Supplier.Name)
-            .ThenBy(contact => contact.FullName)
-            .ThenBy(contact => contact.Id)
+        var rows = await ProjectListRows(ApplyFilters(supplierId, normalizedSearch, includeArchived))
+            .OrderBy(row => row.SupplierName)
+            .ThenBy(row => row.FullName)
+            .ThenBy(row => row.ContactId)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return rows.Select(ToContact).ToList();
     }
 
     public async Task<SupplierContactPageData> GetPageAsync(
@@ -53,21 +54,7 @@ public sealed class EfSupplierContactRepository(GarageBalanceDbContext dbContext
     {
         const int PageCategory = 1;
         const int TotalsCategory = 2;
-        var projectedRows = query.Select(contact => new SupplierContactListRow
-        {
-            Category = PageCategory,
-            ContactId = contact.Id,
-            SupplierId = contact.SupplierId,
-            SupplierName = contact.Supplier.Name,
-            FullName = contact.FullName,
-            Position = contact.Position,
-            Phone = contact.Phone,
-            Email = contact.Email,
-            Status = contact.Status,
-            Comment = contact.Comment,
-            IsArchived = contact.IsArchived,
-            TotalCount = 0
-        });
+        var projectedRows = ProjectListRows(query);
         var pageRows = ApplyPostgresOrdering(projectedRows, sortBy, sortDescending)
             .Skip(offset)
             .Take(limit);
@@ -96,22 +83,41 @@ public sealed class EfSupplierContactRepository(GarageBalanceDbContext dbContext
         var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
         var items = rows
             .Where(row => row.Category == PageCategory)
-            .Select(row => new SupplierContact
-            {
-                Id = row.ContactId!.Value,
-                SupplierId = row.SupplierId!.Value,
-                Supplier = new Supplier { Id = row.SupplierId.Value, Name = row.SupplierName! },
-                FullName = row.FullName!,
-                Position = row.Position,
-                Phone = row.Phone,
-                Email = row.Email,
-                Status = row.Status!,
-                Comment = row.Comment,
-                IsArchived = row.IsArchived!.Value
-            })
+            .Select(ToContact)
             .ToList();
         return new SupplierContactPageData(items, totalCount);
     }
+
+    private static IQueryable<SupplierContactListRow> ProjectListRows(IQueryable<SupplierContact> query) =>
+        query.Select(contact => new SupplierContactListRow
+        {
+            Category = 1,
+            ContactId = contact.Id,
+            SupplierId = contact.SupplierId,
+            SupplierName = contact.Supplier.Name,
+            FullName = contact.FullName,
+            Position = contact.Position,
+            Phone = contact.Phone,
+            Email = contact.Email,
+            Status = contact.Status,
+            Comment = contact.Comment,
+            IsArchived = contact.IsArchived,
+            TotalCount = 0
+        });
+
+    private static SupplierContact ToContact(SupplierContactListRow row) => new()
+    {
+        Id = row.ContactId!.Value,
+        SupplierId = row.SupplierId!.Value,
+        Supplier = new Supplier { Id = row.SupplierId.Value, Name = row.SupplierName! },
+        FullName = row.FullName!,
+        Position = row.Position,
+        Phone = row.Phone,
+        Email = row.Email,
+        Status = row.Status!,
+        Comment = row.Comment,
+        IsArchived = row.IsArchived!.Value
+    };
 
     private static IOrderedQueryable<SupplierContactListRow> ApplyPostgresOrdering(
         IQueryable<SupplierContactListRow> query,
