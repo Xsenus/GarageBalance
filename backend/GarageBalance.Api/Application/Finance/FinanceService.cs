@@ -1229,6 +1229,23 @@ public sealed class FinanceService(
             });
         }
 
+        foreach (var episodicExpense in worksheetData.EpisodicExpenses)
+        {
+            var expenseAmount = MoneyMath.RoundMoney(episodicExpense.Amount);
+            rows.Add(new ExpenseWorksheetRowDto(
+                "episodic",
+                null,
+                null,
+                episodicExpense.CounterpartyName ?? "Получатель не указан",
+                episodicExpense.ExpenseTypeId,
+                episodicExpense.ExpenseTypeName,
+                0m,
+                expenseAmount,
+                0m,
+                null,
+                null));
+        }
+
         var staffExpenses = worksheetData.StaffExpenses
             .ToDictionary(item => (item.StaffMemberId, item.ExpenseTypeId), item => item.Amount);
         var staffOpeningExpenses = worksheetData.StaffOpeningExpenses
@@ -1298,7 +1315,7 @@ public sealed class FinanceService(
         }
 
         rows = rows
-            .OrderBy(row => row.RowKind == "supplier" ? 0 : 1)
+            .OrderBy(row => row.RowKind == "supplier" ? 0 : row.RowKind == "episodic" ? 1 : 2)
             .ThenBy(row => row.CounterpartyName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(row => row.ExpenseTypeName, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -313,7 +313,7 @@ function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): Payment
     balance: row.closingDebt ?? row.balance,
     collected: row.collectedAmount ?? '',
     difference: row.difference ?? '',
-    action: true,
+    action: row.rowKind !== 'episodic',
   }))
 }
 
@@ -4997,7 +4997,7 @@ function PaymentsPrototypePanel({
               <table className="payments-prototype-table" aria-label={expenseWorksheetTableLabel}>
                 <thead>
                   <tr>
-                    <th scope="col">Поставщик</th>
+                    <th scope="col">Получатель</th>
                     <th scope="col">Услуга</th>
                     <th scope="col">Входящий баланс</th>
                     <th scope="col">Стоимость</th>
@@ -5046,6 +5046,9 @@ function PaymentsPrototypePanel({
                           <span>{row.item}</span>
                           {row.rowKind === 'supplier' && row.expenseFundName ? (
                             <small className="payments-prototype-cell-note">Фонд: {row.expenseFundName}</small>
+                          ) : null}
+                          {row.rowKind === 'episodic' ? (
+                            <small className="payments-prototype-cell-note">Эпизодическая выплата из кассы</small>
                           ) : null}
                           {isStaffPaymentRow && ((row.bonus ?? 0) > 0 || (row.penalty ?? 0) > 0) ? (
                             <small className="payments-prototype-cell-note">

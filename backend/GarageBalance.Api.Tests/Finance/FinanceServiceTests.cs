@@ -11342,6 +11342,34 @@ public sealed class FinanceServiceTests
             new CreateIncomeOperationRequest(fixtures.Garage.Id, unmatchedIncomeType.Id, new DateOnly(2026, 6, 23), month, 50m, "PKO-donation", "Пожертвование"),
             null,
             CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                null,
+                expenseOnlyType.Id,
+                new DateOnly(2026, 6, 24),
+                month,
+                333m,
+                "RKO-episodic-333",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                CounterpartyName: "TEST 1"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                null,
+                expenseOnlyType.Id,
+                new DateOnly(2026, 6, 25),
+                month,
+                9m,
+                "RKO-episodic-9",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                CounterpartyName: "TEST 1"),
+            null,
+            CancellationToken.None)).Succeeded);
         commandCounter.Reset();
 
         var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
@@ -11350,7 +11378,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(1, commandCounter.Count);
         Assert.Equal(month, result.Value!.AccountingMonth);
         Assert.Equal(76075m, result.Value.AccrualTotal);
-        Assert.Equal(25100m, result.Value.ExpenseTotal);
+        Assert.Equal(25442m, result.Value.ExpenseTotal);
         Assert.Equal(51075m, result.Value.BalanceTotal);
         Assert.Equal(0m, result.Value.OpeningDebtTotal);
         Assert.Equal(0m, result.Value.OpeningAdvanceTotal);
@@ -11358,7 +11386,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(100m, result.Value.ClosingAdvanceTotal);
         Assert.Equal(SeededBankAmount, result.Value.CollectedTotal);
         Assert.Equal(SeededBankAmount - 10100m, result.Value.DifferenceTotal);
-        Assert.Equal(29050m, result.Value.CashAmount);
+        Assert.Equal(28708m, result.Value.CashAmount);
         Assert.Equal(SeededBankAmount - 10100m, result.Value.BankAmount);
 
         var supplierRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == fixtures.ExpenseType.Id);
@@ -11377,7 +11405,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(fixtures.ExpenseFund.Id, supplierRow.ExpenseFundId);
         Assert.Equal(fixtures.ExpenseFund.Name, supplierRow.ExpenseFundName);
 
-        var expenseOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == expenseOnlyType.Id);
+        var expenseOnlyRow = Assert.Single(result.Value.Rows, row => row.RowKind == "supplier" && row.ExpenseTypeId == expenseOnlyType.Id);
         Assert.Equal(0m, expenseOnlyRow.AccrualAmount);
         Assert.Equal(100m, expenseOnlyRow.ExpenseAmount);
         Assert.Equal(0m, expenseOnlyRow.Balance);
@@ -11404,6 +11432,20 @@ public sealed class FinanceServiceTests
         Assert.Equal(29000m, staffRow.Balance);
         Assert.Null(staffRow.CollectedAmount);
         Assert.Null(staffRow.Difference);
+
+        var episodicRow = Assert.Single(result.Value.Rows, row => row.RowKind == "episodic");
+        Assert.Null(episodicRow.SupplierId);
+        Assert.Null(episodicRow.StaffMemberId);
+        Assert.Equal("TEST 1", episodicRow.CounterpartyName);
+        Assert.Equal(expenseOnlyType.Id, episodicRow.ExpenseTypeId);
+        Assert.Equal("Ремонт", episodicRow.ExpenseTypeName);
+        Assert.Equal(0m, episodicRow.AccrualAmount);
+        Assert.Equal(342m, episodicRow.ExpenseAmount);
+        Assert.Equal(0m, episodicRow.OpeningBalance);
+        Assert.Equal(0m, episodicRow.ClosingDebt);
+        Assert.Equal(0m, episodicRow.ClosingAdvance);
+        Assert.Null(episodicRow.CollectedAmount);
+        Assert.Null(episodicRow.Difference);
     }
 
     [Fact]
@@ -11435,6 +11477,61 @@ public sealed class FinanceServiceTests
         Assert.Equal(june, result.Value!.MonthFrom);
         Assert.Equal(july, result.Value.MonthTo);
         Assert.Equal(350m, Assert.Single(result.Value.Rows, row => row.SupplierId == fixtures.Supplier.Id).AccrualAmount);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_ShowsOnlyActiveEpisodicExpensesFromSelectedPeriod()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var month = new DateOnly(2026, 8, 1);
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 8, 10),
+                AccountingMonth = month,
+                Amount = 333m,
+                ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
+                ExpenseType = fixtures.ExpenseType
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 7, 31),
+                AccountingMonth = month.AddMonths(-1),
+                Amount = 9m,
+                ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
+                ExpenseType = fixtures.ExpenseType
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 8, 11),
+                AccountingMonth = month,
+                Amount = 7m,
+                ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
+                ExpenseType = fixtures.ExpenseType,
+                IsCanceled = true
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, commandCounter.Count);
+        var row = Assert.Single(result.Value!.Rows, item => item.RowKind == "episodic");
+        Assert.Equal("Получатель не указан", row.CounterpartyName);
+        Assert.Equal(333m, row.ExpenseAmount);
+        Assert.Equal(0m, row.OpeningBalance);
+        Assert.Equal(0m, row.ClosingDebt);
+        Assert.Equal(0m, row.ClosingAdvance);
     }
 
     [Fact]

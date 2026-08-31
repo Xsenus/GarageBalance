@@ -45,6 +45,8 @@ public sealed record ExpenseWorksheetData(
     IReadOnlyList<ExpenseWorksheetSupplierFundData> SupplierFunds,
     FinanceAvailableBalanceData AvailableBalance)
 {
+    public IReadOnlyList<ExpenseWorksheetEpisodicExpenseData> EpisodicExpenses { get; init; } = [];
+
     public IReadOnlyList<ExpenseWorksheetSupplierData> SupplierOpeningAccruals { get; init; } = [];
 
     public IReadOnlyList<ExpenseWorksheetSupplierData> SupplierOpeningExpenses { get; init; } = [];
@@ -69,6 +71,13 @@ public sealed record ExpenseWorksheetData(
 public sealed record ExpenseWorksheetSupplierData(
     Guid SupplierId,
     string SupplierName,
+    Guid ExpenseTypeId,
+    string ExpenseTypeName,
+    string? ExpenseTypeCode,
+    decimal Amount);
+
+public sealed record ExpenseWorksheetEpisodicExpenseData(
+    string? CounterpartyName,
     Guid ExpenseTypeId,
     string ExpenseTypeName,
     string? ExpenseTypeCode,

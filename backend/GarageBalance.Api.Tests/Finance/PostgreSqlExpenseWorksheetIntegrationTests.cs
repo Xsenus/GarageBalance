@@ -72,6 +72,65 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task ExpenseWorksheet_ReturnsAggregatedEpisodicCashExpensesOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var month = new DateOnly(2044, 2, 1);
+        var recipient = $"Получатель {Guid.NewGuid():N}";
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var expenseType = new ExpenseType { Name = $"Юридические расходы {Guid.NewGuid():N}", Code = $"legal_{Guid.NewGuid():N}" };
+            expenseTypeId = expenseType.Id;
+            seedContext.AddRange(
+                expenseType,
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(10),
+                    AccountingMonth = month,
+                    Amount = 333m,
+                    ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+                    ExpensePaymentSource = ExpensePaymentSources.Cash,
+                    CounterpartyName = recipient,
+                    ExpenseType = expenseType
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(11),
+                    AccountingMonth = month,
+                    Amount = 9m,
+                    ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+                    ExpensePaymentSource = ExpensePaymentSources.Cash,
+                    CounterpartyName = recipient,
+                    ExpenseType = expenseType
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(12),
+                    AccountingMonth = month,
+                    Amount = 7m,
+                    ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+                    ExpensePaymentSource = ExpensePaymentSources.Cash,
+                    CounterpartyName = recipient,
+                    ExpenseType = expenseType,
+                    IsCanceled = true
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var result = await new EfExpenseWorksheetQuery(context)
+            .GetAsync(month, ["no_receipt"], ["Выплата без чека"], CancellationToken.None);
+
+        var row = Assert.Single(result.EpisodicExpenses, item => item.ExpenseTypeId == expenseTypeId);
+        Assert.Equal(recipient, row.CounterpartyName);
+        Assert.Equal(342m, row.Amount);
+    }
+
+    [PostgreSqlFact]
     public async Task AutomaticStaffSalary_UsesConfiguredDayInPostgreSqlWorksheet()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

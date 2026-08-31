@@ -12270,6 +12270,53 @@ describe('App', () => {
     expect(within(cashAndBankSummary).getByText('Касса + банк').closest('div')).toHaveTextContent('16 000.00')
   })
 
+  it('shows an episodic cash expense in the worksheet without offering a repeated supplier payment', async () => {
+    vi.setSystemTime(new Date('2026-08-31T15:00:00+07:00'))
+    const user = userEvent.setup()
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accountingMonth: '2026-08-01',
+      accrualTotal: 0,
+      expenseTotal: 342,
+      balanceTotal: 0,
+      closingDebtTotal: 0,
+      rows: [{
+        rowKind: 'episodic',
+        supplierId: null,
+        staffMemberId: null,
+        counterpartyName: 'TEST 1',
+        expenseTypeId: 'expense-legal',
+        expenseTypeName: 'Юридические расходы',
+        openingBalance: 0,
+        openingDebt: 0,
+        openingAdvance: 0,
+        closingDebt: 0,
+        closingAdvance: 0,
+        accrualAmount: 0,
+        expenseAmount: 342,
+        balance: 0,
+        collectedAmount: null,
+        difference: null,
+      }],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    const table = await within(prototype).findByRole('table', { name: 'Форма выплат за август 2026' })
+    expect(within(table).getByRole('columnheader', { name: 'Получатель' })).toBeInTheDocument()
+    const row = within(table).getByText('TEST 1').closest('tr')
+    expect(row).not.toBeNull()
+    expect(within(row!).getByText('Юридические расходы')).toBeInTheDocument()
+    expect(within(row!).getByText('Эпизодическая выплата из кассы')).toBeInTheDocument()
+    expect(within(row!).getByText('342.00')).toBeInTheDocument()
+    expect(within(row!).queryByRole('button', { name: 'Оплатить Юридические расходы' })).not.toBeInTheDocument()
+    expect(within(table).queryByRole('button', { name: /Показать состав суммы: TEST 1/ })).not.toBeInTheDocument()
+  })
+
   it('shows unused service collections in each following expense month until they are paid', async () => {
     const user = userEvent.setup()
     const monthlyAmounts: Record<string, { collected: number; difference: number; expense: number }> = {
