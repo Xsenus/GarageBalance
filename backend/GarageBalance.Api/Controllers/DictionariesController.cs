@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -1062,7 +1063,12 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     private ActionResult? ValidateArchiveRequest(ArchiveDictionaryEntryRequest? request)
     {
-        if (string.IsNullOrWhiteSpace(request?.Reason))
+        if (request is null)
+        {
+            return BadRequest(ApiProblemDetails.Create("dictionary_archive_request_required", "Передайте параметры удаления записи.", StatusCodes.Status400BadRequest));
+        }
+
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(request.Reason))
         {
             return BadRequest(ApiProblemDetails.Create("dictionary_archive_reason_required", "Укажите причину удаления записи.", StatusCodes.Status400BadRequest));
         }

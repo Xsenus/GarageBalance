@@ -40,6 +40,10 @@ const auth: AuthResponse = {
 
 function renderShell() {
   const emptyClient = {} as never
+  const settingsClient = {
+    getActionCommentSettings: () => new Promise<never>(() => undefined),
+    updateActionCommentSettings: async (_accessToken: string, request: { required: boolean; version: string }) => request,
+  } as never
   return render(
     <AuthenticatedAppShell
       auth={auth}
@@ -52,7 +56,7 @@ function renderShell() {
       integrationClient={emptyClient}
       reportClient={emptyClient}
       releaseClient={emptyClient}
-      settingsClient={emptyClient}
+      settingsClient={settingsClient}
       userClient={emptyClient}
       onLogout={vi.fn()}
     />,
@@ -139,8 +143,9 @@ describe('AuthenticatedAppShell performance', () => {
     expect(preloadWorkspaceSection).toHaveBeenCalledTimes(2)
   })
 
-  it('provides production API clients when callers do not inject test clients', () => {
+  it('provides production API clients when callers do not inject test clients', async () => {
     render(<AuthenticatedAppShell auth={auth} authClient={{} as never} onLogout={vi.fn()} />)
+    await act(async () => undefined)
 
     const props = workspacePropsSpy.mock.calls[0]?.[0] as Record<string, unknown>
     for (const clientName of ['auditClient', 'dictionaryClient', 'financeClient', 'fundsClient', 'importClient', 'integrationClient', 'reportClient', 'releaseClient', 'settingsClient', 'userClient']) {

@@ -799,7 +799,12 @@ public sealed class FinanceController(
 
     private ActionResult<T>? ValidateCancelRequest<T>(CancelFinanceEntryRequest? request, string errorCode, string message)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.Reason))
+        if (request is null)
+        {
+            return BadRequest(ApiProblemDetails.Create(errorCode, "Передайте параметры действия.", StatusCodes.Status400BadRequest));
+        }
+
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(request.Reason))
         {
             return BadRequest(ApiProblemDetails.Create(errorCode, message, StatusCodes.Status400BadRequest));
         }

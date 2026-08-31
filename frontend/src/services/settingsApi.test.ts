@@ -4,6 +4,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settingsApi } from './settingsApi'
 
 describe('settingsApi', () => {
+  it('loads and updates the global action comment requirement', async () => {
+    const current = { required: false, version: 'comments-v1' }
+    const request = { required: true, version: 'comments-v1' }
+    const updated = { required: true, version: 'comments-v2' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(current), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getActionCommentSettings('token')).resolves.toEqual(current)
+    await expect(settingsApi.updateActionCommentSettings('token', request)).resolves.toEqual(updated)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/action-comments', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/action-comments', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(request),
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
+
   it('loads and saves the authenticated tariff panel layout', async () => {
     const fetchMock = vi.fn()
     fetchMock

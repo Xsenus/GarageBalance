@@ -20,6 +20,11 @@ export type SalaryAccrualSettingsDto = {
   version: string
 }
 
+export type ActionCommentSettingsDto = {
+  required: boolean
+  version: string
+}
+
 export type BusinessDateSettingsDto = {
   systemDate: string
   effectiveDate: string
@@ -103,6 +108,8 @@ export type DiagnosticLogStatusDto = {
 }
 
 export type ApplicationSettingsClient = {
+  getActionCommentSettings(accessToken: string, signal?: AbortSignal): Promise<ActionCommentSettingsDto>
+  updateActionCommentSettings(accessToken: string, request: ActionCommentSettingsDto): Promise<ActionCommentSettingsDto>
   getPaymentDisplaySettings(accessToken: string, signal?: AbortSignal): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
   getTariffPanelsLayout(accessToken: string, signal?: AbortSignal): Promise<TariffPanelsLayoutDto>
@@ -147,6 +154,12 @@ async function requestBlob(
 }
 
 export const settingsApi: ApplicationSettingsClient = {
+  getActionCommentSettings(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/action-comments', { signal })
+  },
+  updateActionCommentSettings(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/action-comments', { method: 'PUT', body: JSON.stringify(request) })
+  },
   getPaymentDisplaySettings(accessToken, signal) {
     return requestJson(accessToken, '/api/settings/payments/display', { signal })
   },

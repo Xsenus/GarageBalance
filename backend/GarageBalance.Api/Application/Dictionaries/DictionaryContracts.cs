@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Dictionaries;
 
@@ -27,7 +28,7 @@ public sealed record UpsertOwnerRequest(
     [MaxLength(1000)] string? MeterNotes);
 
 public sealed record ArchiveDictionaryEntryRequest(
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason);
 
 public sealed record GarageDto(
     Guid Id,
@@ -104,7 +105,7 @@ public sealed record UpsertSupplierRequest(
 public sealed record CreateOpeningBalanceAdjustmentRequest(
     DateOnly EffectiveDate,
     decimal NewAmount,
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason);
 
 public sealed record OpeningBalanceAdjustmentDto(
     Guid Id,
@@ -330,7 +331,7 @@ public sealed record UpsertIrregularPaymentRequest(
 
 public sealed record UpdateIrregularPaymentStatusRequest(
     bool IsActive,
-    [MaxLength(1000)] string? Reason);
+    [ActionComment, MaxLength(1000)] string? Reason);
 
 public sealed record FeeCampaignDto(
     Guid Id,

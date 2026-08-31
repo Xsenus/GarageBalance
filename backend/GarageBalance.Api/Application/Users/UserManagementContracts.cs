@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Users;
 
@@ -33,7 +34,7 @@ public sealed record UpdateManagedUserRequest(
     [MinLength(1)] IReadOnlyList<string> RoleCodes,
     bool IsActive,
     [MinLength(8), MaxLength(200)] string? NewPassword,
-    [MaxLength(1000)] string? DeactivationReason = null,
+    [ActionComment, MaxLength(1000)] string? DeactivationReason = null,
     Guid? Version = null);
 
 public sealed record UpdateRolePermissionsRequest(

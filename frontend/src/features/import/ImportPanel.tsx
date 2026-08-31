@@ -12,12 +12,14 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createClientPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { maximumAccessImportFileSizeMegabytes, validateAccessImportFileSize } from './importFileLimits'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 const importQuarantineScreenRequestLimit = 50
 const importCreatedRecordsScreenRequestLimit = 100
 
 type ImportTab = 'checks' | 'log' | 'created' | 'history' | 'quarantine'
 export function ImportPanel({ auth, importClient }: { auth: AuthResponse; importClient: ImportClient }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const fileInputId = useId()
   const [runs, setRuns] = useState<AccessImportRunListItemDto[]>([])
   const [readerStatus, setReaderStatus] = useState<AccessImportReaderStatusDto | null>(null)
@@ -444,7 +446,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     const reason = applyReason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setApplyError('Укажите причину фактического импорта.')
       return
     }
@@ -492,7 +494,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     const reason = applyCancelReason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setApplyCancelError('Укажите причину отмены заявки на импорт.')
       return
     }
@@ -535,7 +537,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     const reason = rollbackReason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setRollbackError('Укажите причину rollback импорта.')
       return
     }
@@ -595,7 +597,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     const comment = quarantineResolveComment.trim()
-    if (!comment) {
+    if (actionCommentsRequired && !comment) {
       setQuarantineResolveError('Укажите комментарий к закрытию строки карантина.')
       return
     }

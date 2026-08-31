@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -363,6 +364,25 @@ public sealed class FundServiceTests
         Assert.Equal(expectedErrorCode, result.ErrorCode);
         Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task DeleteFundAsync_AllowsMissingReasonWhenCommentsAreOptional()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None))[0];
+        using var scope = ActionCommentRequirementContext.Push(false);
+
+        var result = await service.DeleteFundAsync(
+            fund.Id,
+            new DeleteFundRequest(string.Empty),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.archived");
     }
 
     [Fact]

@@ -19,12 +19,13 @@ import { restoreFocusAfterClose, useEscapeKey, useFocusOnOpen, useFocusTrap, use
 import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 function SettingsDisplaySwitch({ title, label, checked, disabled, onChange }: {
   title: string
   label: string
   checked: boolean
-  disabled: boolean
+  disabled?: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
@@ -43,6 +44,7 @@ const tariffColumnSwitches = [
 ] as const
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
+  const [actionCommentsRequired, actionCommentSettingsLoading, actionCommentSettingsError, saveActionCommentsRequired] = useActionCommentSettings()
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
   const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
@@ -315,7 +317,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
 
     const reason = backupConfirmation.reason.trim()
-    if (reason.length < 3) {
+    if (actionCommentsRequired && reason.length < 3) {
       setBackupConfirmation({ ...backupConfirmation, error: 'Укажите причину длиной не менее 3 символов.' })
       return
     }
@@ -385,7 +387,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   async function deleteDatabaseBackup() {
     if (!backupDeleteConfirmation) return
     const reason = backupDeleteConfirmation.reason.trim()
-    if (reason.length < 3 || reason.length > 500) {
+    if ((actionCommentsRequired && reason.length < 3) || reason.length > 500) {
       setBackupDeleteConfirmation({
         ...backupDeleteConfirmation,
         error: 'Укажите причину длиной от 3 до 500 символов.',
@@ -497,7 +499,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setCashBankError('Укажите дату операции.')
       return
     }
-    if (reason.length < 3) {
+    if (actionCommentsRequired && reason.length < 3) {
       setCashBankError('Укажите причину операции длиной не менее 3 символов.')
       return
     }
@@ -1093,7 +1095,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                     disabled={cashBankSaving}
                     maxLength={1000}
                     onChange={(event) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, reason: event.target.value })}
-                    required
+                    required={actionCommentsRequired}
                   />
                 </FormField>
               </div>
@@ -1112,9 +1114,22 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       {canManageApplicationSettings && activeSettingsTab === 'display' ? (
       <section className="password-panel settings-card settings-card--display" aria-label="Отображение таблиц">
         <div className="settings-card-intro">
-          <h2>Рабочие таблицы</h2>
+          <h2>Интерфейс и действия</h2>
         </div>
         <div className="dictionary-form settings-card-form settings-display-form">
+          <SettingsDisplaySwitch
+            title="Требовать комментарий к действиям"
+            label="Требовать комментарий к действиям"
+            checked={actionCommentsRequired}
+            disabled={actionCommentSettingsLoading}
+            onChange={(checked) => {
+              setPaymentDisplaySettingsError(null)
+              void saveActionCommentsRequired(checked)
+                .catch((caught: unknown) => setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку.'))
+            }}
+          />
+          <p className="form-hint">Причины необязательны, но история действий сохраняется.</p>
+          {actionCommentSettingsError ? <FormError>{actionCommentSettingsError}</FormError> : null}
           <SettingsDisplaySwitch
             title="Показывать общую ведомость платежей"
             label="Показывать общую ведомость платежей при открытии"

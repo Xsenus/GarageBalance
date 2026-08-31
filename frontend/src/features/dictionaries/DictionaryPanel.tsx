@@ -30,6 +30,7 @@ import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
 import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
 import { getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors } from '../../shared/validation'
 
@@ -57,6 +58,7 @@ type DictionaryEditorState = { section: DictionarySectionKey; mode: 'create' | '
 type DictionaryChangePreview = ChangePreview
 
 export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey; onOpenWorkspaceSection?: (section: Exclude<CatalogWorkspaceSection, 'dictionaries'>, context?: WorkspaceOpenContext | null) => void }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
@@ -765,7 +767,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }
 
     const reason = archiveReason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setArchiveReasonError('Укажите причину удаления записи.')
       return
     }
@@ -1433,12 +1435,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               }}
               placeholder="Например: дубль, ошибочная карточка, услуга больше не используется"
               disabled={saving === 'dictionary-archive'}
-              required
+              required={actionCommentsRequired}
             />
             {archiveReasonError ? <p className="form-error" id="dictionary-archive-reason-error">{archiveReasonError}</p> : null}
             <div className="detail-dialog-actions">
               <button ref={archiveCancelRef} className="ghost-button" type="button" onClick={() => closeArchiveTarget()} disabled={saving === 'dictionary-archive'}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={() => void confirmArchive()} disabled={saving === 'dictionary-archive' || !archiveReason.trim()}>
+              <button className="secondary-button danger-button" type="button" onClick={() => void confirmArchive()} disabled={saving === 'dictionary-archive' || (actionCommentsRequired && !archiveReason.trim())}>
                 <Trash2 size={16} />
                 <span>{saving === 'dictionary-archive' ? 'Удаляем...' : 'Удалить запись'}</span>
               </button>

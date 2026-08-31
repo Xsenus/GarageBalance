@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Buffers;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Import;
 
 namespace GarageBalance.Api.Application.Import;
@@ -160,8 +161,8 @@ public sealed class ImportService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        var reason = request.Reason.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
         {
             return ImportResult<AccessImportRunDto>.Failure("import_rollback_reason_required", "Укажите причину rollback импорта.");
         }
@@ -224,8 +225,8 @@ public sealed class ImportService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        var reason = request.Reason.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
         {
             return ImportResult<AccessImportRunDto>.Failure("import_apply_reason_required", "Укажите причину фактического импорта.");
         }
@@ -305,8 +306,8 @@ public sealed class ImportService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        var reason = request.Reason.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
         {
             return ImportResult<AccessImportRunDto>.Failure("import_apply_cancel_reason_required", "Укажите причину отмены заявки на импорт.");
         }

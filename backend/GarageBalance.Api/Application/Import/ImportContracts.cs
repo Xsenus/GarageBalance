@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Import;
 
@@ -32,25 +33,25 @@ public sealed record AccessImportCreatedRecordListRequest
 
 public sealed record AccessImportRollbackRequest
 {
-    [Required]
+    [ActionComment]
     [MaxLength(1000)]
-    public string Reason { get; init; } = string.Empty;
+    public string? Reason { get; init; }
 }
 
 public sealed record AccessImportApplyRequest
 {
-    [Required]
+    [ActionComment]
     [MaxLength(1000)]
-    public string Reason { get; init; } = string.Empty;
+    public string? Reason { get; init; }
 
     public bool BackupConfirmed { get; init; }
 }
 
 public sealed record AccessImportApplyCancelRequest
 {
-    [Required]
+    [ActionComment]
     [MaxLength(1000)]
-    public string Reason { get; init; } = string.Empty;
+    public string? Reason { get; init; }
 }
 
 public sealed record AccessImportCheckDto(

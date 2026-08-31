@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Domain.Users;
 
@@ -347,7 +348,7 @@ public sealed class UserManagementService(
     private static (string Code, string Message)? ValidateDeactivationReason(string? reason, out string normalizedReason)
     {
         normalizedReason = reason?.Trim() ?? string.Empty;
-        if (normalizedReason.Length == 0)
+        if (ActionCommentRequirementContext.IsRequired && normalizedReason.Length == 0)
         {
             return ("user_deactivation_reason_required", "Укажите причину отключения пользователя.");
         }

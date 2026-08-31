@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -118,6 +119,25 @@ public sealed class AuditEventWriterTests
             Summary: "Опасное действие.")));
 
         Assert.Equal("Причина обязательна для удаления, архивирования и отмены.", error.Message);
+    }
+
+    [Fact]
+    public void Add_AllowsDangerousActionWithoutReasonWhenCommentsAreOptional()
+    {
+        using var database = TestDatabase.Create();
+        var writer = new AuditEventWriter(database.Context);
+        using var scope = ActionCommentRequirementContext.Push(false);
+
+        var auditEvent = writer.Add(new AuditEventWriteRequest(
+            Guid.NewGuid(),
+            "finance.operation_canceled",
+            "financial_operation",
+            Guid.NewGuid().ToString(),
+            Summary: "Операция отменена.",
+            ActionKind: "cancel"));
+
+        Assert.NotNull(auditEvent);
+        Assert.Single(database.Context.AuditEvents.Local);
     }
 
     [Fact]

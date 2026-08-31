@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Settings;
 using System.Globalization;
 using System.Text.Json;
 
@@ -186,7 +187,7 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
 
     private static void EnsureReasonForDangerousAction(string actionKind, string? reason)
     {
-        if (IsDangerousAction(actionKind) && string.IsNullOrWhiteSpace(reason))
+        if (ActionCommentRequirementContext.IsRequired && IsDangerousAction(actionKind) && string.IsNullOrWhiteSpace(reason))
         {
             throw new InvalidOperationException("Причина обязательна для удаления, архивирования и отмены.");
         }

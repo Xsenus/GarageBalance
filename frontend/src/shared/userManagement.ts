@@ -61,7 +61,7 @@ export function getUserEditorChanges(form: UserFormState, user: ManagedUserDto, 
   return changes
 }
 
-export function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'edit', user?: ManagedUserDto) {
+export function getUserEditorValidationErrors(form: UserFormState, mode: 'create' | 'edit', user?: ManagedUserDto, actionCommentsRequired = true) {
   const passwordWasEntered = form.password.length > 0 || form.passwordConfirmation.length > 0
   const passwordConfirmationError = passwordWasEntered && form.password !== form.passwordConfirmation
     ? 'Пароль и подтверждение пароля не совпадают.'
@@ -93,7 +93,7 @@ export function getUserEditorValidationErrors(form: UserFormState, mode: 'create
     errors.push(passwordConfirmationError)
   }
 
-  if (user?.isActive && !form.isActive && !form.deactivationReason.trim()) {
+  if (actionCommentsRequired && user?.isActive && !form.isActive && !form.deactivationReason.trim()) {
     errors.push('Укажите причину отключения пользователя.')
   }
 

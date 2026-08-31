@@ -36,6 +36,7 @@ import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { useIntentPreload } from '../../shared/useIntentPreload'
+import { ActionCommentSettingsProvider } from '../../shared/ActionCommentSettings'
 import { Workspace } from './Workspace'
 import { preloadWorkspaceSection } from './workspaceSectionLoader'
 
@@ -144,6 +145,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
   }, [auth, openWorkspaceSection])
 
   return (
+    <ActionCommentSettingsProvider accessToken={auth.accessToken} client={settingsClient}>
     <main className={`app-shell ${sidebarModeClass}`}>
       <aside className={isSidebarExpanded ? 'sidebar sidebar--expanded' : 'sidebar sidebar--collapsed'}>
           <div className="brand">
@@ -175,5 +177,6 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
         <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onLogout={onLogout} />
       </section>
     </main>
+    </ActionCommentSettingsProvider>
   )
 }

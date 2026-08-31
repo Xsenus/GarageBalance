@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -120,7 +121,12 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<FundOperationDto>> CancelOperation(Guid operationId, [FromBody] CancelFundOperationRequest? request, CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.Reason))
+        if (request is null)
+        {
+            return BadRequest(ApiProblemDetails.Create("fund_operation_cancel_request_required", "Передайте параметры отмены операции фонда.", StatusCodes.Status400BadRequest));
+        }
+
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(request.Reason))
         {
             return BadRequest(ApiProblemDetails.Create("fund_operation_cancel_reason_required", "Для отмены операции фонда нужна причина.", StatusCodes.Status400BadRequest));
         }

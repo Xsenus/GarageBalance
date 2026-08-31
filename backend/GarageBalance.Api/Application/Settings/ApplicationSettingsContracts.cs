@@ -38,6 +38,10 @@ public sealed record SalaryAccrualSettingsDto(int AccrualDay, Guid Version = def
 
 public sealed record UpdateSalaryAccrualSettingsRequest(int AccrualDay, Guid? Version = null);
 
+public sealed record ActionCommentSettingsDto(bool Required, Guid Version = default);
+
+public sealed record UpdateActionCommentSettingsRequest(bool Required, Guid? Version = null);
+
 public sealed record BusinessDateSettingsDto(
     DateOnly SystemDate,
     DateOnly EffectiveDate,

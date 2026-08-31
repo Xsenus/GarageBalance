@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Finance;
@@ -136,7 +137,7 @@ public sealed record CreateStaffSalaryAdjustmentRequest(
     [Required, MaxLength(20)] string AdjustmentType,
     [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(120)] string? DocumentNumber,
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason);
 
 public sealed record StaffSalaryAdjustmentDto(
     Guid Id,
@@ -161,7 +162,7 @@ public sealed record CashBankTransferDto(
     DateTimeOffset CreatedAtUtc);
 
 public sealed record CancelFinanceEntryRequest(
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason);
 
 public sealed record FinancialOperationListRequest(
     DateOnly? DateFrom,
@@ -400,7 +401,7 @@ public sealed record ReplaceMeterDeviceRequest(
     [Required, Range(0, 999999999)] decimal? NewInitialValue,
     [Required, Range(0, 999999999)] decimal? CurrentValue,
     [Range(0, 999999999)] decimal? RemovedDeviceFinalValue,
-    [Required, MaxLength(500)] string Reason,
+    [ActionComment, MaxLength(500)] string Reason,
     Guid? MeterReadingId = null,
     Guid? ExpectedReadingVersion = null);
 

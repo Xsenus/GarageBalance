@@ -22,6 +22,11 @@ public interface IApplicationSettingsService
         UpdateSalaryAccrualSettingsRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+    Task<ActionCommentSettingsDto> GetActionCommentSettingsAsync(CancellationToken cancellationToken);
+    Task<ActionCommentSettingsDto> UpdateActionCommentSettingsAsync(
+        UpdateActionCommentSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
     Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken);
     Task<BusinessDateChangePreviewDto> PreviewBusinessDateChangeAsync(
         PreviewBusinessDateRequest request,

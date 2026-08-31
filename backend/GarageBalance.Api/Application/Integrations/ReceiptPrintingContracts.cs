@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Integrations;
 
 public sealed record ReceiptPrintingActionRequest(
     [Required, MaxLength(40)] string Action,
-    [MaxLength(1000)] string? Reason);
+    [ActionComment, MaxLength(1000)] string? Reason);
 
 public sealed record ReceiptPrintingActionDto(
     Guid AuditEventId,

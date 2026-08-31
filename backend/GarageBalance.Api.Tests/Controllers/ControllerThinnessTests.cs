@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.ComponentModel.DataAnnotations;
 using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Application.Settings;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 
@@ -109,12 +110,12 @@ public sealed class ControllerThinnessTests
     }
 
     [Fact]
-    public void DangerousControllerActions_RequireConstrainedReasonRequest()
+    public void DangerousControllerActions_UseConfigurableConstrainedCommentRequest()
     {
         var offenders = GetControllerActionMethods()
             .Where(IsDangerousActionName)
             .Where(method => !method.GetParameters().Any(RequestParameterHasConstrainedRequiredReasonFromBody))
-            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must require a body request with required Reason limited to 1000 characters.")
+            .Select(method => $"{method.DeclaringType!.Name}.{method.Name} must use a configurable body comment limited to 1000 characters.")
             .Order(StringComparer.Ordinal)
             .ToArray();
 
@@ -260,8 +261,8 @@ public sealed class ControllerThinnessTests
             reasonConstructorParameter?.GetCustomAttribute<MaxLengthAttribute>();
 
         return reasonProperty?.PropertyType == typeof(string) &&
-            (reasonProperty.GetCustomAttribute<RequiredAttribute>() is not null ||
-                reasonConstructorParameter?.GetCustomAttribute<RequiredAttribute>() is not null) &&
+            (reasonProperty.GetCustomAttribute<ActionCommentAttribute>() is not null ||
+                reasonConstructorParameter?.GetCustomAttribute<ActionCommentAttribute>() is not null) &&
             maxLength is { Length: > 0 and <= 1000 };
     }
 

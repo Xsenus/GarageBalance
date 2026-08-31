@@ -11,6 +11,37 @@ namespace GarageBalance.Api.Tests.Settings;
 public sealed class ApplicationSettingsServiceTests
 {
     [Fact]
+    public async Task ActionComments_DefaultToOptionalWhenSettingIsMissing()
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        var result = await service.GetActionCommentSettingsAsync(CancellationToken.None);
+
+        Assert.False(result.Required);
+        Assert.NotEqual(Guid.Empty, result.Version);
+    }
+
+    [Fact]
+    public async Task ActionComments_UpdatePersistsValueAndWritesAudit()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdateActionCommentSettingsAsync(
+            new UpdateActionCommentSettingsRequest(true),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Required);
+        Assert.Equal(ApplicationSettingsService.ActionCommentsRequiredKey, repository.Setting!.Key);
+        Assert.True(repository.Setting.BooleanValue);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        Assert.Equal("application_setting.action_comments_updated", Assert.Single(auditWriter.Requests).Action);
+    }
+
+    [Fact]
     public async Task TariffPanelsLayout_DefaultsToFortyPercentForAUser()
     {
         var repository = new FakeRepository();

@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Integrations;
@@ -29,11 +30,12 @@ public sealed class ReceiptPrintingService(
         }
 
         var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
-        if ((action is ReceiptPrintingActions.Cancel or ReceiptPrintingActions.Reprint) && reason is null)
+        if (ActionCommentRequirementContext.IsRequired &&
+            action is ReceiptPrintingActions.Cancel or ReceiptPrintingActions.Reprint &&
+            reason is null)
         {
             return ReceiptPrintingResult<ReceiptPrintingActionDto>.Failure("receipt_print_reason_required", "Для отмены или повторной печати нужна причина.");
         }
-
         var receiptOperations = await repository.FindReceiptOperationsAsync(financialOperationId, cancellationToken);
         var operation = receiptOperations.SingleOrDefault(item => item.Id == financialOperationId);
         if (operation is null)

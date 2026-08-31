@@ -15,6 +15,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEditableInputOnBlur } from '../../shared/prototypeEditing'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { getMeterReadingDateForMonth } from './meterReadingPeriod'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 const meterReadingMonths = [
   { key: '01', label: 'Январь' },
   { key: '02', label: 'Февраль' },
@@ -186,6 +187,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
 })
 
 export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const canEditOutsideCurrentMonth = hasPermission(auth, permissions.historicalMeterReadingsCorrect)
   const [yearDraft, setYearDraft] = useState('2026')
   const [appliedYear, setAppliedYear] = useState('2026')
@@ -247,7 +249,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       const currentValue = parseMeterReadingInputValue(pendingReadingChange.nextValue)
       const initialValue = parseMeterReadingInputValue(replacementForm.initialValue)
       const finalValue = parseMeterReadingInputValue(replacementForm.finalValue)
-      if (!financeClient.replaceMeterDevice || currentValue === null || initialValue === null || finalValue === null || !replacementForm.serial.trim() || !replacementForm.reason.trim() || !replacementForm.date) {
+      if (!financeClient.replaceMeterDevice || currentValue === null || initialValue === null || finalValue === null || !replacementForm.serial.trim() || (actionCommentsRequired && !replacementForm.reason.trim()) || !replacementForm.date) {
         setReadingChangeError('Заполните все поля замены счетчика.')
         return
       }

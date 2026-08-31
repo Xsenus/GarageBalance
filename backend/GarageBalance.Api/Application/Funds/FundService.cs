@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Funds;
@@ -122,8 +123,8 @@ public sealed class FundService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        var reason = request.Reason?.Trim();
-        if (string.IsNullOrEmpty(reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrEmpty(reason))
         {
             return FundResult<bool>.Failure(
                 "fund_delete_reason_required",
@@ -275,8 +276,8 @@ public sealed class FundService(
 
     public async Task<FundResult<FundOperationDto>> UpdateOperationAsync(Guid operationId, UpdateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reason = request.Reason.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_reason_required", "Укажите причину операции фонда.");
         }
@@ -347,8 +348,8 @@ public sealed class FundService(
 
     public async Task<FundResult<FundOperationDto>> CancelOperationAsync(Guid operationId, CancelFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reason = request.Reason.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_cancel_reason_required", "Для отмены операции фонда нужна причина.");
         }

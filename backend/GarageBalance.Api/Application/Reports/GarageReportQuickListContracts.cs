@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Reports;
 
@@ -20,4 +21,4 @@ public sealed record UpsertGarageReportQuickListRequest(
     [Required, MinLength(1), MaxLength(500)] IReadOnlyList<Guid> GarageIds);
 
 public sealed record DeleteGarageReportQuickListRequest(
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason);

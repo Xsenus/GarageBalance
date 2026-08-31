@@ -44,11 +44,11 @@ public sealed class CashBankBalanceSettingsService(
                 "Стартовый остаток не может быть отрицательным.");
         }
 
-        if (!IsValidReason(reason))
+        if ((ActionCommentRequirementContext.IsRequired && reason.Length == 0) || reason.Length is > 0 and < 3 or > 1000)
         {
             return FinanceResult<CashBankBalanceSettingsDto>.Failure(
                 "reason_invalid",
-                "Укажите причину изменения от 3 до 1000 символов.");
+                "Комментарий не должен превышать 1000 символов.");
         }
 
         await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
@@ -174,9 +174,9 @@ public sealed class CashBankBalanceSettingsService(
             return Invalid("amount_invalid", "Сумма операции должна быть больше нуля.");
         }
 
-        if (!IsValidReason(reason))
+        if ((ActionCommentRequirementContext.IsRequired && reason.Length == 0) || reason.Length is > 0 and < 3 or > 1000)
         {
-            return Invalid("reason_invalid", "Укажите причину операции от 3 до 1000 символов.");
+            return Invalid("reason_invalid", "Комментарий не должен превышать 1000 символов.");
         }
 
         var cashAccount = account == CashBankAccounts.Cash;
@@ -363,9 +363,6 @@ public sealed class CashBankBalanceSettingsService(
         balance.BankAdjustmentTotal +
         balance.BankDepositTotal -
         balance.BankExpenseTotal;
-
-    private static bool IsValidReason(string reason) =>
-        reason.Length is >= 3 and <= 1000;
 
     private static string AccountName(string account) =>
         account == CashBankAccounts.Cash ? "Касса" : "Банковский счёт";

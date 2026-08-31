@@ -95,6 +95,7 @@ builder.Services.AddDbContextPool<GarageBalanceDbContext>((services, options) =>
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
 builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
+builder.Services.AddScoped<ActionCommentRequirementFilter>();
 builder.Services.AddScoped<ICashBankBalanceOperationRepository, EfCashBankBalanceOperationRepository>();
 builder.Services.AddScoped<ICashBankBalanceSettingsService, CashBankBalanceSettingsService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
@@ -398,7 +399,7 @@ builder.Services.AddAuthorization(options =>
     }
 });
 builder.Services
-    .AddControllers()
+    .AddControllers(options => options.Filters.AddService<ActionCommentRequirementFilter>())
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = ApiProblemDetails.CreateInvalidModelStateResponse;

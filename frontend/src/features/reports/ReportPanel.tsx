@@ -17,6 +17,7 @@ import type { RankableReportFilterOption, ReportQuickPeriodRange } from '../../s
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
 import { SelectControl } from '../../shared/SelectControl'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
@@ -256,6 +257,7 @@ function renderReportLoadingState(primaryLoading: boolean, refreshing: boolean) 
 }
 
 export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
   const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
@@ -962,7 +964,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return
     }
     const reason = garageQuickListDeleteReason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setGarageQuickListError('Укажите причину удаления быстрого списка.')
       return
     }
@@ -1920,7 +1922,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 aria-label="Причина удаления быстрого списка"
                 value={garageQuickListDeleteReason}
                 maxLength={1000}
-                required
+                required={actionCommentsRequired}
                 disabled={garageQuickListSaving}
                 onChange={(event) => {
                   setGarageQuickListDeleteReason(event.target.value)

@@ -33,6 +33,8 @@ public sealed class SettingsControllerTests
         var getCashBankBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetCashBankBalances));
         var updateOpeningBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateCashBankOpeningBalances));
         var createAdjustmentAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateCashBankBalanceAdjustment));
+        var getActionCommentsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetActionCommentSettings));
+        var updateActionCommentsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateActionCommentSettings));
 
         Assert.Null(Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -50,6 +52,8 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getCashBankBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateOpeningBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Null(Assert.Single(getActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
     }
 
     [Fact]
@@ -65,6 +69,32 @@ public sealed class SettingsControllerTests
         Assert.False(dto.ShowAllGarageOperationsByDefault);
         Assert.False(dto.ShowPeriodicityColumn);
         Assert.False(dto.ShowAccrualMonthColumn);
+    }
+
+    [Fact]
+    public async Task ActionCommentSettings_ReturnDefaultAndPassAuthenticatedActorOnUpdate()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeService();
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+
+        var getResult = await controller.GetActionCommentSettings(CancellationToken.None);
+        var current = Assert.IsType<ActionCommentSettingsDto>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.False(current.Required);
+
+        var updateResult = await controller.UpdateActionCommentSettings(
+            new UpdateActionCommentSettingsRequest(true, current.Version),
+            CancellationToken.None);
+        var updated = Assert.IsType<ActionCommentSettingsDto>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.True(updated.Required);
+        Assert.Equal(actorUserId, service.ReceivedActorUserId);
     }
 
     [Fact]
@@ -514,6 +544,15 @@ public sealed class SettingsControllerTests
             ReceivedSalaryAccrualRequest = request;
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(new SalaryAccrualSettingsDto(request.AccrualDay));
+        }
+
+        public Task<ActionCommentSettingsDto> GetActionCommentSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new ActionCommentSettingsDto(false));
+
+        public Task<ActionCommentSettingsDto> UpdateActionCommentSettingsAsync(UpdateActionCommentSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(new ActionCommentSettingsDto(request.Required, request.Version ?? Guid.NewGuid()));
         }
 
         public Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken) =>

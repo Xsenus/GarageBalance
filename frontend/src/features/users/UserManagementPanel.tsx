@@ -16,12 +16,14 @@ import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
 import type { UserFormState } from '../../shared/userManagement'
 import { getInitialRoleCodes, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
 type UserDeactivationConfirmationState = { user: ManagedUserDto; request: UpdateManagedUserRequest }
 type RolePermissionEditorState = { role: ManagedRoleDto; permissions: string[] }
 
 export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
   const [page, setPage] = useState<PagedManagedUsersDto>(() => createEmptyPage<ManagedUserDto>())
   const [searchDraft, setSearchDraft] = useState('')
@@ -218,7 +220,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       return
     }
 
-    const errors = getUserEditorValidationErrors(form, editor.mode, editor.user)
+    const errors = getUserEditorValidationErrors(form, editor.mode, editor.user, actionCommentsRequired)
     if (errors.length > 0) {
       setValidationErrors(errors)
       return
@@ -337,7 +339,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     }
 
     const reason = deleteReason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setDeleteReasonError('Укажите причину отключения пользователя.')
       return
     }
@@ -675,7 +677,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     value={form.deactivationReason}
                     disabled={busy}
                     onChange={(event) => setForm({ ...form, deactivationReason: event.target.value })}
-                    required
+                    required={actionCommentsRequired}
                   />
                 </FormField>
               ) : null}
@@ -829,13 +831,13 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               }}
               placeholder="Например: сотрудник больше не работает или доступ выдан ошибочно"
               disabled={saving === 'delete'}
-              required
+              required={actionCommentsRequired}
             />
             {deleteReasonError ? <p className="form-error" id="user-delete-reason-error">{deleteReasonError}</p> : null}
             {dialogErrorMessage}
             <div className="detail-dialog-actions">
               <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteDialog} disabled={saving === 'delete'}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete' || !deleteReason.trim()}>
+              <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete' || (actionCommentsRequired && !deleteReason.trim())}>
                 <Trash2 size={16} />
                 <span>{saving === 'delete' ? 'Удаляем...' : 'Удалить'}</span>
               </button>

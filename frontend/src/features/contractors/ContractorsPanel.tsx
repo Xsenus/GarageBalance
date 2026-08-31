@@ -27,6 +27,7 @@ import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/worksp
 import { createRetryableLazyLoader } from '../../shared/retryableLazyLoader'
 import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 const AddServicePrototypeDialog = lazy(createRetryableLazyLoader(() =>
   import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.AddServicePrototypeDialog }))))
@@ -797,6 +798,7 @@ function FinancialReportPeriodFilters({ filters, targetLabel, onChange }: { filt
 }
 
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
   const [showGarageDebtorsOnly, setShowGarageDebtorsOnly] = useState(false)
   const [garageColumnFilterForm, setGarageColumnFilterForm] = useState<GarageColumnFilterForm>(emptyGarageColumnFilterForm)
@@ -2962,7 +2964,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="garage-table-delete-description">Гараж будет скрыт из рабочего списка, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <p className="confirmation-text" id="garage-table-delete-description">Гараж будет скрыт из рабочего списка.</p>
             <label className="field-label" htmlFor="garage-table-delete-reason">Причина удаления</label>
             <textarea
               id="garage-table-delete-reason"
@@ -2972,12 +2974,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               disabled={confirmationSaving}
               onChange={(event) => setGarageDeleteReason(event.target.value)}
               placeholder="Например: дубликат карточки"
-              required
+              required={actionCommentsRequired}
             />
             {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={garageDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeGarageDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmGarageDeleteFromTable()} disabled={confirmationSaving || !garageDeleteReason.trim()}>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmGarageDeleteFromTable()} disabled={confirmationSaving || (actionCommentsRequired && !garageDeleteReason.trim())}>
                 {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
@@ -2999,7 +3001,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="supplier-table-delete-description">Поставщик будет скрыт из рабочего списка, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <p className="confirmation-text" id="supplier-table-delete-description">Поставщик будет скрыт из рабочего списка.</p>
             <label className="field-label" htmlFor="supplier-table-delete-reason">Причина удаления</label>
             <textarea
               id="supplier-table-delete-reason"
@@ -3009,12 +3011,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               disabled={confirmationSaving}
               onChange={(event) => setSupplierDeleteReason(event.target.value)}
               placeholder="Например: договор больше не действует"
-              required
+              required={actionCommentsRequired}
             />
             {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeSupplierDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmSupplierDeleteFromTable()} disabled={confirmationSaving || !supplierDeleteReason.trim()}>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmSupplierDeleteFromTable()} disabled={confirmationSaving || (actionCommentsRequired && !supplierDeleteReason.trim())}>
                 {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
@@ -3036,7 +3038,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="employee-table-delete-description">Сотрудник будет скрыт из рабочего списка персонала, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <p className="confirmation-text" id="employee-table-delete-description">Сотрудник будет скрыт из рабочего списка.</p>
             <label className="field-label" htmlFor="employee-table-delete-reason">Причина удаления</label>
             <textarea
               id="employee-table-delete-reason"
@@ -3046,12 +3048,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               disabled={confirmationSaving}
               onChange={(event) => setEmployeeDeleteReason(event.target.value)}
               placeholder="Например: сотрудник больше не работает"
-              required
+              required={actionCommentsRequired}
             />
             {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeEmployeeDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmEmployeeDeleteFromTable()} disabled={confirmationSaving || !employeeDeleteReason.trim()}>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmEmployeeDeleteFromTable()} disabled={confirmationSaving || (actionCommentsRequired && !employeeDeleteReason.trim())}>
                 {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
@@ -3073,7 +3075,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="department-table-delete-description">Отдел будет скрыт из рабочего списка персонала, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+            <p className="confirmation-text" id="department-table-delete-description">Отдел будет скрыт из рабочего списка.</p>
             <label className="field-label" htmlFor="department-table-delete-reason">Причина удаления</label>
             <textarea
               id="department-table-delete-reason"
@@ -3083,12 +3085,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               disabled={confirmationSaving}
               onChange={(event) => setDepartmentDeleteReason(event.target.value)}
               placeholder="Например: отдел больше не используется"
-              required
+              required={actionCommentsRequired}
             />
             {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={departmentDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeDepartmentDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmDepartmentDeleteFromTable()} disabled={confirmationSaving || !departmentDeleteReason.trim()}>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmDepartmentDeleteFromTable()} disabled={confirmationSaving || (actionCommentsRequired && !departmentDeleteReason.trim())}>
                 {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
@@ -3267,6 +3269,7 @@ function SupplierContactDeleteConfirmationDialog({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   return (
     <ContractorDialogShell
       closeLabel="Закрыть подтверждение удаления контакта"
@@ -3278,7 +3281,7 @@ function SupplierContactDeleteConfirmationDialog({
       title="Удалить контакт?"
       titleId="supplier-contact-delete-title"
     >
-        <p className="confirmation-text" id="supplier-contact-delete-description">Контакт будет скрыт в карточке поставщика, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
+        <p className="confirmation-text" id="supplier-contact-delete-description">Контакт будет скрыт из карточки поставщика.</p>
         <label className="field-label" htmlFor="supplier-contact-delete-reason">Причина удаления</label>
         <textarea
           id="supplier-contact-delete-reason"
@@ -3287,10 +3290,10 @@ function SupplierContactDeleteConfirmationDialog({
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
           placeholder="Например: контакт больше не работает у поставщика"
-          required
+          required={actionCommentsRequired}
         />
         <div className="detail-dialog-actions contractors-dialog-actions">
-          <button className="secondary-button danger-button" type="button" onClick={onConfirm} disabled={!reason.trim()}>
+          <button className="secondary-button danger-button" type="button" onClick={onConfirm} disabled={actionCommentsRequired && !reason.trim()}>
             <Trash2 size={16} />
             <span>Удалить</span>
           </button>
@@ -3429,6 +3432,7 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
 }
 
 function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target, onClose, onSaved }: { accessToken: string; dictionaryClient: DictionaryClient; target: OpeningBalanceAdjustmentTarget; onClose: () => void; onSaved: () => void }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toLocaleDateString('sv-SE'))
   const [newAmount, setNewAmount] = useState(String(target.currentAmount))
   const [reason, setReason] = useState('')
@@ -3441,8 +3445,8 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const parsedAmount = parseStaffRate(newAmount)
-    if (!effectiveDate || parsedAmount === null || !reason.trim()) {
-      setError('Укажите дату, новое значение и причину корректировки.')
+    if (!effectiveDate || parsedAmount === null || (actionCommentsRequired && !reason.trim())) {
+      setError(actionCommentsRequired ? 'Укажите дату, новое значение и причину корректировки.' : 'Укажите дату и новое значение корректировки.')
       return
     }
 
@@ -3475,7 +3479,7 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
             <FormField label="Новое значение"><MoneyTextInput aria-label="Новое значение начального баланса" value={newAmount} onValueChange={setNewAmount} /></FormField>
             <FormField label="Дата корректировки"><LocalizedDatePicker ariaLabel="Дата корректировки начального баланса" mode="date" value={effectiveDate} required onChange={setEffectiveDate} /></FormField>
           </div>
-          <FormField label="Причина"><textarea aria-label="Причина корректировки начального баланса" maxLength={1000} required value={reason} onChange={(event) => setReason(event.target.value)} /></FormField>
+          <FormField label="Причина"><textarea aria-label="Причина корректировки начального баланса" maxLength={1000} required={actionCommentsRequired} value={reason} onChange={(event) => setReason(event.target.value)} /></FormField>
           <p className="form-field-hint">Документ и его автор сохраняются в разделе «История изменений».</p>
           <div className="detail-dialog-actions contractors-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить корректировку'}</span></button>

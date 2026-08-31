@@ -3,6 +3,7 @@ using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Diagnostics;
+using GarageBalance.Api.Application.Settings;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -66,19 +67,20 @@ public sealed partial class PostgresDatabaseBackupService(
 
         if (kind == DatabaseBackupKind.Manual)
         {
-            reason = reason?.Trim();
-            if (string.IsNullOrWhiteSpace(reason))
+            reason = reason?.Trim() ?? string.Empty;
+
+            if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
             {
                 return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
                     "database_backup_reason_required",
                     "Укажите причину создания резервной копии.");
             }
 
-            if (reason.Length is < 3 or > 500)
+            if (reason.Length is > 0 and < 3 or > 500)
             {
                 return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
                     "database_backup_reason_invalid",
-                    "Причина должна содержать от 3 до 500 символов.");
+                    "Комментарий не должен превышать 500 символов.");
             }
         }
 
@@ -264,19 +266,20 @@ public sealed partial class PostgresDatabaseBackupService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        reason = reason?.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
+        reason = reason?.Trim() ?? string.Empty;
+
+        if (ActionCommentRequirementContext.IsRequired && string.IsNullOrWhiteSpace(reason))
         {
             return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
                 "database_backup_delete_reason_required",
                 "Укажите причину удаления резервной копии.");
         }
 
-        if (reason.Length is < 3 or > 500)
+        if (reason.Length is > 0 and < 3 or > 500)
         {
             return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
                 "database_backup_delete_reason_invalid",
-                "Причина должна содержать от 3 до 500 символов.");
+                "Комментарий не должен превышать 500 символов.");
         }
 
         var backup = FindManagedBackup(fileName);

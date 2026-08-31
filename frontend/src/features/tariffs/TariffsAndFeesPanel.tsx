@@ -29,6 +29,7 @@ import { usePointerResize } from '../../shared/useColumnResize'
 import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 const dictionaryScreenRequestLimit = 100
 const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -742,6 +743,7 @@ function getFeeCampaignDisplayRank(campaign: FeeCampaignDto, today: string) {
 }
 
 export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient, settingsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; fundsClient: FundsClient; settingsClient: ApplicationSettingsClient }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
@@ -3144,7 +3146,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="threshold-delete-description">Порог будет удален из текущей настройки тарифов. Укажите причину, чтобы действие было понятным при проверке изменений.</p>
+            <p className="confirmation-text" id="threshold-delete-description">Порог будет удалён из текущего тарифа.</p>
             <label className="field-label" htmlFor="threshold-delete-reason">Причина удаления</label>
             <textarea
               id="threshold-delete-reason"
@@ -3153,11 +3155,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               value={thresholdDeleteReason}
               onChange={(event) => setThresholdDeleteReason(event.target.value)}
               placeholder="Например: лишний порог добавлен ошибочно"
-              required
+              required={actionCommentsRequired}
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={thresholdDeleteCancelRef} className="ghost-button" type="button" onClick={closeThresholdDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmThresholdDelete} disabled={!thresholdDeleteReason.trim() || Boolean(tariffSavingRowId)}>
+              <button className="secondary-button danger-button" type="button" onClick={confirmThresholdDelete} disabled={(actionCommentsRequired && !thresholdDeleteReason.trim()) || Boolean(tariffSavingRowId)}>
                 <Trash2 size={16} />
                 <span>{tariffSavingRowId ? 'Удаляем…' : 'Удалить'}</span>
               </button>
@@ -3179,7 +3181,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="one-time-delete-description">Платеж будет удален из списка нерегулярных платежей. Укажите причину, чтобы действие можно было проверить позже.</p>
+            <p className="confirmation-text" id="one-time-delete-description">Платёж будет удалён из списка.</p>
             <label className="field-label" htmlFor="one-time-delete-reason">Причина удаления</label>
             <textarea
               id="one-time-delete-reason"
@@ -3188,11 +3190,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               value={oneTimeDeleteReason}
               onChange={(event) => setOneTimeDeleteReason(event.target.value)}
               placeholder="Например: платеж больше не используется"
-              required
+              required={actionCommentsRequired}
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={!oneTimeDeleteReason.trim() || oneTimeSavingRowId === oneTimeDeleteTarget.id}>
+              <button className="secondary-button danger-button" type="button" onClick={confirmOneTimeDelete} disabled={(actionCommentsRequired && !oneTimeDeleteReason.trim()) || oneTimeSavingRowId === oneTimeDeleteTarget.id}>
                 <Trash2 size={16} />
                 <span>Удалить</span>
               </button>
@@ -3253,11 +3255,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
               placeholder="Например: услуга больше не используется"
               disabled={Boolean(tariffSavingRowId)}
-              required
+              required={actionCommentsRequired}
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || Boolean(tariffSavingRowId)}>
+              <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={(actionCommentsRequired && !chargeServiceArchiveReason.trim()) || Boolean(tariffSavingRowId)}>
                 <PowerOff size={16} aria-hidden="true" />
                 <span>Деактивировать</span>
               </button>
@@ -3304,7 +3306,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="fee-campaign-archive-description">Сбор будет скрыт из активного списка, но его можно будет вернуть. Укажите причину для истории изменений.</p>
+            <p className="confirmation-text" id="fee-campaign-archive-description">Сбор будет скрыт из активного списка.</p>
             <label className="field-label" htmlFor="fee-campaign-archive-reason">Причина архивации</label>
             <textarea
               id="fee-campaign-archive-reason"
@@ -3313,11 +3315,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               value={feeCampaignArchiveReason}
               onChange={(event) => setFeeCampaignArchiveReason(event.target.value)}
               placeholder="Например: сбор больше не используется"
-              required
+              required={actionCommentsRequired}
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={archiveFeeCampaign} disabled={!feeCampaignArchiveReason.trim() || feeCampaignSavingId === feeCampaignArchiveTarget.id}>
+              <button className="secondary-button danger-button" type="button" onClick={archiveFeeCampaign} disabled={(actionCommentsRequired && !feeCampaignArchiveReason.trim()) || feeCampaignSavingId === feeCampaignArchiveTarget.id}>
                 <Trash2 size={16} />
                 <span>Архивировать</span>
               </button>

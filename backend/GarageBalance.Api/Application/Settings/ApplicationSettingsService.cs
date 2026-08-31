@@ -20,6 +20,7 @@ public sealed class ApplicationSettingsService(
     public const int MaximumTariffPanelsSplitPercent = 60;
     public const string SalaryAccrualDayKey = "finance.salary_accrual_day";
     public const int DefaultSalaryAccrualDay = 1;
+    public const string ActionCommentsRequiredKey = "system.action_comments_required";
     public const string BusinessDateOverrideKey = "system.business_date_override";
 
     public async Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken)
@@ -250,6 +251,61 @@ public sealed class ApplicationSettingsService(
 
         await repository.SaveChangesAsync(cancellationToken);
         return new SalaryAccrualSettingsDto(request.AccrualDay, setting.Version);
+    }
+
+    public async Task<ActionCommentSettingsDto> GetActionCommentSettingsAsync(CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindAsync(ActionCommentsRequiredKey, cancellationToken);
+        return new ActionCommentSettingsDto(setting?.BooleanValue ?? false, setting?.Version ?? Guid.NewGuid());
+    }
+
+    public async Task<ActionCommentSettingsDto> UpdateActionCommentSettingsAsync(
+        UpdateActionCommentSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindForUpdateAsync(ActionCommentsRequiredKey, cancellationToken);
+        var previousValue = setting?.BooleanValue ?? false;
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
+
+        if (setting is null && !request.Required)
+        {
+            return new ActionCommentSettingsDto(false, request.Version ?? Guid.NewGuid());
+        }
+
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = ActionCommentsRequiredKey };
+            repository.Add(setting);
+        }
+        else if (setting.BooleanValue == request.Required)
+        {
+            return new ActionCommentSettingsDto(setting.BooleanValue, setting.Version);
+        }
+
+        setting.BooleanValue = request.Required;
+        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+        setting.UpdatedByUserId = actorUserId;
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "application_setting.action_comments_updated",
+            "application_setting",
+            ActionCommentsRequiredKey,
+            Summary: request.Required
+                ? "Включено обязательное заполнение комментариев к действиям."
+                : "Отключено обязательное заполнение комментариев к действиям.",
+            Section: "settings",
+            ActionKind: "update",
+            EntityDisplayName: "Комментарии к действиям",
+            OldValues: new Dictionary<string, object?> { ["required"] = previousValue },
+            NewValues: new Dictionary<string, object?> { ["required"] = request.Required },
+            FieldLabels: new Dictionary<string, string> { ["required"] = "Требовать комментарий" }));
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return new ActionCommentSettingsDto(setting.BooleanValue, setting.Version);
     }
 
     public async Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken)

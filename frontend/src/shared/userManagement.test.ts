@@ -119,6 +119,20 @@ describe('user management helpers', () => {
     }, 'edit', activeUser)).toEqual([])
   })
 
+  it('allows disabling a user without a reason when action comments are optional', () => {
+    const activeUser = createUser(['operator'])
+
+    expect(getUserEditorValidationErrors({
+      email: activeUser.email,
+      displayName: activeUser.displayName,
+      password: '',
+      passwordConfirmation: '',
+      roleCodes: ['operator'],
+      isActive: false,
+      deactivationReason: '',
+    }, 'edit', activeUser, false)).toEqual([])
+  })
+
   it('requires matching password fields when a password is entered', () => {
     const user = createUser(['operator'])
     expect(getUserEditorValidationErrors({

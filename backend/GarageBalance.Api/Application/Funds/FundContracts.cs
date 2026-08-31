@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Funds;
 
@@ -27,7 +28,7 @@ public sealed record UpsertFundRequest(
     Guid? Version = null);
 
 public sealed record DeleteFundRequest(
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string? Reason);
 
 public sealed record FundOperationDto(
     Guid Id,
@@ -55,7 +56,7 @@ public sealed record CreateFundOperationRequest(
 
 public sealed record UpdateFundOperationRequest(
     [Range(0.01, 999999999)] decimal Amount,
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason);
 
 public sealed record CancelFundOperationRequest(
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string? Reason);

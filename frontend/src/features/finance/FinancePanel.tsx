@@ -37,6 +37,7 @@ import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 import { overdueDebtDetailsPreference } from './financeDisplayPreferences'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -313,6 +314,7 @@ export function FinancePanel({
   integrationClient: IntegrationClient
   settingsClient: ApplicationSettingsClient
 }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const today = getLocalDateInputValue()
   const month = `${today.slice(0, 7)}-01`
   const [garages, setGarages] = useState<GarageDto[]>([])
@@ -1382,7 +1384,7 @@ export function FinancePanel({
     }
 
     const reason = cancelFinanceTarget.reason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setCancelFinanceReasonError('Укажите причину отмены.')
       return
     }
@@ -2541,7 +2543,7 @@ export function FinancePanel({
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <p className="confirmation-text" id="finance-cancel-description">Запись будет скрыта из рабочих таблиц как отмененная, но останется в истории изменений и финансовом журнале. Укажите причину, чтобы бухгалтер мог проверить действие позже.</p>
+            <p className="confirmation-text" id="finance-cancel-description">Запись останется в истории и финансовом журнале.</p>
             <FormField label="Причина отмены">
               <textarea
                 ref={cancelFinanceReasonRef}
@@ -2552,7 +2554,7 @@ export function FinancePanel({
                   setCancelFinanceTarget((target) => target ? { ...target, reason: event.target.value } : target)
                 }}
                 placeholder="Например: ошибочный документ, неверная сумма или дубль записи"
-                required
+                required={actionCommentsRequired}
               />
             </FormField>
             {cancelFinanceReasonError ? <FormError>{cancelFinanceReasonError}</FormError> : null}
@@ -2826,6 +2828,7 @@ function PaymentsPrototypePanel({
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
   refreshRevision: number
 }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
   const [garageSearchGarages, setGarageSearchGarages] = useState<GarageDto[]>([])
@@ -3456,7 +3459,7 @@ function PaymentsPrototypePanel({
     }
 
     const reason = historyCancel.reason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setHistoryCancel((state) => state ? { ...state, error: 'Укажите причину отмены платежа.' } : state)
       return
     }
@@ -5854,6 +5857,7 @@ function StaffSalaryAdjustmentPrototypeDialog({
   onClose: () => void
   onSubmit: (request: StaffSalaryAdjustmentPrototypeSubmitRequest) => Promise<string | null>
 }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   const [staffMemberId, setStaffMemberId] = useState(staffMembers[0]?.id ?? '')
@@ -5883,7 +5887,7 @@ function StaffSalaryAdjustmentPrototypeDialog({
       setError(`Укажите сумму ${isBonus ? 'премии' : 'штрафа'} больше нуля.`)
       return
     }
-    if (!reason.trim()) {
+    if (actionCommentsRequired && !reason.trim()) {
       setError(`Укажите основание для ${isBonus ? 'премии' : 'штрафа'}.`)
       return
     }
@@ -6126,6 +6130,7 @@ function PenaltyAccrualPrototypeDialog({
   onClose: () => void
   onSubmit: (request: PenaltyAccrualPrototypeSubmitRequest) => Promise<string | null>
 }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   const [amount, setAmount] = useState('')
@@ -6146,7 +6151,7 @@ function PenaltyAccrualPrototypeDialog({
       setError('Укажите месяц начисления штрафа.')
       return
     }
-    if (!reason.trim()) {
+    if (actionCommentsRequired && !reason.trim()) {
       setError('Укажите причину начисления штрафа.')
       return
     }

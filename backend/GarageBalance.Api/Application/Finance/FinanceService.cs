@@ -2371,8 +2371,8 @@ public sealed class FinanceService(
             return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_salary_adjustment_amount_invalid", "Сумма премии или штрафа должна быть больше нуля.");
         }
 
-        var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
+        var reason = NormalizeOptional(request.Reason) ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_salary_adjustment_reason_required", "Укажите основание премии или штрафа.");
         }
@@ -2890,8 +2890,8 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
+        var reason = NormalizeOptional(request.Reason) ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_cancel_reason_required", "Для отмены операции нужна причина.");
         }
@@ -3143,8 +3143,8 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<AccrualDto>> CancelAccrualAsync(Guid accrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
+        var reason = NormalizeOptional(request.Reason) ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<AccrualDto>.Failure("accrual_cancel_reason_required", "Для отмены начисления нужна причина.");
         }
@@ -3783,8 +3783,8 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<SupplierAccrualDto>> CancelSupplierAccrualAsync(Guid supplierAccrualId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
+        var reason = NormalizeOptional(request.Reason) ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_cancel_reason_required", "Для отмены начисления поставщику нужна причина.");
         }
@@ -4536,13 +4536,13 @@ public sealed class FinanceService(
         }
 
         var serialNumber = NormalizeOptional(request.NewSerialNumber);
-        var reason = NormalizeOptional(request.Reason);
+        var reason = NormalizeOptional(request.Reason) ?? string.Empty;
         if (serialNumber is null)
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_serial_required", "Укажите номер нового счетчика.");
         }
 
-        if (reason is null)
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_reason_required", "Укажите причину замены счетчика.");
         }
@@ -5376,8 +5376,8 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
+        var reason = NormalizeOptional(request.Reason) ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_cancel_reason_required", "Для отмены показания счетчика нужна причина.");
         }

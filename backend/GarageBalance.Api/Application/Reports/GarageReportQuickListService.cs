@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Reports;
 
 namespace GarageBalance.Api.Application.Reports;
@@ -98,7 +99,7 @@ public sealed class GarageReportQuickListService(
         CancellationToken cancellationToken)
     {
         var reason = request.Reason?.Trim() ?? string.Empty;
-        if (reason.Length == 0)
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return ReportResult<bool>.Failure("garage_quick_list_delete_reason_required", "Укажите причину удаления быстрого списка.");
         }

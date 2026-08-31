@@ -4,6 +4,8 @@ import { vi } from 'vitest'
 
 vi.mock('./services/settingsApi', () => ({
   settingsApi: {
+    getActionCommentSettings: vi.fn(async () => ({ required: true, version: 'comment-version' })),
+    updateActionCommentSettings: vi.fn(async (_accessToken: string, request: { required: boolean; version: string }) => request),
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request),
     getTariffPanelsLayout: vi.fn(async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' })),
@@ -42,6 +44,8 @@ describe('App', () => {
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
     vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }))
     vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request)
+    vi.mocked(settingsApi.getActionCommentSettings).mockImplementation(async () => ({ required: true, version: 'comment-version' }))
+    vi.mocked(settingsApi.updateActionCommentSettings).mockImplementation(async (_accessToken: string, request: { required: boolean; version: string }) => request)
     window.sessionStorage.clear()
     window.localStorage.clear()
   })
@@ -185,6 +189,7 @@ describe('App', () => {
     })
 
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await act(async () => undefined)
 
     expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /Тарифы\s+и\s+сборы/i }).length).toBeGreaterThan(0)
@@ -13214,6 +13219,32 @@ describe('App', () => {
     expect(await within(displayPanel).findByText('Отображение сохранено.')).toHaveAttribute('role', 'status')
   })
 
+  it('loads and updates the global action-comment requirement', async () => {
+    const user = userEvent.setup()
+    const updateActionCommentSettings = vi.fn(async (_accessToken: string, request: { required: boolean; version: string }) => ({ ...request, version: 'comment-next-version' }))
+    const settingsClient = createSettingsClient({
+      getActionCommentSettings: async () => ({ required: false, version: 'comment-version' }),
+      updateActionCommentSettings,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
+
+    const toggle = within(settings).getByRole('checkbox', { name: 'Требовать комментарий к действиям' })
+    await waitFor(() => expect(toggle).not.toBeChecked())
+    await user.click(toggle)
+
+    await waitFor(() => expect(updateActionCommentSettings).toHaveBeenCalledWith('token', {
+      required: true,
+      version: 'comment-version',
+    }))
+    await waitFor(() => expect(toggle).toBeChecked())
+  })
+
   it('hides opening balance editing and records a cash replenishment in a modal', async () => {
     const user = userEvent.setup()
     const createCashBankBalanceAdjustment = vi.fn(async (_accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }) => ({
@@ -23329,6 +23360,8 @@ function createReleasePage(
 
 function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}): ApplicationSettingsClient {
   return {
+    getActionCommentSettings: async () => ({ required: true, version: 'comment-version' }),
+    updateActionCommentSettings: async (_accessToken, request) => request,
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),

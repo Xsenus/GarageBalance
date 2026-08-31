@@ -129,6 +129,28 @@ public sealed class SettingsController(
         }
     }
 
+    [HttpGet("action-comments")]
+    [Authorize]
+    [ProducesResponseType<ActionCommentSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ActionCommentSettingsDto>> GetActionCommentSettings(CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.GetActionCommentSettingsAsync(cancellationToken));
+    }
+
+    [HttpPut("action-comments")]
+    [RequireConcurrencyVersion("request.Version")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType<ActionCommentSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ActionCommentSettingsDto>> UpdateActionCommentSettings(
+        UpdateActionCommentSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.UpdateActionCommentSettingsAsync(
+            request,
+            GetActorUserId(),
+            cancellationToken));
+    }
+
     [HttpGet("business-date")]
     [Authorize(Roles = SystemRoles.Administrator)]
     [ProducesResponseType<BusinessDateSettingsDto>(StatusCodes.Status200OK)]

@@ -20,11 +20,11 @@ public sealed record CashBankBalanceOperationDto(
 public sealed record UpdateCashBankOpeningBalancesRequest(
     decimal CashOpeningBalance,
     decimal BankOpeningBalance,
-    string Reason);
+    [ActionComment] string? Reason);
 
 public sealed record CreateCashBankBalanceAdjustmentRequest(
     string Account,
     string Direction,
     DateOnly OperationDate,
     decimal Amount,
-    string Reason);
+    [ActionComment] string? Reason);

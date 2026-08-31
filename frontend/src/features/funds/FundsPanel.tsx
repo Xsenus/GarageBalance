@@ -16,6 +16,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { loadFundsRequest } from './fundsLoading'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 type FundPrototypeRow = {
   id: string
   version: string
@@ -100,6 +101,7 @@ async function getFundOperationsPage(fundsClient: FundsClient, accessToken: stri
 }
 
 export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse; fundsClient: FundsClient }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
   const [operationPage, setOperationPage] = useState(() => createEmptyPage<FundOperationDto>(25))
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
@@ -334,7 +336,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     }
 
     const reason = fundDelete.reason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setFundDeleteError('Укажите причину удаления фонда.')
       return
     }
@@ -517,7 +519,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       return
     }
 
-    if (statusAction.action === 'cancel' && !statusAction.reason.trim()) {
+    if (actionCommentsRequired && statusAction.action === 'cancel' && !statusAction.reason.trim()) {
       setOperationError('Укажите причину отмены операции фонда.')
       return
     }
@@ -552,7 +554,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       return
     }
 
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setOperationError('Укажите основание изменения операции фонда.')
       return
     }
@@ -595,7 +597,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     }
 
     const reason = operationReverse.reason.trim()
-    if (!reason) {
+    if (actionCommentsRequired && !reason) {
       setOperationError('Укажите причину обратной операции фонда.')
       return
     }
@@ -911,7 +913,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 aria-label="Причина удаления фонда"
                 value={fundDelete.reason}
                 maxLength={1000}
-                required
+                required={actionCommentsRequired}
                 aria-invalid={Boolean(fundDeleteError)}
                 onChange={(event) => {
                   setFundDelete({ ...fundDelete, reason: event.target.value })
@@ -1176,7 +1178,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             </div>
             <p className="confirmation-text" id="fund-status-description">
               {statusAction.action === 'cancel'
-                ? 'Укажите причину отмены. Операция будет скрыта из активных расчетов, а действие попадет в историю изменений.'
+                ? 'Операция будет скрыта из активных расчётов.'
                 : 'Операция снова попадет в активные расчеты фонда, а действие будет записано в историю изменений.'}
             </p>
             <form className="dictionary-modal-form" onSubmit={submitFundStatusAction}>

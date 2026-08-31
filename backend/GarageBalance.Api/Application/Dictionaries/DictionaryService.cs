@@ -3429,7 +3429,7 @@ public sealed class DictionaryService(
     private static DictionaryResult<T>? ValidateArchiveReason<T>(string? reason, out string normalizedReason)
     {
         normalizedReason = reason?.Trim() ?? string.Empty;
-        if (normalizedReason.Length == 0)
+        if (ActionCommentRequirementContext.IsRequired && normalizedReason.Length == 0)
         {
             return DictionaryResult<T>.Failure("dictionary_archive_reason_required", "Укажите причину удаления записи.");
         }
@@ -3458,12 +3458,13 @@ public sealed class DictionaryService(
             return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_effective_date_required", "Укажите дату корректировки.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Reason))
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_reason_required", "Укажите причину корректировки начального баланса.");
         }
 
-        if (request.Reason.Trim().Length > 1000)
+        if (reason.Length > 1000)
         {
             return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_reason_too_long", "Причина корректировки не должна быть длиннее 1000 символов.");
         }
@@ -3484,6 +3485,7 @@ public sealed class DictionaryService(
     {
         var newAmount = MoneyMath.RoundMoney(request.NewAmount);
         previousAmount = MoneyMath.RoundMoney(previousAmount);
+        var reason = request.Reason?.Trim() ?? string.Empty;
         if (newAmount == previousAmount)
         {
             return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_unchanged", "Новое значение совпадает с действующим начальным балансом.");
@@ -3496,7 +3498,7 @@ public sealed class DictionaryService(
             EffectiveDate = request.EffectiveDate,
             PreviousAmount = previousAmount,
             NewAmount = newAmount,
-            Reason = request.Reason.Trim(),
+            Reason = reason,
             CreatedByUserId = actorUserId
         };
         updateAmount(newAmount);

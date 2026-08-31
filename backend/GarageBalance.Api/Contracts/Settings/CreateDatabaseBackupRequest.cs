@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Contracts.Settings;
 
 public sealed record CreateDatabaseBackupRequest(
-    [property: Required, MinLength(3), MaxLength(500)] string Reason);
+    [ActionComment, MaxLength(500)] string? Reason);

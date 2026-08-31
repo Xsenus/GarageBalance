@@ -1,3 +1,5 @@
+using GarageBalance.Api.Application.Settings;
+
 namespace GarageBalance.Api.Application.Import;
 
 public sealed record RegisterImportQuarantineItemRequest(
@@ -11,7 +13,7 @@ public sealed record RegisterImportQuarantineItemRequest(
     string? RowSnapshotJson,
     Guid? AccessImportRunId);
 
-public sealed record ResolveImportQuarantineItemRequest(string? ResolutionComment);
+public sealed record ResolveImportQuarantineItemRequest([ActionComment] string? ResolutionComment);
 
 public sealed record AccessImportQuarantineItemDto(
     Guid Id,
