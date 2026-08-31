@@ -1546,6 +1546,19 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(
             CountOccurrences(fundRepositorySource, ".Take(limit)") >= 2,
             "Fund operation lists must apply the same bound in PostgreSQL and SQLite branches.");
+        var recentOperationsSource = ExtractMethodSource(
+            fundRepositorySource,
+            "public async Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync");
+        Assert.Contains("dbContext.Database.IsNpgsql()", recentOperationsSource, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresRecentOperationsAsync(query, limit", recentOperationsSource, StringComparison.Ordinal);
+        var postgresRecentOperationsSource = ExtractMethodSource(
+            fundRepositorySource,
+            "private static async Task<IReadOnlyList<FundOperation>> GetPostgresRecentOperationsAsync");
+        Assert.Equal(1, CountOccurrences(postgresRecentOperationsSource, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("FundName = operation.Fund.Name", postgresRecentOperationsSource, StringComparison.Ordinal);
+        Assert.Contains("Fund = new Fund { Id = row.FundId, Name = row.FundName }", postgresRecentOperationsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ActorUserId", postgresRecentOperationsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresRecentOperationsSource, StringComparison.Ordinal);
         var postgresPageSource = ExtractMethodSource(
             fundRepositorySource,
             "private async Task<FundOperationPageData> GetPostgresOperationsPageAsync");
