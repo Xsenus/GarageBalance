@@ -11,20 +11,89 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     private const int AccrualDebtCategory = 2;
     private const int PaymentDebtCategory = 3;
 
-    public async Task<IReadOnlyList<Supplier>> GetListAsync(
+    public async Task<SupplierListData> GetListAsync(
         Guid? groupId,
         string? normalizedSearch,
         bool includeArchived,
         int limit,
         CancellationToken cancellationToken)
     {
-        return await IncludeDetails(ApplyFilters(groupId, normalizedSearch, includeArchived))
+        var query = ApplyFilters(groupId, normalizedSearch, includeArchived);
+        if (IsNpgsqlProvider())
+        {
+            return await GetPostgresListAsync(query, limit, cancellationToken);
+        }
+
+        var items = await IncludeDetails(query)
             .OrderBy(supplier => supplier.Group.Name)
             .ThenBy(supplier => supplier.Name)
             .ThenBy(supplier => supplier.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        var debtTotals = await GetDebtTotalsAsync(items.Select(item => item.Id).ToArray(), cancellationToken);
+        return new SupplierListData(items, debtTotals);
     }
+
+    private async Task<SupplierListData> GetPostgresListAsync(
+        IQueryable<Supplier> query,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var limitedSuppliers = query
+            .OrderBy(supplier => supplier.Group.Name)
+            .ThenBy(supplier => supplier.Name)
+            .ThenBy(supplier => supplier.Id)
+            .Take(limit);
+        var rows = await BuildPostgresListRows(limitedSuppliers)
+            .OrderBy(row => row.GroupName)
+            .ThenBy(row => row.Name)
+            .ThenBy(row => row.SupplierId)
+            .ToListAsync(cancellationToken);
+        var items = rows.Select(MaterializePostgresPageItem).ToList();
+        return new SupplierListData(
+            items.Select(item => item.Supplier).ToList(),
+            items.ToDictionary(item => item.Supplier.Id, item => item.DebtTotal));
+    }
+
+    private IQueryable<SupplierListRow> BuildPostgresListRows(IQueryable<Supplier> query) =>
+        query.Select(supplier => new SupplierListRow
+        {
+            Category = 1,
+            SupplierId = supplier.Id,
+            Name = supplier.Name,
+            GroupId = supplier.GroupId,
+            GroupName = supplier.Group.Name,
+            Inn = supplier.Inn,
+            LegalAddress = supplier.LegalAddress,
+            ContactPerson = supplier.ContactPerson,
+            Phone = supplier.Phone,
+            Email = supplier.Email,
+            StartingBalance = supplier.StartingBalance,
+            Comment = supplier.Comment,
+            IsArchived = supplier.IsArchived,
+            Version = supplier.Version,
+            ChargeServiceSettingId = supplier.ChargeServiceSettingId,
+            ChargeServiceSettingName = supplier.ChargeServiceSetting == null ? null : supplier.ChargeServiceSetting.Name,
+            ExpenseTypeId = supplier.ExpenseTypeId,
+            ExpenseTypeName = supplier.ExpenseType == null ? null : supplier.ExpenseType.Name,
+            ExpenseFundId = supplier.ExpenseFundId,
+            ExpenseFundName = supplier.ExpenseFund == null ? null : supplier.ExpenseFund.Name,
+            ExpenseFundBalance = supplier.ExpenseFund == null ? null : supplier.ExpenseFund.Balance,
+            PrimaryContactFullName = null,
+            PrimaryContactPhone = null,
+            PrimaryContactEmail = null,
+            DebtTotal = supplier.StartingBalance
+                + (dbContext.SupplierAccruals
+                    .Where(accrual => accrual.SupplierId == supplier.Id && !accrual.IsCanceled)
+                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m)
+                - (dbContext.FinancialOperations
+                    .Where(operation =>
+                        operation.SupplierId == supplier.Id
+                        && !operation.IsCanceled
+                        && operation.OperationKind == FinancialOperationKinds.Expense)
+                    .Sum(operation => (decimal?)operation.Amount) ?? 0m),
+            TotalCount = 0
+        });
 
     public async Task<SupplierPageData> GetPageAsync(
         Guid? groupId,

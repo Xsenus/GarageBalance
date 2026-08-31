@@ -121,24 +121,70 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
         CancellationToken cancellationToken)
     {
         var query = dbContext.FundOperations.AsNoTracking()
-            .Include(operation => operation.Fund)
             .Where(operation =>
                 operation.SourceFinancialOperationId == null &&
                 (includeCanceled || !operation.IsCanceled));
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresRecentOperationsAsync(query, limit, cancellationToken);
+        }
+
+        var queryWithFund = query.Include(operation => operation.Fund);
         if (IsSqliteProvider())
         {
-            return (await query.ToListAsync(cancellationToken))
+            return (await queryWithFund.ToListAsync(cancellationToken))
                 .OrderByDescending(operation => operation.CreatedAtUtc)
                 .ThenByDescending(operation => operation.Id)
                 .Take(limit)
                 .ToList();
         }
 
-        return await query
+        return await queryWithFund
             .OrderByDescending(operation => operation.CreatedAtUtc)
             .ThenByDescending(operation => operation.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<FundOperation>> GetPostgresRecentOperationsAsync(
+        IQueryable<FundOperation> query,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .OrderByDescending(operation => operation.CreatedAtUtc)
+            .ThenByDescending(operation => operation.Id)
+            .Take(limit)
+            .Select(operation => new
+            {
+                operation.Id,
+                operation.FundId,
+                FundName = operation.Fund.Name,
+                operation.SourceFinancialOperationId,
+                operation.OperationKind,
+                operation.Amount,
+                operation.BalanceBefore,
+                operation.BalanceAfter,
+                operation.Reason,
+                operation.IsCanceled,
+                operation.CreatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(row => new FundOperation
+        {
+            Id = row.Id,
+            FundId = row.FundId,
+            Fund = new Fund { Id = row.FundId, Name = row.FundName },
+            SourceFinancialOperationId = row.SourceFinancialOperationId,
+            OperationKind = row.OperationKind,
+            Amount = row.Amount,
+            BalanceBefore = row.BalanceBefore,
+            BalanceAfter = row.BalanceAfter,
+            Reason = row.Reason,
+            IsCanceled = row.IsCanceled,
+            CreatedAtUtc = row.CreatedAtUtc
+        }).ToList();
     }
 
     public async Task<FundOperationPageData> GetOperationsPageAsync(

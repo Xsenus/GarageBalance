@@ -672,9 +672,10 @@ public sealed class DictionaryService(
     public async Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync(Guid? groupId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var suppliers = await supplierRepository.GetListAsync(groupId, normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
-        var debtTotals = await supplierRepository.GetDebtTotalsAsync(suppliers.Select(item => item.Id).ToArray(), cancellationToken);
-        return suppliers.Select(item => ToSupplierDto(item, debt: debtTotals.GetValueOrDefault(item.Id, item.StartingBalance))).ToList();
+        var data = await supplierRepository.GetListAsync(groupId, normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return data.Items
+            .Select(item => ToSupplierDto(item, debt: data.DebtTotals.GetValueOrDefault(item.Id, item.StartingBalance)))
+            .ToList();
     }
 
     public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync(Guid? groupId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
