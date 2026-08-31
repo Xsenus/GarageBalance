@@ -809,6 +809,11 @@ public sealed class FinanceService(
                 "Гараж для расчета поступлений не найден.");
         }
 
+        var garageAccrualStartMonth = GetGarageAccrualStartMonth(garage);
+        var calculationMonthFrom = monthFrom > garageAccrualStartMonth
+            ? monthFrom
+            : garageAccrualStartMonth;
+
         await using var garageWorksheetLock =
             await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(
                 garage.Id,
@@ -833,7 +838,7 @@ public sealed class FinanceService(
             .ToArray();
         var meterReadings = (await meterReadingRepository.GetActiveForGaragePeriodAsync(
                 garage.Id,
-                monthFrom,
+                calculationMonthFrom,
                 monthTo,
                 meterKinds,
                 cancellationToken))
@@ -856,17 +861,34 @@ public sealed class FinanceService(
         var paidAccrualIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
             existingAccruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
-        var monthlyAccruals = existingAccruals
+        var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
+        foreach (var historicalAccrual in existingAccruals.Where(accrual =>
+                     accrual.AccountingMonth < garageAccrualStartMonth &&
+                     !paidAccrualIds.Contains(accrual.Id)))
+        {
+            historicalAccrual.IsCanceled = true;
+            historicalAccrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+            AddAudit(
+                actorUserId,
+                "finance.regular_accrual_before_garage_registration_canceled",
+                historicalAccrual,
+                $"Неоплаченное регулярное начисление за {historicalAccrual.AccountingMonth:MM.yyyy} отменено: гараж {garage.Number} зарегистрирован {GetGarageRegistrationDate(garage):dd.MM.yyyy}.");
+            changedKeys.Add(new AccrualPaymentAllocationKey(garage.Id, historicalAccrual.IncomeTypeId));
+        }
+
+        var activeExistingAccruals = existingAccruals
+            .Where(accrual => !accrual.IsCanceled)
+            .ToArray();
+        var monthlyAccruals = activeExistingAccruals
             .Where(accrual => !accrual.AccountingYear.HasValue)
             .GroupBy(accrual => (accrual.AccountingMonth, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
-        var annualAccruals = existingAccruals
+        var annualAccruals = activeExistingAccruals
             .Where(accrual => accrual.AccountingYear.HasValue)
             .GroupBy(accrual => (AccountingYear: accrual.AccountingYear!.Value, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
-        var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
 
-        for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
+        for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
         {
             foreach (var setting in settings)
             {
@@ -1043,7 +1065,7 @@ public sealed class FinanceService(
         }
 
         var rows = worksheet.Value.Rows.ToList();
-        for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
+        for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
         {
             foreach (var setting in settings)
             {
@@ -4346,7 +4368,9 @@ public sealed class FinanceService(
                     AccrualSources.Regular,
                     cancellationToken);
         var pendingGarageIds = garages
-            .Where(garage => !existingGarageIds.Contains(garage.Id))
+            .Where(garage =>
+                GetGarageAccrualStartMonth(garage) <= month &&
+                !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
             .ToArray();
         var meteredCalculationBase = calculationSegments
@@ -4368,6 +4392,12 @@ public sealed class FinanceService(
 
         foreach (var garage in garages)
         {
+            if (GetGarageAccrualStartMonth(garage) > month)
+            {
+                skipped.Add($"Гараж {garage.Number}: месяц начисления раньше месяца регистрации гаража.");
+                continue;
+            }
+
             if (existingGarageIds.Contains(garage.Id))
             {
                 var periodLabel = accountingYear.HasValue ? $" за {accountingYear.Value} год" : null;
@@ -6788,6 +6818,11 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var createdKeys = new List<AccrualPaymentAllocationKey>();
+        if (reading.AccountingMonth < GetGarageAccrualStartMonth(garage))
+        {
+            return createdKeys;
+        }
+
         var processedIncomeTypeIds = new HashSet<Guid>();
         foreach (var setting in settings)
         {
@@ -7871,6 +7906,9 @@ public sealed class FinanceService(
 
     private static DateOnly GetGarageRegistrationDate(Garage garage) =>
         DateOnly.FromDateTime(garage.CreatedAtUtc.UtcDateTime);
+
+    private static DateOnly GetGarageAccrualStartMonth(Garage garage) =>
+        MonthPeriod.Normalize(GetGarageRegistrationDate(garage));
 
     private static string? NormalizeExpensePaymentSource(string? value, string? expensePaymentType)
     {

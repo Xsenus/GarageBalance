@@ -24,7 +24,8 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
                 Number = "PG-METER-ACCRUAL",
                 PeopleCount = 1,
                 FloorCount = 1,
-                InitialWaterMeterValue = 10m
+                InitialWaterMeterValue = 10m,
+                CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
             var incomeType = await seedContext.IncomeTypes.SingleAsync(item => item.Code == "water");
             var waterSetting = await seedContext.ChargeServiceSettings

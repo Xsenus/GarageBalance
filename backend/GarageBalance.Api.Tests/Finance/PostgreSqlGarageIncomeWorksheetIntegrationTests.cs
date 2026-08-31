@@ -22,7 +22,8 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             Number = "PG-FOURTEEN-MONTH-LEDGER",
             PeopleCount = 1,
             FloorCount = 1,
-            InitialWaterMeterValue = 100m
+            InitialWaterMeterValue = 100m,
+            CreatedAtUtc = new DateTimeOffset(2025, 12, 1, 0, 0, 0, TimeSpan.Zero)
         };
         context.Garages.Add(garage);
         await context.SaveChangesAsync();

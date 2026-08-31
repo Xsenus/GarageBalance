@@ -5371,6 +5371,49 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_SkipsGarageCreatedAfterAccountingMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "registration_bounded_service";
+        var newGarage = new Garage
+        {
+            Number = "NEW-AUGUST",
+            PeopleCount = 1,
+            FloorCount = 1,
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 20, 8, 0, 0, TimeSpan.Zero)
+        };
+        var tariff = new Tariff
+        {
+            Name = "Тариф до регистрации",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.AddRange(newGarage, tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(
+                fixtures.IncomeType.Id,
+                tariff.Id,
+                new DateOnly(2026, 7, 1),
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(1, result.Value!.CreatedCount);
+        Assert.Equal(1, result.Value.SkippedCount);
+        Assert.Contains(result.Value.SkippedGarages, reason =>
+            reason.Contains(newGarage.Number, StringComparison.Ordinal) &&
+            reason.Contains("раньше месяца регистрации", StringComparison.Ordinal));
+        Assert.DoesNotContain(database.Context.Accruals, accrual => accrual.GarageId == newGarage.Id);
+        Assert.Contains(database.Context.Accruals, accrual => accrual.GarageId == fixtures.Garage.Id);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_CalculatesPeopleAmountForEachActiveGarage()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -5378,8 +5421,23 @@ public sealed class FinanceServiceTests
         fixtures.IncomeType.Code = "trash";
         fixtures.Garage.PeopleCount = 2;
         var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
-        var secondGarage = new Garage { Number = "22", PeopleCount = 3, FloorCount = 1, Owner = secondOwner };
-        var archivedGarage = new Garage { Number = "99", PeopleCount = 4, FloorCount = 1, Owner = secondOwner, IsArchived = true };
+        var secondGarage = new Garage
+        {
+            Number = "22",
+            PeopleCount = 3,
+            FloorCount = 1,
+            Owner = secondOwner,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var archivedGarage = new Garage
+        {
+            Number = "99",
+            PeopleCount = 4,
+            FloorCount = 1,
+            Owner = secondOwner,
+            IsArchived = true,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
         var tariff = new Tariff { Name = "Вывоз мусора", CalculationBase = "people", Rate = 125m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.AddRange(secondOwner, secondGarage, archivedGarage, tariff);
         await database.Context.SaveChangesAsync();
@@ -5719,6 +5777,168 @@ public sealed class FinanceServiceTests
         Assert.True(followingMonth.Succeeded, followingMonth.ErrorMessage);
         Assert.DoesNotContain(followingMonth.Value!.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id);
         Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task CalculateGarageIncomeWorksheetAsync_StartsAtGarageRegistrationMonthAndRemovesUnpaidHistoricalAutomaticAccruals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.CreatedAtUtc = new DateTimeOffset(2026, 8, 20, 8, 0, 0, TimeSpan.Zero);
+        fixtures.IncomeType.Code = "new_garage_monthly";
+        var waterType = new IncomeType { Name = "Вода нового гаража", Code = MeterKinds.Water };
+        var monthlyTariff = new Tariff
+        {
+            Name = "Ежемесячный тариф нового гаража",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var waterTariff = new Tariff
+        {
+            Name = "Тариф воды нового гаража",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 10m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var historicalAccrual = new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            Tariff = monthlyTariff,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        database.Context.AddRange(
+            waterType,
+            monthlyTariff,
+            waterTariff,
+            historicalAccrual,
+            new ChargeServiceSetting
+            {
+                Name = "Ежемесячная услуга нового гаража",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 20,
+                OverdueGraceDays = 30,
+                IncomeType = fixtures.IncomeType,
+                Tariff = monthlyTariff,
+                UnitName = "руб."
+            },
+            new ChargeServiceSetting
+            {
+                Name = "Вода нового гаража",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 20,
+                OverdueGraceDays = 30,
+                IncomeType = waterType,
+                Tariff = waterTariff,
+                IsMetered = true,
+                MeterKind = MeterKinds.Water,
+                UnitName = "куб. м"
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)));
+
+        var historicalReading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Water,
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 1, 31),
+                15m,
+                "Проверка показания до регистрации"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(historicalReading.Succeeded, historicalReading.ErrorMessage);
+        Assert.DoesNotContain(database.Context.Accruals, accrual =>
+            accrual.IncomeTypeId == waterType.Id && !accrual.IsCanceled);
+
+        var result = await service.CalculateGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 8, 1)),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 1, 1), result.Value!.MonthFrom);
+        Assert.Equal(new DateOnly(2026, 8, 1), result.Value.MonthTo);
+        Assert.All(result.Value.Rows, row => Assert.Equal(new DateOnly(2026, 8, 1), row.AccountingMonth));
+        Assert.Equal(100m, Assert.Single(result.Value.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id).AccrualAmount);
+        var waterRow = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == waterType.Id);
+        Assert.Null(waterRow.MeterReadingId);
+        Assert.Equal(0m, waterRow.AccrualAmount);
+        Assert.True(historicalAccrual.IsCanceled);
+        Assert.DoesNotContain(database.Context.Accruals, accrual =>
+            !accrual.IsCanceled && accrual.AccountingMonth < new DateOnly(2026, 8, 1));
+        Assert.Contains(database.Context.AuditEvents, audit =>
+            audit.Action == "finance.regular_accrual_before_garage_registration_canceled" &&
+            audit.EntityId == historicalAccrual.Id.ToString());
+    }
+
+    [Fact]
+    public async Task CalculateGarageIncomeWorksheetAsync_KeepsPaidHistoricalAccrualAsFinancialHistory()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.CreatedAtUtc = new DateTimeOffset(2026, 8, 20, 8, 0, 0, TimeSpan.Zero);
+        fixtures.IncomeType.Code = "paid_historical_service";
+        var historicalAccrual = new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            OperationDate = new DateOnly(2026, 1, 20),
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            Amount = 100m
+        };
+        database.Context.AddRange(
+            historicalAccrual,
+            payment,
+            new AccrualPaymentAllocation
+            {
+                Accrual = historicalAccrual,
+                FinancialOperation = payment,
+                Amount = 100m
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CalculateGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 8, 1)),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.False(historicalAccrual.IsCanceled);
+        Assert.Contains(result.Value!.Rows, row =>
+            row.AccountingMonth == historicalAccrual.AccountingMonth &&
+            row.IncomeTypeId == historicalAccrual.IncomeTypeId &&
+            row.IncomeAmount == 100m);
+        Assert.DoesNotContain(database.Context.AuditEvents, audit =>
+            audit.Action == "finance.regular_accrual_before_garage_registration_canceled");
     }
 
     [Fact]
@@ -8774,7 +8994,8 @@ public sealed class FinanceServiceTests
                 Number = $"M-{index:D3}",
                 PeopleCount = 1,
                 FloorCount = 1,
-                Owner = fixtures.Garage.Owner
+                Owner = fixtures.Garage.Owner,
+                CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
             garages.Add(garage);
             database.Context.Garages.Add(garage);
@@ -8879,7 +9100,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GenerateRegularAccrualsAsync_CreatesRowsForGaragesAddedAfterTheFirstMonthlyRun()
+    public async Task GenerateRegularAccrualsAsync_CreatesRowsForGaragesAddedWithinTheSameAccountingMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -8895,7 +9116,8 @@ public sealed class FinanceServiceTests
             Number = "NEW-001",
             PeopleCount = 1,
             FloorCount = 1,
-            Owner = fixtures.Garage.Owner
+            Owner = fixtures.Garage.Owner,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 20, 8, 0, 0, TimeSpan.Zero)
         };
         database.Context.Garages.Add(laterGarage);
         await database.Context.SaveChangesAsync();
@@ -12242,7 +12464,16 @@ public sealed class FinanceServiceTests
         public async Task<Fixtures> SeedAsync()
         {
             var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
-            var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner, InitialWaterMeterValue = 10m, InitialElectricityMeterValue = 100m };
+            var garage = new Garage
+            {
+                Number = "12",
+                PeopleCount = 1,
+                FloorCount = 1,
+                Owner = owner,
+                InitialWaterMeterValue = 10m,
+                InitialElectricityMeterValue = 100m,
+                CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
             var group = new SupplierGroup { Name = "Коммунальные услуги" };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };

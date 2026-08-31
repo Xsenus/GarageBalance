@@ -132,7 +132,14 @@ public sealed class PostgreSqlAnnualAccrualIntegrationTests
         {
             var membership = await setupContext.IncomeTypes.SingleAsync(item => item.Code == "membership" && !item.IsArchived);
             var originalOwner = new Owner { LastName = "Первый", FirstName = "Владелец" };
-            var garage = new Garage { Number = "PG-ANNUAL-IDEMPOTENT", PeopleCount = 1, FloorCount = 1, Owner = originalOwner };
+            var garage = new Garage
+            {
+                Number = "PG-ANNUAL-IDEMPOTENT",
+                PeopleCount = 1,
+                FloorCount = 1,
+                Owner = originalOwner,
+                CreatedAtUtc = new DateTimeOffset(2025, 12, 1, 0, 0, 0, TimeSpan.Zero)
+            };
             var tariff = new Tariff
             {
                 Name = "PG годовой членский тариф",

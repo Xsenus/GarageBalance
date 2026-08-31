@@ -9,6 +9,84 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task NewGarageWorksheet_DoesNotBackdateAutomaticAccrualsBeforeRegistrationMonth()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var garage = new Garage
+        {
+            Number = "PG-NEW-AUGUST-GARAGE",
+            PeopleCount = 1,
+            FloorCount = 1,
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 20, 8, 0, 0, TimeSpan.Zero)
+        };
+        var incomeType = new IncomeType
+        {
+            Name = "Ежемесячная услуга нового гаража",
+            Code = "new_garage_registration_month"
+        };
+        var tariff = new Tariff
+        {
+            Name = "Тариф нового гаража",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Ежемесячная услуга нового гаража",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        };
+        var erroneousJanuaryAccrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            Amount = 300m,
+            Source = AccrualSources.Regular
+        };
+        context.AddRange(garage, incomeType, tariff, setting, erroneousJanuaryAccrual);
+        await context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(
+                context,
+                new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)))
+            .CalculateGarageIncomeWorksheetAsync(
+                garage.Id,
+                new GarageIncomeWorksheetRequest(
+                    new DateOnly(2026, 1, 1),
+                    new DateOnly(2026, 8, 1)),
+                Guid.NewGuid(),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var row = Assert.Single(result.Value!.Rows, item => item.IncomeTypeId == incomeType.Id);
+        Assert.Equal(new DateOnly(2026, 8, 1), row.AccountingMonth);
+        Assert.Equal(300m, row.AccrualAmount);
+        Assert.True(erroneousJanuaryAccrual.IsCanceled);
+        Assert.Equal(
+            [new DateOnly(2026, 8, 1)],
+            await context.Accruals
+                .Where(accrual =>
+                    accrual.GarageId == garage.Id &&
+                    accrual.IncomeTypeId == incomeType.Id &&
+                    !accrual.IsCanceled)
+                .Select(accrual => accrual.AccountingMonth)
+                .ToArrayAsync());
+        Assert.Contains(await context.AuditEvents.ToListAsync(), audit =>
+            audit.Action == "finance.regular_accrual_before_garage_registration_canceled" &&
+            audit.EntityId == erroneousJanuaryAccrual.Id.ToString());
+    }
+
+    [PostgreSqlFact]
     public async Task MidMonthTariffChange_PersistsArithmeticMeanAndTwoCalculationSegments()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -189,5 +267,10 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
         Assert.Equal(garageId.ToString(), audit.RelatedGarageId);
         Assert.Contains("вид Штраф", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"Комментарий: {reason}", audit.Summary, StringComparison.Ordinal);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
