@@ -27,6 +27,7 @@ internal static class DictionaryServiceTestFactory
             new EfFeeCampaignRepository(dbContext),
             new EfFundRepository(dbContext),
             new EfOpeningBalanceAdjustmentRepository(dbContext),
+            new EfAccrualPaymentAllocationRepository(dbContext),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             new TestBusinessDateProvider(businessDate ?? DefaultBusinessDate));

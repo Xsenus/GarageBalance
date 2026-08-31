@@ -9,7 +9,10 @@ public sealed class AccrualPaymentAllocatorTests
     {
         var older = Accrual(new DateOnly(2026, 6, 30), 500m, 1);
         var newer = Accrual(new DateOnly(2026, 7, 31), 700m, 2);
-        var payment = Payment(new DateOnly(2026, 7, 20), 1500m, 3);
+        var payment = Payment(new DateOnly(2026, 7, 20), 1500m, 3) with
+        {
+            AccountingMonth = new DateOnly(2026, 8, 1)
+        };
 
         var result = AccrualPaymentAllocator.Allocate([newer, older], [payment]);
 
@@ -91,6 +94,22 @@ public sealed class AccrualPaymentAllocatorTests
     }
 
     [Fact]
+    public void Allocate_UntargetedPeriodPaymentPaysSelectedMonthBeforeOlderOrdinaryDebt()
+    {
+        var january = Accrual(new DateOnly(2026, 1, 31), 300m, 1);
+        var february = Accrual(new DateOnly(2026, 2, 28), 300m, 2);
+        var februaryPayment = Payment(new DateOnly(2026, 2, 20), 100m, 3) with
+        {
+            AccountingMonth = new DateOnly(2026, 2, 1)
+        };
+
+        var allocation = Assert.Single(AccrualPaymentAllocator.Allocate([january, february], [februaryPayment]));
+
+        Assert.Equal(february.Id, allocation.AccrualId);
+        Assert.Equal(100m, allocation.Amount);
+    }
+
+    [Fact]
     public void Allocate_LegacyUntargetedPaymentUsesRemainingAmountForIrregularAccrual()
     {
         var regular = Accrual(new DateOnly(2026, 8, 31), 500m, 1);
@@ -109,5 +128,10 @@ public sealed class AccrualPaymentAllocatorTests
         new(new Guid(id, 0, 0, new byte[8]), dueDate, new DateOnly(dueDate.Year, dueDate.Month, 1), amount, DateTimeOffset.UnixEpoch);
 
     private static AccrualPaymentAllocationPayment Payment(DateOnly operationDate, decimal amount, byte id) =>
-        new(new Guid(id, 0, 0, new byte[8]), operationDate, amount, DateTimeOffset.UnixEpoch);
+        new(
+            new Guid(id, 0, 0, new byte[8]),
+            operationDate,
+            new DateOnly(operationDate.Year, operationDate.Month, 1),
+            amount,
+            DateTimeOffset.UnixEpoch);
 }

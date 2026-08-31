@@ -451,6 +451,12 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
     public Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         TrackedAggregate().SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 
+    public Task<Guid?> GetFeeCampaignIdAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking()
+            .Where(accrual => accrual.Id == id)
+            .Select(accrual => accrual.FeeCampaignId)
+            .SingleOrDefaultAsync(cancellationToken);
+
     public Task<Accrual?> FindActiveForUpdateAsync(
         Guid garageId,
         Guid incomeTypeId,
@@ -563,13 +569,11 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
 
     public async Task<IReadOnlySet<Guid>> GetActiveFeeCampaignGarageIdsAsync(
         Guid feeCampaignId,
-        DateOnly accountingMonth,
         CancellationToken cancellationToken) =>
         await dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
                 !accrual.IsCanceled &&
-                accrual.FeeCampaignId == feeCampaignId &&
-                accrual.AccountingMonth == accountingMonth)
+                accrual.FeeCampaignId == feeCampaignId)
             .Select(accrual => accrual.GarageId)
             .ToHashSetAsync(cancellationToken);
 
@@ -699,14 +703,12 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         Guid? ignoredId,
         Guid garageId,
         Guid feeCampaignId,
-        DateOnly accountingMonth,
         CancellationToken cancellationToken) =>
         dbContext.Accruals.AsNoTracking().AnyAsync(accrual =>
             !accrual.IsCanceled &&
             (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
             accrual.GarageId == garageId &&
-            accrual.FeeCampaignId == feeCampaignId &&
-            accrual.AccountingMonth == accountingMonth,
+            accrual.FeeCampaignId == feeCampaignId,
             cancellationToken);
 
     public async Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { FileSpreadsheet, FileText, ListPlus, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react'
+import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
@@ -1415,7 +1415,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                           title={selectedGarageIds.length === 0 ? 'Сначала выберите гаражи' : undefined}
                           onClick={openGarageQuickListCreate}
                         >
-                          <ListPlus size={16} aria-hidden="true" />
+                          <FileSpreadsheet size={16} aria-hidden="true" />
                           Создать список
                         </button>
                         {selectedGarageQuickListId ? (

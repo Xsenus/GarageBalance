@@ -99,7 +99,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             .OrderBy(allocation => allocation.Accrual.AccountingMonth)
             .Select(allocation => allocation.Amount)
             .ToArrayAsync();
-        Assert.Equal([100.60m, 100.60m, 48.80m], partialWaterAllocations);
+        Assert.Equal([100.60m, 48.80m, 100.60m], partialWaterAllocations);
 
         var partialMembership = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(

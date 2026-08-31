@@ -598,7 +598,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IrregularPaymentId, accrual.AccountingMonth })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NOT NULL");
-            entity.HasIndex(accrual => new { accrual.GarageId, accrual.FeeCampaignId, accrual.AccountingMonth })
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.FeeCampaignId })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"FeeCampaignId\" IS NOT NULL");
             entity.HasOne(accrual => accrual.Garage)

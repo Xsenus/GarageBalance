@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 
 namespace GarageBalance.Api.Tests.Deployment;
 
@@ -37,10 +38,17 @@ public sealed class BackendDockerfileTests
             "infrastructure",
             "deployment",
             "postgresql-archive-keyring.asc");
-        var keyHash = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(keyPath)));
+        var canonicalKeyBytes = Encoding.UTF8.GetBytes(File.ReadAllText(keyPath).ReplaceLineEndings("\n"));
+        var keyHash = Convert.ToHexStringLower(SHA256.HashData(canonicalKeyBytes));
 
         Assert.Equal("0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76", keyHash);
         Assert.Contains(keyHash, dockerfile, StringComparison.Ordinal);
+
+        var gitAttributes = File.ReadAllText(Path.Combine(FindRepositoryRoot(), ".gitattributes"));
+        Assert.Contains(
+            "infrastructure/deployment/postgresql-archive-keyring.asc text eol=lf",
+            gitAttributes,
+            StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
@@ -49,8 +57,9 @@ public sealed class BackendDockerfileTests
 
         while (directory is not null)
         {
+            var gitMetadataPath = Path.Combine(directory.FullName, ".git");
             if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
-                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+                (Directory.Exists(gitMetadataPath) || File.Exists(gitMetadataPath)))
             {
                 return directory.FullName;
             }

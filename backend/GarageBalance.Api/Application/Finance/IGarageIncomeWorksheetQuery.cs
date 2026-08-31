@@ -33,7 +33,8 @@ public sealed record GarageIncomeWorksheetBucketData(
     string? IncomeTypeCode,
     decimal Amount,
     Guid? IrregularPaymentId = null,
-    bool IrregularPaymentIsAvailable = true);
+    bool IrregularPaymentIsAvailable = true,
+    Guid? FeeCampaignId = null);
 
 public sealed record GarageIncomeWorksheetMeterTypeData(
     Guid IncomeTypeId,
@@ -66,8 +67,10 @@ public sealed record GarageIncomeWorksheetAllocationData(
     Guid IncomeTypeId,
     string IncomeTypeName,
     DateOnly PaymentAccountingMonth,
+    Guid PaymentIncomeTypeId,
     decimal Amount,
-    Guid? IrregularPaymentId = null);
+    Guid? IrregularPaymentId = null,
+    Guid? FeeCampaignId = null);
 
 public sealed record GarageIncomeWorksheetAdvanceData(
     Guid IncomeTypeId,
@@ -77,10 +80,12 @@ public sealed record GarageIncomeWorksheetCalculationData(
     DateOnly AccountingMonth,
     Guid IncomeTypeId,
     string IncomeTypeName,
-    string CalculationDetailsJson);
+    string CalculationDetailsJson,
+    Guid? FeeCampaignId = null);
 
 public sealed record GarageIncomeWorksheetReasonData(
     DateOnly AccountingMonth,
     Guid IncomeTypeId,
     string IncomeTypeName,
-    string Reason);
+    string Reason,
+    Guid? FeeCampaignId = null);
