@@ -324,6 +324,7 @@ export type GarageIncomeWorksheetRowDto = {
   irregularPaymentRemainingAmount?: number | null
   calculationDetails?: AccrualCalculationDetailsDto | null
   reason?: string | null
+  incomeTypeCode?: string | null
 }
 
 export type AccrualCalculationTierDto = {

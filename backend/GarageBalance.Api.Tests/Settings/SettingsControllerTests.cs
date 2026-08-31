@@ -63,7 +63,14 @@ public sealed class SettingsControllerTests
     [Fact]
     public async Task GetPaymentDisplaySettings_ReturnsServiceValue()
     {
-        var service = new FakeService { Current = new PaymentDisplaySettingsDto(false) };
+        var reasonVersion = Guid.NewGuid();
+        var service = new FakeService
+        {
+            Current = new PaymentDisplaySettingsDto(
+                false,
+                AccrualReasonDisplayMode: AccrualReasonDisplayModes.All,
+                AccrualReasonDisplayVersion: reasonVersion)
+        };
         var controller = CreateController(service);
 
         var result = await controller.GetPaymentDisplaySettings(CancellationToken.None);
@@ -74,6 +81,8 @@ public sealed class SettingsControllerTests
         Assert.False(dto.ShowPeriodicityColumn);
         Assert.False(dto.ShowAccrualMonthColumn);
         Assert.False(dto.ShowFundName);
+        Assert.Equal(AccrualReasonDisplayModes.All, dto.AccrualReasonDisplayMode);
+        Assert.Equal(reasonVersion, dto.AccrualReasonDisplayVersion);
     }
 
     [Fact]
@@ -207,7 +216,14 @@ public sealed class SettingsControllerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
             }
         };
-        var request = new UpdatePaymentDisplaySettingsRequest(true, ShowPeriodicityColumn: true, ShowAccrualMonthColumn: false, ShowFundName: true);
+        var reasonVersion = Guid.NewGuid();
+        var request = new UpdatePaymentDisplaySettingsRequest(
+            true,
+            ShowPeriodicityColumn: true,
+            ShowAccrualMonthColumn: false,
+            ShowFundName: true,
+            AccrualReasonDisplayMode: AccrualReasonDisplayModes.Hidden,
+            AccrualReasonDisplayVersion: reasonVersion);
 
         var result = await controller.UpdatePaymentDisplaySettings(request, CancellationToken.None);
 
@@ -217,9 +233,27 @@ public sealed class SettingsControllerTests
         Assert.True(dto.ShowPeriodicityColumn);
         Assert.False(dto.ShowAccrualMonthColumn);
         Assert.True(dto.ShowFundName);
+        Assert.Equal(AccrualReasonDisplayModes.Hidden, dto.AccrualReasonDisplayMode);
+        Assert.Equal(reasonVersion, dto.AccrualReasonDisplayVersion);
         Assert.Same(request, service.ReceivedRequest);
         Assert.Equal(new UpdateTariffTableDisplaySettingsRequest(true, false, ShowFundName: true), service.ReceivedTariffTableDisplayRequest);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_ReturnsBadRequestForUnknownReasonMode()
+    {
+        var service = new FakeService { RejectAccrualReasonDisplayUpdate = true };
+        var controller = CreateController(service);
+
+        var result = await controller.UpdatePaymentDisplaySettings(
+            new UpdatePaymentDisplaySettingsRequest(false, AccrualReasonDisplayMode: "unexpected"),
+            CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.StatusCode);
+        Assert.Equal("accrual_reason_display_mode_invalid", Assert.IsType<ProblemDetails>(problem.Value).Title);
+        Assert.Null(service.ReceivedTariffTableDisplayRequest);
     }
 
     [Fact]
@@ -525,14 +559,22 @@ public sealed class SettingsControllerTests
         public UpdateSalaryAccrualSettingsRequest? ReceivedSalaryAccrualRequest { get; private set; }
         public bool RejectSalaryAccrualUpdate { get; set; }
         public bool RejectTariffPanelsLayoutUpdate { get; set; }
+        public bool RejectAccrualReasonDisplayUpdate { get; set; }
 
         public Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken) => Task.FromResult(Current);
 
         public Task<PaymentDisplaySettingsDto> UpdatePaymentDisplaySettingsAsync(UpdatePaymentDisplaySettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
+            if (RejectAccrualReasonDisplayUpdate)
+            {
+                throw new AccrualReasonDisplaySettingsValidationException("Некорректный режим.");
+            }
             ReceivedRequest = request;
             ReceivedActorUserId = actorUserId;
-            Current = new PaymentDisplaySettingsDto(request.ShowAllGarageOperationsByDefault);
+            Current = new PaymentDisplaySettingsDto(
+                request.ShowAllGarageOperationsByDefault,
+                AccrualReasonDisplayMode: request.AccrualReasonDisplayMode,
+                AccrualReasonDisplayVersion: request.AccrualReasonDisplayVersion ?? Guid.NewGuid());
             return Task.FromResult(Current);
         }
 

@@ -8,7 +8,9 @@ public sealed record PaymentDisplaySettingsDto(
     bool ShowPeriodicityColumn = false,
     bool ShowAccrualMonthColumn = false,
     Guid TariffTableVersion = default,
-    bool ShowFundName = false);
+    bool ShowFundName = false,
+    string AccrualReasonDisplayMode = AccrualReasonDisplayModes.PenaltiesOnly,
+    Guid AccrualReasonDisplayVersion = default);
 
 public sealed record UpdatePaymentDisplaySettingsRequest(
     bool ShowAllGarageOperationsByDefault,
@@ -16,7 +18,19 @@ public sealed record UpdatePaymentDisplaySettingsRequest(
     bool ShowPeriodicityColumn = false,
     bool ShowAccrualMonthColumn = false,
     Guid? TariffTableVersion = null,
-    bool ShowFundName = false);
+    bool ShowFundName = false,
+    string AccrualReasonDisplayMode = AccrualReasonDisplayModes.PenaltiesOnly,
+    Guid? AccrualReasonDisplayVersion = null);
+
+public static class AccrualReasonDisplayModes
+{
+    public const string PenaltiesOnly = "penalties_only";
+    public const string All = "all";
+    public const string Hidden = "hidden";
+
+    public static bool IsValid(string? value) =>
+        value is PenaltiesOnly or All or Hidden;
+}
 
 public sealed record TariffTableDisplaySettingsDto(
     bool ShowPeriodicityColumn,

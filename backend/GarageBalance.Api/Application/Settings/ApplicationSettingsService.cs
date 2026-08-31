@@ -14,6 +14,7 @@ public sealed class ApplicationSettingsService(
     ILogger<ApplicationSettingsService> logger) : IApplicationSettingsService
 {
     public const string ShowAllGarageOperationsKey = "payments.show_all_garage_operations_by_default";
+    public const string AccrualReasonDisplayModeKey = "payments.accrual_reason_display_mode";
     public const string TariffTableVisibleColumnsKey = "tariffs.table_visible_columns";
     public const int DefaultTariffPanelsSplitPercent = 40;
     public const int MinimumTariffPanelsSplitPercent = 25;
@@ -27,7 +28,12 @@ public sealed class ApplicationSettingsService(
     public async Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken)
     {
         var setting = await repository.FindAsync(ShowAllGarageOperationsKey, cancellationToken);
-        return new PaymentDisplaySettingsDto(setting?.BooleanValue ?? false, setting?.Version ?? Guid.NewGuid());
+        var reasonSetting = await repository.FindAsync(AccrualReasonDisplayModeKey, cancellationToken);
+        return new PaymentDisplaySettingsDto(
+            setting?.BooleanValue ?? false,
+            setting?.Version ?? Guid.NewGuid(),
+            AccrualReasonDisplayMode: CreateAccrualReasonDisplayMode(reasonSetting?.IntegerValue),
+            AccrualReasonDisplayVersion: reasonSetting?.Version ?? Guid.NewGuid());
     }
 
     public async Task<PaymentDisplaySettingsDto> UpdatePaymentDisplaySettingsAsync(
@@ -35,49 +41,102 @@ public sealed class ApplicationSettingsService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        if (!AccrualReasonDisplayModes.IsValid(request.AccrualReasonDisplayMode))
+        {
+            throw new AccrualReasonDisplaySettingsValidationException(
+                "Режим показа причин начислений должен быть: только у штрафов, у всех начислений или не показывать.");
+        }
+
         var setting = await repository.FindForUpdateAsync(ShowAllGarageOperationsKey, cancellationToken);
+        var reasonSetting = await repository.FindForUpdateAsync(AccrualReasonDisplayModeKey, cancellationToken);
         var previousValue = setting?.BooleanValue ?? false;
+        var previousReasonMode = CreateAccrualReasonDisplayMode(reasonSetting?.IntegerValue);
+        var nextReasonValue = CreateAccrualReasonDisplayValue(request.AccrualReasonDisplayMode);
         if (setting is not null && request.Version.HasValue)
         {
             OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
         }
-
-        if (setting is null && !request.ShowAllGarageOperationsByDefault)
+        if (reasonSetting is not null)
         {
-            return new PaymentDisplaySettingsDto(false, request.Version ?? Guid.NewGuid());
+            OptimisticConcurrencyGuard.EnsureCurrent(request.AccrualReasonDisplayVersion, reasonSetting);
         }
 
-        if (setting is null)
+        var paymentChanged = setting is null
+            ? request.ShowAllGarageOperationsByDefault
+            : setting.BooleanValue != request.ShowAllGarageOperationsByDefault;
+        var reasonChanged = reasonSetting is null
+            ? nextReasonValue != 0
+            : reasonSetting.IntegerValue != nextReasonValue;
+
+        if (!paymentChanged && !reasonChanged)
         {
-            setting = new ApplicationSetting { Key = ShowAllGarageOperationsKey };
-            repository.Add(setting);
-        }
-        else if (setting.BooleanValue == request.ShowAllGarageOperationsByDefault)
-        {
-            return new PaymentDisplaySettingsDto(setting.BooleanValue, setting.Version);
+            return new PaymentDisplaySettingsDto(
+                previousValue,
+                setting?.Version ?? request.Version ?? Guid.NewGuid(),
+                AccrualReasonDisplayMode: previousReasonMode,
+                AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid());
         }
 
-        setting.BooleanValue = request.ShowAllGarageOperationsByDefault;
-        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
-        setting.UpdatedByUserId = actorUserId;
+        if (paymentChanged)
+        {
+            if (setting is null)
+            {
+                setting = new ApplicationSetting { Key = ShowAllGarageOperationsKey };
+                repository.Add(setting);
+            }
 
-        auditEventWriter.Add(new AuditEventWriteRequest(
-            actorUserId,
-            "application_setting.updated",
-            "application_setting",
-            ShowAllGarageOperationsKey,
-            Summary: request.ShowAllGarageOperationsByDefault
-                ? "Включен показ общей ведомости платежей при открытии раздела."
-                : "Отключен показ общей ведомости платежей при открытии раздела.",
-            Section: "settings",
-            ActionKind: "update",
-            EntityDisplayName: "Отображение платежей",
-            OldValues: new Dictionary<string, object?> { ["showAllGarageOperationsByDefault"] = previousValue },
-            NewValues: new Dictionary<string, object?> { ["showAllGarageOperationsByDefault"] = request.ShowAllGarageOperationsByDefault },
-            FieldLabels: new Dictionary<string, string> { ["showAllGarageOperationsByDefault"] = "Показывать общую ведомость платежей" }));
+            setting.BooleanValue = request.ShowAllGarageOperationsByDefault;
+            setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+            setting.UpdatedByUserId = actorUserId;
+
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                actorUserId,
+                "application_setting.updated",
+                "application_setting",
+                ShowAllGarageOperationsKey,
+                Summary: request.ShowAllGarageOperationsByDefault
+                    ? "Включен показ общей ведомости платежей при открытии раздела."
+                    : "Отключен показ общей ведомости платежей при открытии раздела.",
+                Section: "settings",
+                ActionKind: "update",
+                EntityDisplayName: "Отображение платежей",
+                OldValues: new Dictionary<string, object?> { ["showAllGarageOperationsByDefault"] = previousValue },
+                NewValues: new Dictionary<string, object?> { ["showAllGarageOperationsByDefault"] = request.ShowAllGarageOperationsByDefault },
+                FieldLabels: new Dictionary<string, string> { ["showAllGarageOperationsByDefault"] = "Показывать общую ведомость платежей" }));
+        }
+
+        if (reasonChanged)
+        {
+            if (reasonSetting is null)
+            {
+                reasonSetting = new ApplicationSetting { Key = AccrualReasonDisplayModeKey };
+                repository.Add(reasonSetting);
+            }
+
+            reasonSetting.IntegerValue = nextReasonValue;
+            reasonSetting.UpdatedAtUtc = timeProvider.GetUtcNow();
+            reasonSetting.UpdatedByUserId = actorUserId;
+
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                actorUserId,
+                "application_setting.accrual_reason_display_updated",
+                "application_setting",
+                AccrualReasonDisplayModeKey,
+                Summary: $"Изменён показ причин начислений: {GetAccrualReasonDisplayLabel(request.AccrualReasonDisplayMode)}.",
+                Section: "settings",
+                ActionKind: "update",
+                EntityDisplayName: "Показ причин начислений",
+                OldValues: new Dictionary<string, object?> { ["accrualReasonDisplayMode"] = previousReasonMode },
+                NewValues: new Dictionary<string, object?> { ["accrualReasonDisplayMode"] = request.AccrualReasonDisplayMode },
+                FieldLabels: new Dictionary<string, string> { ["accrualReasonDisplayMode"] = "Показывать причины начислений" }));
+        }
 
         await repository.SaveChangesAsync(cancellationToken);
-        return new PaymentDisplaySettingsDto(setting.BooleanValue, setting.Version);
+        return new PaymentDisplaySettingsDto(
+            setting?.BooleanValue ?? false,
+            setting?.Version ?? request.Version ?? Guid.NewGuid(),
+            AccrualReasonDisplayMode: request.AccrualReasonDisplayMode,
+            AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid());
     }
 
     public async Task<TariffTableDisplaySettingsDto> GetTariffTableDisplaySettingsAsync(CancellationToken cancellationToken)
@@ -505,6 +564,27 @@ public sealed class ApplicationSettingsService(
     private static TariffTableDisplaySettingsDto CreateTariffTableDisplaySettingsDto(int mask, Guid version) =>
         new((mask & 1) != 0, (mask & 2) != 0, version, (mask & 4) != 0);
 
+    private static string CreateAccrualReasonDisplayMode(int? value) => value switch
+    {
+        1 => AccrualReasonDisplayModes.All,
+        2 => AccrualReasonDisplayModes.Hidden,
+        _ => AccrualReasonDisplayModes.PenaltiesOnly
+    };
+
+    private static int CreateAccrualReasonDisplayValue(string mode) => mode switch
+    {
+        AccrualReasonDisplayModes.All => 1,
+        AccrualReasonDisplayModes.Hidden => 2,
+        _ => 0
+    };
+
+    private static string GetAccrualReasonDisplayLabel(string mode) => mode switch
+    {
+        AccrualReasonDisplayModes.All => "у всех начислений",
+        AccrualReasonDisplayModes.Hidden => "не показывать",
+        _ => "только у штрафов"
+    };
+
     private static string CreateTariffPanelsLayoutKey(Guid userId) =>
         $"users.{userId:N}.tariffs.bottom_panels_split";
 
@@ -519,3 +599,5 @@ public sealed class BusinessDateValidationException(string message) : Exception(
 public sealed class SalaryAccrualSettingsValidationException(string message) : Exception(message);
 
 public sealed class TariffPanelsLayoutValidationException(string message) : Exception(message);
+
+public sealed class AccrualReasonDisplaySettingsValidationException(string message) : Exception(message);

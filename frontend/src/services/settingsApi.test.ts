@@ -1,9 +1,16 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { settingsApi } from './settingsApi'
+import { normalizeAccrualReasonDisplayMode, settingsApi } from './settingsApi'
 
 describe('settingsApi', () => {
+  it('normalizes missing and unknown reason modes to the safe default', () => {
+    expect(normalizeAccrualReasonDisplayMode(undefined)).toBe('penalties_only')
+    expect(normalizeAccrualReasonDisplayMode('unexpected')).toBe('penalties_only')
+    expect(normalizeAccrualReasonDisplayMode('all')).toBe('all')
+    expect(normalizeAccrualReasonDisplayMode('hidden')).toBe('hidden')
+  })
+
   it('loads and updates the global action comment requirement', async () => {
     const current = { required: false, version: 'comments-v1' }
     const request = { required: true, version: 'comments-v1' }
@@ -74,6 +81,8 @@ describe('settingsApi', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       showAllGarageOperationsByDefault: false,
       showFundName: false,
+      accrualReasonDisplayMode: 'penalties_only',
+      accrualReasonDisplayVersion: 'reason-v1',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -81,6 +90,8 @@ describe('settingsApi', () => {
 
     expect(result.showAllGarageOperationsByDefault).toBe(false)
     expect(result.showFundName).toBe(false)
+    expect(result.accrualReasonDisplayMode).toBe('penalties_only')
+    expect(result.accrualReasonDisplayVersion).toBe('reason-v1')
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       headers: {
         'Content-Type': 'application/json',
@@ -93,14 +104,18 @@ describe('settingsApi', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       showAllGarageOperationsByDefault: true,
       showFundName: true,
+      accrualReasonDisplayMode: 'all',
+      accrualReasonDisplayVersion: 'reason-v2',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version', showFundName: true }
+    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version', showFundName: true, accrualReasonDisplayMode: 'all' as const, accrualReasonDisplayVersion: 'reason-v1' }
     const result = await settingsApi.updatePaymentDisplaySettings('token', request)
 
     expect(result.showAllGarageOperationsByDefault).toBe(true)
     expect(result.showFundName).toBe(true)
+    expect(result.accrualReasonDisplayMode).toBe('all')
+    expect(result.accrualReasonDisplayVersion).toBe('reason-v2')
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       method: 'PUT',
       body: JSON.stringify(request),

@@ -4365,6 +4365,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
         var initialRow = Assert.Single(initialWorksheet.Value!.Rows, row => row.IrregularPaymentId == template.Id);
         Assert.Equal((1_000m, 1_000m), (initialRow.Debt, initialRow.IrregularPaymentRemainingAmount));
+        Assert.Equal("other_payments", initialRow.IncomeTypeCode);
 
         var partialPayment = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(

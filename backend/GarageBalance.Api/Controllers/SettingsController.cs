@@ -29,7 +29,9 @@ public sealed class SettingsController(
             tariffs.ShowPeriodicityColumn,
             tariffs.ShowAccrualMonthColumn,
             tariffs.Version,
-            tariffs.ShowFundName));
+            tariffs.ShowFundName,
+            payments.AccrualReasonDisplayMode,
+            payments.AccrualReasonDisplayVersion));
     }
 
     [HttpPut("payments/display")]
@@ -41,7 +43,18 @@ public sealed class SettingsController(
         CancellationToken cancellationToken)
     {
         var actorUserId = GetActorUserId();
-        var payments = await applicationSettingsService.UpdatePaymentDisplaySettingsAsync(request, actorUserId, cancellationToken);
+        PaymentDisplaySettingsDto payments;
+        try
+        {
+            payments = await applicationSettingsService.UpdatePaymentDisplaySettingsAsync(request, actorUserId, cancellationToken);
+        }
+        catch (AccrualReasonDisplaySettingsValidationException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "accrual_reason_display_mode_invalid",
+                detail: exception.Message);
+        }
         var tariffs = await applicationSettingsService.UpdateTariffTableDisplaySettingsAsync(
             new UpdateTariffTableDisplaySettingsRequest(
                 request.ShowPeriodicityColumn,
@@ -56,7 +69,9 @@ public sealed class SettingsController(
             tariffs.ShowPeriodicityColumn,
             tariffs.ShowAccrualMonthColumn,
             tariffs.Version,
-            tariffs.ShowFundName));
+            tariffs.ShowFundName,
+            payments.AccrualReasonDisplayMode,
+            payments.AccrualReasonDisplayVersion));
     }
 
     [HttpGet("tariffs/layout")]

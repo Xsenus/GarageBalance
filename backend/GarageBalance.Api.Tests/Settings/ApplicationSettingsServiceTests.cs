@@ -212,7 +212,102 @@ public sealed class ApplicationSettingsServiceTests
         var result = await service.GetPaymentDisplaySettingsAsync(CancellationToken.None);
 
         Assert.False(result.ShowAllGarageOperationsByDefault);
+        Assert.Equal(AccrualReasonDisplayModes.PenaltiesOnly, result.AccrualReasonDisplayMode);
         Assert.NotEqual(Guid.Empty, result.Version);
+        Assert.NotEqual(Guid.Empty, result.AccrualReasonDisplayVersion);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_PersistsReasonModeAndWritesAuditEvent()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(false, AccrualReasonDisplayMode: AccrualReasonDisplayModes.All),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.Equal(AccrualReasonDisplayModes.All, result.AccrualReasonDisplayMode);
+        Assert.Equal(ApplicationSettingsService.AccrualReasonDisplayModeKey, repository.Setting!.Key);
+        Assert.Equal(1, repository.Setting.IntegerValue);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        Assert.Equal(1, repository.SaveChangesCount);
+        var audit = Assert.Single(auditWriter.Requests);
+        Assert.Equal("application_setting.accrual_reason_display_updated", audit.Action);
+        Assert.Equal(AccrualReasonDisplayModes.PenaltiesOnly, audit.OldValues!["accrualReasonDisplayMode"]);
+        Assert.Equal(AccrualReasonDisplayModes.All, audit.NewValues!["accrualReasonDisplayMode"]);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_SavesOverviewAndReasonModeAtomically()
+    {
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(
+                true,
+                AccrualReasonDisplayMode: AccrualReasonDisplayModes.Hidden),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.ShowAllGarageOperationsByDefault);
+        Assert.Equal(AccrualReasonDisplayModes.Hidden, result.AccrualReasonDisplayMode);
+        Assert.Equal(2, repository.Settings.Count);
+        Assert.Equal(2, repository.Settings[ApplicationSettingsService.AccrualReasonDisplayModeKey].IntegerValue);
+        Assert.Equal(1, repository.SaveChangesCount);
+        Assert.Collection(
+            auditWriter.Requests,
+            audit => Assert.Equal("application_setting.updated", audit.Action),
+            audit => Assert.Equal("application_setting.accrual_reason_display_updated", audit.Action));
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_RejectsUnknownReasonModeWithoutSaving()
+    {
+        var repository = new FakeRepository();
+        var service = CreateService(repository, new CaptureAuditWriter());
+
+        await Assert.ThrowsAsync<AccrualReasonDisplaySettingsValidationException>(() =>
+            service.UpdatePaymentDisplaySettingsAsync(
+                new UpdatePaymentDisplaySettingsRequest(false, AccrualReasonDisplayMode: "unexpected"),
+                Guid.NewGuid(),
+                CancellationToken.None));
+
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Null(repository.Setting);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_RejectsStaleReasonModeVersion()
+    {
+        var currentVersion = Guid.NewGuid();
+        var repository = new FakeRepository
+        {
+            Setting = new ApplicationSetting
+            {
+                Key = ApplicationSettingsService.AccrualReasonDisplayModeKey,
+                IntegerValue = 1,
+                Version = currentVersion
+            }
+        };
+        var service = CreateService(repository, new CaptureAuditWriter());
+
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() =>
+            service.UpdatePaymentDisplaySettingsAsync(
+                new UpdatePaymentDisplaySettingsRequest(
+                    false,
+                    AccrualReasonDisplayMode: AccrualReasonDisplayModes.Hidden,
+                    AccrualReasonDisplayVersion: Guid.NewGuid()),
+                Guid.NewGuid(),
+                CancellationToken.None));
+
+        Assert.Equal(1, repository.Setting.IntegerValue);
+        Assert.Equal(0, repository.SaveChangesCount);
     }
 
     [Fact]
@@ -485,20 +580,35 @@ public sealed class ApplicationSettingsServiceTests
 
     private sealed class FakeRepository : IApplicationSettingRepository
     {
-        public ApplicationSetting? Setting { get; set; }
+        private readonly Dictionary<string, ApplicationSetting> settings = [];
+        private ApplicationSetting? setting;
+
+        public ApplicationSetting? Setting
+        {
+            get => setting;
+            set
+            {
+                setting = value;
+                if (value is not null)
+                {
+                    settings[value.Key] = value;
+                }
+            }
+        }
         public int SaveChangesCount { get; private set; }
         public string? LastRequestedKey { get; private set; }
+        public IReadOnlyDictionary<string, ApplicationSetting> Settings => settings;
 
         public Task<ApplicationSetting?> FindAsync(string key, CancellationToken cancellationToken)
         {
             LastRequestedKey = key;
-            return Task.FromResult(Setting);
+            return Task.FromResult(settings.GetValueOrDefault(key));
         }
 
         public Task<ApplicationSetting?> FindForUpdateAsync(string key, CancellationToken cancellationToken)
         {
             LastRequestedKey = key;
-            return Task.FromResult(Setting);
+            return Task.FromResult(settings.GetValueOrDefault(key));
         }
         public void Add(ApplicationSetting setting) => Setting = setting;
         public Task SaveChangesAsync(CancellationToken cancellationToken)

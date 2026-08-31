@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
-import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
+import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 
 describe('formatPaymentPrototypeMonthLabel', () => {
   it('formats an accounting month and a date through the same compact label', () => {
@@ -99,5 +100,23 @@ describe('getAccrualCalculationSummary', () => {
 
     expect(getAccrualCalculationSummary(details, 'Сохранённое начисление: 20.00'))
       .toBe('Расчёт за месяц: 8 м³ × 2,5 = 20,00.')
+  })
+})
+
+describe('shouldShowAccrualReason', () => {
+  const row = (incomeTypeCode: string | null, reason: string | null) => ({ incomeTypeCode, reason }) as GarageIncomePrototypeRow
+
+  it('shows only penalty reasons in the default mode', () => {
+    expect(shouldShowAccrualReason(row('penalty', 'Пеня за просрочку'), 'penalties_only')).toBe(true)
+    expect(shouldShowAccrualReason(row('water', 'Повторный расчёт'), 'penalties_only')).toBe(false)
+  })
+
+  it('shows every available reason in the all mode', () => {
+    expect(shouldShowAccrualReason(row('water', 'Повторный расчёт'), 'all')).toBe(true)
+    expect(shouldShowAccrualReason(row(null, null), 'all')).toBe(false)
+  })
+
+  it('hides every reason in the hidden mode', () => {
+    expect(shouldShowAccrualReason(row('penalty', 'Пеня за просрочку'), 'hidden')).toBe(false)
   })
 })

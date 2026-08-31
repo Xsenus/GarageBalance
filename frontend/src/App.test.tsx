@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
 vi.mock('./services/settingsApi', () => ({
+  normalizeAccrualReasonDisplayMode: (value: string | null | undefined) => value === 'all' || value === 'hidden' ? value : 'penalties_only',
   settingsApi: {
     getActionCommentSettings: vi.fn(async () => ({ required: true, version: 'comment-version' })),
     updateActionCommentSettings: vi.fn(async (_accessToken: string, request: { required: boolean; version: string }) => request),
@@ -13855,7 +13856,7 @@ describe('App', () => {
 
   it('saves the default payment overview mode from display settings', async () => {
     const user = userEvent.setup()
-    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request)
+    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean; accrualReasonDisplayMode: string; accrualReasonDisplayVersion: string }) => request)
     const updateHistoricalMeterReadingCorrectionSettings = vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request)
     const settingsClient = createSettingsClient({
       getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: false, version: 'meter-correction-version' }),
@@ -13876,16 +13877,20 @@ describe('App', () => {
     const accrualMonthToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Месяц начисления»' })
     const fundNameToggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать фонд под наименованием услуги' })
     const historicalCorrectionToggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить изменение существующих показаний за другие месяцы' })
+    const reasonMode = within(displayPanel).getByRole('combobox', { name: 'Показывать причины начислений' })
     await waitFor(() => expect(toggle).toBeEnabled())
     expect(toggle).not.toBeChecked()
     expect(periodicityToggle).not.toBeChecked()
     expect(accrualMonthToggle).not.toBeChecked()
     expect(fundNameToggle).not.toBeChecked()
     expect(historicalCorrectionToggle).not.toBeChecked()
+    expect(reasonMode).toHaveTextContent('Только у штрафов')
     await user.click(toggle)
     await user.click(periodicityToggle)
     await user.click(fundNameToggle)
     await user.click(historicalCorrectionToggle)
+    await user.click(reasonMode)
+    await user.click(within(displayPanel).getByRole('option', { name: 'У всех начислений' }))
     await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
 
     await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', {
@@ -13895,6 +13900,8 @@ describe('App', () => {
       showAccrualMonthColumn: false,
       tariffTableVersion: 'tariff-table-version',
       showFundName: true,
+      accrualReasonDisplayMode: 'all',
+      accrualReasonDisplayVersion: 'accrual-reason-version',
     }))
     await waitFor(() => expect(updateHistoricalMeterReadingCorrectionSettings).toHaveBeenCalledWith('token', {
       enabled: true,
@@ -24112,7 +24119,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
     updateActionCommentSettings: async (_accessToken, request) => request,
     getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: true, version: 'meter-correction-version' }),
     updateHistoricalMeterReadingCorrectionSettings: async (_accessToken, request) => request,
-    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }),
+    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, accrualReasonDisplayMode: 'penalties_only', accrualReasonDisplayVersion: 'accrual-reason-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),
     updateTariffPanelsLayout: async (_accessToken, request) => ({ ...request, version: 'tariff-layout-version' }),

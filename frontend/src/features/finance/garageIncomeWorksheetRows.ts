@@ -1,5 +1,6 @@
 import type { GarageIncomeWorksheetDto } from '../../services/financeApi'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
+import type { AccrualReasonDisplayMode } from '../../services/settingsApi'
 
 const paymentPrototypeMonthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
@@ -30,6 +31,7 @@ export type GarageIncomePrototypeRow = {
   meterRequired?: boolean
   calculationDetails?: AccrualCalculationDetailsDto | null
   reason?: string | null
+  incomeTypeCode: string | null
 }
 
 export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
@@ -63,8 +65,17 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       meterRequired: row.meterKind !== null && row.meterValue === null,
       calculationDetails: row.calculationDetails ?? null,
       reason: row.reason ?? null,
+      incomeTypeCode: row.incomeTypeCode ?? null,
     }
   })
+}
+
+export function shouldShowAccrualReason(row: GarageIncomePrototypeRow, mode: AccrualReasonDisplayMode) {
+  if (!row.reason || mode === 'hidden') {
+    return false
+  }
+
+  return mode === 'all' || row.incomeTypeCode === 'penalty'
 }
 
 export function formatPaymentPrototypeMonthLabel(value: string) {

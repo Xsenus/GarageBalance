@@ -7,6 +7,14 @@ export type PaymentDisplaySettingsDto = {
   showAccrualMonthColumn: boolean
   tariffTableVersion: string
   showFundName: boolean
+  accrualReasonDisplayMode?: AccrualReasonDisplayMode
+  accrualReasonDisplayVersion?: string
+}
+
+export type AccrualReasonDisplayMode = 'penalties_only' | 'all' | 'hidden'
+
+export function normalizeAccrualReasonDisplayMode(value: string | null | undefined): AccrualReasonDisplayMode {
+  return value === 'all' || value === 'hidden' ? value : 'penalties_only'
 }
 
 export type TariffPanelsLayoutDto = {

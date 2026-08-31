@@ -551,7 +551,8 @@ public sealed class FinanceService(
                 IrregularPaymentId: key.IrregularPaymentId,
                 IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
                 CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)),
-                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)));
+                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)),
+                IncomeTypeCode: key.IncomeTypeCode);
         }).ToList();
 
         foreach (var annualAccrual in worksheetData.AnnualAccruals)
@@ -599,7 +600,8 @@ public sealed class FinanceService(
                     Reason: BuildAnnualAccrualWorksheetReason(
                         annualAccrual,
                         month,
-                        MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)))));
+                        MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m))),
+                    IncomeTypeCode: annualAccrual.IncomeTypeCode));
             }
         }
 

@@ -6,7 +6,8 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDt
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient } from '../../services/settingsApi'
+import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
+import type { AccrualReasonDisplayMode, ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDebouncedRequest, scheduleDelayedAction } from '../../shared/debouncedRequest'
@@ -32,7 +33,7 @@ import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toS
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
-import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -403,6 +404,7 @@ export function FinancePanel({
   const [financePreviewReloadRevision, setFinancePreviewReloadRevision] = useState(0)
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
+  const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -676,6 +678,7 @@ export function FinancePanel({
       .then((settings) => {
         if (!ignore) {
           setShowAllGarageOperations(settings.showAllGarageOperationsByDefault)
+          setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
           setPaymentDisplaySettingsError(null)
         }
       })
@@ -2096,6 +2099,7 @@ export function FinancePanel({
       <PaymentsPrototypePanel
         auth={auth}
         canWritePayments={canWritePayments}
+        accrualReasonDisplayMode={accrualReasonDisplayMode}
         dictionaryClient={dictionaryClient}
         expenseTypes={expenseTypes}
         financeClient={financeClient}
@@ -2795,6 +2799,7 @@ function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOpera
 function PaymentsPrototypePanel({
   auth,
   canWritePayments,
+  accrualReasonDisplayMode,
   dictionaryClient,
   expenseTypes,
   financeClient,
@@ -2812,6 +2817,7 @@ function PaymentsPrototypePanel({
 }: {
   auth: AuthResponse
   canWritePayments: boolean
+  accrualReasonDisplayMode: AccrualReasonDisplayMode
   dictionaryClient: DictionaryClient
   expenseTypes: AccountingTypeDto[]
   financeClient: FinanceClient
@@ -4005,6 +4011,7 @@ function PaymentsPrototypePanel({
           monthLabel,
           service: serviceName,
           incomeTypeId: savedAccrual.incomeTypeId,
+          incomeTypeCode: incomeTypes.find((incomeType) => incomeType.id === savedAccrual.incomeTypeId)?.code ?? null,
           annualAccrualId: savedAccrual.accountingYear ? savedAccrual.id : null,
           meterKind: null,
           meterReadingId: null,
@@ -4072,6 +4079,7 @@ function PaymentsPrototypePanel({
           monthLabel,
           service: serviceName,
           incomeTypeId: savedAccrual.incomeTypeId,
+          incomeTypeCode: 'penalty',
           annualAccrualId: null,
           meterKind: null,
           meterReadingId: null,
@@ -4646,7 +4654,7 @@ function PaymentsPrototypePanel({
                             <td />
                             <td>
                               <span>{row.service}</span>
-                              {row.reason ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
+                              {shouldShowAccrualReason(row, accrualReasonDisplayMode) ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
                             </td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>
                               {row.meterKind && canWritePayments && financeClient.savePaymentFormMeterReading && (

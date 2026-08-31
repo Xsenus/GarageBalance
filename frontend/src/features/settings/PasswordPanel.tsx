@@ -3,12 +3,14 @@ import type { FormEvent } from 'react'
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
+import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
+import type { AccrualReasonDisplayMode, ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage } from '../../shared/AsyncState'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyTextInput } from '../../shared/MoneyInput'
+import { SelectControl } from '../../shared/SelectControl'
 import { parseMoneyInput } from '../../shared/moneyInputFormatting'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
@@ -43,6 +45,12 @@ const tariffColumnSwitches = [
   { key: 'accrualMonth', title: 'Месяц начисления', label: 'Колонка «Месяц начисления»' },
   { key: 'fundName', title: 'Название фонда', label: 'Показывать фонд под наименованием услуги' },
 ] as const
+
+const accrualReasonDisplayOptions = [
+  { value: 'penalties_only', label: 'Только у штрафов' },
+  { value: 'all', label: 'У всех начислений' },
+  { value: 'hidden', label: 'Не показывать' },
+]
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
   const [actionCommentsRequired, actionCommentSettingsLoading, actionCommentSettingsError, saveActionCommentsRequired] = useActionCommentSettings()
@@ -79,9 +87,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
+  const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
   const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false, fundName: false })
   const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
   const [tariffTableDisplaySettingsVersion, setTariffTableDisplaySettingsVersion] = useState<string | null>(null)
+  const [accrualReasonDisplayVersion, setAccrualReasonDisplayVersion] = useState<string | null>(null)
   const [historicalMeterReadingCorrectionEnabled, setHistoricalMeterReadingCorrectionEnabled] = useState(false)
   const [historicalMeterReadingCorrectionSettingsVersion, setHistoricalMeterReadingCorrectionSettingsVersion] = useState<string | null>(null)
   const [historicalMeterReadingCorrectionSaving, setHistoricalMeterReadingCorrectionSaving] = useState(false)
@@ -216,6 +226,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .then(([settings, meterReadingSettings]) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+          setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
+          setAccrualReasonDisplayVersion(settings.accrualReasonDisplayVersion ?? null)
           setPaymentDisplaySettingsVersion(settings.version)
           setTariffTableColumns({
             periodicity: settings.showPeriodicityColumn,
@@ -371,10 +383,14 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         showAccrualMonthColumn: tariffTableColumns.accrualMonth,
         tariffTableVersion: tariffTableDisplaySettingsVersion ?? '',
         showFundName: tariffTableColumns.fundName,
+        accrualReasonDisplayMode,
+        accrualReasonDisplayVersion: accrualReasonDisplayVersion ?? '',
       })
       setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
       setPaymentDisplaySettingsVersion(settings.version)
       setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
+      setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
+      setAccrualReasonDisplayVersion(settings.accrualReasonDisplayVersion ?? null)
       setPaymentDisplaySettingsMessage('Отображение сохранено.')
     } catch (caught) {
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить.')
@@ -1173,6 +1189,18 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
             onChange={(checked) => { setShowAllGarageOperationsByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
           />
+          <FormField label="Причины начислений" help="Настройка определяет, под какими строками в таблице платежей показывается пояснение «Причина». Данные начислений и история изменений не скрываются.">
+            <SelectControl
+              aria-label="Показывать причины начислений"
+              value={accrualReasonDisplayMode}
+              options={accrualReasonDisplayOptions}
+              disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
+              onChange={(value) => {
+                setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(value))
+                setPaymentDisplaySettingsMessage(null)
+              }}
+            />
+          </FormField>
           <SettingsDisplaySwitch
             title="Изменение показаний за другие месяцы"
             label="Разрешить изменение существующих показаний за другие месяцы"
