@@ -48,6 +48,26 @@ public sealed class EfExpenseWorksheetQuery(
             limit,
             cancellationToken);
 
+    public Task<ExpenseWorksheetStaffBreakdownData> GetStaffBreakdownAsync(
+        Guid staffMemberId,
+        Guid expenseTypeId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        DateOnly businessDate,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken) =>
+        EfExpenseWorksheetStaffBreakdownQuery.GetAsync(
+            dbContext,
+            businessDate,
+            staffMemberId,
+            expenseTypeId,
+            monthFrom,
+            monthTo,
+            offset,
+            limit,
+            cancellationToken);
+
     public Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
         string[] cashExpenseTypeCodes,

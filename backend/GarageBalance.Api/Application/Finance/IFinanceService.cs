@@ -43,6 +43,10 @@ public interface IFinanceService
         ExpenseWorksheetSupplierBreakdownRequest request,
         CancellationToken cancellationToken);
 
+    Task<FinanceResult<ExpenseWorksheetStaffBreakdownDto>> GetExpenseWorksheetStaffBreakdownAsync(
+        ExpenseWorksheetStaffBreakdownRequest request,
+        CancellationToken cancellationToken);
+
     Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<FinancialReportPeriodDto>> GetFinancialReportPeriodAsync(FinancialReportPeriodRequest request, CancellationToken cancellationToken);

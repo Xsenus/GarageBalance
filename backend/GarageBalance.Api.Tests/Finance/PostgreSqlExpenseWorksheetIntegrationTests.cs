@@ -72,6 +72,84 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task StaffBreakdown_ReturnsSalaryAdjustmentsAndPaymentsOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var month = new DateOnly(2044, 2, 1);
+        Guid staffMemberId;
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = $"Отдел {Guid.NewGuid():N}" };
+            var staffMember = new StaffMember
+            {
+                FullName = $"Сотрудник {Guid.NewGuid():N}",
+                Department = department,
+                Rate = 45000m,
+                CreatedAtUtc = new DateTimeOffset(2044, 1, 1, 8, 0, 0, TimeSpan.Zero)
+            };
+            var salaryType = new ExpenseType { Name = $"Зарплата {Guid.NewGuid():N}", Code = $"salary_{Guid.NewGuid():N}" };
+            staffMemberId = staffMember.Id;
+            expenseTypeId = salaryType.Id;
+            seedContext.AddRange(
+                department,
+                staffMember,
+                salaryType,
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = month,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                    Amount = 5123m,
+                    DocumentNumber = "ПР-PG",
+                    Reason = "Премия PostgreSQL"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = month,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                    Amount = 2111m,
+                    DocumentNumber = "ШТ-PG",
+                    Reason = "Штраф PostgreSQL"
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(20),
+                    AccountingMonth = month,
+                    Amount = 48002m,
+                    StaffMember = staffMember,
+                    ExpenseType = salaryType,
+                    ExpensePaymentSource = ExpensePaymentSources.Cash,
+                    DocumentNumber = "РКО-PG"
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var result = await new EfExpenseWorksheetQuery(context).GetStaffBreakdownAsync(
+            staffMemberId,
+            expenseTypeId,
+            month,
+            month,
+            month.AddDays(27),
+            0,
+            25,
+            CancellationToken.None);
+
+        Assert.Equal(45000m, result.BaseAccrualTotal);
+        Assert.Equal(5123m, result.BonusTotal);
+        Assert.Equal(2111m, result.PenaltyTotal);
+        Assert.Equal(48002m, result.ExpenseTotal);
+        Assert.Equal(4, result.TotalCount);
+        Assert.Contains(result.Items, item => item.EntryKind == "salary");
+        Assert.Contains(result.Items, item => item.EntryKind == "bonus" && item.Comment == "Премия PostgreSQL");
+        Assert.Contains(result.Items, item => item.EntryKind == "penalty" && item.Comment == "Штраф PostgreSQL");
+        Assert.Contains(result.Items, item => item.EntryKind == "payment" && item.DocumentNumber == "РКО-PG");
+    }
+
+    [PostgreSqlFact]
     public async Task ExpenseWorksheet_ReturnsAggregatedEpisodicCashExpensesOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

@@ -712,6 +712,77 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdown_PassesFiltersAndPagingToService()
+    {
+        var staffMemberId = Guid.NewGuid();
+        var expenseTypeId = Guid.NewGuid();
+        var monthFrom = new DateOnly(2026, 7, 1);
+        var monthTo = new DateOnly(2026, 8, 1);
+        var breakdown = new ExpenseWorksheetStaffBreakdownDto(
+            staffMemberId,
+            expenseTypeId,
+            monthFrom,
+            monthTo,
+            90000m,
+            5123m,
+            2111m,
+            93012m,
+            48002m,
+            [],
+            6,
+            0,
+            25);
+        var service = new FakeFinanceService
+        {
+            ExpenseWorksheetStaffBreakdownResult = FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Success(breakdown)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetExpenseWorksheetStaffBreakdown(
+            staffMemberId,
+            expenseTypeId,
+            monthFrom,
+            monthTo,
+            0,
+            25,
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(breakdown, ok.Value);
+        Assert.Equal(staffMemberId, service.LastExpenseWorksheetStaffBreakdownRequest?.StaffMemberId);
+        Assert.Equal(expenseTypeId, service.LastExpenseWorksheetStaffBreakdownRequest?.ExpenseTypeId);
+        Assert.Equal(monthFrom, service.LastExpenseWorksheetStaffBreakdownRequest?.MonthFrom);
+        Assert.Equal(monthTo, service.LastExpenseWorksheetStaffBreakdownRequest?.MonthTo);
+        Assert.Equal(0, service.LastExpenseWorksheetStaffBreakdownRequest?.Offset);
+        Assert.Equal(25, service.LastExpenseWorksheetStaffBreakdownRequest?.Limit);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdown_MapsInvalidPeriodToBadRequest()
+    {
+        var service = new FakeFinanceService
+        {
+            ExpenseWorksheetStaffBreakdownResult = FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Failure(
+                "expense_worksheet_staff_breakdown_period_invalid",
+                "Некорректный период.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetExpenseWorksheetStaffBreakdown(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new DateOnly(2026, 8, 1),
+            new DateOnly(2026, 7, 1),
+            null,
+            null,
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("Некорректный период.", problem.Detail);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -2313,6 +2384,7 @@ public sealed class FinanceControllerTests
         public Guid? LastGarageFullPaymentQuoteGarageId { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public ExpenseWorksheetSupplierBreakdownRequest? LastExpenseWorksheetSupplierBreakdownRequest { get; private set; }
+        public ExpenseWorksheetStaffBreakdownRequest? LastExpenseWorksheetStaffBreakdownRequest { get; private set; }
         public SupplierOpeningBalanceRequest? LastSupplierOpeningBalanceRequest { get; private set; }
         public FinancialReportPeriodRequest? LastFinancialReportPeriodRequest { get; private set; }
         public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
@@ -2330,6 +2402,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetSupplierBreakdownDto> ExpenseWorksheetSupplierBreakdownResult { get; init; } = FinanceResult<ExpenseWorksheetSupplierBreakdownDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<ExpenseWorksheetStaffBreakdownDto> ExpenseWorksheetStaffBreakdownResult { get; init; } = FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierOpeningBalanceDto> SupplierOpeningBalanceResult { get; init; } = FinanceResult<SupplierOpeningBalanceDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialReportPeriodDto> FinancialReportPeriodResult { get; init; } = FinanceResult<FinancialReportPeriodDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -2488,6 +2561,14 @@ public sealed class FinanceControllerTests
         {
             LastExpenseWorksheetSupplierBreakdownRequest = request;
             return Task.FromResult(ExpenseWorksheetSupplierBreakdownResult);
+        }
+
+        public Task<FinanceResult<ExpenseWorksheetStaffBreakdownDto>> GetExpenseWorksheetStaffBreakdownAsync(
+            ExpenseWorksheetStaffBreakdownRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastExpenseWorksheetStaffBreakdownRequest = request;
+            return Task.FromResult(ExpenseWorksheetStaffBreakdownResult);
         }
 
         public Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken)

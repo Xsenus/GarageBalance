@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetSupplierBreakdownDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
@@ -108,7 +108,7 @@ type PaymentPrototypeRow = {
 
 type ExpenseSupplierBreakdownState = {
   loading: boolean
-  value: ExpenseWorksheetSupplierBreakdownDto | null
+  value: ExpenseWorksheetSupplierBreakdownDto | ExpenseWorksheetStaffBreakdownDto | null
   error: string | null
 }
 
@@ -4345,12 +4345,15 @@ function PaymentsPrototypePanel({
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
 
   function getExpenseSupplierBreakdownKey(row: PaymentPrototypeRow) {
-    return row.supplierId && row.expenseTypeId ? `${row.supplierId}:${row.expenseTypeId}` : null
+    if (!row.expenseTypeId) return null
+    if (row.supplierId) return `supplier:${row.supplierId}:${row.expenseTypeId}`
+    if (row.staffMemberId) return `staff:${row.staffMemberId}:${row.expenseTypeId}`
+    return null
   }
 
   async function loadExpenseSupplierBreakdown(row: PaymentPrototypeRow, append = false) {
     const key = getExpenseSupplierBreakdownKey(row)
-    if (!key || !row.supplierId || !row.expenseTypeId) {
+    if (!key || !row.expenseTypeId || (!row.supplierId && !row.staffMemberId)) {
       return
     }
 
@@ -4368,14 +4371,22 @@ function PaymentsPrototypePanel({
     }))
 
     try {
-      const breakdown = await financeClient.getExpenseWorksheetSupplierBreakdown(auth.accessToken, {
-        supplierId: row.supplierId,
+      const commonParams = {
         expenseTypeId: row.expenseTypeId,
         monthFrom: expenseWorksheetMonthFrom,
         monthTo: expenseWorksheetMonthTo,
         offset: append ? currentValue?.items.length ?? 0 : 0,
         limit: 25,
-      }, controller.signal)
+      }
+      const breakdown = row.staffMemberId
+        ? await financeClient.getExpenseWorksheetStaffBreakdown(auth.accessToken, {
+            ...commonParams,
+            staffMemberId: row.staffMemberId,
+          }, controller.signal)
+        : await financeClient.getExpenseWorksheetSupplierBreakdown(auth.accessToken, {
+            ...commonParams,
+            supplierId: row.supplierId!,
+          }, controller.signal)
       if (controller.signal.aborted || expenseSupplierBreakdownControllersRef.current.get(key) !== controller) {
         return
       }
@@ -4426,7 +4437,18 @@ function PaymentsPrototypePanel({
     if (source === 'manual') return 'Ручное начисление'
     if (source === 'bank') return 'Банк'
     if (source === 'cash') return 'Касса'
+    if (source === 'salary') return 'Оклад по ставке'
+    if (source === 'bonus') return 'Премия'
+    if (source === 'penalty') return 'Штраф'
     return source?.trim() || '—'
+  }
+
+  function getExpenseBreakdownEntryLabel(entryKind: string) {
+    if (entryKind === 'payment') return 'Выплата'
+    if (entryKind === 'salary') return 'Оклад'
+    if (entryKind === 'bonus') return 'Премия'
+    if (entryKind === 'penalty') return 'Штраф'
+    return 'Начисление'
   }
 
   const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
@@ -5021,7 +5043,7 @@ function PaymentsPrototypePanel({
                     const breakdownKey = getExpenseSupplierBreakdownKey(row)
                     const breakdownExpanded = breakdownKey ? Boolean(expandedExpenseSupplierRows[breakdownKey]) : false
                     const breakdownState = breakdownKey ? expenseSupplierBreakdowns[breakdownKey] : undefined
-                    const breakdownId = breakdownKey ? `expense-supplier-breakdown-${breakdownKey.replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined
+                    const breakdownId = breakdownKey ? `expense-breakdown-${breakdownKey.replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined
                     return (
                       <Fragment key={`${row.item}-${row.supplierId ?? row.staffMemberId ?? index}`}>
                       <tr>
@@ -5090,6 +5112,13 @@ function PaymentsPrototypePanel({
                             <section id={breakdownId} className="payments-prototype-breakdown" aria-label={`Состав суммы: ${supplier}, ${row.item}`}>
                               {breakdownState?.value ? (
                                 <div className="payments-prototype-breakdown-summary">
+                                  {'staffMemberId' in breakdownState.value ? (
+                                    <>
+                                      <span>Оклад: <strong>{formatPaymentMoney(breakdownState.value.baseAccrualTotal)}</strong></span>
+                                      <span>Премии: <strong>{formatPaymentMoney(breakdownState.value.bonusTotal)}</strong></span>
+                                      <span>Штрафы: <strong>{formatPaymentMoney(breakdownState.value.penaltyTotal)}</strong></span>
+                                    </>
+                                  ) : null}
                                   <span>Начислено: <strong>{formatPaymentMoney(breakdownState.value.accrualTotal)}</strong></span>
                                   <span>Оплачено: <strong>{formatPaymentMoney(breakdownState.value.expenseTotal)}</strong></span>
                                   <span>Операций: <strong>{breakdownState.value.totalCount}</strong></span>
@@ -5124,12 +5153,12 @@ function PaymentsPrototypePanel({
                                     <tbody>
                                       {breakdownState.value.items.map((item) => (
                                         <tr key={`${item.entryKind}-${item.id}`}>
-                                          <td>{item.entryKind === 'payment' ? 'Выплата' : 'Начисление'}</td>
+                                          <td>{getExpenseBreakdownEntryLabel(item.entryKind)}</td>
                                           <td>{formatMonth(item.accountingMonth)}</td>
                                           <td>{item.operationDate ? formatDateOnly(item.operationDate) : '—'}</td>
-                                          <td>{item.documentNumber?.trim() || getExpenseBreakdownSourceLabel(item.source)}</td>
+                                          <td>{item.documentNumber?.trim() || getExpenseBreakdownSourceLabel(item.source ?? item.entryKind)}</td>
                                           <td>{item.comment?.trim() || '—'}</td>
-                                          <td className={item.entryKind === 'payment' ? 'money-income' : undefined}>{formatPaymentMoney(item.amount)}</td>
+                                          <td className={item.entryKind === 'payment' ? 'money-income' : item.entryKind === 'penalty' ? 'money-expense' : undefined}>{formatPaymentMoney(item.amount)}</td>
                                         </tr>
                                       ))}
                                     </tbody>

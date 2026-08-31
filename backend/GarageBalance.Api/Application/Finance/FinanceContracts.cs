@@ -612,6 +612,29 @@ public sealed record ExpenseWorksheetSupplierBreakdownDto(
     int Offset,
     int Limit);
 
+public sealed record ExpenseWorksheetStaffBreakdownRequest(
+    Guid StaffMemberId,
+    Guid ExpenseTypeId,
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo,
+    int? Offset = null,
+    int? Limit = null);
+
+public sealed record ExpenseWorksheetStaffBreakdownDto(
+    Guid StaffMemberId,
+    Guid ExpenseTypeId,
+    DateOnly MonthFrom,
+    DateOnly MonthTo,
+    decimal BaseAccrualTotal,
+    decimal BonusTotal,
+    decimal PenaltyTotal,
+    decimal AccrualTotal,
+    decimal ExpenseTotal,
+    IReadOnlyList<ExpenseWorksheetSupplierBreakdownEntryDto> Items,
+    int TotalCount,
+    int Offset,
+    int Limit);
+
 public sealed record SupplierOpeningBalanceRequest(
     DateOnly? MonthFrom);
 

@@ -12479,6 +12479,79 @@ describe('App', () => {
     expect(within(prototype).queryByRole('table', { name: 'Операции: 312, Вода' })).not.toBeInTheDocument()
   })
 
+  it('expands an employee total into salary bonus penalty and payment details', async () => {
+    const user = userEvent.setup()
+    const getExpenseWorksheetStaffBreakdown = vi.fn(async () => ({
+      staffMemberId: 'staff-petrov',
+      expenseTypeId: 'expense-salary',
+      monthFrom: '2026-08-01',
+      monthTo: '2026-08-01',
+      baseAccrualTotal: 45000,
+      bonusTotal: 5123,
+      penaltyTotal: 2111,
+      accrualTotal: 48012,
+      expenseTotal: 48002,
+      items: [
+        { id: 'payment-1', entryKind: 'payment', accountingMonth: '2026-08-01', operationDate: '2026-08-25', amount: 48002, documentNumber: 'РКО-8', comment: 'Выплата зарплаты', source: 'cash' },
+        { id: 'bonus-1', entryKind: 'bonus', accountingMonth: '2026-08-01', operationDate: null, amount: 5123, documentNumber: 'ПР-8', comment: 'За срочный ремонт ворот', source: null },
+        { id: 'penalty-1', entryKind: 'penalty', accountingMonth: '2026-08-01', operationDate: null, amount: 2111, documentNumber: 'ШТ-8', comment: 'Нарушение графика', source: null },
+        { id: 'salary-1', entryKind: 'salary', accountingMonth: '2026-08-01', operationDate: null, amount: 45000, documentNumber: null, comment: null, source: 'salary' },
+      ],
+      totalCount: 4,
+      offset: 0,
+      limit: 25,
+    }))
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accountingMonth: '2026-08-01',
+      accrualTotal: 48012,
+      expenseTotal: 48002,
+      rows: [{
+        rowKind: 'staff',
+        supplierId: null,
+        staffMemberId: 'staff-petrov',
+        counterpartyName: 'Петров Валентин Семенович',
+        expenseTypeId: 'expense-salary',
+        expenseTypeName: 'Зарплата',
+        baseAccrualAmount: 45000,
+        bonusAmount: 5123,
+        penaltyAmount: 2111,
+        accrualAmount: 48012,
+        expenseAmount: 48002,
+        balance: 10,
+        collectedAmount: null,
+        difference: null,
+      }],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetStaffBreakdown })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Петров Валентин Семенович, Зарплата' }))
+    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: Петров Валентин Семенович, Зарплата' })
+    expect(within(prototype).getByText('Оклад:').closest('span')).toHaveTextContent('45 000.00')
+    expect(within(prototype).getByText('Премии:').closest('span')).toHaveTextContent('5 123.00')
+    expect(within(prototype).getByText('Штрафы:').closest('span')).toHaveTextContent('2 111.00')
+    expect(within(prototype).getByText('Начислено:').closest('span')).toHaveTextContent('48 012.00')
+    expect(within(prototype).getByText('Оплачено:').closest('span')).toHaveTextContent('48 002.00')
+    expect(within(detailsTable).getByText('За срочный ремонт ворот')).toBeInTheDocument()
+    expect(within(detailsTable).getByText('Нарушение графика')).toBeInTheDocument()
+    expect(within(detailsTable).getByText('Оклад по ставке')).toBeInTheDocument()
+    expect(within(detailsTable).getAllByText('Премия')).toHaveLength(1)
+    expect(within(detailsTable).getAllByText('Штраф')).toHaveLength(1)
+    expect(getExpenseWorksheetStaffBreakdown).toHaveBeenCalledWith('token', {
+      staffMemberId: 'staff-petrov',
+      expenseTypeId: 'expense-salary',
+      monthFrom: '2026-06',
+      monthTo: '2026-06',
+      offset: 0,
+      limit: 25,
+    }, expect.any(AbortSignal))
+  })
+
   it('shows a foreground error and retries supplier breakdown loading', async () => {
     const user = userEvent.setup()
     const getExpenseWorksheetSupplierBreakdown = vi.fn()
@@ -25333,6 +25406,21 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       expenseTypeId: params.expenseTypeId,
       monthFrom: `${params.monthFrom.slice(0, 7)}-01`,
       monthTo: `${params.monthTo.slice(0, 7)}-01`,
+      accrualTotal: 0,
+      expenseTotal: 0,
+      items: [],
+      totalCount: 0,
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 25,
+    }),
+    getExpenseWorksheetStaffBreakdown: async (_token, params) => ({
+      staffMemberId: params.staffMemberId,
+      expenseTypeId: params.expenseTypeId,
+      monthFrom: `${params.monthFrom.slice(0, 7)}-01`,
+      monthTo: `${params.monthTo.slice(0, 7)}-01`,
+      baseAccrualTotal: 0,
+      bonusTotal: 0,
+      penaltyTotal: 0,
       accrualTotal: 0,
       expenseTotal: 0,
       items: [],

@@ -1422,6 +1422,68 @@ public sealed class FinanceService(
                 limit));
     }
 
+    public async Task<FinanceResult<ExpenseWorksheetStaffBreakdownDto>> GetExpenseWorksheetStaffBreakdownAsync(
+        ExpenseWorksheetStaffBreakdownRequest request,
+        CancellationToken cancellationToken)
+    {
+        var defaultMonth = MonthPeriod.Normalize(businessDateProvider.Today);
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? defaultMonth);
+        var monthTo = MonthPeriod.Normalize(request.MonthTo ?? request.MonthFrom ?? defaultMonth);
+        if (monthFrom > monthTo)
+        {
+            return FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Failure(
+                "expense_worksheet_staff_breakdown_period_invalid",
+                "Дата начала расшифровки не может быть позже даты окончания.");
+        }
+
+        var monthCount = ((monthTo.Year - monthFrom.Year) * 12) + monthTo.Month - monthFrom.Month + 1;
+        if (monthCount > MaxBalanceHistoryMonths)
+        {
+            return FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Failure(
+                "expense_worksheet_staff_breakdown_period_too_large",
+                $"Расшифровку можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
+        }
+
+        var offset = NormalizeListOffset(request.Offset);
+        var limit = QueryLimits.NormalizeListSize(request.Limit, QueryLimits.DefaultPageSize);
+        var data = await expenseWorksheetQuery.GetStaffBreakdownAsync(
+            request.StaffMemberId,
+            request.ExpenseTypeId,
+            monthFrom,
+            monthTo,
+            businessDateProvider.Today,
+            offset,
+            limit,
+            cancellationToken);
+        var baseAccrualTotal = MoneyMath.RoundMoney(data.BaseAccrualTotal);
+        var bonusTotal = MoneyMath.RoundMoney(data.BonusTotal);
+        var penaltyTotal = MoneyMath.RoundMoney(data.PenaltyTotal);
+
+        return FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Success(
+            new ExpenseWorksheetStaffBreakdownDto(
+                request.StaffMemberId,
+                request.ExpenseTypeId,
+                monthFrom,
+                monthTo,
+                baseAccrualTotal,
+                bonusTotal,
+                penaltyTotal,
+                MoneyMath.RoundMoney(baseAccrualTotal + bonusTotal - penaltyTotal),
+                MoneyMath.RoundMoney(data.ExpenseTotal),
+                data.Items.Select(item => new ExpenseWorksheetSupplierBreakdownEntryDto(
+                    item.Id,
+                    item.EntryKind,
+                    item.AccountingMonth,
+                    item.OperationDate,
+                    MoneyMath.RoundMoney(item.Amount),
+                    item.DocumentNumber,
+                    item.Comment,
+                    item.Source)).ToList(),
+                data.TotalCount,
+                offset,
+                limit));
+    }
+
     private static int NormalizeListLimit(int? limit)
     {
         return QueryLimits.NormalizeListSize(limit);

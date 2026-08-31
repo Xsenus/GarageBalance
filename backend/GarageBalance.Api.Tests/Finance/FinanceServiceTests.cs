@@ -12265,6 +12265,203 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdownAsync_ReturnsSalaryBonusesPenaltiesAndPayments()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Администрация" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петров Валентин Семенович",
+            Department = department,
+            Rate = 45000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 8, 0, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.AddRange(
+            department,
+            staffMember,
+            salaryType,
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staffMember,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                Amount = 5123m,
+                DocumentNumber = "ПР-8",
+                Reason = "За срочный ремонт ворот",
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.Zero)
+            },
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staffMember,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                Amount = 2111m,
+                DocumentNumber = "ШТ-7",
+                Reason = "Нарушение графика",
+                CreatedAtUtc = new DateTimeOffset(2026, 7, 20, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 8, 25),
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                Amount = 48002m,
+                StaffMember = staffMember,
+                ExpenseType = salaryType,
+                ExpensePaymentSource = ExpensePaymentSources.Cash,
+                DocumentNumber = "РКО-8",
+                Comment = "Выплата зарплаты",
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 8, 26),
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                Amount = 999m,
+                StaffMember = staffMember,
+                ExpenseType = salaryType,
+                IsCanceled = true
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)));
+
+        var firstPage = await service.GetExpenseWorksheetStaffBreakdownAsync(
+            new ExpenseWorksheetStaffBreakdownRequest(
+                staffMember.Id,
+                salaryType.Id,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 8, 1),
+                0,
+                3),
+            CancellationToken.None);
+        var secondPage = await service.GetExpenseWorksheetStaffBreakdownAsync(
+            new ExpenseWorksheetStaffBreakdownRequest(
+                staffMember.Id,
+                salaryType.Id,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 8, 1),
+                3,
+                3),
+            CancellationToken.None);
+
+        Assert.True(firstPage.Succeeded);
+        Assert.Equal(90000m, firstPage.Value!.BaseAccrualTotal);
+        Assert.Equal(5123m, firstPage.Value.BonusTotal);
+        Assert.Equal(2111m, firstPage.Value.PenaltyTotal);
+        Assert.Equal(93012m, firstPage.Value.AccrualTotal);
+        Assert.Equal(48002m, firstPage.Value.ExpenseTotal);
+        Assert.Equal(5, firstPage.Value.TotalCount);
+        var entries = firstPage.Value.Items.Concat(secondPage.Value!.Items).ToList();
+        Assert.Equal(5, entries.Count);
+        Assert.Equal(2, entries.Count(item => item.EntryKind == "salary"));
+        Assert.Contains(entries, item => item.EntryKind == "bonus" && item.DocumentNumber == "ПР-8" && item.Comment == "За срочный ремонт ворот");
+        Assert.Contains(entries, item => item.EntryKind == "penalty" && item.DocumentNumber == "ШТ-7" && item.Comment == "Нарушение графика");
+        Assert.Contains(entries, item => item.EntryKind == "payment" && item.DocumentNumber == "РКО-8" && item.OperationDate == new DateOnly(2026, 8, 25));
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdownAsync_RejectsReversedPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetExpenseWorksheetStaffBreakdownAsync(
+            new ExpenseWorksheetStaffBreakdownRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 7, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("expense_worksheet_staff_breakdown_period_invalid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdownAsync_RejectsPeriodLongerThanMaximum()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetExpenseWorksheetStaffBreakdownAsync(
+            new ExpenseWorksheetStaffBreakdownRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2076, 1, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("expense_worksheet_staff_breakdown_period_too_large", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdownAsync_DoesNotShowCurrentSalaryBeforeAccrualDay()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Правление" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Сотрудник до даты начисления",
+            Department = department,
+            Rate = 45000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 8, 0, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.AddRange(
+            department,
+            staffMember,
+            salaryType,
+            new ApplicationSetting
+            {
+                Key = ApplicationSettingsService.SalaryAccrualDayKey,
+                IntegerValue = 20
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.GetExpenseWorksheetStaffBreakdownAsync(
+            new ExpenseWorksheetStaffBreakdownRequest(
+                staffMember.Id,
+                salaryType.Id,
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0m, result.Value!.BaseAccrualTotal);
+        Assert.Equal(0m, result.Value.AccrualTotal);
+        Assert.Empty(result.Value.Items);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetStaffBreakdownAsync_ReturnsEmptyPageForUnknownEmployee()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetExpenseWorksheetStaffBreakdownAsync(
+            new ExpenseWorksheetStaffBreakdownRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Value!.Items);
+        Assert.Equal(0, result.Value.TotalCount);
+        Assert.Equal(0m, result.Value.AccrualTotal);
+        Assert.Equal(0m, result.Value.ExpenseTotal);
+    }
+
+    [Fact]
     public async Task GetExpenseWorksheetAsync_IncludesSupplierStartingBalanceBeforeCurrentPayment()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -12435,6 +12632,26 @@ public sealed class FinanceServiceTests
                 Guid.NewGuid(),
                 new DateOnly(2026, 6, 1),
                 new DateOnly(2026, 6, 1),
+                0,
+                25,
+                cancellationSource.Token));
+    }
+
+    [Fact]
+    public async Task ExpenseWorksheetStaffBreakdownQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfExpenseWorksheetQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            query.GetStaffBreakdownAsync(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 31),
                 0,
                 25,
                 cancellationSource.Token));

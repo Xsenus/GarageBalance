@@ -451,6 +451,22 @@ export type ExpenseWorksheetSupplierBreakdownDto = {
   limit: number
 }
 
+export type ExpenseWorksheetStaffBreakdownDto = {
+  staffMemberId: string
+  expenseTypeId: string
+  monthFrom: string
+  monthTo: string
+  baseAccrualTotal: number
+  bonusTotal: number
+  penaltyTotal: number
+  accrualTotal: number
+  expenseTotal: number
+  items: ExpenseWorksheetSupplierBreakdownEntryDto[]
+  totalCount: number
+  offset: number
+  limit: number
+}
+
 export type CreateIncomeOperationRequest = {
   garageId: string
   incomeTypeId: string
@@ -722,6 +738,7 @@ export type FinanceClient = {
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
+  getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest, signal?: AbortSignal): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -914,6 +931,16 @@ export const financeApi: FinanceClient = {
   getExpenseWorksheetSupplierBreakdown(accessToken, params, signal) {
     return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet/supplier-breakdown', {
       supplierId: params.supplierId,
+      expenseTypeId: params.expenseTypeId,
+      monthFrom: toMonthStart(params.monthFrom),
+      monthTo: toMonthStart(params.monthTo),
+      offset: params.offset,
+      limit: params.limit,
+    }), { signal })
+  },
+  getExpenseWorksheetStaffBreakdown(accessToken, params, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet/staff-breakdown', {
+      staffMemberId: params.staffMemberId,
       expenseTypeId: params.expenseTypeId,
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
