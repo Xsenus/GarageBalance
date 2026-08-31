@@ -4400,6 +4400,108 @@ h1 {
   line-height: 1.35;
 }
 
+.payments-prototype-supplier-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payments-prototype-expand-button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid #b2ccff;
+  border-radius: 7px;
+  background: #eff4ff;
+  color: #175cd3;
+  cursor: pointer;
+}
+
+.payments-prototype-expand-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.payments-prototype-expand-button:hover {
+  border-color: #84adff;
+  background: #dbe9ff;
+}
+
+.payments-prototype-expand-button:focus-visible {
+  outline: 3px solid rgba(47, 107, 255, 0.25);
+  outline-offset: 2px;
+}
+
+.payments-prototype-breakdown-row > td {
+  height: auto;
+  padding: 0 !important;
+  background: #f8fafc !important;
+  text-align: left !important;
+}
+
+.payments-prototype-breakdown-row:hover > td {
+  background: #f8fafc !important;
+}
+
+.payments-prototype-breakdown {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px 52px;
+  border-left: 3px solid #84adff;
+}
+
+.payments-prototype-breakdown-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  color: #475467;
+  font-size: 12px;
+}
+
+.payments-prototype-breakdown-summary strong {
+  color: #101828;
+}
+
+.payments-prototype-breakdown-table-scroll {
+  overflow-x: auto;
+}
+
+.payments-prototype-breakdown-table {
+  width: 100%;
+  min-width: 720px;
+  border: 1px solid #d0d5dd;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.payments-prototype-breakdown-table th,
+.payments-prototype-breakdown-table td {
+  position: static;
+  height: auto;
+  padding: 8px 10px;
+  border: 1px solid #e4e7ec;
+  background: #ffffff !important;
+  text-align: left !important;
+  vertical-align: top;
+}
+
+.payments-prototype-breakdown-table th {
+  color: #475467;
+  font-size: 11px;
+}
+
+.payments-prototype-breakdown-table :is(th, td):last-child {
+  width: 120px;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.payments-prototype-breakdown-more {
+  margin-top: 10px;
+}
+
 .payments-prototype-table label {
   display: grid;
   gap: 5px;

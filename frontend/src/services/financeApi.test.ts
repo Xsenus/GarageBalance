@@ -76,6 +76,14 @@ describe('financeApi', () => {
       financeApi.getMeterReadings('token', 8, controller.signal),
       financeApi.getGarageOverdueDebt('token', 'garage-88', controller.signal),
       financeApi.getExpenseWorksheet('token', { accountingMonth: '2026-06' }, controller.signal),
+      financeApi.getExpenseWorksheetSupplierBreakdown('token', {
+        supplierId: 'supplier-88',
+        expenseTypeId: 'expense-type-88',
+        monthFrom: '2026-05',
+        monthTo: '2026-06',
+        offset: 25,
+        limit: 25,
+      }, controller.signal),
       financeApi.getGarageBalanceHistory('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
       financeApi.getFinancialReportPeriod('token', { garageId: 'garage-88' }, controller.signal),
       financeApi.getSupplierOpeningBalance('token', 'supplier-88', '2026-05', controller.signal),
@@ -83,7 +91,7 @@ describe('financeApi', () => {
       financeApi.getGarageIncomeWorksheet('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
       financeApi.calculateGarageIncomeWorksheet('token', 'garage-88', { monthFrom: '2026-05', monthTo: '2026-06' }, controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(12))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(13))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -95,6 +103,7 @@ describe('financeApi', () => {
       '/api/finance/meter-readings?limit=8',
       '/api/finance/garages/garage-88/overdue-debt',
       '/api/finance/expenses-worksheet?accountingMonth=2026-06-01',
+      '/api/finance/expenses-worksheet/supplier-breakdown?supplierId=supplier-88&expenseTypeId=expense-type-88&monthFrom=2026-05-01&monthTo=2026-06-01&offset=25&limit=25',
       '/api/finance/garages/garage-88/balance-history?monthFrom=2026-05-01&monthTo=2026-06-01',
       '/api/finance/financial-report-period?garageId=garage-88',
       '/api/finance/suppliers/supplier-88/opening-balance?monthFrom=2026-05-01',

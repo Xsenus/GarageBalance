@@ -14,6 +14,64 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlExpenseWorksheetIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task SupplierBreakdown_ReturnsAccrualsAndPaymentsOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var month = new DateOnly(2044, 2, 1);
+        Guid supplierId;
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var supplierGroup = new SupplierGroup { Name = $"Расшифровка выплат {Guid.NewGuid():N}" };
+            var supplier = new Supplier { Name = $"Поставщик {Guid.NewGuid():N}", Group = supplierGroup };
+            var expenseType = new ExpenseType { Name = $"Услуга {Guid.NewGuid():N}", Code = $"breakdown_{Guid.NewGuid():N}" };
+            supplierId = supplier.Id;
+            expenseTypeId = expenseType.Id;
+            seedContext.AddRange(
+                supplierGroup,
+                supplier,
+                expenseType,
+                new SupplierAccrual
+                {
+                    Supplier = supplier,
+                    ExpenseType = expenseType,
+                    AccountingMonth = month,
+                    Amount = 1250m,
+                    Source = "manual",
+                    DocumentNumber = "СЧЕТ-PG"
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(19),
+                    AccountingMonth = month,
+                    Amount = 400m,
+                    Supplier = supplier,
+                    ExpenseType = expenseType,
+                    ExpensePaymentSource = "bank",
+                    DocumentNumber = "ПП-PG"
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var result = await new EfExpenseWorksheetQuery(context).GetSupplierBreakdownAsync(
+            supplierId,
+            expenseTypeId,
+            month,
+            month,
+            0,
+            25,
+            CancellationToken.None);
+
+        Assert.Equal(1250m, result.AccrualTotal);
+        Assert.Equal(400m, result.ExpenseTotal);
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, item => item.EntryKind == "accrual" && item.DocumentNumber == "СЧЕТ-PG");
+        Assert.Contains(result.Items, item => item.EntryKind == "payment" && item.DocumentNumber == "ПП-PG");
+    }
+
+    [PostgreSqlFact]
     public async Task AutomaticStaffSalary_UsesConfiguredDayInPostgreSqlWorksheet()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

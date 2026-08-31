@@ -12043,6 +12043,131 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheetSupplierBreakdownAsync_ReturnsFilteredPagedAccrualsAndPayments()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var month = new DateOnly(2026, 6, 1);
+        database.Context.SupplierAccruals.AddRange(
+            new SupplierAccrual
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id,
+                AccountingMonth = month,
+                Amount = 1000m,
+                Source = "manual",
+                DocumentNumber = "СЧЕТ-1",
+                Comment = "Основное начисление",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 9, 0, 0, TimeSpan.Zero)
+            },
+            new SupplierAccrual
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id,
+                AccountingMonth = month,
+                Amount = 250m,
+                Source = "manual",
+                DocumentNumber = "СЧЕТ-2",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 6, 9, 0, 0, TimeSpan.Zero)
+            },
+            new SupplierAccrual
+            {
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id,
+                AccountingMonth = month,
+                Amount = 999m,
+                Source = "manual",
+                IsCanceled = true
+            });
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 6, 20),
+            AccountingMonth = month,
+            Amount = 400m,
+            SupplierId = fixtures.Supplier.Id,
+            ExpenseTypeId = fixtures.ExpenseType.Id,
+            ExpensePaymentSource = "bank",
+            DocumentNumber = "ПП-7",
+            Comment = "Частичная оплата",
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 20, 9, 0, 0, TimeSpan.Zero)
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var firstPage = await service.GetExpenseWorksheetSupplierBreakdownAsync(
+            new ExpenseWorksheetSupplierBreakdownRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                month,
+                month,
+                0,
+                2),
+            CancellationToken.None);
+        var secondPage = await service.GetExpenseWorksheetSupplierBreakdownAsync(
+            new ExpenseWorksheetSupplierBreakdownRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                month,
+                month,
+                2,
+                2),
+            CancellationToken.None);
+
+        Assert.True(firstPage.Succeeded);
+        Assert.Equal(1250m, firstPage.Value!.AccrualTotal);
+        Assert.Equal(400m, firstPage.Value.ExpenseTotal);
+        Assert.Equal(3, firstPage.Value.TotalCount);
+        Assert.Equal(2, firstPage.Value.Items.Count);
+        Assert.Equal("payment", firstPage.Value.Items[0].EntryKind);
+        Assert.Equal("ПП-7", firstPage.Value.Items[0].DocumentNumber);
+        Assert.True(secondPage.Succeeded);
+        Assert.Single(secondPage.Value!.Items);
+        Assert.Equal("СЧЕТ-1", secondPage.Value.Items[0].DocumentNumber);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetSupplierBreakdownAsync_RejectsReversedPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetExpenseWorksheetSupplierBreakdownAsync(
+            new ExpenseWorksheetSupplierBreakdownRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 7, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("expense_worksheet_breakdown_period_invalid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetSupplierBreakdownAsync_ReturnsEmptyPageForUnknownPair()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetExpenseWorksheetSupplierBreakdownAsync(
+            new ExpenseWorksheetSupplierBreakdownRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Value!.Items);
+        Assert.Equal(0, result.Value.TotalCount);
+        Assert.Equal(0m, result.Value.AccrualTotal);
+        Assert.Equal(0m, result.Value.ExpenseTotal);
+    }
+
+    [Fact]
     public async Task GetExpenseWorksheetAsync_IncludesSupplierStartingBalanceBeforeCurrentPayment()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -12196,6 +12321,25 @@ public sealed class FinanceServiceTests
                 new DateOnly(2026, 6, 1),
                 ["no_receipt"],
                 ["Выплата без чека"],
+                cancellationSource.Token));
+    }
+
+    [Fact]
+    public async Task ExpenseWorksheetSupplierBreakdownQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfExpenseWorksheetQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            query.GetSupplierBreakdownAsync(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 1),
+                0,
+                25,
                 cancellationSource.Token));
     }
 

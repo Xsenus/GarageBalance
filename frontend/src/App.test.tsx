@@ -12363,6 +12363,104 @@ describe('App', () => {
     expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('0')
   })
 
+  it('expands a supplier total into paged accrual and payment details', async () => {
+    const user = userEvent.setup()
+    const getExpenseWorksheetSupplierBreakdown = vi.fn(async (_token: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }) => ({
+      supplierId: params.supplierId,
+      expenseTypeId: params.expenseTypeId,
+      monthFrom: '2026-06-01',
+      monthTo: '2026-06-01',
+      accrualTotal: 1250,
+      expenseTotal: 400,
+      items: params.offset === 2
+        ? [{ id: 'accrual-1', entryKind: 'accrual', accountingMonth: '2026-06-01', operationDate: null, amount: 1000, documentNumber: 'СЧЕТ-1', comment: 'Основное начисление', source: 'manual' }]
+        : [
+            { id: 'payment-1', entryKind: 'payment', accountingMonth: '2026-06-01', operationDate: '2026-06-20', amount: 400, documentNumber: 'ПП-7', comment: 'Частичная оплата', source: 'bank' },
+            { id: 'accrual-2', entryKind: 'accrual', accountingMonth: '2026-06-01', operationDate: null, amount: 250, documentNumber: 'СЧЕТ-2', comment: null, source: 'manual' },
+          ],
+      totalCount: 3,
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 25,
+    }))
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accountingMonth: '2026-06-01',
+      accrualTotal: 1250,
+      expenseTotal: 400,
+      rows: [{
+        rowKind: 'supplier',
+        supplierId: 'supplier-312',
+        staffMemberId: null,
+        counterpartyName: '312',
+        expenseTypeId: 'expense-water',
+        expenseTypeName: 'Вода',
+        accrualAmount: 1250,
+        expenseAmount: 400,
+        balance: 850,
+        collectedAmount: 0,
+        difference: 0,
+      }],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetSupplierBreakdown })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    const expandButton = await within(prototype).findByRole('button', { name: 'Показать состав суммы: 312, Вода' })
+    await user.click(expandButton)
+    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: 312, Вода' })
+    expect(within(detailsTable).getByText('ПП-7')).toBeInTheDocument()
+    expect(within(detailsTable).getByText('СЧЕТ-2')).toBeInTheDocument()
+    expect(within(prototype).getByText('Начислено:').closest('span')).toHaveTextContent('1 250.00')
+    expect(within(prototype).getByText('Оплачено:').closest('span')).toHaveTextContent('400.00')
+    expect(getExpenseWorksheetSupplierBreakdown).toHaveBeenNthCalledWith(1, 'token', {
+      supplierId: 'supplier-312',
+      expenseTypeId: 'expense-water',
+      monthFrom: '2026-06',
+      monthTo: '2026-06',
+      offset: 0,
+      limit: 25,
+    }, expect.any(AbortSignal))
+
+    await user.click(within(prototype).getByRole('button', { name: 'Показать ещё' }))
+    expect(await within(detailsTable).findByText('СЧЕТ-1')).toBeInTheDocument()
+    expect(getExpenseWorksheetSupplierBreakdown).toHaveBeenNthCalledWith(2, 'token', expect.objectContaining({ offset: 2 }), expect.any(AbortSignal))
+
+    await user.click(within(prototype).getByRole('button', { name: 'Скрыть состав суммы: 312, Вода' }))
+    expect(within(prototype).queryByRole('table', { name: 'Операции: 312, Вода' })).not.toBeInTheDocument()
+  })
+
+  it('shows a foreground error and retries supplier breakdown loading', async () => {
+    const user = userEvent.setup()
+    const getExpenseWorksheetSupplierBreakdown = vi.fn()
+      .mockRejectedValueOnce(new Error('Расшифровка временно недоступна.'))
+      .mockResolvedValue({
+        supplierId: 'supplier-312', expenseTypeId: 'expense-water', monthFrom: '2026-06-01', monthTo: '2026-06-01',
+        accrualTotal: 0, expenseTotal: 0, items: [], totalCount: 0, offset: 0, limit: 25,
+      })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({
+      getExpenseWorksheet: async () => createExpenseWorksheet({ rows: [{
+        rowKind: 'supplier', supplierId: 'supplier-312', staffMemberId: null, counterpartyName: '312', expenseTypeId: 'expense-water', expenseTypeName: 'Вода',
+        accrualAmount: 0, expenseAmount: 0, balance: 0, collectedAmount: null, difference: null,
+      }] }),
+      getExpenseWorksheetSupplierBreakdown,
+    })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: 312, Вода' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Расшифровка временно недоступна.')
+    await user.click(screen.getByRole('button', { name: 'Повторить загрузку' }))
+    expect(await within(prototype).findByText('За выбранный период отдельных начислений и выплат нет.')).toBeInTheDocument()
+    expect(getExpenseWorksheetSupplierBreakdown).toHaveBeenCalledTimes(2)
+  })
+
   it('shows a clear empty state when the selected garage has no debt to pay', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-without-debt', number: '31', ownerName: 'Орлова Мария', startingBalance: 0 })
@@ -25183,6 +25281,18 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getExpenseWorksheet: async () => {
       throw new Error('Серверная форма выплат недоступна')
     },
+    getExpenseWorksheetSupplierBreakdown: async (_token, params) => ({
+      supplierId: params.supplierId,
+      expenseTypeId: params.expenseTypeId,
+      monthFrom: `${params.monthFrom.slice(0, 7)}-01`,
+      monthTo: `${params.monthTo.slice(0, 7)}-01`,
+      accrualTotal: 0,
+      expenseTotal: 0,
+      items: [],
+      totalCount: 0,
+      offset: params.offset ?? 0,
+      limit: params.limit ?? 25,
+    }),
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
     getIncomePaymentWarning: async () => ({
       isElectricityPayment: false,

@@ -582,6 +582,36 @@ public sealed record ExpenseWorksheetRequest(
     DateOnly? MonthFrom = null,
     DateOnly? MonthTo = null);
 
+public sealed record ExpenseWorksheetSupplierBreakdownRequest(
+    Guid SupplierId,
+    Guid ExpenseTypeId,
+    DateOnly? MonthFrom,
+    DateOnly? MonthTo,
+    int? Offset = null,
+    int? Limit = null);
+
+public sealed record ExpenseWorksheetSupplierBreakdownEntryDto(
+    Guid Id,
+    string EntryKind,
+    DateOnly AccountingMonth,
+    DateOnly? OperationDate,
+    decimal Amount,
+    string? DocumentNumber,
+    string? Comment,
+    string? Source);
+
+public sealed record ExpenseWorksheetSupplierBreakdownDto(
+    Guid SupplierId,
+    Guid ExpenseTypeId,
+    DateOnly MonthFrom,
+    DateOnly MonthTo,
+    decimal AccrualTotal,
+    decimal ExpenseTotal,
+    IReadOnlyList<ExpenseWorksheetSupplierBreakdownEntryDto> Items,
+    int TotalCount,
+    int Offset,
+    int Limit);
+
 public sealed record SupplierOpeningBalanceRequest(
     DateOnly? MonthFrom);
 

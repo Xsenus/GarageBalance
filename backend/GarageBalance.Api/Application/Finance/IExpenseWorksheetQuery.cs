@@ -8,7 +8,33 @@ public interface IExpenseWorksheetQuery
         string[] cashExpenseTypeCodes,
         string[] cashExpenseTypeNames,
         CancellationToken cancellationToken);
+
+    Task<ExpenseWorksheetSupplierBreakdownData> GetSupplierBreakdownAsync(
+        Guid supplierId,
+        Guid expenseTypeId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken);
 }
+
+public sealed record ExpenseWorksheetSupplierBreakdownData(
+    IReadOnlyList<ExpenseWorksheetSupplierBreakdownEntryData> Items,
+    int TotalCount,
+    decimal AccrualTotal,
+    decimal ExpenseTotal);
+
+public sealed record ExpenseWorksheetSupplierBreakdownEntryData(
+    Guid Id,
+    string EntryKind,
+    DateOnly AccountingMonth,
+    DateOnly? OperationDate,
+    decimal Amount,
+    string? DocumentNumber,
+    string? Comment,
+    string? Source,
+    DateTimeOffset CreatedAtUtc);
 
 public sealed record ExpenseWorksheetData(
     IReadOnlyList<ExpenseWorksheetSupplierData> SupplierAccruals,

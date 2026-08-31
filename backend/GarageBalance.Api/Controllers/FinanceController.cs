@@ -266,6 +266,30 @@ public sealed class FinanceController(
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("expenses-worksheet/supplier-breakdown")]
+    [ProducesResponseType<ExpenseWorksheetSupplierBreakdownDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ExpenseWorksheetSupplierBreakdownDto>> GetExpenseWorksheetSupplierBreakdown(
+        [FromQuery] Guid supplierId,
+        [FromQuery] Guid expenseTypeId,
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetExpenseWorksheetSupplierBreakdownAsync(
+            new ExpenseWorksheetSupplierBreakdownRequest(
+                supplierId,
+                expenseTypeId,
+                monthFrom,
+                monthTo,
+                offset,
+                limit),
+            cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("garages/{garageId:guid}/income-worksheet/calculate")]
     [ProducesResponseType<GarageIncomeWorksheetDto>(StatusCodes.Status200OK)]

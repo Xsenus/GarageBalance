@@ -29,6 +29,24 @@ public sealed class EfExpenseWorksheetQuery(
     private const int SalaryConfigurationCategory = 18;
     private const int SupplierStartingBalanceCategory = 19;
 
+    public Task<ExpenseWorksheetSupplierBreakdownData> GetSupplierBreakdownAsync(
+        Guid supplierId,
+        Guid expenseTypeId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken) =>
+        EfExpenseWorksheetSupplierBreakdownQuery.GetAsync(
+            dbContext,
+            supplierId,
+            expenseTypeId,
+            monthFrom,
+            monthTo,
+            offset,
+            limit,
+            cancellationToken);
+
     public Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
         string[] cashExpenseTypeCodes,

@@ -427,6 +427,30 @@ export type ExpenseWorksheetDto = {
   rows: ExpenseWorksheetRowDto[]
 }
 
+export type ExpenseWorksheetSupplierBreakdownEntryDto = {
+  id: string
+  entryKind: 'accrual' | 'payment' | string
+  accountingMonth: string
+  operationDate: string | null
+  amount: number
+  documentNumber: string | null
+  comment: string | null
+  source: string | null
+}
+
+export type ExpenseWorksheetSupplierBreakdownDto = {
+  supplierId: string
+  expenseTypeId: string
+  monthFrom: string
+  monthTo: string
+  accrualTotal: number
+  expenseTotal: number
+  items: ExpenseWorksheetSupplierBreakdownEntryDto[]
+  totalCount: number
+  offset: number
+  limit: number
+}
+
 export type CreateIncomeOperationRequest = {
   garageId: string
   incomeTypeId: string
@@ -697,6 +721,7 @@ export type FinanceClient = {
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
+  getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest, signal?: AbortSignal): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -884,6 +909,16 @@ export const financeApi: FinanceClient = {
       dateFrom: toMonthStart(params.monthFrom),
       dateTo: toMonthEnd(params.monthTo),
       search: params.search,
+    }), { signal })
+  },
+  getExpenseWorksheetSupplierBreakdown(accessToken, params, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet/supplier-breakdown', {
+      supplierId: params.supplierId,
+      expenseTypeId: params.expenseTypeId,
+      monthFrom: toMonthStart(params.monthFrom),
+      monthTo: toMonthStart(params.monthTo),
+      offset: params.offset,
+      limit: params.limit,
     }), { signal })
   },
   getSupplierOpeningBalance(accessToken, supplierId, monthFrom, signal) {

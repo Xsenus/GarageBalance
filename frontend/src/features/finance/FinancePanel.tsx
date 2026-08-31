@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetSupplierBreakdownDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
@@ -104,6 +104,12 @@ type PaymentPrototypeRow = {
   collected: number | string
   difference: number | string
   action: boolean
+}
+
+type ExpenseSupplierBreakdownState = {
+  loading: boolean
+  value: ExpenseWorksheetSupplierBreakdownDto | null
+  error: string | null
 }
 
 type PaymentsPrototypeGarage = {
@@ -2880,6 +2886,9 @@ function PaymentsPrototypePanel({
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [expenseCashAmount, setExpenseCashAmount] = useState(0)
   const [expenseWorksheetRefreshRevision, setExpenseWorksheetRefreshRevision] = useState(0)
+  const [expandedExpenseSupplierRows, setExpandedExpenseSupplierRows] = useState<Record<string, boolean>>({})
+  const [expenseSupplierBreakdowns, setExpenseSupplierBreakdowns] = useState<Record<string, ExpenseSupplierBreakdownState>>({})
+  const expenseSupplierBreakdownControllersRef = useRef(new Map<string, AbortController>())
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
@@ -3038,6 +3047,11 @@ function PaymentsPrototypePanel({
       return
     }
 
+    expenseSupplierBreakdownControllersRef.current.forEach((controller) => controller.abort())
+    expenseSupplierBreakdownControllersRef.current.clear()
+    setExpandedExpenseSupplierRows({})
+    setExpenseSupplierBreakdowns({})
+
     if (expenseWorksheetMonthFrom > expenseWorksheetMonthTo) {
       setExpenseRows([])
       setExpenseWorksheetLoading(false)
@@ -3083,6 +3097,11 @@ function PaymentsPrototypePanel({
       controller.abort()
     }
   }, [activeTab, auth.accessToken, expenseWorksheetMonthFrom, expenseWorksheetMonthTo, expenseWorksheetRefreshRevision, financeClient, refreshRevision])
+
+  useEffect(() => () => {
+    expenseSupplierBreakdownControllersRef.current.forEach((controller) => controller.abort())
+    expenseSupplierBreakdownControllersRef.current.clear()
+  }, [])
 
   function activateExpenseTab() {
     if (activeTab !== 'expense') {
@@ -4324,6 +4343,92 @@ function PaymentsPrototypePanel({
       }
     }),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
+
+  function getExpenseSupplierBreakdownKey(row: PaymentPrototypeRow) {
+    return row.supplierId && row.expenseTypeId ? `${row.supplierId}:${row.expenseTypeId}` : null
+  }
+
+  async function loadExpenseSupplierBreakdown(row: PaymentPrototypeRow, append = false) {
+    const key = getExpenseSupplierBreakdownKey(row)
+    if (!key || !row.supplierId || !row.expenseTypeId) {
+      return
+    }
+
+    const currentValue = expenseSupplierBreakdowns[key]?.value ?? null
+    expenseSupplierBreakdownControllersRef.current.get(key)?.abort()
+    const controller = new AbortController()
+    expenseSupplierBreakdownControllersRef.current.set(key, controller)
+    setExpenseSupplierBreakdowns((current) => ({
+      ...current,
+      [key]: {
+        loading: true,
+        value: append ? current[key]?.value ?? null : null,
+        error: null,
+      },
+    }))
+
+    try {
+      const breakdown = await financeClient.getExpenseWorksheetSupplierBreakdown(auth.accessToken, {
+        supplierId: row.supplierId,
+        expenseTypeId: row.expenseTypeId,
+        monthFrom: expenseWorksheetMonthFrom,
+        monthTo: expenseWorksheetMonthTo,
+        offset: append ? currentValue?.items.length ?? 0 : 0,
+        limit: 25,
+      }, controller.signal)
+      if (controller.signal.aborted || expenseSupplierBreakdownControllersRef.current.get(key) !== controller) {
+        return
+      }
+
+      setExpenseSupplierBreakdowns((current) => ({
+        ...current,
+        [key]: {
+          loading: false,
+          value: append && current[key]?.value
+            ? { ...breakdown, items: [...current[key].value.items, ...breakdown.items], offset: 0 }
+            : breakdown,
+          error: null,
+        },
+      }))
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return
+      }
+      setExpenseSupplierBreakdowns((current) => ({
+        ...current,
+        [key]: {
+          loading: false,
+          value: append ? current[key]?.value ?? null : null,
+          error: error instanceof Error ? error.message : 'Не удалось загрузить состав суммы.',
+        },
+      }))
+    } finally {
+      if (expenseSupplierBreakdownControllersRef.current.get(key) === controller) {
+        expenseSupplierBreakdownControllersRef.current.delete(key)
+      }
+    }
+  }
+
+  function toggleExpenseSupplierBreakdown(row: PaymentPrototypeRow) {
+    const key = getExpenseSupplierBreakdownKey(row)
+    if (!key) {
+      return
+    }
+
+    const opening = !expandedExpenseSupplierRows[key]
+    setExpandedExpenseSupplierRows((current) => ({ ...current, [key]: opening }))
+    if (opening && !expenseSupplierBreakdowns[key]?.value && !expenseSupplierBreakdowns[key]?.loading) {
+      void loadExpenseSupplierBreakdown(row)
+    }
+  }
+
+  function getExpenseBreakdownSourceLabel(source: string | null) {
+    if (source === 'manual') return 'Ручное начисление'
+    if (source === 'bank') return 'Банк'
+    if (source === 'cash') return 'Касса'
+    return source?.trim() || '—'
+  }
+
   const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
   const expenseOpeningDebtTotal = expenseRows.reduce((sum, row) => sum + row.openingDebt, 0)
   const expenseOpeningAdvanceTotal = expenseRows.reduce((sum, row) => sum + row.openingAdvance, 0)
@@ -4913,9 +5018,30 @@ function PaymentsPrototypePanel({
                     const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
                     const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
                     const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
+                    const breakdownKey = getExpenseSupplierBreakdownKey(row)
+                    const breakdownExpanded = breakdownKey ? Boolean(expandedExpenseSupplierRows[breakdownKey]) : false
+                    const breakdownState = breakdownKey ? expenseSupplierBreakdowns[breakdownKey] : undefined
+                    const breakdownId = breakdownKey ? `expense-supplier-breakdown-${breakdownKey.replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined
                     return (
-                      <tr key={`${row.item}-${index}`}>
-                        <td>{supplier}</td>
+                      <Fragment key={`${row.item}-${row.supplierId ?? row.staffMemberId ?? index}`}>
+                      <tr>
+                        <td>
+                          {breakdownKey ? (
+                            <div className="payments-prototype-supplier-cell">
+                              <button
+                                className="icon-button payments-prototype-expand-button"
+                                type="button"
+                                aria-expanded={breakdownExpanded}
+                                aria-controls={breakdownId}
+                                aria-label={`${breakdownExpanded ? 'Скрыть' : 'Показать'} состав суммы: ${supplier}, ${row.item}`}
+                                onClick={() => toggleExpenseSupplierBreakdown(row)}
+                              >
+                                {breakdownExpanded ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+                              </button>
+                              <span>{supplier}</span>
+                            </div>
+                          ) : supplier}
+                        </td>
                         <td>
                           <span>{row.item}</span>
                           {row.rowKind === 'supplier' && row.expenseFundName ? (
@@ -4955,6 +5081,73 @@ function PaymentsPrototypePanel({
                           </>
                         ) : null}
                       </tr>
+                      {breakdownExpanded && breakdownId ? (
+                        <tr className="payments-prototype-breakdown-row">
+                          <td colSpan={isEditableExpenseWorksheetPeriod ? 8 : 6}>
+                            <section id={breakdownId} className="payments-prototype-breakdown" aria-label={`Состав суммы: ${supplier}, ${row.item}`}>
+                              {breakdownState?.value ? (
+                                <div className="payments-prototype-breakdown-summary">
+                                  <span>Начислено: <strong>{formatPaymentMoney(breakdownState.value.accrualTotal)}</strong></span>
+                                  <span>Оплачено: <strong>{formatPaymentMoney(breakdownState.value.expenseTotal)}</strong></span>
+                                  <span>Операций: <strong>{breakdownState.value.totalCount}</strong></span>
+                                </div>
+                              ) : null}
+                              {breakdownState?.error ? (
+                                <AsyncErrorState
+                                  message={breakdownState.error}
+                                  onRetry={() => void loadExpenseSupplierBreakdown(row, Boolean(breakdownState.value))}
+                                  retrying={breakdownState.loading}
+                                />
+                              ) : null}
+                              {breakdownState?.loading && !breakdownState.value ? (
+                                <TableLoadingState className="table-loading-state--compact" label={`Загружаем состав суммы: ${supplier}, ${row.item}`} rows={2} columns={5} />
+                              ) : null}
+                              {breakdownState?.value && breakdownState.value.items.length === 0 ? (
+                                <StatusMessage>За выбранный период отдельных начислений и выплат нет.</StatusMessage>
+                              ) : null}
+                              {breakdownState?.value && breakdownState.value.items.length > 0 ? (
+                                <div className="payments-prototype-breakdown-table-scroll">
+                                  <table className="payments-prototype-breakdown-table" aria-label={`Операции: ${supplier}, ${row.item}`}>
+                                    <thead>
+                                      <tr>
+                                        <th scope="col">Операция</th>
+                                        <th scope="col">Месяц</th>
+                                        <th scope="col">Дата</th>
+                                        <th scope="col">Основание</th>
+                                        <th scope="col">Комментарий</th>
+                                        <th scope="col">Сумма</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {breakdownState.value.items.map((item) => (
+                                        <tr key={`${item.entryKind}-${item.id}`}>
+                                          <td>{item.entryKind === 'payment' ? 'Выплата' : 'Начисление'}</td>
+                                          <td>{formatMonth(item.accountingMonth)}</td>
+                                          <td>{item.operationDate ? formatDateOnly(item.operationDate) : '—'}</td>
+                                          <td>{item.documentNumber?.trim() || getExpenseBreakdownSourceLabel(item.source)}</td>
+                                          <td>{item.comment?.trim() || '—'}</td>
+                                          <td className={item.entryKind === 'payment' ? 'money-income' : undefined}>{formatPaymentMoney(item.amount)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                  {breakdownState.value.items.length < breakdownState.value.totalCount ? (
+                                    <button
+                                      className="ghost-button payments-prototype-breakdown-more"
+                                      type="button"
+                                      disabled={breakdownState.loading}
+                                      onClick={() => void loadExpenseSupplierBreakdown(row, true)}
+                                    >
+                                      {breakdownState.loading ? 'Загружаем…' : 'Показать ещё'}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </section>
+                          </td>
+                        </tr>
+                      ) : null}
+                      </Fragment>
                     )
                   })}
                   {expenseRows.length === 0 ? (

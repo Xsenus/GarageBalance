@@ -669,6 +669,49 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheetSupplierBreakdown_PassesFiltersAndPagingToService()
+    {
+        var supplierId = Guid.NewGuid();
+        var expenseTypeId = Guid.NewGuid();
+        var monthFrom = new DateOnly(2026, 6, 1);
+        var monthTo = new DateOnly(2026, 8, 1);
+        var breakdown = new ExpenseWorksheetSupplierBreakdownDto(
+            supplierId,
+            expenseTypeId,
+            monthFrom,
+            monthTo,
+            1250m,
+            400m,
+            [],
+            3,
+            25,
+            25);
+        var service = new FakeFinanceService
+        {
+            ExpenseWorksheetSupplierBreakdownResult = FinanceResult<ExpenseWorksheetSupplierBreakdownDto>.Success(breakdown)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetExpenseWorksheetSupplierBreakdown(
+            supplierId,
+            expenseTypeId,
+            monthFrom,
+            monthTo,
+            25,
+            25,
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(breakdown, ok.Value);
+        Assert.Equal(supplierId, service.LastExpenseWorksheetSupplierBreakdownRequest?.SupplierId);
+        Assert.Equal(expenseTypeId, service.LastExpenseWorksheetSupplierBreakdownRequest?.ExpenseTypeId);
+        Assert.Equal(monthFrom, service.LastExpenseWorksheetSupplierBreakdownRequest?.MonthFrom);
+        Assert.Equal(monthTo, service.LastExpenseWorksheetSupplierBreakdownRequest?.MonthTo);
+        Assert.Equal(25, service.LastExpenseWorksheetSupplierBreakdownRequest?.Offset);
+        Assert.Equal(25, service.LastExpenseWorksheetSupplierBreakdownRequest?.Limit);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -2269,6 +2312,7 @@ public sealed class FinanceControllerTests
         public Guid? LastGarageIncomeWorksheetActorUserId { get; private set; }
         public Guid? LastGarageFullPaymentQuoteGarageId { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
+        public ExpenseWorksheetSupplierBreakdownRequest? LastExpenseWorksheetSupplierBreakdownRequest { get; private set; }
         public SupplierOpeningBalanceRequest? LastSupplierOpeningBalanceRequest { get; private set; }
         public FinancialReportPeriodRequest? LastFinancialReportPeriodRequest { get; private set; }
         public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
@@ -2285,6 +2329,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<GarageFullPaymentQuoteDto> GarageFullPaymentQuoteResult { get; init; } = FinanceResult<GarageFullPaymentQuoteDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<ExpenseWorksheetSupplierBreakdownDto> ExpenseWorksheetSupplierBreakdownResult { get; init; } = FinanceResult<ExpenseWorksheetSupplierBreakdownDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierOpeningBalanceDto> SupplierOpeningBalanceResult { get; init; } = FinanceResult<SupplierOpeningBalanceDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialReportPeriodDto> FinancialReportPeriodResult { get; init; } = FinanceResult<FinancialReportPeriodDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -2435,6 +2480,14 @@ public sealed class FinanceControllerTests
         {
             LastExpenseWorksheetRequest = request;
             return Task.FromResult(ExpenseWorksheetResult);
+        }
+
+        public Task<FinanceResult<ExpenseWorksheetSupplierBreakdownDto>> GetExpenseWorksheetSupplierBreakdownAsync(
+            ExpenseWorksheetSupplierBreakdownRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastExpenseWorksheetSupplierBreakdownRequest = request;
+            return Task.FromResult(ExpenseWorksheetSupplierBreakdownResult);
         }
 
         public Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken)
