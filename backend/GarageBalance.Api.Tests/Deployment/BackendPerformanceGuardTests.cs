@@ -581,6 +581,8 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("ProjectListRows(ApplyFilters", source, StringComparison.Ordinal);
+        Assert.Contains("return rows.Select(ToContact).ToList();", source, StringComparison.Ordinal);
         var postgresPage = ExtractMethodSource(
             source,
             "private async Task<SupplierContactPageData> GetPostgresPageAsync");
