@@ -11179,6 +11179,113 @@ describe('App', () => {
     expect(createFullGaragePayment.mock.calls[0][1].lines.reduce((sum, line) => sum + line.amount, 0)).toBeCloseTo(4300.31, 2)
   })
 
+  it('subtracts row advances from a selected month and shows the exact full payment distribution', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-full-payment-net-debt', number: '777', ownerName: 'Тестовый владелец' })
+    const trashIncome = createAccountingType({ id: 'income-trash-net-debt', name: 'Мусор', code: 'trash' })
+    const targetIncome = createAccountingType({ id: 'income-target-net-debt', name: 'Целевой взнос', code: 'target_fee' })
+    const membershipIncome = createAccountingType({ id: 'income-membership-net-debt', name: 'Членский взнос', code: 'membership_fee' })
+    const createFullGaragePayment = vi.fn(async (_token: string, request: CreateFullGaragePaymentRequest) => ({
+      receiptBatchId: request.receiptBatchId!,
+      totalAmount: request.lines.reduce((sum, line) => sum + line.amount, 0),
+      operations: request.lines.map((line) => createFinancialOperation({
+        id: 'net-full-payment',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: line.incomeTypeId,
+        incomeTypeName: 'Мусор',
+        operationDate: request.operationDate,
+        accountingMonth: line.accountingMonth,
+        amount: line.amount,
+        receiptBatchId: request.receiptBatchId,
+      })),
+    }))
+    const worksheet = createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      monthFrom: '2026-08-01',
+      monthTo: '2026-08-01',
+      accrualTotal: 610,
+      incomeTotal: 410,
+      debtTotal: 610,
+      advanceTotal: 410,
+      closingDebt: 200,
+      rows: [
+        {
+          accountingMonth: '2026-08-01', incomeTypeId: targetIncome.id, incomeTypeName: targetIncome.name, meterKind: null, meterValue: null, meterConsumption: null,
+          accrualAmount: 100, payableAmount: 100, incomeAmount: 0, advanceAmount: 100, debt: 100,
+        },
+        {
+          accountingMonth: '2026-08-01', incomeTypeId: membershipIncome.id, incomeTypeName: membershipIncome.name, meterKind: null, meterValue: null, meterConsumption: null,
+          accrualAmount: 250, payableAmount: 250, incomeAmount: 0, advanceAmount: 250, debt: 250,
+        },
+        {
+          accountingMonth: '2026-08-01', incomeTypeId: trashIncome.id, incomeTypeName: trashIncome.name, meterKind: null, meterValue: null, meterConsumption: null,
+          accrualAmount: 260, payableAmount: 260, incomeAmount: 0, advanceAmount: 60, debt: 260,
+        },
+      ],
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [garage],
+        getIncomeTypes: async () => [trashIncome, targetIncome, membershipIncome],
+      })}
+      financeClient={createFinanceClient({
+        getGarageIncomeWorksheet: async () => worksheet,
+        getGarageFullPaymentQuote: async () => ({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          totalAmount: 200,
+          lines: [{
+            incomeTypeId: trashIncome.id,
+            incomeTypeName: trashIncome.name,
+            accountingMonth: '2026-08-01',
+            outstandingAmount: 200,
+            isOpeningDebt: false,
+          }],
+        }),
+        createFullGaragePayment,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*777\s*Тестовый владелец/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    const period = within(dialog).getByRole('combobox', { name: 'Период полной оплаты' })
+    await user.click(period)
+    await user.click(within(dialog).getByRole('option', { name: 'авг.26' }))
+
+    expect(within(dialog).getByLabelText('Сумма полной оплаты')).toHaveValue('200.00')
+    const distribution = within(dialog).getByRole('list', { name: 'Распределение полной оплаты' })
+    expect(distribution).toHaveTextContent('Мусор (авг.26)')
+    expect(distribution).toHaveTextContent('200.00 руб.')
+    expect(distribution).not.toHaveTextContent('Целевой взнос')
+    expect(distribution).not.toHaveTextContent('Членский взнос')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledTimes(1))
+    expect(createFullGaragePayment.mock.calls[0][1].lines).toEqual([
+      expect.objectContaining({
+        incomeTypeId: trashIncome.id,
+        accountingMonth: '2026-08-01',
+        amount: 200,
+      }),
+    ])
+  })
+
   it('uses the server quote when full debt is larger than the visible worksheet period', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-full-payment-authoritative', number: '102-А', ownerName: 'Тестовый владелец', balance: 13105.36 })

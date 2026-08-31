@@ -17,31 +17,63 @@ export function roundPaymentMoney(value: number) {
   return fromMoneyMinorUnits(toMoneyMinorUnits(value))
 }
 
-export function getFullPaymentRows(rows: GarageIncomePrototypeRow[], period: string) {
-  const payableRows = rows
-    .filter((row) => toMoneyMinorUnits(row.debt) > 0 && (period === 'full' || row.month === period))
+export function getFullPaymentOutstandingAmount(row: GarageIncomePrototypeRow) {
+  return fromMoneyMinorUnits(Math.max(
+    toMoneyMinorUnits(row.debt) - toMoneyMinorUnits(row.advance),
+    0,
+  ))
+}
 
-  if (period !== 'full') {
-    return payableRows
+export function getFullPaymentRows(rows: GarageIncomePrototypeRow[], period: string) {
+  const annualRows = new Map<string, { first: GarageIncomePrototypeRow; latest: GarageIncomePrototypeRow }>()
+  for (const row of rows) {
+    if (!row.annualAccrualId) {
+      continue
+    }
+
+    const current = annualRows.get(row.annualAccrualId)
+    if (!current) {
+      annualRows.set(row.annualAccrualId, { first: row, latest: row })
+      continue
+    }
+
+    annualRows.set(row.annualAccrualId, {
+      first: row.month < current.first.month ? row : current.first,
+      latest: row.month > current.latest.month ? row : current.latest,
+    })
   }
 
-  const seenAnnualAccruals = new Set<string>()
-  return payableRows
+  const candidates = period === 'full'
+    ? [
+        ...rows.filter((row) => !row.annualAccrualId),
+        ...Array.from(annualRows.values()).map(({ first, latest }) => ({
+          ...first,
+          debt: latest.debt,
+          advance: latest.advance,
+        })),
+      ]
+    : rows
+        .filter((row) => row.month === period)
+        .map((row) => {
+          if (!row.annualAccrualId) {
+            return row
+          }
+
+          const latest = annualRows.get(row.annualAccrualId)?.latest ?? row
+          return {
+            ...row,
+            debt: latest.debt,
+            advance: latest.advance,
+          }
+        })
+
+  return candidates
+    .filter((row) => getFullPaymentOutstandingAmount(row) > 0)
     .sort((left, right) => left.month.localeCompare(right.month))
-    .filter((row) => {
-      if (!row.annualAccrualId) {
-        return true
-      }
-      if (seenAnnualAccruals.has(row.annualAccrualId)) {
-        return false
-      }
-      seenAnnualAccruals.add(row.annualAccrualId)
-      return true
-    })
 }
 
 export function sumPaymentDebt(rows: GarageIncomePrototypeRow[], openingDebt = 0) {
-  const rowDebt = rows.reduce((sum, row) => sum + toMoneyMinorUnits(row.debt), 0)
+  const rowDebt = rows.reduce((sum, row) => sum + toMoneyMinorUnits(getFullPaymentOutstandingAmount(row)), 0)
   return fromMoneyMinorUnits(rowDebt + Math.max(toMoneyMinorUnits(openingDebt), 0))
 }
 
@@ -54,7 +86,7 @@ export function createFullPaymentAllocations(rows: GarageIncomePrototypeRow[], a
       break
     }
 
-    const rowDebtMinorUnits = Math.max(toMoneyMinorUnits(row.debt), 0)
+    const rowDebtMinorUnits = toMoneyMinorUnits(getFullPaymentOutstandingAmount(row))
     const allocatedMinorUnits = Math.min(rowDebtMinorUnits, remainingMinorUnits)
     if (allocatedMinorUnits <= 0) {
       continue

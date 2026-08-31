@@ -53,6 +53,34 @@ describe('full payment plan', () => {
     expect(sumPaymentDebt(getFullPaymentRows(rows, 'full'))).toBe(700)
   })
 
+  it('uses the latest unpaid remainder for an annual obligation shown in an earlier month', () => {
+    const rows = [
+      createRow({ id: 'annual-july', month: '2026-07', debt: 500, annualAccrualId: 'annual' }),
+      createRow({ id: 'annual-august', debt: 250, annualAccrualId: 'annual' }),
+    ]
+
+    const julyRows = getFullPaymentRows(rows, '2026-07')
+
+    expect(julyRows).toHaveLength(1)
+    expect(julyRows[0]).toMatchObject({ id: 'annual-july', month: '2026-07', debt: 250 })
+    expect(sumPaymentDebt(julyRows)).toBe(250)
+    expect(sumPaymentDebt(getFullPaymentRows(rows, 'full'))).toBe(250)
+  })
+
+  it('does not offer a repeated payment when an advance already covers the displayed debt', () => {
+    const rows = [
+      createRow({ id: 'target-fee', service: 'Целевой взнос', debt: 100, advance: 100 }),
+      createRow({ id: 'membership-fee', service: 'Членский взнос', debt: 250, advance: 250 }),
+      createRow({ id: 'trash', service: 'Мусор', debt: 260, advance: 60 }),
+    ]
+
+    const payableRows = getFullPaymentRows(rows, '2026-08')
+
+    expect(payableRows.map((row) => row.id)).toEqual(['trash'])
+    expect(sumPaymentDebt(payableRows)).toBe(200)
+    expect(createFullPaymentAllocations(payableRows, 200)).toEqual([{ row: rows[2], amount: 200 }])
+  })
+
   it('allocates fractional amounts without leaving a floating-point kopeck remainder', () => {
     const rows = [
       createRow({ id: 'first', debt: 0.1 }),

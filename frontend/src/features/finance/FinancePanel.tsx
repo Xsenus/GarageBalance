@@ -175,6 +175,14 @@ type FullPaymentPrototypePeriodOption = {
   value: string
   label: string
   debt: number
+  lines: FullPaymentPrototypePlanLine[]
+}
+
+type FullPaymentPrototypePlanLine = {
+  key: string
+  label: string
+  periodLabel: string
+  amount: number
 }
 
 type FullPaymentPrototypeSubmitRequest = {
@@ -4276,9 +4284,45 @@ function PaymentsPrototypePanel({
   const authoritativeFullPaymentDebt = selectedGarageFullPaymentQuote
     ? roundPaymentMoney(selectedGarageFullPaymentQuote.totalAmount)
     : roundPaymentMoney(fullPaymentRowsDebt + getOpeningDebtForFullPayment('full'))
+  const fallbackFullPaymentLines: FullPaymentPrototypePlanLine[] = [
+    ...(getOpeningDebtForFullPayment('full') > 0 ? [{
+      key: 'opening-debt',
+      label: 'Входящий долг',
+      periodLabel: formatPaymentPrototypeMonthLabel(incomeWorksheetMonthFrom),
+      amount: getOpeningDebtForFullPayment('full'),
+    }] : []),
+    ...createFullPaymentAllocations(getRowsForFullPayment('full'), fullPaymentRowsDebt).map(({ row, amount }) => ({
+      key: row.id,
+      label: row.service,
+      periodLabel: row.monthLabel,
+      amount,
+    })),
+  ]
+  const authoritativeFullPaymentLines: FullPaymentPrototypePlanLine[] = selectedGarageFullPaymentQuote
+    ? selectedGarageFullPaymentQuote.lines.map((line, index) => ({
+        key: `${line.isOpeningDebt ? 'opening' : line.incomeTypeId ?? 'income'}-${line.accountingMonth}-${line.feeCampaignId ?? line.irregularPaymentId ?? index}`,
+        label: line.isOpeningDebt ? 'Входящий долг' : line.incomeTypeName,
+        periodLabel: formatPaymentPrototypeMonthLabel(line.accountingMonth),
+        amount: roundPaymentMoney(line.outstandingAmount),
+      }))
+    : fallbackFullPaymentLines
   const fullPaymentPeriodOptions = [
-    { value: 'full', label: 'Полный расчет', debt: authoritativeFullPaymentDebt },
-    ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: sumPaymentDebt(getRowsForFullPayment(group.month)) })),
+    { value: 'full', label: 'Полный расчет', debt: authoritativeFullPaymentDebt, lines: authoritativeFullPaymentLines },
+    ...groupedGarageRows.map((group) => {
+      const rows = getRowsForFullPayment(group.month)
+      const debt = sumPaymentDebt(rows)
+      return {
+        value: group.month,
+        label: group.monthLabel,
+        debt,
+        lines: createFullPaymentAllocations(rows, debt).map(({ row, amount }) => ({
+          key: row.id,
+          label: row.service,
+          periodLabel: row.monthLabel,
+          amount,
+        })),
+      }
+    }),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
   const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
   const expenseOpeningDebtTotal = expenseRows.reduce((sum, row) => sum + row.openingDebt, 0)
@@ -6369,6 +6413,20 @@ function FullPaymentPrototypeDialog({
   useEscapeKey(!saving, onClose)
 
   const selectedDebt = periodOptions.find((option) => option.value === period)?.debt ?? 0
+  const selectedOption = periodOptions.find((option) => option.value === period)
+  const visiblePlanLines = (selectedOption?.lines ?? []).reduce<{
+    lines: FullPaymentPrototypePlanLine[]
+    remainingAmount: number
+  }>((plan, line) => {
+    const allocatedAmount = Math.min(toMoneyMinorUnits(line.amount), plan.remainingAmount)
+    return {
+      lines: allocatedAmount > 0 ? [...plan.lines, { ...line, amount: allocatedAmount / 100 }] : plan.lines,
+      remainingAmount: plan.remainingAmount - allocatedAmount,
+    }
+  }, {
+    lines: [],
+    remainingAmount: Number.isFinite(amount) ? Math.max(toMoneyMinorUnits(amount), 0) : 0,
+  }).lines
   const hasDebt = periodOptions.some((option) => option.debt > 0)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -6450,6 +6508,18 @@ function FullPaymentPrototypeDialog({
           <FormField className="full-payment-field" label="Комментарий" hint="Необязательно">
             <textarea aria-label="Комментарий к полной оплате" rows={3} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
+          <div className="full-payment-fields" role="status" aria-live="polite">
+            <strong>Распределение выбранной суммы</strong>
+            {visiblePlanLines.length > 0 ? (
+              <ul aria-label="Распределение полной оплаты">
+                {visiblePlanLines.map((line) => (
+                  <li key={line.key}>
+                    {line.label} ({line.periodLabel}) — <strong>{formatPaymentMoney(line.amount)} руб.</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : <p>Укажите сумму, чтобы увидеть её распределение.</p>}
+          </div>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести оплату'}</button>
