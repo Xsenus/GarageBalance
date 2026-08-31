@@ -46,6 +46,10 @@ public sealed record ActionCommentSettingsDto(bool Required, Guid Version = defa
 
 public sealed record UpdateActionCommentSettingsRequest(bool Required, Guid? Version = null);
 
+public sealed record HistoricalMeterReadingCorrectionSettingsDto(bool Enabled, Guid Version = default);
+
+public sealed record UpdateHistoricalMeterReadingCorrectionSettingsRequest(bool Enabled, Guid? Version = null);
+
 public sealed record BusinessDateSettingsDto(
     DateOnly SystemDate,
     DateOnly EffectiveDate,

@@ -9,7 +9,10 @@ namespace GarageBalance.Api.Tests.Common;
 
 internal static class FinanceServiceTestFactory
 {
-    public static FinanceService Create(GarageBalanceDbContext dbContext, TimeProvider? timeProvider = null) =>
+    public static FinanceService Create(
+        GarageBalanceDbContext dbContext,
+        TimeProvider? timeProvider = null,
+        IHistoricalMeterReadingCorrectionPolicy? historicalMeterReadingCorrectionPolicy = null) =>
         new(
             new EfStaffMemberRepository(dbContext),
             new EfGarageRepository(dbContext, TestBusinessDateProvider.From(timeProvider)),
@@ -42,8 +45,14 @@ internal static class FinanceServiceTestFactory
             new ExpenseFundDisbursementService(
                 new EfFundRepository(dbContext),
                 new AuditEventWriter(dbContext)),
+            historicalMeterReadingCorrectionPolicy ?? new EnabledHistoricalMeterReadingCorrectionPolicy(),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             timeProvider ?? TimeProvider.System,
             TestBusinessDateProvider.From(timeProvider));
+
+    private sealed class EnabledHistoricalMeterReadingCorrectionPolicy : IHistoricalMeterReadingCorrectionPolicy
+    {
+        public Task<bool> IsEnabledAsync(CancellationToken cancellationToken) => Task.FromResult(true);
+    }
 }

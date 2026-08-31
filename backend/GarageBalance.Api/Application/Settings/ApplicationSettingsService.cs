@@ -21,6 +21,7 @@ public sealed class ApplicationSettingsService(
     public const string SalaryAccrualDayKey = "finance.salary_accrual_day";
     public const int DefaultSalaryAccrualDay = 1;
     public const string ActionCommentsRequiredKey = "system.action_comments_required";
+    public const string HistoricalMeterReadingCorrectionEnabledKey = "meter_readings.historical_correction_enabled";
     public const string BusinessDateOverrideKey = "system.business_date_override";
 
     public async Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken)
@@ -311,6 +312,62 @@ public sealed class ApplicationSettingsService(
 
         await repository.SaveChangesAsync(cancellationToken);
         return new ActionCommentSettingsDto(setting.BooleanValue, setting.Version);
+    }
+
+    public async Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(
+        CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindAsync(HistoricalMeterReadingCorrectionEnabledKey, cancellationToken);
+        return new HistoricalMeterReadingCorrectionSettingsDto(setting?.BooleanValue ?? false, setting?.Version ?? Guid.NewGuid());
+    }
+
+    public async Task<HistoricalMeterReadingCorrectionSettingsDto> UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+        UpdateHistoricalMeterReadingCorrectionSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindForUpdateAsync(HistoricalMeterReadingCorrectionEnabledKey, cancellationToken);
+        var previousValue = setting?.BooleanValue ?? false;
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
+
+        if (setting is null && !request.Enabled)
+        {
+            return new HistoricalMeterReadingCorrectionSettingsDto(false, request.Version ?? Guid.NewGuid());
+        }
+
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = HistoricalMeterReadingCorrectionEnabledKey };
+            repository.Add(setting);
+        }
+        else if (setting.BooleanValue == request.Enabled)
+        {
+            return new HistoricalMeterReadingCorrectionSettingsDto(setting.BooleanValue, setting.Version);
+        }
+
+        setting.BooleanValue = request.Enabled;
+        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+        setting.UpdatedByUserId = actorUserId;
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "application_setting.historical_meter_reading_correction_updated",
+            "application_setting",
+            HistoricalMeterReadingCorrectionEnabledKey,
+            Summary: request.Enabled
+                ? "Включено изменение существующих показаний за другие месяцы."
+                : "Отключено изменение существующих показаний за другие месяцы.",
+            Section: "settings",
+            ActionKind: "update",
+            EntityDisplayName: "Изменение показаний за другие месяцы",
+            OldValues: new Dictionary<string, object?> { ["enabled"] = previousValue },
+            NewValues: new Dictionary<string, object?> { ["enabled"] = request.Enabled },
+            FieldLabels: new Dictionary<string, string> { ["enabled"] = "Разрешить изменение существующих показаний" }));
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return new HistoricalMeterReadingCorrectionSettingsDto(setting.BooleanValue, setting.Version);
     }
 
     public async Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken)

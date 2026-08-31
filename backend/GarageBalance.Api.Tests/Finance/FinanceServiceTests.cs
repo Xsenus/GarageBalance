@@ -9388,6 +9388,31 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CorrectHistoricalMeterReadingAsync_RejectsCorrectionWhenApplicationSettingIsDisabled()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero));
+        var enabledService = FinanceServiceTestFactory.Create(database.Context, timeProvider);
+        var created = await enabledService.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var disabledService = FinanceServiceTestFactory.Create(database.Context, timeProvider, new DisabledHistoricalMeterReadingCorrectionPolicy());
+
+        var result = await disabledService.CorrectHistoricalMeterReadingAsync(
+            created.Value!.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 6, 21), 18m, null, null, created.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("historical_meter_reading_correction_disabled", result.ErrorCode);
+        Assert.Equal(15m, database.Context.MeterReadings.Single(item => item.Id == created.Value.Id).CurrentValue);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_historical_updated");
+    }
+
+    [Fact]
     public async Task CorrectHistoricalMeterReadingAsync_RejectsCurrentAndAllowsAnotherMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -12414,5 +12439,10 @@ public sealed class FinanceServiceTests
 
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
+    }
+
+    private sealed class DisabledHistoricalMeterReadingCorrectionPolicy : IHistoricalMeterReadingCorrectionPolicy
+    {
+        public Task<bool> IsEnabledAsync(CancellationToken cancellationToken) => Task.FromResult(false);
     }
 }

@@ -35,6 +35,8 @@ public sealed class SettingsControllerTests
         var createAdjustmentAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateCashBankBalanceAdjustment));
         var getActionCommentsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetActionCommentSettings));
         var updateActionCommentsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateActionCommentSettings));
+        var getHistoricalCorrectionAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetHistoricalMeterReadingCorrectionSettings));
+        var updateHistoricalCorrectionAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateHistoricalMeterReadingCorrectionSettings));
 
         Assert.Null(Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -54,6 +56,8 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemRoles.Administrator, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Null(Assert.Single(getActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Null(Assert.Single(getHistoricalCorrectionAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateHistoricalCorrectionAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
     }
 
     [Fact]
@@ -95,6 +99,32 @@ public sealed class SettingsControllerTests
             CancellationToken.None);
         var updated = Assert.IsType<ActionCommentSettingsDto>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
         Assert.True(updated.Required);
+        Assert.Equal(actorUserId, service.ReceivedActorUserId);
+    }
+
+    [Fact]
+    public async Task HistoricalMeterReadingCorrectionSettings_ReturnDefaultAndPassAuthenticatedActorOnUpdate()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeService();
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+
+        var getResult = await controller.GetHistoricalMeterReadingCorrectionSettings(CancellationToken.None);
+        var current = Assert.IsType<HistoricalMeterReadingCorrectionSettingsDto>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.False(current.Enabled);
+
+        var updateResult = await controller.UpdateHistoricalMeterReadingCorrectionSettings(
+            new UpdateHistoricalMeterReadingCorrectionSettingsRequest(true, current.Version),
+            CancellationToken.None);
+        var updated = Assert.IsType<HistoricalMeterReadingCorrectionSettingsDto>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.True(updated.Enabled);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
     }
 
@@ -558,6 +588,15 @@ public sealed class SettingsControllerTests
         {
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(new ActionCommentSettingsDto(request.Required, request.Version ?? Guid.NewGuid()));
+        }
+
+        public Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new HistoricalMeterReadingCorrectionSettingsDto(false));
+
+        public Task<HistoricalMeterReadingCorrectionSettingsDto> UpdateHistoricalMeterReadingCorrectionSettingsAsync(UpdateHistoricalMeterReadingCorrectionSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(new HistoricalMeterReadingCorrectionSettingsDto(request.Enabled, request.Version ?? Guid.NewGuid()));
         }
 
         public Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken) =>

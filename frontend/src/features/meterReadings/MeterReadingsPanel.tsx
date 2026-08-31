@@ -3,6 +3,7 @@ import { LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError } from '../../shared/formFeedback'
@@ -87,6 +88,7 @@ type MeterReadingMonth = typeof meterReadingMonths[number]
 type MeterReadingsTableProps = {
   appliedYear: string
   canEditOutsideCurrentMonth: boolean
+  historicalCorrectionEnabled: boolean
   currentMonth: string
   draftReadings: Record<string, string>
   garages: MeterReadingYearGarageDto[]
@@ -105,6 +107,7 @@ type MeterReadingsTableProps = {
 const MeterReadingsTable = memo(function MeterReadingsTable({
   appliedYear,
   canEditOutsideCurrentMonth,
+  historicalCorrectionEnabled,
   currentMonth,
   draftReadings,
   garages,
@@ -149,6 +152,10 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             {meterReadingMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
+              const outsideCurrentMonth = `${appliedYear}-${month.key}` !== currentMonth
+              const hasSavedReading = Boolean(savedReadings[cellKey]?.trim())
+              const outsideMonthUnavailable = (futureMonth && !canEditOutsideCurrentMonth) ||
+                (outsideCurrentMonth && hasSavedReading && !historicalCorrectionEnabled)
               const replacementSerial = savedReadingReplacements[cellKey]
               return (
                 <span className={replacementSerial ? 'meter-readings-value-cell meter-readings-value-cell--replacement' : 'meter-readings-value-cell'} role="cell" key={cellKey}>
@@ -164,7 +171,12 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   ) : null}
                   <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
-                    disabled={loading || !yearIsValid || (futureMonth && !canEditOutsideCurrentMonth) || savingReadingKey === cellKey}
+                    disabled={loading || !yearIsValid || outsideMonthUnavailable || savingReadingKey === cellKey}
+                    title={outsideMonthUnavailable
+                      ? !canEditOutsideCurrentMonth
+                        ? 'Нет права на работу с показаниями за другие месяцы.'
+                        : 'Изменение существующих показаний за другие месяцы отключено в настройках.'
+                      : undefined}
                     value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                     onBlur={(event) => {
                       if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
@@ -187,7 +199,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   )
 })
 
-export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
+export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient, settingsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; settingsClient: ApplicationSettingsClient }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const canEditOutsideCurrentMonth = hasPermission(auth, permissions.historicalMeterReadingsCorrect)
   const [yearDraft, setYearDraft] = useState('2026')
@@ -212,6 +224,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [reloadRevision, setReloadRevision] = useState(0)
   const [configurationReloadRevision, setConfigurationReloadRevision] = useState(0)
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
+  const [historicalCorrectionEnabled, setHistoricalCorrectionEnabled] = useState(false)
 
   const selectedMeterType = availableMeterTypes?.find((item) => item.id === meterType)
     ?? meterReadingTypes.find((item) => item.id === meterType)
@@ -309,6 +322,22 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const readingChangeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingReadingChange))
   const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingReadingChange))
   useEscapeKey(Boolean(pendingReadingChange) && !pendingReadingSaving, () => cancelPendingReadingChange())
+
+  useEffect(() => {
+    let isMounted = true
+    const controller = new AbortController()
+    settingsClient.getHistoricalMeterReadingCorrectionSettings(auth.accessToken, controller.signal)
+      .then((settings) => {
+        if (isMounted) setHistoricalCorrectionEnabled(settings.enabled)
+      })
+      .catch((caught: unknown) => {
+        if (isMounted) setError(caught instanceof Error ? caught.message : 'Не удалось загрузить настройку изменения показаний.')
+      })
+    return () => {
+      isMounted = false
+      controller.abort()
+    }
+  }, [auth.accessToken, settingsClient])
 
   useEffect(() => {
     let isMounted = true
@@ -532,8 +561,14 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     const parsedPreviousChainValue = previousChainValue ? parseMeterReadingInputValue(previousChainValue) : null
     const suggestsReplacement = parsedNextValue !== null && parsedPreviousChainValue !== null && parsedNextValue < parsedPreviousChainValue
 
-    if (previousValue.trim() === '' && !suggestsReplacement && !isOutsideCurrentMonth) {
+    if (previousValue.trim() === '' && !suggestsReplacement) {
       void saveReadingValue(cellKey, undefined, undefined, nextValue)
+      return
+    }
+
+    if (isOutsideCurrentMonth && !historicalCorrectionEnabled) {
+      setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
+      setError('Изменение существующих показаний за другие месяцы отключено в настройках.')
       return
     }
 
@@ -564,7 +599,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       reason: '',
       date: `${accountingMonth}-01`,
     })
-  }, [appliedYear, canEditOutsideCurrentMonth, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, yearIsValid])
+  }, [appliedYear, canEditOutsideCurrentMonth, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, historicalCorrectionEnabled, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, yearIsValid])
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
@@ -614,7 +649,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           setReloadRevision((value) => value + 1)
         }
       }} retrying={loading} /> : null}
-      <p className="form-hint">Для другого месяца нужно отдельное право; действие записывается в историю.</p>
+      <p className="form-hint">Первое показание в пустой ячейке сохраняется сразу. Изменение существующего показания за другой месяц требует права и включённой настройки.</p>
 
       {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
       {availableMeterTypes?.length === 0 && !error ? (
@@ -622,6 +657,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       ) : availableMeterTypes && availableMeterTypes.length > 0 ? <MeterReadingsTable
         appliedYear={appliedYear}
         canEditOutsideCurrentMonth={canEditOutsideCurrentMonth}
+        historicalCorrectionEnabled={historicalCorrectionEnabled}
         currentMonth={currentMonth}
         draftReadings={draftReadings}
         garages={hasLoadedCurrentDataset ? garages : []}

@@ -26,6 +26,11 @@ export type ActionCommentSettingsDto = {
   version: string
 }
 
+export type HistoricalMeterReadingCorrectionSettingsDto = {
+  enabled: boolean
+  version: string
+}
+
 export type BusinessDateSettingsDto = {
   systemDate: string
   effectiveDate: string
@@ -111,6 +116,8 @@ export type DiagnosticLogStatusDto = {
 export type ApplicationSettingsClient = {
   getActionCommentSettings(accessToken: string, signal?: AbortSignal): Promise<ActionCommentSettingsDto>
   updateActionCommentSettings(accessToken: string, request: ActionCommentSettingsDto): Promise<ActionCommentSettingsDto>
+  getHistoricalMeterReadingCorrectionSettings(accessToken: string, signal?: AbortSignal): Promise<HistoricalMeterReadingCorrectionSettingsDto>
+  updateHistoricalMeterReadingCorrectionSettings(accessToken: string, request: HistoricalMeterReadingCorrectionSettingsDto): Promise<HistoricalMeterReadingCorrectionSettingsDto>
   getPaymentDisplaySettings(accessToken: string, signal?: AbortSignal): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
   getTariffPanelsLayout(accessToken: string, signal?: AbortSignal): Promise<TariffPanelsLayoutDto>
@@ -160,6 +167,12 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   updateActionCommentSettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/action-comments', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getHistoricalMeterReadingCorrectionSettings(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/meter-readings/historical-corrections', { signal })
+  },
+  updateHistoricalMeterReadingCorrectionSettings(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/meter-readings/historical-corrections', { method: 'PUT', body: JSON.stringify(request) })
   },
   getPaymentDisplaySettings(accessToken, signal) {
     return requestJson(accessToken, '/api/settings/payments/display', { signal })

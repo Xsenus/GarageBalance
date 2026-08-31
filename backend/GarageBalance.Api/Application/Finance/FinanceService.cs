@@ -38,6 +38,7 @@ public sealed class FinanceService(
     IChargeServiceSettingRepository chargeServiceSettingRepository,
     IIncomeFundAssignmentService incomeFundAssignmentService,
     IExpenseFundDisbursementService expenseFundDisbursementService,
+    IHistoricalMeterReadingCorrectionPolicy historicalMeterReadingCorrectionPolicy,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     TimeProvider timeProvider,
@@ -5532,6 +5533,13 @@ public sealed class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        if (!await historicalMeterReadingCorrectionPolicy.IsEnabledAsync(cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "historical_meter_reading_correction_disabled",
+                "Изменение существующих показаний за другие месяцы отключено в настройках.");
+        }
+
         var reason = NormalizeOptional(request.Reason) ?? "Корректировка показания за другой месяц.";
 
         var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);

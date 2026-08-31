@@ -82,6 +82,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false, fundName: false })
   const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
   const [tariffTableDisplaySettingsVersion, setTariffTableDisplaySettingsVersion] = useState<string | null>(null)
+  const [historicalMeterReadingCorrectionEnabled, setHistoricalMeterReadingCorrectionEnabled] = useState(false)
+  const [historicalMeterReadingCorrectionSettingsVersion, setHistoricalMeterReadingCorrectionSettingsVersion] = useState<string | null>(null)
+  const [historicalMeterReadingCorrectionSaving, setHistoricalMeterReadingCorrectionSaving] = useState(false)
   const [paymentDisplaySettingsLoading, setPaymentDisplaySettingsLoading] = useState(false)
   const [paymentDisplaySettingsSaving, setPaymentDisplaySettingsSaving] = useState(false)
   const [paymentDisplaySettingsMessage, setPaymentDisplaySettingsMessage] = useState<string | null>(null)
@@ -206,8 +209,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     const controller = new AbortController()
     setPaymentDisplaySettingsLoading(true)
     setPaymentDisplaySettingsError(null)
-    settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal)
-      .then((settings) => {
+    Promise.all([
+      settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal),
+      settingsClient.getHistoricalMeterReadingCorrectionSettings(auth.accessToken, controller.signal),
+    ])
+      .then(([settings, meterReadingSettings]) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
           setPaymentDisplaySettingsVersion(settings.version)
@@ -217,6 +223,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             fundName: settings.showFundName,
           })
           setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
+          setHistoricalMeterReadingCorrectionEnabled(meterReadingSettings.enabled)
+          setHistoricalMeterReadingCorrectionSettingsVersion(meterReadingSettings.version)
         }
       })
       .catch((caught: unknown) => {
@@ -372,6 +380,28 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить.')
     } finally {
       setPaymentDisplaySettingsSaving(false)
+    }
+  }
+
+  async function saveHistoricalMeterReadingCorrectionEnabled(enabled: boolean) {
+    const previousValue = historicalMeterReadingCorrectionEnabled
+    setHistoricalMeterReadingCorrectionEnabled(enabled)
+    setHistoricalMeterReadingCorrectionSaving(true)
+    setPaymentDisplaySettingsMessage(null)
+    setPaymentDisplaySettingsError(null)
+    try {
+      const settings = await settingsClient.updateHistoricalMeterReadingCorrectionSettings(auth.accessToken, {
+        enabled,
+        version: historicalMeterReadingCorrectionSettingsVersion ?? '',
+      })
+      setHistoricalMeterReadingCorrectionEnabled(settings.enabled)
+      setHistoricalMeterReadingCorrectionSettingsVersion(settings.version)
+      setPaymentDisplaySettingsMessage('Настройка показаний сохранена.')
+    } catch (caught) {
+      setHistoricalMeterReadingCorrectionEnabled(previousValue)
+      setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку показаний.')
+    } finally {
+      setHistoricalMeterReadingCorrectionSaving(false)
     }
   }
 
@@ -1143,6 +1173,14 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
             onChange={(checked) => { setShowAllGarageOperationsByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
           />
+          <SettingsDisplaySwitch
+            title="Изменение показаний за другие месяцы"
+            label="Разрешить изменение существующих показаний за другие месяцы"
+            checked={historicalMeterReadingCorrectionEnabled}
+            disabled={paymentDisplaySettingsLoading || historicalMeterReadingCorrectionSaving}
+            onChange={(checked) => { void saveHistoricalMeterReadingCorrectionEnabled(checked) }}
+          />
+          <p className="form-hint">По умолчанию выключено. Первичное заполнение пустой ячейки остаётся доступным без окна подтверждения.</p>
           {tariffColumnSwitches.map((item) => (
             <SettingsDisplaySwitch
               key={item.key}

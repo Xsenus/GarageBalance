@@ -26,6 +26,27 @@ describe('settingsApi', () => {
     }))
   })
 
+  it('loads and updates the historical meter reading correction switch', async () => {
+    const current = { enabled: false, version: 'meter-correction-v1' }
+    const request = { enabled: true, version: 'meter-correction-v1' }
+    const updated = { enabled: true, version: 'meter-correction-v2' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(current), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getHistoricalMeterReadingCorrectionSettings('token')).resolves.toEqual(current)
+    await expect(settingsApi.updateHistoricalMeterReadingCorrectionSettings('token', request)).resolves.toEqual(updated)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/meter-readings/historical-corrections', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/meter-readings/historical-corrections', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(request),
+    }))
+  })
+
   it('loads and saves the authenticated tariff panel layout', async () => {
     const fetchMock = vi.fn()
     fetchMock
@@ -113,8 +134,9 @@ describe('settingsApi', () => {
     const request = Promise.all([
       settingsApi.getPaymentDisplaySettings('token', controller.signal),
       settingsApi.getTariffPanelsLayout('token', controller.signal),
+      settingsApi.getHistoricalMeterReadingCorrectionSettings('token', controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(2))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(3))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -122,6 +144,7 @@ describe('settingsApi', () => {
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       '/api/settings/payments/display',
       '/api/settings/tariffs/layout',
+      '/api/settings/meter-readings/historical-corrections',
     ])
   })
 

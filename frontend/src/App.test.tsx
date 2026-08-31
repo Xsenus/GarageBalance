@@ -6,6 +6,8 @@ vi.mock('./services/settingsApi', () => ({
   settingsApi: {
     getActionCommentSettings: vi.fn(async () => ({ required: true, version: 'comment-version' })),
     updateActionCommentSettings: vi.fn(async (_accessToken: string, request: { required: boolean; version: string }) => request),
+    getHistoricalMeterReadingCorrectionSettings: vi.fn(async () => ({ enabled: true, version: 'meter-correction-version' })),
+    updateHistoricalMeterReadingCorrectionSettings: vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request),
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request),
     getTariffPanelsLayout: vi.fn(async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' })),
@@ -46,6 +48,8 @@ describe('App', () => {
     vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request)
     vi.mocked(settingsApi.getActionCommentSettings).mockImplementation(async () => ({ required: true, version: 'comment-version' }))
     vi.mocked(settingsApi.updateActionCommentSettings).mockImplementation(async (_accessToken: string, request: { required: boolean; version: string }) => request)
+    vi.mocked(settingsApi.getHistoricalMeterReadingCorrectionSettings).mockImplementation(async () => ({ enabled: true, version: 'meter-correction-version' }))
+    vi.mocked(settingsApi.updateHistoricalMeterReadingCorrectionSettings).mockImplementation(async (_accessToken: string, request: { enabled: boolean; version: string }) => request)
     window.sessionStorage.clear()
     window.localStorage.clear()
   })
@@ -6967,7 +6971,7 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
     expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByText('Для другого месяца нужно отдельное право; действие записывается в историю.')).toBeInTheDocument()
+    expect(within(readingsPanel).getByText('Первое показание в пустой ячейке сохраняется сразу. Изменение существующего показания за другой месяц требует права и включённой настройки.')).toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     await act(async () => resolveMeterReadingYearPage({
       garages: [
@@ -7022,9 +7026,7 @@ describe('App', () => {
     await user.type(yearInput, '2026')
     let januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
     await user.type(januaryInput, '4654{Enter}')
-    const createOutsidePeriodDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
-    expect(within(createOutsidePeriodDialog).getByText(/комментарий не требуется/i)).toBeInTheDocument()
-    await user.click(within(createOutsidePeriodDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(screen.queryByRole('dialog', { name: 'Сохранить показание за другой месяц?' })).not.toBeInTheDocument()
     await waitFor(() => expect(createdMeterReadingRequest?.currentValue).toBe(4654))
     expect(createdMeterReadingRequest).toMatchObject({
       garageId: 'garage-12',
@@ -7561,6 +7563,47 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Сохранить показание за другой месяц?' })).not.toBeInTheDocument()
     const decemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
     expect(decemberInput).toBeDisabled()
+    expect(correctHistoricalMeterReading).not.toHaveBeenCalled()
+  })
+
+  it('keeps existing readings for other months locked while the application setting is disabled', async () => {
+    const user = userEvent.setup()
+    const correctHistoricalMeterReading = vi.fn()
+    const financeClient = createFinanceClient({
+      getMeterReadingYearPage: async () => ({
+        garages: [{ id: 'garage-12', number: '12' }],
+        readings: [{
+          id: 'historical-reading',
+          garageId: 'garage-12',
+          accountingMonth: '2026-01-01',
+          currentValue: 4654,
+          version: 'historical-reading-version',
+        }],
+        totalCount: 1,
+        offset: 0,
+        limit: 25,
+      }),
+      correctHistoricalMeterReading,
+    })
+    const electricityTariff = createTariff({ id: 'meter-setting-electricity-tariff', calculationBase: 'meter_electricity' })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [electricityTariff],
+      getChargeServiceSettings: async () => [createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity' })],
+    })
+    const settingsClient = createSettingsClient({
+      getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: false, version: 'meter-correction-version' }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    const januaryInput = await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')
+
+    expect(januaryInput).toBeDisabled()
+    expect(januaryInput).toHaveAttribute('title', 'Изменение существующих показаний за другие месяцы отключено в настройках.')
+    expect(within(readingsPanel).getByLabelText('Гараж 12, Февраль, показание')).toBeEnabled()
     expect(correctHistoricalMeterReading).not.toHaveBeenCalled()
   })
 
@@ -13703,7 +13746,12 @@ describe('App', () => {
   it('saves the default payment overview mode from display settings', async () => {
     const user = userEvent.setup()
     const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request)
-    const settingsClient = createSettingsClient({ updatePaymentDisplaySettings })
+    const updateHistoricalMeterReadingCorrectionSettings = vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request)
+    const settingsClient = createSettingsClient({
+      getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: false, version: 'meter-correction-version' }),
+      updateHistoricalMeterReadingCorrectionSettings,
+      updatePaymentDisplaySettings,
+    })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -13717,14 +13765,17 @@ describe('App', () => {
     const periodicityToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Периодичность»' })
     const accrualMonthToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Месяц начисления»' })
     const fundNameToggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать фонд под наименованием услуги' })
+    const historicalCorrectionToggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить изменение существующих показаний за другие месяцы' })
     await waitFor(() => expect(toggle).toBeEnabled())
     expect(toggle).not.toBeChecked()
     expect(periodicityToggle).not.toBeChecked()
     expect(accrualMonthToggle).not.toBeChecked()
     expect(fundNameToggle).not.toBeChecked()
+    expect(historicalCorrectionToggle).not.toBeChecked()
     await user.click(toggle)
     await user.click(periodicityToggle)
     await user.click(fundNameToggle)
+    await user.click(historicalCorrectionToggle)
     await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
 
     await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', {
@@ -13735,7 +13786,35 @@ describe('App', () => {
       tariffTableVersion: 'tariff-table-version',
       showFundName: true,
     }))
+    await waitFor(() => expect(updateHistoricalMeterReadingCorrectionSettings).toHaveBeenCalledWith('token', {
+      enabled: true,
+      version: 'meter-correction-version',
+    }))
     expect(await within(displayPanel).findByText('Отображение сохранено.')).toHaveAttribute('role', 'status')
+  })
+
+  it('restores the historical correction switch when saving the setting fails', async () => {
+    const user = userEvent.setup()
+    const settingsClient = createSettingsClient({
+      getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: false, version: 'meter-correction-version' }),
+      updateHistoricalMeterReadingCorrectionSettings: async () => { throw new Error('Не удалось изменить настройку показаний.') },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
+    const displayPanel = within(settings).getByRole('region', { name: 'Отображение таблиц' })
+    const toggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить изменение существующих показаний за другие месяцы' })
+    await waitFor(() => expect(toggle).toBeEnabled())
+
+    await user.click(toggle)
+
+    expect(await within(displayPanel).findByRole('alert')).toHaveTextContent('Не удалось изменить настройку показаний.')
+    expect(toggle).not.toBeChecked()
+    expect(toggle).toBeEnabled()
   })
 
   it('loads and updates the global action-comment requirement', async () => {
@@ -23881,6 +23960,8 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
   return {
     getActionCommentSettings: async () => ({ required: true, version: 'comment-version' }),
     updateActionCommentSettings: async (_accessToken, request) => request,
+    getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: true, version: 'meter-correction-version' }),
+    updateHistoricalMeterReadingCorrectionSettings: async (_accessToken, request) => request,
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),

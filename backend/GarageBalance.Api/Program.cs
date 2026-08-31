@@ -94,6 +94,7 @@ builder.Services.AddDbContextPool<GarageBalanceDbContext>((services, options) =>
 }, dbContextPoolSize);
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
 builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();
+builder.Services.AddScoped<IHistoricalMeterReadingCorrectionPolicy, HistoricalMeterReadingCorrectionPolicy>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<ActionCommentRequirementFilter>();
 builder.Services.AddScoped<ICashBankBalanceOperationRepository, EfCashBankBalanceOperationRepository>();
@@ -163,6 +164,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IChargeServiceSettingRepository>(),
     services.GetRequiredService<IIncomeFundAssignmentService>(),
     services.GetRequiredService<IExpenseFundDisbursementService>(),
+    services.GetRequiredService<IHistoricalMeterReadingCorrectionPolicy>(),
     services.GetRequiredService<IApplicationUnitOfWork>(),
     services.GetRequiredService<IAuditEventWriter>(),
     services.GetRequiredService<TimeProvider>(),

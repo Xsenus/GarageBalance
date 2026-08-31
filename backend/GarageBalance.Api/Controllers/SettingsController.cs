@@ -154,6 +154,29 @@ public sealed class SettingsController(
             cancellationToken));
     }
 
+    [HttpGet("meter-readings/historical-corrections")]
+    [Authorize]
+    [ProducesResponseType<HistoricalMeterReadingCorrectionSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<HistoricalMeterReadingCorrectionSettingsDto>> GetHistoricalMeterReadingCorrectionSettings(
+        CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.GetHistoricalMeterReadingCorrectionSettingsAsync(cancellationToken));
+    }
+
+    [HttpPut("meter-readings/historical-corrections")]
+    [RequireConcurrencyVersion("request.Version")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType<HistoricalMeterReadingCorrectionSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<HistoricalMeterReadingCorrectionSettingsDto>> UpdateHistoricalMeterReadingCorrectionSettings(
+        UpdateHistoricalMeterReadingCorrectionSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+            request,
+            GetActorUserId(),
+            cancellationToken));
+    }
+
     [HttpGet("business-date")]
     [Authorize(Roles = SystemRoles.Administrator)]
     [ProducesResponseType<BusinessDateSettingsDto>(StatusCodes.Status200OK)]

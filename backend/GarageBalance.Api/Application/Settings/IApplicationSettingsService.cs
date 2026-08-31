@@ -27,6 +27,11 @@ public interface IApplicationSettingsService
         UpdateActionCommentSettingsRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+    Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(CancellationToken cancellationToken);
+    Task<HistoricalMeterReadingCorrectionSettingsDto> UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+        UpdateHistoricalMeterReadingCorrectionSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
     Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken);
     Task<BusinessDateChangePreviewDto> PreviewBusinessDateChangeAsync(
         PreviewBusinessDateRequest request,

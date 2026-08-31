@@ -222,7 +222,7 @@ export const Workspace = memo(function Workspace({
         )
       case 'meterReadings':
         return canReadPayments ? (
-        <MeterReadingsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} />
+        <MeterReadingsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} settingsClient={settingsClient} />
         ) : (
           <AccessNotice label="Показания недоступны" title="Показания" permission={permissions.paymentsRead} description="Для просмотра показаний счетчиков нужно право на чтение финансовых операций." />
         )

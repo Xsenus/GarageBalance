@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Tests.Common;
@@ -39,6 +40,111 @@ public sealed class ApplicationSettingsServiceTests
         Assert.True(repository.Setting.BooleanValue);
         Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
         Assert.Equal("application_setting.action_comments_updated", Assert.Single(auditWriter.Requests).Action);
+    }
+
+    [Fact]
+    public async Task HistoricalMeterReadingCorrections_DefaultToDisabled()
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        var result = await service.GetHistoricalMeterReadingCorrectionSettingsAsync(CancellationToken.None);
+
+        Assert.False(result.Enabled);
+        Assert.NotEqual(Guid.Empty, result.Version);
+    }
+
+    [Fact]
+    public async Task HistoricalMeterReadingCorrections_UpdatePersistsValueAndWritesAudit()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+            new UpdateHistoricalMeterReadingCorrectionSettingsRequest(true),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Enabled);
+        Assert.Equal(ApplicationSettingsService.HistoricalMeterReadingCorrectionEnabledKey, repository.Setting!.Key);
+        Assert.True(repository.Setting.BooleanValue);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        var audit = Assert.Single(auditWriter.Requests);
+        Assert.Equal("application_setting.historical_meter_reading_correction_updated", audit.Action);
+        Assert.Equal(false, audit.OldValues!["enabled"]);
+        Assert.Equal(true, audit.NewValues!["enabled"]);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task HistoricalMeterReadingCorrectionPolicy_UsesPersistedSwitch(bool? storedValue, bool expected)
+    {
+        var repository = new FakeRepository
+        {
+            Setting = storedValue.HasValue
+                ? new ApplicationSetting
+                {
+                    Key = ApplicationSettingsService.HistoricalMeterReadingCorrectionEnabledKey,
+                    BooleanValue = storedValue.Value
+                }
+                : null
+        };
+        var policy = new HistoricalMeterReadingCorrectionPolicy(repository);
+
+        Assert.Equal(expected, await policy.IsEnabledAsync(CancellationToken.None));
+        Assert.Equal(ApplicationSettingsService.HistoricalMeterReadingCorrectionEnabledKey, repository.LastRequestedKey);
+    }
+
+    [Fact]
+    public async Task HistoricalMeterReadingCorrections_DoNotPersistMissingDefaultOrUnchangedValue()
+    {
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var missingDefault = await service.UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+            new UpdateHistoricalMeterReadingCorrectionSettingsRequest(false),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        Assert.False(missingDefault.Enabled);
+        Assert.Null(repository.Setting);
+
+        repository.Setting = new ApplicationSetting
+        {
+            Key = ApplicationSettingsService.HistoricalMeterReadingCorrectionEnabledKey,
+            BooleanValue = true
+        };
+        var unchanged = await service.UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+            new UpdateHistoricalMeterReadingCorrectionSettingsRequest(true, repository.Setting.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(unchanged.Enabled);
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
+    }
+
+    [Fact]
+    public async Task HistoricalMeterReadingCorrections_RejectStaleVersion()
+    {
+        var repository = new FakeRepository
+        {
+            Setting = new ApplicationSetting
+            {
+                Key = ApplicationSettingsService.HistoricalMeterReadingCorrectionEnabledKey,
+                BooleanValue = true
+            }
+        };
+        var service = CreateService(repository, new CaptureAuditWriter());
+
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() =>
+            service.UpdateHistoricalMeterReadingCorrectionSettingsAsync(
+                new UpdateHistoricalMeterReadingCorrectionSettingsRequest(false, Guid.NewGuid()),
+                Guid.NewGuid(),
+                CancellationToken.None));
     }
 
     [Fact]
