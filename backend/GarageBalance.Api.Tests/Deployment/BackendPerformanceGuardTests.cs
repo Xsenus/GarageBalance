@@ -809,6 +809,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
         Assert.Contains("PostgresLikeSearch.ContainsPattern(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(source, "EF.Functions.ILike("));
+        Assert.Contains("ReadCompactListAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("new FeeCampaignListRow(", source, StringComparison.Ordinal);
+        Assert.Contains("new FeeCampaignParticipantListRow(", source, StringComparison.Ordinal);
+        Assert.Contains(".Take(limit),", source, StringComparison.Ordinal);
     }
 
     [Fact]
