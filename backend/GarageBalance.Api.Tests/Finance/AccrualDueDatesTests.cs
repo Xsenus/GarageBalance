@@ -37,6 +37,36 @@ public sealed class AccrualDueDatesTests
         Assert.Equal(new DateOnly(2026, 5, 26), result.OverdueFromDate);
     }
 
+    [Fact]
+    public void ForIncomeType_UsesConfiguredPeriodicityForAnyServiceCode()
+    {
+        var annual = CreateSetting(periodicityMonths: 12, dueDay: 15, dueMonth: 5, graceDays: 10);
+        var monthly = CreateSetting(periodicityMonths: 1, dueDay: 20, dueMonth: null, graceDays: 5);
+
+        var customAnnualResult = AccrualDueDates.ForIncomeType(new DateOnly(2026, 1, 1), "custom_service", annual);
+        var configuredMonthlyMembershipResult = AccrualDueDates.ForIncomeType(new DateOnly(2026, 1, 1), "membership", monthly);
+
+        Assert.Equal(new DateOnly(2026, 5, 15), customAnnualResult.DueDate);
+        Assert.Equal(new DateOnly(2026, 5, 26), customAnnualResult.OverdueFromDate);
+        Assert.Equal(new DateOnly(2026, 2, 20), configuredMonthlyMembershipResult.DueDate);
+        Assert.Equal(new DateOnly(2026, 2, 26), configuredMonthlyMembershipResult.OverdueFromDate);
+    }
+
+    [Fact]
+    public void ForGarage_MovesPassedConfiguredAnnualDeadlineForAnyServiceCode()
+    {
+        var setting = CreateSetting(periodicityMonths: 12, dueDay: 30, dueMonth: 6, graceDays: 30);
+
+        var result = AccrualDueDates.ForGarage(
+            new DateOnly(2026, 8, 1),
+            "custom_service",
+            setting,
+            registeredOn: new DateOnly(2026, 8, 26));
+
+        Assert.Equal(new DateOnly(2027, 6, 30), result.DueDate);
+        Assert.Equal(new DateOnly(2027, 7, 31), result.OverdueFromDate);
+    }
+
     [Theory]
     [InlineData("membership")]
     [InlineData("target")]

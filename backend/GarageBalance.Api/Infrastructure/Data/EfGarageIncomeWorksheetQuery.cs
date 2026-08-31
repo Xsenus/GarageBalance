@@ -341,9 +341,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 accrual.GarageId == garageId &&
                 accrual.AccountingYear >= monthFrom.Year &&
                 accrual.AccountingYear <= monthTo.Year &&
-                (accrual.IncomeType.Code == "membership" ||
-                 accrual.IncomeType.Code == "target" ||
-                 accrual.IncomeType.Code == "outdoor_lighting"))
+                accrual.FeeCampaignId == null &&
+                accrual.Source != AccrualSources.DebtTransfer)
             .Select(accrual => new
             {
                 Category = AnnualAccrualCategory,
@@ -388,9 +387,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                  allocation.Accrual.FeeCampaignId != null ||
                  (allocation.Accrual.AccountingYear >= monthFrom.Year &&
                   allocation.Accrual.AccountingYear <= monthTo.Year &&
-                  (allocation.Accrual.IncomeType.Code == "membership" ||
-                   allocation.Accrual.IncomeType.Code == "target" ||
-                   allocation.Accrual.IncomeType.Code == "outdoor_lighting"))))
+                  allocation.Accrual.FeeCampaignId == null &&
+                  allocation.Accrual.Source != AccrualSources.DebtTransfer)))
             .Select(allocation => new
             {
                 Category = AllocationCategory,

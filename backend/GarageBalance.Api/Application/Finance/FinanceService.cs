@@ -595,7 +595,11 @@ public sealed class FinanceService(
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
                     allocatedInMonth,
                     advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
-                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m))));
+                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m)),
+                    Reason: BuildAnnualAccrualWorksheetReason(
+                        annualAccrual,
+                        month,
+                        MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)))));
             }
         }
 
@@ -905,7 +909,10 @@ public sealed class FinanceService(
                     continue;
                 }
 
-                var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+                var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(
+                    incomeType.Code,
+                    month,
+                    setting.PeriodicityMonths);
                 var existing = accountingYear.HasValue
                     ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
                       monthlyAccruals.GetValueOrDefault((month, incomeType.Id))
@@ -3806,16 +3813,7 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
-        if (await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
-        {
-            var duplicateMessage = source == AccrualSources.Regular && accountingYear.HasValue
-                ? $"Регулярное годовое начисление за {accountingYear.Value} год уже внесено."
-                : "Такое начисление за месяц уже внесено.";
-            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", duplicateMessage);
-        }
-
-        var dueDateSetting = accountingYear.HasValue
+        var dueDateSetting = source == AccrualSources.Regular
             ? SelectChargeServiceSettingForDueDates(
                 await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
                     incomeType.Id,
@@ -3824,6 +3822,18 @@ public sealed class FinanceService(
                     cancellationToken),
                 month)
             : null;
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(
+            incomeType.Code,
+            month,
+            source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
+        if (await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
+        {
+            var duplicateMessage = source == AccrualSources.Regular && accountingYear.HasValue
+                ? $"Регулярное годовое начисление за {accountingYear.Value} год уже внесено."
+                : "Такое начисление за месяц уже внесено.";
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", duplicateMessage);
+        }
+
         var dueDates = AccrualDueDates.ForGarage(month, incomeType.Code, dueDateSetting, GetGarageRegistrationDate(garage));
         var accrual = new Accrual
         {
@@ -4001,7 +4011,19 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+        var dueDateSetting = source == AccrualSources.Regular
+            ? SelectChargeServiceSettingForDueDates(
+                await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
+                    incomeType.Id,
+                    tariffId: null,
+                    month,
+                    cancellationToken),
+                month)
+            : null;
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(
+            incomeType.Code,
+            month,
+            source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
         if (await accrualRepository.ActiveDuplicateExistsAsync(
             accrual.Id,
             garage.Id,
@@ -4055,15 +4077,6 @@ public sealed class FinanceService(
         accrual.IncomeType = incomeType;
         accrual.AccountingMonth = month;
         accrual.AccountingYear = accountingYear;
-        var dueDateSetting = accountingYear.HasValue
-            ? SelectChargeServiceSettingForDueDates(
-                await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
-                    incomeType.Id,
-                    tariffId: null,
-                    month,
-                    cancellationToken),
-                month)
-            : null;
         var updatedDueDates = AccrualDueDates.ForGarage(month, incomeType.Code, dueDateSetting, GetGarageRegistrationDate(garage));
         accrual.DueDate = updatedDueDates.DueDate;
         accrual.OverdueFromDate = updatedDueDates.OverdueFromDate;
@@ -4327,7 +4340,10 @@ public sealed class FinanceService(
 
         var calculationSegments = BuildRegularAccrualSegments(month, matchingSetting, tariff);
         var useTieredElectricity = calculationSegments.Any(segment => segment.Tiers.Count > 0);
-        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(
+            incomeType.Code,
+            month,
+            matchingSetting?.PeriodicityMonths);
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [new AccrualPaymentAllocationKey(Guid.Empty, incomeType.Id)],
             cancellationToken);
@@ -6437,6 +6453,16 @@ public sealed class FinanceService(
         return userComment is null
             ? $"Автоначисление; {snapshot}."
             : $"{userComment}; {snapshot}.";
+    }
+
+    private static string BuildAnnualAccrualWorksheetReason(
+        GarageIncomeWorksheetAnnualAccrualData accrual,
+        DateOnly displayedMonth,
+        decimal payableAmount)
+    {
+        return accrual.AccountingMonth == displayedMonth
+            ? $"Годовое начисление за {accrual.AccountingYear} год: {MoneyFormatting.Format(accrual.Amount)}."
+            : $"Перенос остатка годового начисления за {accrual.AccountingYear} год: {MoneyFormatting.Format(payableAmount)}. Новое начисление в этом месяце не создавалось.";
     }
 
     private static string BuildFeeCampaignAccrualComment(FeeCampaign campaign, string? comment)

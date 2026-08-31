@@ -201,13 +201,16 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
     {
         foreach (var setting in services.Values)
         {
+            var isAnnual = AnnualAccrualPolicy.IsAnnualIncomeType(setting.IncomeType!.Code);
             setting.IsRegular = true;
             setting.IsArchived = false;
-            setting.PeriodicityMonths = 1;
+            setting.PeriodicityMonths = isAnnual ? 12 : 1;
+            setting.AccrualStartMonth = isAnnual ? AccountingMonth.Month : 1;
             setting.PaymentDueDay = 20;
+            setting.PaymentDueMonth = isAnnual ? AccountingMonth.AddMonths(1).Month : null;
             setting.OverdueGraceDays = 30;
             setting.UpdatedAtUtc = CreatedAtUtc;
-            setting.Version = DeterministicGuid($"setting-version-{setting.IncomeType!.Code}");
+            setting.Version = DeterministicGuid($"setting-version-{setting.IncomeType.Code}");
         }
 
         Configure(services["water"], TariffCalculationBases.MeterWater, 101m, true, false, MeterKinds.Water, "м³");

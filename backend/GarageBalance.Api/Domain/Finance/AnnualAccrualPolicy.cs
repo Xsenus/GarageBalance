@@ -15,9 +15,19 @@ public static class AnnualAccrualPolicy
             AnnualIncomeTypeCodes.Contains(incomeTypeCode.Trim());
     }
 
-    public static int? ResolveAccountingYear(string? incomeTypeCode, DateOnly accountingMonth)
+    public static bool IsAnnual(int? periodicityMonths, string? incomeTypeCode)
     {
-        return IsAnnualIncomeType(incomeTypeCode) ? accountingMonth.Year : null;
+        return periodicityMonths.HasValue
+            ? periodicityMonths.Value >= 12
+            : IsAnnualIncomeType(incomeTypeCode);
+    }
+
+    public static int? ResolveAccountingYear(
+        string? incomeTypeCode,
+        DateOnly accountingMonth,
+        int? periodicityMonths = null)
+    {
+        return IsAnnual(periodicityMonths, incomeTypeCode) ? accountingMonth.Year : null;
     }
 
     public static bool IsFullyPaid(decimal accruedAmount, decimal allocatedAmount)

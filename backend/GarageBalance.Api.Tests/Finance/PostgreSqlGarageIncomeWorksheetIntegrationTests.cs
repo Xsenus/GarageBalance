@@ -352,29 +352,50 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
     }
 
     [PostgreSqlFact]
-    public async Task Worksheet_ProjectsAnnualObligationUntilFullPaymentAndReopensItAfterCancellation()
+    public async Task Worksheet_ProjectsConfiguredAnnualObligationForAnyServiceCodeUntilFullPayment()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
-        var membershipType = await context.IncomeTypes.SingleAsync(type => type.Code == "membership");
+        var annualType = new IncomeType { Name = "Ежегодная охрана", Code = "custom_annual_security" };
+        var annualTariff = new Tariff
+        {
+            Name = "Годовая охрана",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 700m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var annualSetting = new ChargeServiceSetting
+        {
+            Name = "Ежегодная охрана",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            PaymentDueMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = annualType,
+            Tariff = annualTariff,
+            UnitName = "руб."
+        };
         var garage = new Garage
         {
             Number = "PG-ANNUAL-OBLIGATION",
             PeopleCount = 1,
             FloorCount = 1
         };
-        context.Garages.Add(garage);
+        context.AddRange(garage, annualSetting);
         await context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(context);
 
         var accrual = await service.CreateAccrualAsync(
-            new CreateAccrualRequest(garage.Id, membershipType.Id, new DateOnly(2026, 1, 1), 700m, "regular", null),
+            new CreateAccrualRequest(garage.Id, annualType.Id, new DateOnly(2026, 1, 1), 700m, "regular", null),
             null,
             CancellationToken.None);
         Assert.True(accrual.Succeeded, accrual.ErrorMessage);
+        Assert.Equal(2026, accrual.Value!.AccountingYear);
         var annualAccrualId = accrual.Value!.Id;
         Assert.True((await service.CreateIncomeAsync(
-            new CreateIncomeOperationRequest(garage.Id, membershipType.Id, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 1), 300m, null, null),
+            new CreateIncomeOperationRequest(garage.Id, annualType.Id, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 1), 300m, null, null),
             null,
             CancellationToken.None)).Succeeded);
 
@@ -384,11 +405,13 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             CancellationToken.None);
         Assert.True(partial.Succeeded, partial.ErrorMessage);
         Assert.Equal(6, partial.Value!.Rows.Count(row => row.AnnualAccrualId == annualAccrualId));
-        Assert.Equal(400m, Assert.Single(partial.Value.Rows, row =>
-            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth == new DateOnly(2026, 6, 1)).Debt);
+        var june = Assert.Single(partial.Value.Rows, row =>
+            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth == new DateOnly(2026, 6, 1));
+        Assert.Equal(400m, june.Debt);
+        Assert.Contains("Новое начисление в этом месяце не создавалось", june.Reason, StringComparison.Ordinal);
 
         var fullPayment = await service.CreateIncomeAsync(
-            new CreateIncomeOperationRequest(garage.Id, membershipType.Id, new DateOnly(2026, 4, 10), new DateOnly(2026, 4, 1), 400m, null, null),
+            new CreateIncomeOperationRequest(garage.Id, annualType.Id, new DateOnly(2026, 4, 10), new DateOnly(2026, 4, 1), 400m, null, null),
             null,
             CancellationToken.None);
         Assert.True(fullPayment.Succeeded, fullPayment.ErrorMessage);

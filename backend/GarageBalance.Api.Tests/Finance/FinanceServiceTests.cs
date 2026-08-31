@@ -6293,7 +6293,9 @@ public sealed class FinanceServiceTests
                 EffectiveFrom = new DateOnly(2026, 8, 16)
             });
         await database.Context.SaveChangesAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)));
 
         var generated = await service.GenerateRegularCatalogAccrualsAsync(
             new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 8, 1), null),
@@ -6673,6 +6675,143 @@ public sealed class FinanceServiceTests
         Assert.True(nextYearGeneration.Succeeded, nextYearGeneration.ErrorMessage);
         Assert.Equal(2, database.Context.Accruals.Count());
         Assert.Equal([2026, 2027], database.Context.Accruals.OrderBy(item => item.AccountingYear).Select(item => item.AccountingYear!.Value).ToArray());
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_UsesAnnualSettingForAnyServiceAndCarriesOnlyItsUnpaidRemainder()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        fixtures.IncomeType.Code = "custom_annual_service";
+        fixtures.IncomeType.Name = "Ежегодная охрана";
+        var tariff = new Tariff
+        {
+            Name = "Годовая охрана",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 500m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Ежегодная охрана",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            PaymentDueMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            Tariff = tariff,
+            UnitName = "руб."
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var generated = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 1, 1), null),
+            null,
+            CancellationToken.None);
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(2026, accrual.AccountingYear);
+
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 1, 15),
+                new DateOnly(2026, 1, 1),
+                250m,
+                null,
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+
+        var repeated = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 2, 1), null),
+            null,
+            CancellationToken.None);
+        Assert.False(repeated.Succeeded);
+        Assert.Equal("regular_accruals_empty", repeated.ErrorCode);
+        Assert.Single(database.Context.Accruals);
+
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var rows = worksheet.Value!.Rows
+            .Where(row => row.AnnualAccrualId == accrual.Id)
+            .OrderBy(row => row.AccountingMonth)
+            .ToArray();
+        Assert.Equal(3, rows.Length);
+        Assert.Equal(500m, rows[0].AccrualAmount);
+        Assert.Equal(250m, rows[0].IncomeAmount);
+        Assert.Equal(250m, rows[0].Debt);
+        Assert.Equal("Годовое начисление за 2026 год: 500.00.", rows[0].Reason);
+        Assert.All(rows[1..], row =>
+        {
+            Assert.Equal(0m, row.AccrualAmount);
+            Assert.Equal(250m, row.PayableAmount);
+            Assert.Equal(250m, row.Debt);
+            Assert.Equal(
+                "Перенос остатка годового начисления за 2026 год: 250.00. Новое начисление в этом месяце не создавалось.",
+                row.Reason);
+        });
+    }
+
+    [Fact]
+    public async Task CalculateGarageIncomeWorksheetAsync_CreatesConfiguredAnnualServiceOnlyInItsAccrualMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "custom_annual_calculation";
+        fixtures.IncomeType.Name = "Годовой резерв";
+        var tariff = new Tariff
+        {
+            Name = "Годовой резерв",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 600m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Годовой резерв",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            PaymentDueMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            Tariff = tariff,
+            UnitName = "руб."
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).CalculateGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 1)),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(new DateOnly(2026, 1, 1), accrual.AccountingMonth);
+        Assert.Equal(2026, accrual.AccountingYear);
+        var annualRows = result.Value!.Rows
+            .Where(row => row.AnnualAccrualId == accrual.Id)
+            .OrderBy(row => row.AccountingMonth)
+            .ToArray();
+        Assert.Equal(3, annualRows.Length);
+        Assert.Equal(600m, annualRows[0].AccrualAmount);
+        Assert.All(annualRows[1..], row =>
+        {
+            Assert.Equal(0m, row.AccrualAmount);
+            Assert.Equal(600m, row.PayableAmount);
+        });
     }
 
     [Fact]

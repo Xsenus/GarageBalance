@@ -9,8 +9,7 @@ public readonly record struct AccrualDueDates(DateOnly DueDate, DateOnly Overdue
         string? incomeTypeCode,
         ChargeServiceSetting? setting)
     {
-        if (AnnualAccrualPolicy.IsAnnualIncomeType(incomeTypeCode) &&
-            setting?.PeriodicityMonths >= 12 &&
+        if (setting?.PeriodicityMonths >= 12 &&
             setting.PaymentDueDay.HasValue &&
             setting.PaymentDueMonth.HasValue)
         {
@@ -19,6 +18,11 @@ public readonly record struct AccrualDueDates(DateOnly DueDate, DateOnly Overdue
                 setting.PaymentDueMonth.Value,
                 setting.PaymentDueDay.Value);
             return FromDueDate(configuredDueDate, setting.OverdueGraceDays);
+        }
+
+        if (setting is not null)
+        {
+            return ForChargeService(accountingMonth, setting);
         }
 
         var year = accountingMonth.Year;
@@ -37,9 +41,8 @@ public readonly record struct AccrualDueDates(DateOnly DueDate, DateOnly Overdue
         DateOnly registeredOn)
     {
         var dueDates = ForIncomeType(accountingMonth, incomeTypeCode, setting);
-        var normalizedCode = incomeTypeCode?.Trim().ToLowerInvariant();
         var registrationMonth = new DateOnly(registeredOn.Year, registeredOn.Month, 1);
-        if (normalizedCode is not ("membership" or "target") ||
+        if (!AnnualAccrualPolicy.IsAnnual(setting?.PeriodicityMonths, incomeTypeCode) ||
             accountingMonth < registrationMonth ||
             dueDates.DueDate >= registeredOn)
         {

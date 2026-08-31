@@ -26,6 +26,15 @@ public sealed class AnnualAccrualPolicyTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public void ResolveAccountingYear_UsesConfiguredPeriodicityBeforeLegacyIncomeTypeCode()
+    {
+        var month = new DateOnly(2027, 1, 1);
+
+        Assert.Equal(2027, AnnualAccrualPolicy.ResolveAccountingYear("custom_service", month, periodicityMonths: 12));
+        Assert.Null(AnnualAccrualPolicy.ResolveAccountingYear("membership", month, periodicityMonths: 1));
+    }
+
     [Theory]
     [InlineData(1000, 999, false)]
     [InlineData(1000, 1000, true)]
