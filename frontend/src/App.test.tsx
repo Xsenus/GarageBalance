@@ -6,8 +6,8 @@ vi.mock('./services/settingsApi', () => ({
   settingsApi: {
     getActionCommentSettings: vi.fn(async () => ({ required: true, version: 'comment-version' })),
     updateActionCommentSettings: vi.fn(async (_accessToken: string, request: { required: boolean; version: string }) => request),
-    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' })),
-    updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request),
+    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false })),
+    updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request),
     getTariffPanelsLayout: vi.fn(async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' })),
     updateTariffPanelsLayout: vi.fn(async (_accessToken: string, request: { irregularPaymentsWidthPercent: number }) => ({ ...request, version: 'tariff-layout-version' })),
     getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10, version: 'salary-version' })),
@@ -42,8 +42,8 @@ describe('App', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
-    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }))
-    vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request)
+    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }))
+    vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request)
     vi.mocked(settingsApi.getActionCommentSettings).mockImplementation(async () => ({ required: true, version: 'comment-version' }))
     vi.mocked(settingsApi.updateActionCommentSettings).mockImplementation(async (_accessToken: string, request: { required: boolean; version: string }) => request)
     window.sessionStorage.clear()
@@ -5481,7 +5481,7 @@ describe('App', () => {
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({
-      getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, showPeriodicityColumn: true, showAccrualMonthColumn: true, version: 'payment-version', tariffTableVersion: 'tariff-table-version' }),
+      getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, showPeriodicityColumn: true, showAccrualMonthColumn: true, version: 'payment-version', tariffTableVersion: 'tariff-table-version', showFundName: false }),
     })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -6013,6 +6013,53 @@ describe('App', () => {
     expect(waterNameCell).not.toHaveTextContent('Водоснабжение')
     expect(wasteNameCell).not.toHaveTextContent('Вывоз мусора')
     expect(wasteNameCell).not.toHaveTextContent('Ставка за вывоз мусора')
+  })
+
+  it('shows the income fund below the service name when enabled in display settings', async () => {
+    const user = userEvent.setup()
+    const waterIncomeType = createAccountingType({
+      id: 'income-water-visible-fund',
+      name: 'Вода',
+      destinationFundId: 'fund-water-visible',
+      destinationFundName: 'Водоснабжение',
+    })
+    const waterTariff = createTariff({ id: 'tariff-water-visible-fund', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 100.8 })
+    const waterService = createChargeServiceSetting({
+      id: 'service-water-visible-fund',
+      name: 'Вода',
+      isRegular: true,
+      incomeTypeId: waterIncomeType.id,
+      tariffId: waterTariff.id,
+      isMetered: true,
+      unitName: 'м³',
+      meterKind: 'water',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [waterIncomeType],
+      getTariffs: async () => [waterTariff],
+      getChargeServiceSettings: async () => [waterService],
+    })
+    const settingsClient = createSettingsClient({
+      getPaymentDisplaySettings: async () => ({
+        showAllGarageOperationsByDefault: false,
+        version: 'payment-version',
+        showPeriodicityColumn: false,
+        showAccrualMonthColumn: false,
+        tariffTableVersion: 'tariff-table-version',
+        showFundName: true,
+      }),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const waterInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
+    const waterNameCell = within(waterInput.closest('[role="row"]') as HTMLElement).getAllByRole('cell')[0]
+
+    expect(waterNameCell).toHaveTextContent('ВодаВодоснабжение')
   })
 
   it('keeps a renamed system metered service in its original table position', async () => {
@@ -10048,7 +10095,7 @@ describe('App', () => {
       reportClient={createReportClient()}
       releaseClient={createReleaseClient()}
       settingsClient={createSettingsClient({
-        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }),
+        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }),
       })}
       userClient={createUserClient()}
     />)
@@ -13655,7 +13702,7 @@ describe('App', () => {
 
   it('saves the default payment overview mode from display settings', async () => {
     const user = userEvent.setup()
-    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn?: boolean; showAccrualMonthColumn?: boolean; tariffTableVersion?: string }) => request)
+    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request)
     const settingsClient = createSettingsClient({ updatePaymentDisplaySettings })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
@@ -13669,12 +13716,15 @@ describe('App', () => {
     const toggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать общую ведомость платежей при открытии' })
     const periodicityToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Периодичность»' })
     const accrualMonthToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Месяц начисления»' })
+    const fundNameToggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать фонд под наименованием услуги' })
     await waitFor(() => expect(toggle).toBeEnabled())
     expect(toggle).not.toBeChecked()
     expect(periodicityToggle).not.toBeChecked()
     expect(accrualMonthToggle).not.toBeChecked()
+    expect(fundNameToggle).not.toBeChecked()
     await user.click(toggle)
     await user.click(periodicityToggle)
+    await user.click(fundNameToggle)
     await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
 
     await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', {
@@ -13683,6 +13733,7 @@ describe('App', () => {
       showPeriodicityColumn: true,
       showAccrualMonthColumn: false,
       tariffTableVersion: 'tariff-table-version',
+      showFundName: true,
     }))
     expect(await within(displayPanel).findByText('Отображение сохранено.')).toHaveAttribute('role', 'status')
   })
@@ -18347,7 +18398,7 @@ describe('App', () => {
     const getGarages = vi.fn(baseDictionaryClient.getGarages)
     const dictionaryClient = createDictionaryClient({ getSupplierGroups, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes, getGaragesPage: undefined, getGarages })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18405,7 +18456,7 @@ describe('App', () => {
     })
     const dictionaryClient = createDictionaryClient({ getGarages })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18442,7 +18493,7 @@ describe('App', () => {
     })
     const dictionaryClient = createDictionaryClient({ getGarages })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18473,7 +18524,7 @@ describe('App', () => {
     })
     const dictionaryClient = createDictionaryClient({ getGarages })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18517,7 +18568,7 @@ describe('App', () => {
     const settingsClient = createSettingsClient({
       getPaymentDisplaySettings: async (_token, signal) => {
         if (signal) startupSignals.set('display-settings', signal)
-        return { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }
+        return { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }
       },
     })
 
@@ -23830,7 +23881,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
   return {
     getActionCommentSettings: async () => ({ required: true, version: 'comment-version' }),
     updateActionCommentSettings: async (_accessToken, request) => request,
-    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }),
+    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),
     updateTariffPanelsLayout: async (_accessToken, request) => ({ ...request, version: 'tariff-layout-version' }),

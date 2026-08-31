@@ -69,6 +69,7 @@ public sealed class SettingsControllerTests
         Assert.False(dto.ShowAllGarageOperationsByDefault);
         Assert.False(dto.ShowPeriodicityColumn);
         Assert.False(dto.ShowAccrualMonthColumn);
+        Assert.False(dto.ShowFundName);
     }
 
     [Fact]
@@ -176,7 +177,7 @@ public sealed class SettingsControllerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
             }
         };
-        var request = new UpdatePaymentDisplaySettingsRequest(true, ShowPeriodicityColumn: true, ShowAccrualMonthColumn: false);
+        var request = new UpdatePaymentDisplaySettingsRequest(true, ShowPeriodicityColumn: true, ShowAccrualMonthColumn: false, ShowFundName: true);
 
         var result = await controller.UpdatePaymentDisplaySettings(request, CancellationToken.None);
 
@@ -185,8 +186,9 @@ public sealed class SettingsControllerTests
         Assert.True(dto.ShowAllGarageOperationsByDefault);
         Assert.True(dto.ShowPeriodicityColumn);
         Assert.False(dto.ShowAccrualMonthColumn);
+        Assert.True(dto.ShowFundName);
         Assert.Same(request, service.ReceivedRequest);
-        Assert.Equal(new UpdateTariffTableDisplaySettingsRequest(true, false), service.ReceivedTariffTableDisplayRequest);
+        Assert.Equal(new UpdateTariffTableDisplaySettingsRequest(true, false, ShowFundName: true), service.ReceivedTariffTableDisplayRequest);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
     }
 
@@ -511,7 +513,10 @@ public sealed class SettingsControllerTests
         {
             ReceivedTariffTableDisplayRequest = request;
             ReceivedActorUserId = actorUserId;
-            return Task.FromResult(new TariffTableDisplaySettingsDto(request.ShowPeriodicityColumn, request.ShowAccrualMonthColumn));
+            return Task.FromResult(new TariffTableDisplaySettingsDto(
+                request.ShowPeriodicityColumn,
+                request.ShowAccrualMonthColumn,
+                ShowFundName: request.ShowFundName));
         }
 
         public Task<TariffPanelsLayoutDto> GetTariffPanelsLayoutAsync(Guid userId, CancellationToken cancellationToken)

@@ -6,6 +6,7 @@ export type PaymentDisplaySettingsDto = {
   showPeriodicityColumn: boolean
   showAccrualMonthColumn: boolean
   tariffTableVersion: string
+  showFundName: boolean
 }
 
 export type TariffPanelsLayoutDto = {

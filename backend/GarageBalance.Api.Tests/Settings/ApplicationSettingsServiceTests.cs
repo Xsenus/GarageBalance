@@ -159,7 +159,7 @@ public sealed class ApplicationSettingsServiceTests
     }
 
     [Fact]
-    public async Task GetTariffTableDisplaySettings_DefaultsBothColumnsToHidden()
+    public async Task GetTariffTableDisplaySettings_DefaultsAllOptionalValuesToHidden()
     {
         var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
 
@@ -167,6 +167,7 @@ public sealed class ApplicationSettingsServiceTests
 
         Assert.False(result.ShowPeriodicityColumn);
         Assert.False(result.ShowAccrualMonthColumn);
+        Assert.False(result.ShowFundName);
         Assert.NotEqual(Guid.Empty, result.Version);
     }
 
@@ -179,18 +180,21 @@ public sealed class ApplicationSettingsServiceTests
         var service = CreateService(repository, auditWriter);
 
         var result = await service.UpdateTariffTableDisplaySettingsAsync(
-            new UpdateTariffTableDisplaySettingsRequest(true, false),
+            new UpdateTariffTableDisplaySettingsRequest(true, false, ShowFundName: true),
             actorUserId,
             CancellationToken.None);
 
         Assert.True(result.ShowPeriodicityColumn);
         Assert.False(result.ShowAccrualMonthColumn);
-        Assert.Equal(1, repository.Setting!.IntegerValue);
+        Assert.True(result.ShowFundName);
+        Assert.Equal(5, repository.Setting!.IntegerValue);
         Assert.Equal(ApplicationSettingsService.TariffTableVisibleColumnsKey, repository.Setting.Key);
         Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
         Assert.Equal(1, repository.SaveChangesCount);
         var audit = Assert.Single(auditWriter.Requests);
         Assert.Equal("application_setting.tariff_table_columns_updated", audit.Action);
+        Assert.Equal(false, audit.OldValues!["showFundName"]);
+        Assert.Equal(true, audit.NewValues!["showFundName"]);
     }
 
     [Fact]
@@ -207,6 +211,7 @@ public sealed class ApplicationSettingsServiceTests
 
         Assert.False(result.ShowPeriodicityColumn);
         Assert.False(result.ShowAccrualMonthColumn);
+        Assert.False(result.ShowFundName);
         Assert.Null(repository.Setting);
         Assert.Equal(0, repository.SaveChangesCount);
         Assert.Empty(auditWriter.Requests);

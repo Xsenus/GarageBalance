@@ -41,6 +41,7 @@ function SettingsDisplaySwitch({ title, label, checked, disabled, onChange }: {
 const tariffColumnSwitches = [
   { key: 'periodicity', title: 'Периодичность', label: 'Колонка «Периодичность»' },
   { key: 'accrualMonth', title: 'Месяц начисления', label: 'Колонка «Месяц начисления»' },
+  { key: 'fundName', title: 'Название фонда', label: 'Показывать фонд под наименованием услуги' },
 ] as const
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
@@ -78,7 +79,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
-  const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false })
+  const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false, fundName: false })
   const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
   const [tariffTableDisplaySettingsVersion, setTariffTableDisplaySettingsVersion] = useState<string | null>(null)
   const [paymentDisplaySettingsLoading, setPaymentDisplaySettingsLoading] = useState(false)
@@ -210,7 +211,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
           setPaymentDisplaySettingsVersion(settings.version)
-          setTariffTableColumns({ periodicity: settings.showPeriodicityColumn, accrualMonth: settings.showAccrualMonthColumn })
+          setTariffTableColumns({
+            periodicity: settings.showPeriodicityColumn,
+            accrualMonth: settings.showAccrualMonthColumn,
+            fundName: settings.showFundName,
+          })
           setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
         }
       })
@@ -357,6 +362,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         showPeriodicityColumn: tariffTableColumns.periodicity,
         showAccrualMonthColumn: tariffTableColumns.accrualMonth,
         tariffTableVersion: tariffTableDisplaySettingsVersion ?? '',
+        showFundName: tariffTableColumns.fundName,
       })
       setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
       setPaymentDisplaySettingsVersion(settings.version)

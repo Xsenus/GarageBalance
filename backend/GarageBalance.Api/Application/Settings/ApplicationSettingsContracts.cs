@@ -7,24 +7,28 @@ public sealed record PaymentDisplaySettingsDto(
     Guid Version = default,
     bool ShowPeriodicityColumn = false,
     bool ShowAccrualMonthColumn = false,
-    Guid TariffTableVersion = default);
+    Guid TariffTableVersion = default,
+    bool ShowFundName = false);
 
 public sealed record UpdatePaymentDisplaySettingsRequest(
     bool ShowAllGarageOperationsByDefault,
     Guid? Version = null,
     bool ShowPeriodicityColumn = false,
     bool ShowAccrualMonthColumn = false,
-    Guid? TariffTableVersion = null);
+    Guid? TariffTableVersion = null,
+    bool ShowFundName = false);
 
 public sealed record TariffTableDisplaySettingsDto(
     bool ShowPeriodicityColumn,
     bool ShowAccrualMonthColumn,
-    Guid Version = default);
+    Guid Version = default,
+    bool ShowFundName = false);
 
 public sealed record UpdateTariffTableDisplaySettingsRequest(
     bool ShowPeriodicityColumn,
     bool ShowAccrualMonthColumn,
-    Guid? Version = null);
+    Guid? Version = null,
+    bool ShowFundName = false);
 
 public sealed record TariffPanelsLayoutDto(
     int IrregularPaymentsWidthPercent,

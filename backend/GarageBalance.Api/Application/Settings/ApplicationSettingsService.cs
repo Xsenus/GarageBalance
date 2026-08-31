@@ -92,7 +92,9 @@ public sealed class ApplicationSettingsService(
     {
         var setting = await repository.FindForUpdateAsync(TariffTableVisibleColumnsKey, cancellationToken);
         var previousMask = setting?.IntegerValue ?? 0;
-        var nextMask = (request.ShowPeriodicityColumn ? 1 : 0) | (request.ShowAccrualMonthColumn ? 2 : 0);
+        var nextMask = (request.ShowPeriodicityColumn ? 1 : 0)
+            | (request.ShowAccrualMonthColumn ? 2 : 0)
+            | (request.ShowFundName ? 4 : 0);
         if (setting is not null)
         {
             OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
@@ -124,24 +126,27 @@ public sealed class ApplicationSettingsService(
             "application_setting.tariff_table_columns_updated",
             "application_setting",
             TariffTableVisibleColumnsKey,
-            Summary: "Изменено отображение колонок периодичности и месяца начисления в таблице тарифов.",
+            Summary: "Изменены параметры отображения таблицы тарифов.",
             Section: "settings",
             ActionKind: "update",
-            EntityDisplayName: "Колонки таблицы тарифов",
+            EntityDisplayName: "Отображение таблицы тарифов",
             OldValues: new Dictionary<string, object?>
             {
                 ["showPeriodicityColumn"] = previous.ShowPeriodicityColumn,
-                ["showAccrualMonthColumn"] = previous.ShowAccrualMonthColumn
+                ["showAccrualMonthColumn"] = previous.ShowAccrualMonthColumn,
+                ["showFundName"] = previous.ShowFundName
             },
             NewValues: new Dictionary<string, object?>
             {
                 ["showPeriodicityColumn"] = next.ShowPeriodicityColumn,
-                ["showAccrualMonthColumn"] = next.ShowAccrualMonthColumn
+                ["showAccrualMonthColumn"] = next.ShowAccrualMonthColumn,
+                ["showFundName"] = next.ShowFundName
             },
             FieldLabels: new Dictionary<string, string>
             {
                 ["showPeriodicityColumn"] = "Показывать периодичность",
-                ["showAccrualMonthColumn"] = "Показывать месяц начисления"
+                ["showAccrualMonthColumn"] = "Показывать месяц начисления",
+                ["showFundName"] = "Показывать название фонда"
             }));
 
         await repository.SaveChangesAsync(cancellationToken);
@@ -441,7 +446,7 @@ public sealed class ApplicationSettingsService(
         value is >= 1 and <= 28 ? value.Value : DefaultSalaryAccrualDay;
 
     private static TariffTableDisplaySettingsDto CreateTariffTableDisplaySettingsDto(int mask, Guid version) =>
-        new((mask & 1) != 0, (mask & 2) != 0, version);
+        new((mask & 1) != 0, (mask & 2) != 0, version, (mask & 4) != 0);
 
     private static string CreateTariffPanelsLayoutKey(Guid userId) =>
         $"users.{userId:N}.tariffs.bottom_panels_split";

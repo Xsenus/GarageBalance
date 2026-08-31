@@ -52,12 +52,14 @@ describe('settingsApi', () => {
   it('loads payment display settings', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       showAllGarageOperationsByDefault: false,
+      showFundName: false,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await settingsApi.getPaymentDisplaySettings('token')
 
     expect(result.showAllGarageOperationsByDefault).toBe(false)
+    expect(result.showFundName).toBe(false)
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       headers: {
         'Content-Type': 'application/json',
@@ -69,13 +71,15 @@ describe('settingsApi', () => {
   it('updates payment display settings', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       showAllGarageOperationsByDefault: true,
+      showFundName: true,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version' }
+    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version', showFundName: true }
     const result = await settingsApi.updatePaymentDisplaySettings('token', request)
 
     expect(result.showAllGarageOperationsByDefault).toBe(true)
+    expect(result.showFundName).toBe(true)
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       method: 'PUT',
       body: JSON.stringify(request),

@@ -28,7 +28,8 @@ public sealed class SettingsController(
             payments.Version,
             tariffs.ShowPeriodicityColumn,
             tariffs.ShowAccrualMonthColumn,
-            tariffs.Version));
+            tariffs.Version,
+            tariffs.ShowFundName));
     }
 
     [HttpPut("payments/display")]
@@ -45,7 +46,8 @@ public sealed class SettingsController(
             new UpdateTariffTableDisplaySettingsRequest(
                 request.ShowPeriodicityColumn,
                 request.ShowAccrualMonthColumn,
-                request.TariffTableVersion),
+                request.TariffTableVersion,
+                request.ShowFundName),
             actorUserId,
             cancellationToken);
         return Ok(new PaymentDisplaySettingsDto(
@@ -53,7 +55,8 @@ public sealed class SettingsController(
             payments.Version,
             tariffs.ShowPeriodicityColumn,
             tariffs.ShowAccrualMonthColumn,
-            tariffs.Version));
+            tariffs.Version,
+            tariffs.ShowFundName));
     }
 
     [HttpGet("tariffs/layout")]

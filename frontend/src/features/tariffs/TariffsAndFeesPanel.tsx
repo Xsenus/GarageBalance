@@ -818,7 +818,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffReferencesLoading, setTariffReferencesLoading] = useState(false)
   const [feeCampaignGarageOptionsLoading, setFeeCampaignGarageOptionsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
-  const [tableColumns, setTableColumns] = useState([false, false])
+  const [tableColumns, setTableColumns] = useState([false, false, false])
   const [tariffPanelsWidth, setTariffPanelsWidthState] = useState(defaultTariffPanelsSplitPercent)
   const [tariffPanelsLayoutError, setTariffPanelsLayoutError] = useState<string | null>(null)
   const tariffPanelsGridRef = useRef<HTMLDivElement>(null)
@@ -1235,7 +1235,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal)
       .then((settings) => {
         if (ignore) return
-        setTableColumns([settings.showPeriodicityColumn, settings.showAccrualMonthColumn])
+        setTableColumns([settings.showPeriodicityColumn, settings.showAccrualMonthColumn, settings.showFundName])
+        if (settings.showFundName) void ensureTariffReferences()
       })
       .catch(() => undefined)
     return () => {
@@ -1243,6 +1244,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       controller.abort()
       chargeServiceEditorControllerRef.current?.abort()
     }
+  // The shared loader is guarded by refs and cancelled by the main section cleanup.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.accessToken, settingsClient])
 
   useEffect(() => {
@@ -2579,6 +2582,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               const periodicityRow = row.serviceSettingKind === 'main'
                 ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'periodicity')
                 : null
+              const incomeFundName = tableColumns[2]
+                ? backendIncomeTypes.find((incomeType) => incomeType.id === serviceSetting?.incomeTypeId)?.destinationFundName
+                : null
               return (
                 <Fragment key={row.id}>
                 <div
@@ -2626,6 +2632,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         <span className="tariffs-threshold-range__unit">{row.unit}</span>
                         {thresholdRangeErrors[row.id] ? <ForegroundDialogError><small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small></ForegroundDialogError> : null}
                       </div>
+                    ) : incomeFundName ? (
+                      <span>{incomeFundName}</span>
                     ) : row.serviceSettingKind !== 'main' && row.title !== (row.group ?? row.category) && (
                       <span>{row.title}</span>
                     )}
