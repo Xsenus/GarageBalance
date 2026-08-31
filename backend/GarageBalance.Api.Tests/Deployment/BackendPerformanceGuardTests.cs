@@ -236,6 +236,17 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
+        var compactList = ExtractMethodSource(
+            source,
+            "public async Task<IReadOnlyList<Owner>> GetListAsync");
+        Assert.Contains("join garage in dbContext.Garages.AsNoTracking()", compactList, StringComparison.Ordinal);
+        Assert.Contains("GarageNumber = garage == null ? null : garage.Number", compactList, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(compactList, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain(".Include(", compactList, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.PeopleCount", compactList, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.FloorCount", compactList, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.StartingBalance", compactList, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.Comment", compactList, StringComparison.Ordinal);
         var postgresPage = ExtractMethodSource(
             source,
             "private async Task<OwnerPageData> GetPostgresPageAsync");

@@ -12,14 +12,65 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
         int limit,
         CancellationToken cancellationToken)
     {
-        return await ApplyFilters(normalizedSearch, includeArchived)
-            .Include(owner => owner.Garages)
-            .AsSplitQuery()
+        var limitedOwners = ApplyFilters(normalizedSearch, includeArchived)
             .OrderBy(owner => owner.LastName)
             .ThenBy(owner => owner.FirstName)
             .ThenBy(owner => owner.Id)
-            .Take(limit)
+            .Take(limit);
+        var rows = await (
+            from owner in limitedOwners
+            join garage in dbContext.Garages.AsNoTracking()
+                on owner.Id equals garage.OwnerId into garages
+            from garage in garages.DefaultIfEmpty()
+            select new
+            {
+                OwnerId = owner.Id,
+                owner.LastName,
+                owner.FirstName,
+                owner.MiddleName,
+                owner.Phone,
+                owner.Address,
+                owner.MeterNotes,
+                OwnerIsArchived = owner.IsArchived,
+                GarageId = garage == null ? null : (Guid?)garage.Id,
+                GarageNumber = garage == null ? null : garage.Number
+            })
+            .OrderBy(row => row.LastName)
+            .ThenBy(row => row.FirstName)
+            .ThenBy(row => row.OwnerId)
+            .ThenBy(row => row.GarageNumber)
+            .ThenBy(row => row.GarageId)
             .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(row => row.OwnerId)
+            .Select(group =>
+            {
+                var first = group.First();
+                var owner = new Owner
+                {
+                    Id = first.OwnerId,
+                    LastName = first.LastName,
+                    FirstName = first.FirstName,
+                    MiddleName = first.MiddleName,
+                    Phone = first.Phone,
+                    Address = first.Address,
+                    MeterNotes = first.MeterNotes,
+                    IsArchived = first.OwnerIsArchived
+                };
+                owner.Garages = group
+                    .Where(row => row.GarageId.HasValue)
+                    .Select(row => new Garage
+                    {
+                        Id = row.GarageId!.Value,
+                        Number = row.GarageNumber!,
+                        OwnerId = owner.Id,
+                        Owner = owner
+                    })
+                    .ToList();
+                return owner;
+            })
+            .ToList();
     }
 
     public async Task<OwnerPageData> GetPageAsync(
