@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
@@ -116,6 +116,95 @@ describe('редактор тарифной сетки услуги', () => {
       ],
     })))
     expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+  })
+
+  it('не отправляет повторный запрос при двух нажатиях до завершения сохранения', async () => {
+    const savedPeriods = [
+      { tariffId: 'tariff-1', effectiveFrom: '2026-01-01', effectiveTo: null, rate: 101, tariffVersion: 'tariff-version-2' },
+    ]
+    let resolveSave!: (periods: typeof savedPeriods) => void
+    const onUpdateTariffSchedule = vi.fn().mockImplementation(() => new Promise<typeof savedPeriods>((resolve) => {
+      resolveSave = resolve
+    }))
+
+    render(<AddServicePrototypeDialog
+      initialSetting={{
+        id: 'service-1', name: 'Вода', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+        paymentDueDay: 30, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income-1',
+        tariffId: 'tariff-1', isMetered: true, hasTieredTariff: false, unitName: 'м³', isArchived: false,
+        version: 'service-version-1',
+      }}
+      isSaving={false}
+      funds={[{ id: 'fund-1', name: 'Водоснабжение', allowOperations: true }]}
+      incomeTypes={[{ id: 'income-1', name: 'Вода', code: 'water', isArchived: false, destinationFundId: 'fund-1', destinationFundName: 'Водоснабжение' }]}
+      measurementUnits={[]}
+      tariffs={[{
+        id: 'tariff-1', name: 'Вода', calculationBase: 'meter_water', rate: 101,
+        electricityFirstThreshold: null, electricitySecondThreshold: null, electricityFirstTierName: null,
+        electricitySecondTierName: null, electricityThirdTierName: null, electricityFirstRate: null,
+        electricitySecondRate: null, electricityThirdRate: null, effectiveFrom: '2026-01-01', comment: null,
+        isArchived: false, version: 'tariff-version-1',
+      }]}
+      tariffSchedule={savedPeriods}
+      onClose={vi.fn()}
+      onUpdateWithTariff={vi.fn()}
+      onUpdateTariffSchedule={onUpdateTariffSchedule}
+    />)
+
+    const saveButton = screen.getByRole('button', { name: 'Сохранить тарифную сетку' })
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onUpdateTariffSchedule).toHaveBeenCalledTimes(1)
+    expect(saveButton).toBeDisabled()
+
+    resolveSave(savedPeriods)
+    expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+  })
+
+  it('после ошибки снимает блокировку и позволяет повторить сохранение', async () => {
+    const savedPeriods = [
+      { tariffId: 'tariff-1', effectiveFrom: '2026-01-01', effectiveTo: null, rate: 101, tariffVersion: 'tariff-version-2' },
+    ]
+    const onUpdateTariffSchedule = vi.fn()
+      .mockRejectedValueOnce(new Error('Не удалось сохранить тарифную сетку.'))
+      .mockResolvedValueOnce(savedPeriods)
+
+    render(<AddServicePrototypeDialog
+      initialSetting={{
+        id: 'service-1', name: 'Вода', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+        paymentDueDay: 30, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income-1',
+        tariffId: 'tariff-1', isMetered: true, hasTieredTariff: false, unitName: 'м³', isArchived: false,
+        version: 'service-version-1',
+      }}
+      isSaving={false}
+      funds={[{ id: 'fund-1', name: 'Водоснабжение', allowOperations: true }]}
+      incomeTypes={[{ id: 'income-1', name: 'Вода', code: 'water', isArchived: false, destinationFundId: 'fund-1', destinationFundName: 'Водоснабжение' }]}
+      measurementUnits={[]}
+      tariffs={[{
+        id: 'tariff-1', name: 'Вода', calculationBase: 'meter_water', rate: 101,
+        electricityFirstThreshold: null, electricitySecondThreshold: null, electricityFirstTierName: null,
+        electricitySecondTierName: null, electricityThirdTierName: null, electricityFirstRate: null,
+        electricitySecondRate: null, electricityThirdRate: null, effectiveFrom: '2026-01-01', comment: null,
+        isArchived: false, version: 'tariff-version-1',
+      }]}
+      tariffSchedule={savedPeriods}
+      onClose={vi.fn()}
+      onUpdateWithTariff={vi.fn()}
+      onUpdateTariffSchedule={onUpdateTariffSchedule}
+    />)
+
+    const saveButton = screen.getByRole('button', { name: 'Сохранить тарифную сетку' })
+    fireEvent.click(saveButton)
+    expect(await screen.findByText('Не удалось сохранить тарифную сетку.')).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+
+    fireEvent.click(saveButton)
+    expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+    expect(onUpdateTariffSchedule).toHaveBeenCalledTimes(2)
   })
 
   it('отправляет отсутствующие идентификаторы нового тарифного периода как null', async () => {

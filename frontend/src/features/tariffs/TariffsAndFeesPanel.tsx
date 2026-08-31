@@ -3512,6 +3512,7 @@ export function AddServicePrototypeDialog({
     (tariffSchedule ?? []).map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
   const [scheduleSaving, setScheduleSaving] = useState(false)
+  const scheduleSaveInFlightRef = useRef(false)
   const selectedTariff = initialTariff
   const supportedMeterCalculationBase = isMeterTariff(initialTariff ?? undefined)
     ? initialTariff!.calculationBase
@@ -3526,7 +3527,7 @@ export function AddServicePrototypeDialog({
   useEscapeKey(true, onClose)
 
   async function saveTariffSchedule() {
-    if (!onUpdateTariffSchedule || !initialSetting) {
+    if (!onUpdateTariffSchedule || !initialSetting || scheduleSaveInFlightRef.current) {
       return
     }
 
@@ -3556,6 +3557,9 @@ export function AddServicePrototypeDialog({
       }
     }
 
+    // The disabled state is committed after the event. Close the same-tick
+    // double-click window synchronously so two requests cannot reuse one version.
+    scheduleSaveInFlightRef.current = true
     setScheduleSaving(true)
     setScheduleMessage(null)
     try {
@@ -3576,6 +3580,7 @@ export function AddServicePrototypeDialog({
     } catch (caught) {
       setScheduleMessage(caught instanceof Error ? caught.message : 'Не удалось сохранить тарифную сетку.')
     } finally {
+      scheduleSaveInFlightRef.current = false
       setScheduleSaving(false)
     }
   }
