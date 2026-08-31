@@ -15,7 +15,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         int limit,
         CancellationToken cancellationToken)
     {
-        var query = WithDetails(dbContext.FeeCampaigns.AsNoTracking())
+        var query = dbContext.FeeCampaigns.AsNoTracking()
             .Where(item => includeArchived || !item.IsArchived);
         if (normalizedSearch is not null)
         {
@@ -34,12 +34,13 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             }
         }
 
-        return await query
-            .OrderBy(item => item.IsArchived)
-            .ThenByDescending(item => item.StartsOn)
-            .ThenBy(item => item.Name)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+        return await ReadCompactListAsync(
+            query
+                .OrderBy(item => item.IsArchived)
+                .ThenByDescending(item => item.StartsOn)
+                .ThenBy(item => item.Name)
+                .Take(limit),
+            cancellationToken);
     }
 
     public Task<FeeCampaign?> FindActiveWithDetailsAsync(Guid id, CancellationToken cancellationToken) =>
@@ -229,6 +230,93 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
 
     public void Add(FeeCampaign campaign) => dbContext.FeeCampaigns.Add(campaign);
 
+    private static async Task<IReadOnlyList<FeeCampaign>> ReadCompactListAsync(
+        IQueryable<FeeCampaign> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .Select(campaign => new FeeCampaignListRow(
+                campaign.Id,
+                campaign.Name,
+                campaign.IncomeTypeId,
+                campaign.IncomeType.Name,
+                campaign.IncomeType.DestinationFundId,
+                campaign.IncomeType.DestinationFund == null ? null : campaign.IncomeType.DestinationFund.Name,
+                campaign.Goal,
+                campaign.ContributionAmount,
+                campaign.TargetAmount,
+                campaign.StartsOn,
+                campaign.EndsOn,
+                campaign.AppliesToAllGarages,
+                campaign.ParticipantGarages
+                    .OrderBy(participant => participant.Garage.Number)
+                    .Select(participant => new FeeCampaignParticipantListRow(
+                        participant.GarageId,
+                        participant.Garage.Number))
+                    .ToList(),
+                campaign.OverdueGraceDays,
+                campaign.ClosedAtUtc,
+                campaign.IsClosedEarly,
+                campaign.ClosureComment,
+                campaign.IsArchived))
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(CreateCompactCampaign).ToList();
+    }
+
+    private static FeeCampaign CreateCompactCampaign(FeeCampaignListRow row)
+    {
+        var campaign = new FeeCampaign
+        {
+            Id = row.Id,
+            Name = row.Name,
+            IncomeTypeId = row.IncomeTypeId,
+            IncomeType = new IncomeType
+            {
+                Id = row.IncomeTypeId,
+                Name = row.IncomeTypeName,
+                DestinationFundId = row.DestinationFundId,
+                DestinationFund = row.DestinationFundId is null
+                    ? null
+                    : new GarageBalance.Api.Domain.Finance.Fund
+                    {
+                        Id = row.DestinationFundId.Value,
+                        Name = row.DestinationFundName ?? string.Empty,
+                        NormalizedName = row.DestinationFundName ?? string.Empty
+                    }
+            },
+            Goal = row.Goal,
+            ContributionAmount = row.ContributionAmount,
+            TargetAmount = row.TargetAmount,
+            StartsOn = row.StartsOn,
+            EndsOn = row.EndsOn,
+            AppliesToAllGarages = row.AppliesToAllGarages,
+            ParticipantGarages = row.Participants
+                .Select(participant => new FeeCampaignGarage
+                {
+                    GarageId = participant.GarageId,
+                    Garage = new Garage
+                    {
+                        Id = participant.GarageId,
+                        Number = participant.GarageNumber
+                    }
+                })
+                .ToList(),
+            OverdueGraceDays = row.OverdueGraceDays,
+            ClosedAtUtc = row.ClosedAtUtc,
+            IsClosedEarly = row.IsClosedEarly,
+            ClosureComment = row.ClosureComment,
+            IsArchived = row.IsArchived
+        };
+        foreach (var participant in campaign.ParticipantGarages)
+        {
+            participant.FeeCampaignId = campaign.Id;
+            participant.FeeCampaign = campaign;
+        }
+
+        return campaign;
+    }
+
     private static IQueryable<FeeCampaign> WithDetails(IQueryable<FeeCampaign> query) =>
         query
             .Include(item => item.IncomeType)
@@ -277,6 +365,28 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         GarageBalance.Api.Domain.Finance.Accrual? Accrual,
         decimal PaidAmount,
         decimal CollectedAmount);
+
+    private sealed record FeeCampaignListRow(
+        Guid Id,
+        string Name,
+        Guid IncomeTypeId,
+        string IncomeTypeName,
+        Guid? DestinationFundId,
+        string? DestinationFundName,
+        string? Goal,
+        decimal ContributionAmount,
+        decimal TargetAmount,
+        DateOnly StartsOn,
+        DateOnly? EndsOn,
+        bool AppliesToAllGarages,
+        List<FeeCampaignParticipantListRow> Participants,
+        int OverdueGraceDays,
+        DateTimeOffset? ClosedAtUtc,
+        bool IsClosedEarly,
+        string? ClosureComment,
+        bool IsArchived);
+
+    private sealed record FeeCampaignParticipantListRow(Guid GarageId, string GarageNumber);
 
     private sealed class FeeCampaignAmountRow
     {
