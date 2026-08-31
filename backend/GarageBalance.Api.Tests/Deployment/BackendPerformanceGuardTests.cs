@@ -605,6 +605,8 @@ public sealed class BackendPerformanceGuardTests
     public void StaffMemberRepository_UsesDatabaseLimitBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
+        Assert.Contains("ProjectListRows(ApplyFilters", source, StringComparison.Ordinal);
+        Assert.Contains("return rows.Select(ToStaffMember).ToList();", source, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("sortBy == \"rate\" && IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("ApplyPageSorting(queryWithDepartment, sortBy, sortDescending)", source, StringComparison.Ordinal);

@@ -8,12 +8,13 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
 {
     public async Task<IReadOnlyList<StaffMember>> GetListAsync(Guid? departmentId, string? normalizedSearch, bool includeArchived, int limit, CancellationToken cancellationToken)
     {
-        return await IncludeDepartment(ApplyFilters(departmentId, normalizedSearch, includeArchived))
-            .OrderBy(member => member.Department.Name)
-            .ThenBy(member => member.FullName)
-            .ThenBy(member => member.Id)
+        var rows = await ProjectListRows(ApplyFilters(departmentId, normalizedSearch, includeArchived))
+            .OrderBy(row => row.DepartmentName)
+            .ThenBy(row => row.FullName)
+            .ThenBy(row => row.MemberId)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return rows.Select(ToStaffMember).ToList();
     }
 
     public async Task<StaffMemberPageData> GetPageAsync(Guid? departmentId, string? normalizedSearch, bool includeArchived, int offset, int limit, string sortBy, bool sortDescending, CancellationToken cancellationToken)
@@ -54,17 +55,7 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
     {
         const int PageCategory = 1;
         const int TotalsCategory = 2;
-        var projectedRows = query.Select(member => new StaffMemberListRow
-        {
-            Category = PageCategory,
-            MemberId = member.Id,
-            FullName = member.FullName,
-            Rate = member.Rate,
-            IsArchived = member.IsArchived,
-            DepartmentId = member.DepartmentId,
-            DepartmentName = member.Department.Name,
-            TotalCount = 0
-        });
+        var projectedRows = ProjectListRows(query);
         var pageRows = ApplyPostgresSorting(projectedRows, sortBy, sortDescending)
             .Skip(offset)
             .Take(limit);
@@ -89,22 +80,37 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
         var items = rows
             .Where(row => row.Category == PageCategory)
-            .Select(row => new StaffMember
-            {
-                Id = row.MemberId!.Value,
-                FullName = row.FullName!,
-                Rate = row.Rate!.Value,
-                IsArchived = row.IsArchived!.Value,
-                DepartmentId = row.DepartmentId!.Value,
-                Department = new StaffDepartment
-                {
-                    Id = row.DepartmentId.Value,
-                    Name = row.DepartmentName!
-                }
-            })
+            .Select(ToStaffMember)
             .ToList();
         return new StaffMemberPageData(items, totalCount);
     }
+
+    private static IQueryable<StaffMemberListRow> ProjectListRows(IQueryable<StaffMember> query) =>
+        query.Select(member => new StaffMemberListRow
+        {
+            Category = 1,
+            MemberId = member.Id,
+            FullName = member.FullName,
+            Rate = member.Rate,
+            IsArchived = member.IsArchived,
+            DepartmentId = member.DepartmentId,
+            DepartmentName = member.Department.Name,
+            TotalCount = 0
+        });
+
+    private static StaffMember ToStaffMember(StaffMemberListRow row) => new()
+    {
+        Id = row.MemberId!.Value,
+        FullName = row.FullName!,
+        Rate = row.Rate!.Value,
+        IsArchived = row.IsArchived!.Value,
+        DepartmentId = row.DepartmentId!.Value,
+        Department = new StaffDepartment
+        {
+            Id = row.DepartmentId.Value,
+            Name = row.DepartmentName!
+        }
+    };
 
     private static IOrderedQueryable<StaffMemberListRow> ApplyPostgresSorting(
         IQueryable<StaffMemberListRow> query,
