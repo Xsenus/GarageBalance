@@ -525,6 +525,20 @@ public sealed class BackendPerformanceGuardTests
         var supplierPageMethod = serviceSource[
             serviceSource.IndexOf("public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync", StringComparison.Ordinal)];
         Assert.DoesNotContain("GetDebtTotalsAsync", supplierPageMethod, StringComparison.Ordinal);
+        var supplierListMethod = serviceSource[
+            serviceSource.IndexOf("public async Task<IReadOnlyList<SupplierDto>> GetSuppliersAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync", StringComparison.Ordinal)];
+        Assert.DoesNotContain("GetDebtTotalsAsync", supplierListMethod, StringComparison.Ordinal);
+        var postgresList = ExtractMethodSource(
+            source,
+            "private async Task<SupplierListData> GetPostgresListAsync");
+        Assert.Equal(1, CountOccurrences(postgresList, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("BuildPostgresListRows(limitedSuppliers)", postgresList, StringComparison.Ordinal);
+        var postgresListProjection = ExtractMethodSource(
+            source,
+            "private IQueryable<SupplierListRow> BuildPostgresListRows");
+        Assert.Contains("DebtTotal = supplier.StartingBalance", postgresListProjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreatedAtUtc", postgresListProjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("UpdatedAtUtc", postgresListProjection, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
         Assert.Matches(
