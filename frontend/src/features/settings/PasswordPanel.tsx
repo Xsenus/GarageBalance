@@ -984,19 +984,19 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               {businessDateSettings.isOverrideActive ? (
                 <div className="form-warning" role="status">Расчёты сейчас выполняются на тестовую дату. Верните системную дату после проверки.</div>
               ) : null}
-              <FormField label="Новая рабочая дата">
+              <FormField label="Новая рабочая дата" help="Изменение применяется только после предварительного просмотра влияния и отдельного подтверждения.">
                 <LocalizedDatePicker ariaLabel="Новая рабочая дата" mode="date" value={businessDateDraft} disabled={businessDateSaving} onChange={(value) => { setBusinessDateDraft(value); setBusinessDateMessage(null) }} required />
               </FormField>
-              <p className="form-hint">Изменение применяется после предварительного просмотра и подтверждения.</p>
-              <div className="dialog-actions dialog-actions--start">
+              <div className="settings-form-actions">
                 <button className="secondary-button" type="button" disabled={!businessDateDraft || businessDateSaving} onClick={() => void previewBusinessDateChange(businessDateDraft)}>
                   <CalendarClock size={16} aria-hidden="true" />
                   <span>{businessDateSaving ? 'Проверяем влияние...' : 'Проверить и установить дату'}</span>
                 </button>
                 <button className="ghost-button" type="button" disabled={!businessDateSettings.isOverrideActive || businessDateSaving} onClick={() => void previewBusinessDateChange(null)}>Проверить возврат системной даты</button>
               </div>
-              <form className="dictionary-form settings-card-form" aria-label="Настройка автоматического начисления зарплаты" onSubmit={(event) => void saveSalaryAccrualSettings(event)}>
-                <FormField label="День начисления зарплаты">
+              <form className="dictionary-form settings-card-form business-date-salary-form" aria-label="Настройка автоматического начисления зарплаты" onSubmit={(event) => void saveSalaryAccrualSettings(event)}>
+                <p className="eyebrow">Зарплата</p>
+                <FormField label="День начисления зарплаты" help="В этот день оклад попадает в ведомость всем активным сотрудникам. Допустимы дни с 1-го по 28-е.">
                   <input
                     aria-label="День начисления зарплаты"
                     type="number"
@@ -1012,8 +1012,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                     required
                   />
                 </FormField>
-                <p className="form-hint">В выбранный день оклад автоматически попадает в ведомость всем активным сотрудникам. Дни 1–28 работают одинаково во всех месяцах.</p>
-                <div className="dialog-actions dialog-actions--start">
+                <div className="settings-form-actions">
                   <button className="secondary-button" type="submit" disabled={salaryAccrualSaving || salaryAccrualSettings?.accrualDay === Number(salaryAccrualDayDraft)}>
                     <CalendarClock size={16} aria-hidden="true" />
                     <span>{salaryAccrualSaving ? 'Сохраняем...' : 'Сохранить день начисления'}</span>
@@ -1060,7 +1059,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                       {account === 'cash' ? <Banknote size={20} aria-hidden="true" /> : <Landmark size={20} aria-hidden="true" />}
                       <strong>{account === 'cash' ? 'Касса' : 'Банковский счёт'}</strong>
                     </div>
-                    <div className="dialog-actions dialog-actions--start">
+                    <div className="dialog-actions">
                       <button className="secondary-button create-action-button" type="button" disabled={cashBankSaving} onClick={() => openBalanceAdjustment(account, 'increase')}>
                         <ArrowUpCircle size={17} aria-hidden="true" />
                         <span>Пополнить</span>
@@ -1595,7 +1594,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       {businessDateConfirmation ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !businessDateSaving && setBusinessDateConfirmation(null)}>
           <section className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="business-date-confirmation-title" aria-describedby="business-date-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="dialog-heading">
+            <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Рабочая дата</p>
                 <h3 id="business-date-confirmation-title">{businessDateConfirmation.overrideDate ? 'Включить тестовую дату?' : 'Вернуть системную дату?'}</h3>
@@ -1615,7 +1614,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               </div>
             ) : null}
             {businessDateError ? <FormError>{businessDateError}</FormError> : null}
-            <div className="dialog-actions">
+            <div className="detail-dialog-actions">
               <button className="ghost-button" type="button" onClick={() => setBusinessDateConfirmation(null)} disabled={businessDateSaving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmBusinessDateChange()} disabled={businessDateSaving}>
                 <CalendarClock size={16} aria-hidden="true" />
@@ -1650,7 +1649,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
           <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="dialog-heading">
+            <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Настройки</p>
                 <h3 id="password-change-confirmation-title">Подтвердить смену пароля?</h3>
@@ -1666,7 +1665,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               after: formatSensitiveChange(pendingPasswordChange.newPassword),
             }]} />
             {error ? <FormError>{error}</FormError> : null}
-            <div className="dialog-actions">
+            <div className="detail-dialog-actions">
               <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingPasswordChange(null)} disabled={saving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmPasswordChange()} disabled={saving}>
                 <ShieldCheck size={16} />
@@ -1683,7 +1682,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           }
         }}>
           <section ref={oneCFreshSyncDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="one-c-fresh-sync-confirmation-title" aria-describedby="one-c-fresh-sync-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="dialog-heading">
+            <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Интеграции</p>
                 <h3 id="one-c-fresh-sync-confirmation-title">{getOneCFreshSyncConfirmationTitle(oneCFreshSyncConfirmation.mode)}</h3>
@@ -1697,7 +1696,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <textarea aria-label={getOneCFreshSyncCommentLabel(oneCFreshSyncConfirmation.mode)} rows={4} value={oneCFreshSyncConfirmation.comment} onChange={(event) => setOneCFreshSyncConfirmation((state) => state ? { ...state, comment: event.target.value, error: null } : state)} disabled={oneCFreshSyncSaving} />
             </FormField>
             {oneCFreshSyncConfirmation.error ? <FormError>{oneCFreshSyncConfirmation.error}</FormError> : null}
-            <div className="dialog-actions">
+            <div className="detail-dialog-actions">
               <button ref={oneCFreshSyncCancelRef} className="ghost-button" type="button" onClick={closeOneCFreshSyncConfirmation} disabled={oneCFreshSyncSaving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmOneCFreshSync()} disabled={oneCFreshSyncSaving}>
                 <RefreshCw size={16} />
@@ -1743,7 +1742,7 @@ function BackupReasonDialog({ fileName, reason, error, busy, onReasonChange, onC
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={() => !busy && onCancel()}>
       <section ref={dialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="dialog-heading">
+        <div className="detail-dialog-header">
           <div>
             <p className="eyebrow">{deleting ? 'Удаление резервной копии' : 'Резервные копии'}</p>
             <h3 id={titleId}>{deleting ? 'Удалить выбранную копию?' : 'Создать резервную копию базы?'}</h3>
@@ -1768,7 +1767,7 @@ function BackupReasonDialog({ fileName, reason, error, busy, onReasonChange, onC
           />
         </FormField>
         {error ? <FormError>{error}</FormError> : null}
-        <div className="dialog-actions">
+        <div className="detail-dialog-actions">
           <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel} disabled={busy}>Отмена</button>
           <button className={deleting ? 'danger-button' : 'secondary-button'} type="button" onClick={onSubmit} disabled={busy}>
             {deleting ? <X size={16} aria-hidden="true" /> : <DatabaseBackup size={16} aria-hidden="true" />}

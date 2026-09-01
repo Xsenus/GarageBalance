@@ -523,9 +523,6 @@
   background: #eef4ff;
   color: #1849a9;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
-}
-
-.icon-button:focus-visible {
   outline: 3px solid rgba(46, 144, 250, 0.18);
   outline-offset: 2px;
 }
@@ -914,7 +911,6 @@ h1 {
 
 .settings-section-content > .password-panel {
   width: 100%;
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-section-content > .password-panel > * {
@@ -1093,8 +1089,12 @@ h1 {
   font-weight: 600;
 }
 
-.dialog-actions--start {
+.settings-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-start;
+  gap: 8px;
 }
 
 .settings-card-intro {
@@ -1144,6 +1144,11 @@ h1 {
 
 .settings-card-body > .table-shell {
   min-width: 0;
+}
+
+.business-date-salary-form {
+  margin-top: 4px;
+  background: #ffffff;
 }
 
 .settings-backup-table-shell {
@@ -7971,6 +7976,15 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 1500px) {
+  .settings-card--security,
+  .settings-card--display,
+  .settings-card--backups,
+  .settings-card--diagnostics,
+  .settings-card--business-date,
+  .settings-card--cash-bank {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .report-workbook-filter {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -9017,6 +9031,15 @@ button.operation-row:focus-visible {
   .cash-bank-adjustment-grid,
   .cash-bank-action-groups {
     grid-template-columns: 1fr;
+  }
+
+  .settings-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .settings-form-actions > button {
+    width: 100%;
   }
 
   .toast-viewport {

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 describe('responsive layout styles', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const contractorsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
+  const settingsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
   function collectFeatureTsxFiles(directory: string): string[] {
@@ -363,11 +364,15 @@ describe('responsive layout styles', () => {
   it('keeps settings navigation full-height and settings forms compact', () => {
     expect(normalizedAppCss).toContain('.settings-layout {\n  display: grid;\n  grid-template-columns: 240px minmax(0, 1fr);\n  gap: 18px;\n  min-height: calc(100dvh - 210px);')
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')
-    expect(normalizedAppCss).toContain('.settings-section-content > .password-panel {\n  width: 100%;\n  grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-section-content > .password-panel {\n  width: 100%;\n}')
     expect(normalizedAppCss).toContain('.settings-section-content > .password-panel > * {\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.settings-card {\n  width: 100%;')
     expect(normalizedAppCss).toContain('.settings-card--security {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.settings-card--business-date {\n  width: 100%;\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('@media (max-width: 1500px) {\n  .settings-card--security,\n  .settings-card--display,\n  .settings-card--backups,\n  .settings-card--diagnostics,\n  .settings-card--business-date,\n  .settings-card--cash-bank {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-form-actions {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 8px;')
+    expect(normalizedAppCss).toContain('.business-date-salary-form {\n  margin-top: 4px;\n  background: #ffffff;')
     expect(normalizedAppCss).toContain('.settings-card-body {\n  display: grid;\n  min-width: 0;\n  align-content: start;\n  gap: 12px;')
     expect(normalizedAppCss).toContain('.settings-card-intro {\n  align-self: start;')
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
@@ -376,6 +381,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.password-panel,\n  .settings-card--security,\n  .settings-card--display,')
     expect(normalizedAppCss).toContain('.settings-card--cash-bank {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.settings-form-actions {\n    display: grid;\n    grid-template-columns: 1fr;')
+    expect(settingsPanel).not.toContain('className="dialog-heading"')
+    expect(settingsPanel).not.toContain('className="dialog-actions dialog-actions--start"')
+    expect(settingsPanel.match(/className="detail-dialog-header"/g)).toHaveLength(5)
+    expect(settingsPanel.match(/className="detail-dialog-actions"/g)).toHaveLength(5)
   })
 
   it('stretches and centers cash and bank balance groups', () => {
