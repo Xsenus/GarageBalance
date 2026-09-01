@@ -1540,7 +1540,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task CreateSupplierAsync_DerivesOpeningBalanceFromDebtAndValidatesItsLimit()
+    public async Task CreateSupplierAsync_KeepsOpeningDebtEqualToDebtBalanceAndRejectsConflicts()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1550,25 +1550,38 @@ public sealed class DictionaryServiceTests
             new UpsertSupplierRequest("Производный долг", group.Value!.Id, null, null, null, null, null, 0m, null, StartingDebt: 125m),
             null,
             CancellationToken.None);
-        var displayedNegative = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Отрицательный баланс", group.Value.Id, null, null, null, null, null, -250m, null, StartingDebt: 125m),
+        var matchingDisplayedNegative = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Согласованный отрицательный баланс", group.Value.Id, null, null, null, null, null, -125m, null, StartingDebt: 125m),
             null,
             CancellationToken.None);
-        var insufficient = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Недостаточный баланс", group.Value.Id, null, null, null, null, null, -100m, null, StartingDebt: 125m),
+        var conflictingDebt = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Несогласованный долг", group.Value.Id, null, null, null, null, null, -250m, null, StartingDebt: 125m),
+            null,
+            CancellationToken.None);
+        var advanceWithDebt = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Аванс с задолженностью", group.Value.Id, null, null, null, null, null, -40m, null, StartingDebt: 10m),
+            null,
+            CancellationToken.None);
+        var advance = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Согласованный аванс", group.Value.Id, null, null, null, null, null, -40m, null, StartingDebt: 0m),
             null,
             CancellationToken.None);
 
         Assert.True(derived.Succeeded);
         Assert.Equal(125m, derived.Value!.StartingBalance);
         Assert.Equal(125m, derived.Value.StartingDebt);
-        Assert.True(displayedNegative.Succeeded);
-        Assert.Equal(250m, displayedNegative.Value!.StartingBalance);
-        Assert.Equal(125m, displayedNegative.Value.StartingDebt);
-        Assert.False(insufficient.Succeeded);
-        Assert.Equal("supplier_starting_debt_invalid", insufficient.ErrorCode);
-        Assert.Equal("Начальная задолженность поставщику не может превышать общий начальный долг.", insufficient.ErrorMessage);
-        Assert.Equal(2, await database.Context.Suppliers.CountAsync());
+        Assert.True(matchingDisplayedNegative.Succeeded);
+        Assert.Equal(125m, matchingDisplayedNegative.Value!.StartingBalance);
+        Assert.Equal(125m, matchingDisplayedNegative.Value.StartingDebt);
+        Assert.False(conflictingDebt.Succeeded);
+        Assert.Equal("supplier_starting_debt_invalid", conflictingDebt.ErrorCode);
+        Assert.Equal("Начальная задолженность должна быть равна общему начальному долгу. При авансе задолженность должна быть нулевой.", conflictingDebt.ErrorMessage);
+        Assert.False(advanceWithDebt.Succeeded);
+        Assert.Equal("supplier_starting_debt_invalid", advanceWithDebt.ErrorCode);
+        Assert.True(advance.Succeeded);
+        Assert.Equal(-40m, advance.Value!.StartingBalance);
+        Assert.Equal(0m, advance.Value.StartingDebt);
+        Assert.Equal(3, await database.Context.Suppliers.CountAsync());
     }
 
     [Fact]
@@ -1695,12 +1708,12 @@ public sealed class DictionaryServiceTests
         var supplier = await database.Context.Suppliers.SingleAsync(item => item.Id == supplierResult.Value!.Id);
         var changedBalance = await service.UpdateSupplierAsync(
             supplier.Id,
-            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 101m, null),
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 101m, null, StartingDebt: 101m),
             null,
             CancellationToken.None);
         var changedDebt = await service.UpdateSupplierAsync(
             supplier.Id,
-            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 100m, null, StartingDebt: 90m),
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 90m, null, StartingDebt: 90m),
             null,
             CancellationToken.None);
 

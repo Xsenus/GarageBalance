@@ -1,5 +1,5 @@
-export const supplierBalanceWithDebtHelp = 'Долг поставщику вводится со знаком минус, аванс поставщику — со знаком плюс. При нулевом балансе введённая задолженность автоматически формирует такой же долг.'
-export const supplierStartingDebtHelp = 'Начальная задолженность входит во входящий баланс поставщика и при нулевом балансе заполняет его автоматически.'
+export const supplierBalanceWithDebtHelp = 'Долг вводится со знаком минус, аванс — со знаком плюс. Баланс долга и задолженность совпадают.'
+export const supplierStartingDebtHelp = 'Введите долг без минуса: система задаст равный отрицательный баланс. При авансе — ноль.'
 
 export function toDisplayedSupplierStartingBalance(storedBalance: number) {
   return storedBalance === 0 ? 0 : -storedBalance
@@ -14,14 +14,6 @@ export function toStoredSupplierStartingBalance(displayedBalance: number, starti
   return effectiveBalance === 0 ? 0 : -effectiveBalance
 }
 
-export function syncDisplayedSupplierBalanceWithDebt(
-  displayedBalance: number,
-  previousDebt: number,
-  nextDebt: number,
-) {
-  if (displayedBalance !== 0 && (previousDebt <= 0 || displayedBalance !== -previousDebt)) {
-    return displayedBalance
-  }
-
+export function syncDisplayedSupplierBalanceWithDebt(nextDebt: number) {
   return nextDebt > 0 ? -nextDebt : 0
 }

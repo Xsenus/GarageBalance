@@ -3915,7 +3915,15 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                   aria-label="Начальный баланс поставщика"
                   readOnly={Boolean(item)}
                   value={form.startingBalance}
-                  onValueChange={(startingBalance) => setForm({ ...form, startingBalance })}
+                  onValueChange={(startingBalance) => {
+                    const displayedBalance = parseStaffRate(startingBalance)
+                    const nextDebt = displayedBalance < 0 ? -displayedBalance : 0
+                    setForm({
+                      ...form,
+                      startingBalance,
+                      startingDebt: nextDebt > 0 ? formatPrototypeMoney(nextDebt) : '',
+                    })
+                  }}
                 />
               </FormField>
               <FormField label="Начальная задолженность" help={supplierStartingDebtHelp}>
@@ -3924,10 +3932,9 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                   readOnly={Boolean(item)}
                   value={form.startingDebt}
                   onValueChange={(startingDebt) => {
-                    const previousDebt = parsePrototypeMoney(form.startingDebt)
                     const nextDebt = parsePrototypeMoney(startingDebt)
                     const currentStartingBalance = parsePrototypeMoney(form.startingBalance)
-                    const nextStartingBalance = syncDisplayedSupplierBalanceWithDebt(currentStartingBalance, previousDebt, nextDebt)
+                    const nextStartingBalance = syncDisplayedSupplierBalanceWithDebt(nextDebt)
                     setForm({
                       ...form,
                       startingBalance: nextStartingBalance === currentStartingBalance ? form.startingBalance : formatPrototypeMoney(nextStartingBalance),

@@ -760,11 +760,11 @@ public sealed class DictionaryService(
             ? MoneyMath.RoundMoney(request.StartingDebt.Value)
             : Math.Max(requestedStartingBalance, 0m);
         var startingBalance = NormalizeSupplierStartingBalance(requestedStartingBalance, startingDebt);
-        if (startingDebt < 0m || startingDebt > Math.Max(startingBalance, 0m))
+        if (startingDebt < 0m || startingDebt != Math.Max(startingBalance, 0m))
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_starting_debt_invalid",
-                "Начальная задолженность поставщику не может превышать общий начальный долг.");
+                "Начальная задолженность должна быть равна общему начальному долгу. При авансе задолженность должна быть нулевой.");
         }
 
         var supplier = new Supplier
@@ -852,11 +852,11 @@ public sealed class DictionaryService(
             : GetSupplierStartingDebt(supplier.StartingBalance, supplier.StartingDebt);
         var startingBalance = NormalizeSupplierStartingBalance(requestedStartingBalance, startingDebt);
         var comment = NormalizeOptional(request.Comment);
-        if (startingDebt < 0m || startingDebt > Math.Max(startingBalance, 0m))
+        if (startingDebt < 0m || startingDebt != Math.Max(startingBalance, 0m))
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_starting_debt_invalid",
-                "Начальная задолженность поставщику не может превышать общий начальный долг.");
+                "Начальная задолженность должна быть равна общему начальному долгу. При авансе задолженность должна быть нулевой.");
         }
         if (supplier.StartingBalance != startingBalance || GetSupplierStartingDebt(supplier.StartingBalance, supplier.StartingDebt) != startingDebt)
         {

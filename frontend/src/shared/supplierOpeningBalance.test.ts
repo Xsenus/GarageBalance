@@ -16,10 +16,11 @@ describe('supplier opening balance boundary', () => {
     expect(toStoredSupplierStartingBalance(Number.NaN, 0)).toBeNaN()
   })
 
-  it('keeps the displayed balance synchronized only while it follows the debt', () => {
-    expect(syncDisplayedSupplierBalanceWithDebt(0, 0, 125)).toBe(-125)
-    expect(syncDisplayedSupplierBalanceWithDebt(-125, 125, 150)).toBe(-150)
-    expect(syncDisplayedSupplierBalanceWithDebt(-125, 125, 0)).toBe(0)
-    expect(syncDisplayedSupplierBalanceWithDebt(-500, 125, 150)).toBe(-500)
+  it('always derives the displayed debt balance from the entered debt', () => {
+    expect(syncDisplayedSupplierBalanceWithDebt(125)).toBe(-125)
+    expect(syncDisplayedSupplierBalanceWithDebt(150)).toBe(-150)
+    expect(syncDisplayedSupplierBalanceWithDebt(0)).toBe(0)
+    expect(syncDisplayedSupplierBalanceWithDebt(-10)).toBe(0)
   })
+
 })

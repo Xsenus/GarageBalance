@@ -269,7 +269,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(supplier => supplier.ExpenseFundId);
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_suppliers_StartingDebt",
-                "\"StartingDebt\" IS NULL OR (CAST(\"StartingDebt\" AS NUMERIC) >= 0 AND CAST(\"StartingDebt\" AS NUMERIC) <= CASE WHEN CAST(\"StartingBalance\" AS NUMERIC) > 0 THEN CAST(\"StartingBalance\" AS NUMERIC) ELSE 0 END)"));
+                "\"StartingDebt\" IS NULL OR (CAST(\"StartingDebt\" AS NUMERIC) = CASE WHEN CAST(\"StartingBalance\" AS NUMERIC) > 0 THEN CAST(\"StartingBalance\" AS NUMERIC) ELSE 0 END)"));
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
                 .HasForeignKey(supplier => supplier.GroupId)
