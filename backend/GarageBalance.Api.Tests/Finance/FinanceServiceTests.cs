@@ -9171,7 +9171,9 @@ public sealed class FinanceServiceTests
         Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
         Assert.Equal(200, firstRun.Value!.CreatedCount);
         Assert.Equal(20000m, firstRun.Value.TotalAmount);
-        Assert.InRange(firstRunSelectCount, 1, 7);
+        // The eighth constant query refreshes existing garage ids after the shared locks,
+        // preventing a worksheet/batch race without introducing a per-garage N+1 query.
+        Assert.InRange(firstRunSelectCount, 1, 8);
         Assert.False(secondRun.Succeeded);
         Assert.Equal("regular_accruals_empty", secondRun.ErrorCode);
         Assert.InRange(secondRunSelectCount, 1, 5);

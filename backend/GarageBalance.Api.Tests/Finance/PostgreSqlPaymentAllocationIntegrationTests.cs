@@ -342,6 +342,113 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         }
     }
 
+    [PostgreSqlFact]
+    public async Task WorksheetAndBatchGeneration_ReadAccrualsAfterTheirSharedGarageLock()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid worksheetGarageId;
+        Guid secondGarageId;
+        Guid incomeTypeId;
+        Guid tariffId;
+        var month = new DateOnly(2026, 9, 1);
+        await using (var seedContext = database.CreateContext())
+        {
+            var firstGarage = new Garage
+            {
+                Number = "PG-WORKSHEET-RACE-1",
+                PeopleCount = 1,
+                CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var secondGarage = new Garage
+            {
+                Number = "PG-WORKSHEET-RACE-2",
+                PeopleCount = 1,
+                CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var incomeType = new IncomeType { Name = "PG-WORKSHEET-RACE" };
+            var tariff = new Tariff
+            {
+                Name = "PG-WORKSHEET-RACE",
+                CalculationBase = TariffCalculationBases.Fixed,
+                Rate = 100m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            };
+            var setting = new ChargeServiceSetting
+            {
+                Name = "PG-WORKSHEET-RACE",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 20,
+                OverdueGraceDays = 30,
+                IncomeType = incomeType,
+                Tariff = tariff
+            };
+            seedContext.AddRange(firstGarage, secondGarage, setting);
+            await seedContext.SaveChangesAsync();
+            worksheetGarageId = firstGarage.Id;
+            secondGarageId = secondGarage.Id;
+            incomeTypeId = incomeType.Id;
+            tariffId = tariff.Id;
+        }
+
+        await using var blockerContext = database.CreateContext();
+        var blockerRepository = new EfAccrualPaymentAllocationRepository(blockerContext);
+        var blockerLease = await blockerRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(worksheetGarageId, incomeTypeId)],
+            CancellationToken.None);
+        try
+        {
+            await using var worksheetContext = database.CreateContext();
+            var worksheetTask = FinanceServiceTestFactory.Create(worksheetContext)
+                .CalculateGarageIncomeWorksheetAsync(
+                    worksheetGarageId,
+                    new GarageIncomeWorksheetRequest(month, month),
+                    null,
+                    CancellationToken.None);
+            await WaitForAdvisoryLockWaitersAsync(blockerContext, expectedCount: 1);
+
+            await using var generationContext = database.CreateContext();
+            var generationTask = FinanceServiceTestFactory.Create(generationContext)
+                .GenerateRegularAccrualsAsync(
+                    new GenerateRegularAccrualsRequest(incomeTypeId, tariffId, month, "Проверка общей блокировки"),
+                    null,
+                    CancellationToken.None);
+            await WaitForGenerationCompletionOrAdvisoryLockWaitersAsync(
+                blockerContext,
+                generationTask,
+                expectedCount: 2);
+
+            await blockerLease.DisposeAsync();
+            blockerLease = null;
+
+            var worksheet = await worksheetTask;
+            var generation = await generationTask;
+            Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+            Assert.True(generation.Succeeded, generation.ErrorMessage);
+        }
+        finally
+        {
+            if (blockerLease is not null)
+            {
+                await blockerLease.DisposeAsync();
+            }
+        }
+
+        await using var assertionContext = database.CreateContext();
+        var activeAccruals = await assertionContext.Accruals
+            .Where(item =>
+                !item.IsCanceled &&
+                item.IncomeTypeId == incomeTypeId &&
+                item.AccountingMonth == month &&
+                item.Source == AccrualSources.Regular)
+            .OrderBy(item => item.GarageId)
+            .ToArrayAsync();
+        Assert.Equal(2, activeAccruals.Length);
+        Assert.Single(activeAccruals, item => item.GarageId == worksheetGarageId);
+        Assert.Single(activeAccruals, item => item.GarageId == secondGarageId);
+    }
+
     private static async Task WaitForAdvisoryLockWaitersAsync(
         GarageBalanceDbContext context,
         int expectedCount)
@@ -368,6 +475,40 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         }
 
         throw new TimeoutException($"Expected {expectedCount} concurrent advisory-lock waiters.");
+    }
+
+    private static async Task WaitForGenerationCompletionOrAdvisoryLockWaitersAsync(
+        GarageBalanceDbContext context,
+        Task generationTask,
+        int expectedCount)
+    {
+        var connection = context.Database.GetDbConnection();
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (generationTask.IsCompleted)
+            {
+                return;
+            }
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT count(*)::int
+                FROM pg_locks
+                WHERE locktype = 'advisory'
+                  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+                  AND NOT granted
+                """;
+            var waitingCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            if (waitingCount >= expectedCount)
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException($"Expected generation completion or {expectedCount} advisory-lock waiters.");
     }
 
     [PostgreSqlFact]

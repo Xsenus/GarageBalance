@@ -849,7 +849,7 @@ public sealed class FinanceService(
                 meterKinds,
                 cancellationToken))
             .ToDictionary(reading => (reading.AccountingMonth, reading.MeterKind));
-        var existingAccruals = await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
+        var existingRegularIncomeTypeIds = await accrualRepository.GetActiveRegularIncomeTypeIdsAsync(
             garage.Id,
             monthFrom,
             monthTo,
@@ -857,11 +857,21 @@ public sealed class FinanceService(
         var allocationKeys = settings
             .Where(setting => incomeTypes.ContainsKey(setting.IncomeTypeId!.Value))
             .Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value))
-            .Concat(existingAccruals.Select(accrual => new AccrualPaymentAllocationKey(garage.Id, accrual.IncomeTypeId)))
+            .Concat(existingRegularIncomeTypeIds.Select(incomeTypeId =>
+                new AccrualPaymentAllocationKey(garage.Id, incomeTypeId)))
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             allocationKeys,
+            cancellationToken);
+
+        // Read the mutable accrual set only after taking the same per-garage locks used by
+        // batch generation. Otherwise both workflows can observe a missing accrual and the
+        // second insert fails on the active-accrual uniqueness constraint.
+        var existingAccruals = await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
+            garage.Id,
+            monthFrom,
+            monthTo,
             cancellationToken);
 
         var paidAccrualIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
@@ -4507,18 +4517,31 @@ public sealed class FinanceService(
         }
 
         var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
-        IReadOnlySet<Guid> existingGarageIds = existingAccrualCount == 0
-            ? new HashSet<Guid>()
-            : accountingYear.HasValue
-                ? await accrualRepository.GetActiveAnnualRegularGarageIdsAsync(
-                    incomeType.Id,
-                    accountingYear.Value,
-                    cancellationToken)
-                : await accrualRepository.GetActiveGarageIdsAsync(
-                    incomeType.Id,
-                    month,
-                    AccrualSources.Regular,
-                    cancellationToken);
+        await using var garageLocks = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            garages
+                .Select(garage => new AccrualPaymentAllocationKey(garage.Id, incomeType.Id))
+                .ToArray(),
+            cancellationToken);
+
+        // Refresh after the per-garage locks. A worksheet may have completed while this
+        // batch was waiting and created one of the same rows.
+        IReadOnlySet<Guid> existingGarageIds = accountingYear.HasValue
+            ? await accrualRepository.GetActiveAnnualRegularGarageIdsAsync(
+                incomeType.Id,
+                accountingYear.Value,
+                cancellationToken)
+            : await accrualRepository.GetActiveGarageIdsAsync(
+                incomeType.Id,
+                month,
+                AccrualSources.Regular,
+                cancellationToken);
+        if (garages.Count > 0 && existingGarageIds.Count >= garages.Count)
+        {
+            var periodLabel = accountingYear.HasValue ? $"за {accountingYear.Value} год" : $"за {month:MM.yyyy}";
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                "regular_accruals_empty",
+                $"Регулярные начисления {periodLabel} уже сформированы для всех активных гаражей ({garages.Count}).");
+        }
         var pendingGarageIds = garages
             .Where(garage =>
                 GetGarageAccrualStartMonth(garage) <= month &&
