@@ -14255,7 +14255,22 @@ describe('App', () => {
     const fundNameToggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать фонд под наименованием услуги' })
     const historicalCorrectionToggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить изменение существующих показаний за другие месяцы' })
     const reasonMode = within(displayPanel).getByRole('combobox', { name: 'Показывать причины начислений' })
+    const settingHelp = [
+      ['Причины действий', /причину удаления и комментарии/i],
+      ['Показывать общую ведомость платежей', /открывает «Платежи» общей ведомостью/i],
+      ['Причины начислений', /строки платежей с пояснением «Причина»/i],
+      ['Изменение показаний за другие месяцы', /Пустую ячейку можно заполнить всегда/i],
+      ['Периодичность', /частоту начисления услуги/i],
+      ['Месяц начисления', /месяц ежегодного начисления/i],
+      ['Название фонда', /фонд под названием услуги/i],
+    ] as const
     await waitFor(() => expect(toggle).toBeEnabled())
+    settingHelp.forEach(([label, description]) => {
+      const help = within(displayPanel).getByLabelText(`Справка: ${label}`)
+      expect(help).toHaveAttribute('tabindex', '0')
+      expect(help).toHaveAccessibleDescription(description)
+    })
+    await user.click(within(displayPanel).getByLabelText('Справка: Показывать общую ведомость платежей'))
     expect(toggle).not.toBeChecked()
     expect(periodicityToggle).not.toBeChecked()
     expect(accrualMonthToggle).not.toBeChecked()

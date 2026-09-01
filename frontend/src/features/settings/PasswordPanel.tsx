@@ -13,7 +13,7 @@ import { MoneyTextInput } from '../../shared/MoneyInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { parseMoneyInput } from '../../shared/moneyInputFormatting'
 import { formatSensitiveChange } from '../../shared/changePreview'
-import { FormField } from '../../shared/FormField'
+import { FieldHelp, FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { formatDateOnly, formatDateTime, formatMoney, formatOperationTime, getLocalDateInputValue } from '../../shared/formatters'
 import { downloadBlob } from '../../shared/fileExports'
@@ -23,27 +23,31 @@ import { useToast } from '../../shared/useToast'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
-function SettingsDisplaySwitch({ title, label, checked, disabled, onChange }: {
+function SettingsDisplaySwitch({ title, label, help, checked, disabled, onChange }: {
   title: string
   label: string
+  help: string
   checked: boolean
   disabled?: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
-    <label className="contractors-switch-row settings-display-switch">
-      <strong>{title}</strong>
-      <span className="contractors-switch-control">
-        <input type="checkbox" aria-label={label} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+    <div className="contractors-switch-row settings-display-switch">
+      <span className="field-label-with-help">
+        <strong>{title}</strong>
+        <FieldHelp label={title}>{help}</FieldHelp>
       </span>
-    </label>
+      <label className="contractors-switch-control">
+        <input type="checkbox" aria-label={label} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      </label>
+    </div>
   )
 }
 
 const tariffColumnSwitches = [
-  { key: 'periodicity', title: 'Периодичность', label: 'Колонка «Периодичность»' },
-  { key: 'accrualMonth', title: 'Месяц начисления', label: 'Колонка «Месяц начисления»' },
-  { key: 'fundName', title: 'Название фонда', label: 'Показывать фонд под наименованием услуги' },
+  { key: 'periodicity', title: 'Периодичность', label: 'Колонка «Периодичность»', help: 'Показывает частоту начисления услуги.' },
+  { key: 'accrualMonth', title: 'Месяц начисления', label: 'Колонка «Месяц начисления»', help: 'Показывает месяц ежегодного начисления.' },
+  { key: 'fundName', title: 'Название фонда', label: 'Показывать фонд под наименованием услуги', help: 'Показывает фонд под названием услуги.' },
 ] as const
 
 const accrualReasonDisplayOptions = [
@@ -1172,6 +1176,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <SettingsDisplaySwitch
             title="Причины действий"
             label="Требовать причину удаления и комментарии к другим действиям"
+            help="Требует причину удаления и комментарии. Действия остаются в истории."
             checked={actionCommentsRequired}
             disabled={actionCommentSettingsLoading}
             onChange={(checked) => {
@@ -1180,16 +1185,16 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 .catch((caught: unknown) => setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку.'))
             }}
           />
-          <p className="form-hint">{actionCommentsRequired ? 'Причина обязательна.' : 'Причина необязательна; действие сохраняется в истории.'}</p>
           {actionCommentSettingsError ? <FormError>{actionCommentSettingsError}</FormError> : null}
           <SettingsDisplaySwitch
             title="Показывать общую ведомость платежей"
             label="Показывать общую ведомость платежей при открытии"
+            help="Открывает «Платежи» общей ведомостью; иначе сначала выбирается гараж."
             checked={showAllGarageOperationsByDefault}
             disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
             onChange={(checked) => { setShowAllGarageOperationsByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
           />
-          <FormField label="Причины начислений" help="Настройка определяет, под какими строками в таблице платежей показывается пояснение «Причина». Данные начислений и история изменений не скрываются.">
+          <FormField label="Причины начислений" help="Задаёт строки платежей с пояснением «Причина». История не скрывается.">
             <SelectControl
               aria-label="Показывать причины начислений"
               value={accrualReasonDisplayMode}
@@ -1204,16 +1209,17 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <SettingsDisplaySwitch
             title="Изменение показаний за другие месяцы"
             label="Разрешить изменение существующих показаний за другие месяцы"
+            help="Разрешает менять показания прошлых месяцев. Пустую ячейку можно заполнить всегда."
             checked={historicalMeterReadingCorrectionEnabled}
             disabled={paymentDisplaySettingsLoading || historicalMeterReadingCorrectionSaving}
             onChange={(checked) => { void saveHistoricalMeterReadingCorrectionEnabled(checked) }}
           />
-          <p className="form-hint">По умолчанию выключено. Первичное заполнение пустой ячейки остаётся доступным без окна подтверждения.</p>
           {tariffColumnSwitches.map((item) => (
             <SettingsDisplaySwitch
               key={item.key}
               title={item.title}
               label={item.label}
+              help={item.help}
               checked={tariffTableColumns[item.key]}
               disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
               onChange={(checked) => { setTariffTableColumns({ ...tariffTableColumns, [item.key]: checked }); setPaymentDisplaySettingsMessage(null) }}

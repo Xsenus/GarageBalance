@@ -1193,38 +1193,6 @@ h1 {
   justify-self: end;
 }
 
-.settings-display-form {
-  gap: 12px;
-}
-
-.settings-display-switch {
-  min-height: 72px;
-  padding: 12px 14px;
-}
-
-.settings-display-switch > span:first-child {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-}
-
-.settings-display-switch strong,
-.settings-display-switch small {
-  display: block;
-}
-
-.settings-display-switch strong {
-  color: #101828;
-  line-height: 1.35;
-}
-
-.settings-display-switch small {
-  color: #667085;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
 .contractors-sheet-row--deleted {
   background: #f9fafb;
   color: #98a2b3;
@@ -6859,8 +6827,7 @@ h1 {
 }
 
 .field-help:hover .field-help__tooltip,
-.field-help:focus .field-help__tooltip,
-.field-help:focus-within .field-help__tooltip {
+.field-help:focus .field-help__tooltip {
   transform: translateY(0);
   opacity: 1;
 }
@@ -9209,8 +9176,7 @@ button.operation-row:focus-visible {
   }
 
   .field-help:hover .field-help__tooltip,
-  .field-help:focus .field-help__tooltip,
-  .field-help:focus-within .field-help__tooltip {
+  .field-help:focus .field-help__tooltip {
     transform: translateY(0);
   }
 

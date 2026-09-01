@@ -310,7 +310,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.owner-name-grid__middle-name {\n  grid-column: 1 / -1;')
     expect(normalizedAppCss).toContain('.field-label-with-help {\n  position: relative;')
     expect(normalizedAppCss).toContain('width: min(280px, 100%);')
-    expect(normalizedAppCss).toContain('.field-help:hover .field-help__tooltip,\n.field-help:focus .field-help__tooltip,\n.field-help:focus-within .field-help__tooltip {')
+    expect(normalizedAppCss).toContain('.field-help:hover .field-help__tooltip,\n.field-help:focus .field-help__tooltip {')
     expect(normalizedAppCss).toContain('.owner-name-grid,\n  .owner-contact-grid {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
@@ -371,7 +371,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card-body {\n  display: grid;\n  min-width: 0;\n  align-content: start;\n  gap: 12px;')
     expect(normalizedAppCss).toContain('.settings-card-intro {\n  align-self: start;')
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('.settings-display-switch > span:first-child {\n  display: grid;')
+    expect(normalizedAppCss).toContain('.contractors-switch-row {\n  display: grid;\n  grid-template-columns: minmax(170px, 1fr) max-content;\n  min-height: 42px;')
     expect(normalizedAppCss).toContain('.settings-layout {\n    grid-template-columns: 1fr;\n    min-height: 0;')
     expect(normalizedAppCss).toContain('.password-panel,\n  .settings-card--security,\n  .settings-card--display,')
     expect(normalizedAppCss).toContain('.settings-card--cash-bank {\n    grid-template-columns: minmax(0, 1fr);')
