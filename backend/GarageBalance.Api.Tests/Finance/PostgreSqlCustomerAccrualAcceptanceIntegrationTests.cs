@@ -98,7 +98,8 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
             {
                 Number = "PG-CUSTOMER-MID-MONTH",
                 PeopleCount = 1,
-                FloorCount = 1
+                FloorCount = 1,
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero)
             };
             var incomeType = new IncomeType
             {

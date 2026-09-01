@@ -7008,7 +7008,8 @@ public sealed class FinanceServiceTests
         {
             Number = "AUTO-FEE-SECOND",
             PeopleCount = 1,
-            FloorCount = 1
+            FloorCount = 1,
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero)
         };
         database.Context.Garages.Add(secondGarage);
         var tariff = new Tariff
