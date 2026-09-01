@@ -355,6 +355,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.funds-heading {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 16px;')
     expect(normalizedAppCss).toContain('.funds-content {\n  display: grid;\n  min-height: 0;\n  flex: 1 1 auto;\n  grid-template-columns: minmax(520px, 0.95fr) minmax(0, 1.05fr);')
     expect(normalizedAppCss).toContain('.funds-left-column {\n  display: flex;\n  width: 100%;\n  min-height: 0;\n  flex-direction: column;')
+    expect(normalizedAppCss).toContain('.funds-distribution {\n  display: grid;\n  width: 100%;\n  grid-template-columns: minmax(0, 1fr) auto;')
+    expect(normalizedAppCss).not.toContain('.funds-distribution {\n  display: grid;\n  width: min(620px, 100%);')
     expect(normalizedAppCss).toContain('.funds-operations-sheet {\n  display: flex;\n  width: 100%;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;')
     expect(normalizedAppCss).toContain('.funds-operations-table-scroll {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow: auto;')
     expect(normalizedAppCss).toContain('.funds-operations-sheet > .dictionary-pagination {\n  flex: 0 0 auto;')
