@@ -1170,8 +1170,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
         <div className="dictionary-form settings-card-form settings-display-form">
           <SettingsDisplaySwitch
-            title="Требовать комментарий к действиям"
-            label="Требовать комментарий к действиям"
+            title="Причины действий"
+            label="Требовать причину удаления и комментарии к другим действиям"
             checked={actionCommentsRequired}
             disabled={actionCommentSettingsLoading}
             onChange={(checked) => {
@@ -1180,7 +1180,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 .catch((caught: unknown) => setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку.'))
             }}
           />
-          <p className="form-hint">Причины необязательны, но история действий сохраняется.</p>
+          <p className="form-hint">{actionCommentsRequired ? 'Причина обязательна.' : 'Причина необязательна; действие сохраняется в истории.'}</p>
           {actionCommentSettingsError ? <FormError>{actionCommentSettingsError}</FormError> : null}
           <SettingsDisplaySwitch
             title="Показывать общую ведомость платежей"

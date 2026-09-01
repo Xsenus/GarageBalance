@@ -1467,12 +1467,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   async function confirmGarageDeleteFromTable() {
-    if (!garageDeleteTarget || !garageDeleteReason.trim()) {
+    if (!garageDeleteTarget) {
+      return
+    }
+
+    const reason = garageDeleteReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
     await runConfirmation(
-      () => deleteGarage(garageDeleteTarget, garageDeleteReason.trim()),
+      () => deleteGarage(garageDeleteTarget, reason),
       () => {
       setGarageDeleteTarget(null)
       setGarageDeleteReason('')
@@ -1839,12 +1844,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   async function confirmSupplierDeleteFromTable() {
-    if (!supplierDeleteTarget || !supplierDeleteReason.trim()) {
+    if (!supplierDeleteTarget) {
+      return
+    }
+
+    const reason = supplierDeleteReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
     await runConfirmation(
-      () => deleteSupplier(supplierDeleteTarget, supplierDeleteReason.trim()),
+      () => deleteSupplier(supplierDeleteTarget, reason),
       () => { setSupplierDeleteTarget(null); setSupplierDeleteReason('') },
       'Не удалось удалить поставщика.',
     )
@@ -1941,12 +1951,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   async function confirmEmployeeDeleteFromTable() {
-    if (!employeeDeleteTarget || !employeeDeleteReason.trim()) {
+    if (!employeeDeleteTarget) {
+      return
+    }
+
+    const reason = employeeDeleteReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
     await runConfirmation(
-      () => deleteEmployee(employeeDeleteTarget, employeeDeleteReason.trim()),
+      () => deleteEmployee(employeeDeleteTarget, reason),
       () => { setEmployeeDeleteTarget(null); setEmployeeDeleteReason('') },
       'Не удалось удалить сотрудника.',
     )
@@ -1969,12 +1984,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }
 
   async function confirmDepartmentDeleteFromTable() {
-    if (!departmentDeleteTarget || !departmentDeleteReason.trim()) {
+    if (!departmentDeleteTarget) {
+      return
+    }
+
+    const reason = departmentDeleteReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
     await runConfirmation(
-      () => deleteDepartment(departmentDeleteTarget, departmentDeleteReason.trim()),
+      () => deleteDepartment(departmentDeleteTarget, reason),
       () => { setDepartmentDeleteTarget(null); setDepartmentDeleteReason('') },
       'Не удалось удалить отдел.',
     )
@@ -3013,7 +3033,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               </button>
             </div>
             <p className="confirmation-text" id="supplier-table-delete-description">Поставщик будет скрыт из рабочего списка.</p>
-            <label className="field-label" htmlFor="supplier-table-delete-reason">Причина удаления</label>
+            <label className="field-label" htmlFor="supplier-table-delete-reason">Причина удаления {actionCommentsRequired ? '*' : '(необязательно)'}</label>
             <textarea
               id="supplier-table-delete-reason"
               aria-label="Причина удаления поставщика"
@@ -3024,6 +3044,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               placeholder="Например: договор больше не действует"
               required={actionCommentsRequired}
             />
+            <p className="form-hint">{actionCommentsRequired ? 'Причина обязательна. Настройка: «Настройки» → «Отображение».' : 'Причина необязательна; действие сохранится в истории.'}</p>
             {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeSupplierDeleteDialog}>Отмена</button>
@@ -3654,6 +3675,7 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
 }
 
 function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const activeServices = services.filter((service) =>
     service.id === item?.serviceId || (!service.isArchived && service.isRegular))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
@@ -3771,11 +3793,11 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   }
 
   function confirmContactDelete() {
-    if (!contactDeleteTarget || !contactDeleteReason.trim()) {
+    if (!contactDeleteTarget || (actionCommentsRequired && !contactDeleteReason.trim())) {
       return
     }
 
-    updateContact(contactDeleteTarget.id, { isDeleted: true, status: 'Не работает', deleteReason: contactDeleteReason.trim() })
+    updateContact(contactDeleteTarget.id, { isDeleted: true, status: 'Не работает', deleteReason: contactDeleteReason.trim() || undefined })
     closeContactDeleteDialog()
   }
 

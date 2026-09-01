@@ -6895,8 +6895,9 @@ h1 {
 }
 
 .danger-button {
-  border-color: #fda29b;
-  color: #b42318;
+  border-color: #d92d20;
+  background: #d92d20;
+  color: #ffffff;
 }
 
 .dictionary-modal-form > fieldset {
@@ -6910,9 +6911,9 @@ h1 {
 
 .danger-button:hover:not(:disabled),
 .danger-button:focus-visible {
-  border-color: #f97066;
-  background: #fef3f2;
-  color: #912018;
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
 }
 
 .danger-button:focus-visible {

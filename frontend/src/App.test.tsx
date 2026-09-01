@@ -2586,6 +2586,44 @@ describe('App', () => {
     expect(departmentError.closest('[role="dialog"]')).toBe(dialog)
   }, 30000)
 
+  it('deletes a supplier without a reason when action comments are optional', async () => {
+    const user = userEvent.setup()
+    const archiveSupplier = vi.fn(async () => undefined)
+    const supplier = createSupplier({
+      id: '20000000-0000-4000-8000-000000000002',
+      name: 'Водоканал',
+      groupId: 'group-1',
+      groupName: 'Коммунальные услуги',
+    })
+    const settingsClient = createSettingsClient({
+      getActionCommentSettings: async () => ({ required: false, version: 'comment-version' }),
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSuppliers: async () => [supplier],
+      archiveSupplier,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Удалить поставщика Водоканал' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Удалить поставщика?' })
+    expect(within(dialog).getByText('Причина необязательна; действие сохранится в истории.')).toBeInTheDocument()
+    expect(within(dialog).getByText('Причина удаления (необязательно)')).toBeInTheDocument()
+    const deleteButton = within(dialog).getByRole('button', { name: 'Удалить' })
+    expect(deleteButton).toHaveClass('danger-button')
+    expect(deleteButton).toBeEnabled()
+
+    await user.click(deleteButton)
+
+    await waitFor(() => expect(archiveSupplier).toHaveBeenCalledWith('token', supplier.id, ''))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить поставщика?' })).not.toBeInTheDocument())
+  })
+
   it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
     const contractorOwner = createOwner({
@@ -14279,7 +14317,7 @@ describe('App', () => {
     const settings = await screen.findByRole('region', { name: 'Настройки' })
     await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
 
-    const toggle = within(settings).getByRole('checkbox', { name: 'Требовать комментарий к действиям' })
+    const toggle = within(settings).getByRole('checkbox', { name: 'Требовать причину удаления и комментарии к другим действиям' })
     await waitFor(() => expect(toggle).not.toBeChecked())
     await user.click(toggle)
 

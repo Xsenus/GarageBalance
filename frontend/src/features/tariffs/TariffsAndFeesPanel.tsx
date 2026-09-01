@@ -1915,7 +1915,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   const confirmOneTimeDelete = async () => {
-    if (!oneTimeDeleteTarget || !oneTimeDeleteReason.trim()) {
+    if (!oneTimeDeleteTarget) {
+      return
+    }
+
+    const reason = oneTimeDeleteReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
@@ -1929,7 +1934,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setOneTimeActionMessage(null)
     setOneTimeConfirmationError(null)
     try {
-      await dictionaryClient.archiveIrregularPayment(auth.accessToken, oneTimeDeleteTarget.backendPaymentId, oneTimeDeleteReason.trim())
+      await dictionaryClient.archiveIrregularPayment(auth.accessToken, oneTimeDeleteTarget.backendPaymentId, reason)
       setOneTimeRows((currentRows) => currentRows.map((currentRow) => (
         currentRow.id === oneTimeDeleteTarget.id ? { ...currentRow, isDeleted: true } : currentRow
       )))
@@ -2118,7 +2123,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   async function archiveChargeServiceSetting() {
-    if (!chargeServiceArchiveTarget || !chargeServiceArchiveReason.trim()) {
+    if (!chargeServiceArchiveTarget) {
+      return
+    }
+
+    const reason = chargeServiceArchiveReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
@@ -2126,7 +2136,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setTariffPersistenceError(null)
     setChargeServiceConfirmationError(null)
     try {
-      await dictionaryClient.archiveChargeServiceSetting(auth.accessToken, chargeServiceArchiveTarget.id, chargeServiceArchiveReason.trim())
+      await dictionaryClient.archiveChargeServiceSetting(auth.accessToken, chargeServiceArchiveTarget.id, reason)
       const nextSettings = backendChargeServices.map((setting) => (
         setting.id === chargeServiceArchiveTarget.id ? { ...setting, isArchived: true } : setting
       ))
@@ -2193,7 +2203,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   async function archiveFeeCampaign() {
-    if (!feeCampaignArchiveTarget || !feeCampaignArchiveReason.trim()) {
+    if (!feeCampaignArchiveTarget) {
+      return
+    }
+
+    const reason = feeCampaignArchiveReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
@@ -2201,7 +2216,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setFeeCampaignActionMessage(null)
     setFeeCampaignConfirmationError(null)
     try {
-      await dictionaryClient.archiveFeeCampaign(auth.accessToken, feeCampaignArchiveTarget.id, feeCampaignArchiveReason.trim())
+      await dictionaryClient.archiveFeeCampaign(auth.accessToken, feeCampaignArchiveTarget.id, reason)
       feeCampaignMutationVersionRef.current += 1
       setFeeCampaigns((currentCampaigns) => currentCampaigns.map((campaign) => (
         campaign.id === feeCampaignArchiveTarget.id ? { ...campaign, isArchived: true } : campaign
@@ -2237,7 +2252,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   async function confirmThresholdDelete() {
-    if (!thresholdDeleteTarget || !thresholdDeleteReason.trim()) {
+    if (!thresholdDeleteTarget) {
+      return
+    }
+
+    const reason = thresholdDeleteReason.trim()
+    if (actionCommentsRequired && !reason) {
       return
     }
 
@@ -2258,7 +2278,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const saved = await persistTariffRow(
       thresholdDeleteTarget,
       nextRows,
-      thresholdDeleteReason.trim(),
+      reason,
       setThresholdDeleteError,
     )
     if (saved) {
