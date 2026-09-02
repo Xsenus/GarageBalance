@@ -903,12 +903,23 @@ public sealed class FinanceService(
         var activeExistingAccruals = existingAccruals
             .Where(accrual => !accrual.IsCanceled)
             .ToArray();
-        var monthlyAccruals = activeExistingAccruals
-            .Where(accrual => !accrual.AccountingYear.HasValue)
+        // The database uniqueness key for an automatic regular accrual is its month and
+        // income type, regardless of AccountingYear. A service can change periodicity, so
+        // an accrual created while it was annual must still be reused after it becomes
+        // monthly (and vice versa) instead of attempting a conflicting insert.
+        var accrualsByMonth = activeExistingAccruals
+            .Where(accrual =>
+                accrual.Basis is null &&
+                !accrual.IrregularPaymentId.HasValue &&
+                !accrual.FeeCampaignId.HasValue)
             .GroupBy(accrual => (accrual.AccountingMonth, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
         var annualAccruals = activeExistingAccruals
-            .Where(accrual => accrual.AccountingYear.HasValue)
+            .Where(accrual =>
+                accrual.AccountingYear.HasValue &&
+                accrual.Basis is null &&
+                !accrual.IrregularPaymentId.HasValue &&
+                !accrual.FeeCampaignId.HasValue)
             .GroupBy(accrual => (AccountingYear: accrual.AccountingYear!.Value, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
 
@@ -935,8 +946,8 @@ public sealed class FinanceService(
                     setting.PeriodicityMonths);
                 var existing = accountingYear.HasValue
                     ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
-                      monthlyAccruals.GetValueOrDefault((month, incomeType.Id))
-                    : monthlyAccruals.GetValueOrDefault((month, incomeType.Id));
+                      accrualsByMonth.GetValueOrDefault((month, incomeType.Id))
+                    : accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
                 if (existing is not null && paidAccrualIds.Contains(existing.Id))
                 {
                     continue;
@@ -1011,13 +1022,10 @@ public sealed class FinanceService(
                             useTieredTariff)
                     };
                     accrualRepository.Add(existing);
+                    accrualsByMonth[(month, incomeType.Id)] = existing;
                     if (accountingYear.HasValue)
                     {
                         annualAccruals[(accountingYear.Value, incomeType.Id)] = existing;
-                    }
-                    else
-                    {
-                        monthlyAccruals[(month, incomeType.Id)] = existing;
                     }
 
                     AddAudit(

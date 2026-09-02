@@ -5717,6 +5717,59 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CalculateGarageIncomeWorksheetAsync_ReusesAnnualAccrualAfterServiceBecomesMonthly()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "periodicity_changed_to_monthly";
+        var tariff = new Tariff
+        {
+            Name = "Monthly tariff after periodicity change",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Monthly service after periodicity change",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            UnitName = "rub."
+        });
+        var existing = new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            AccountingYear = 2026,
+            DueDate = new DateOnly(2026, 8, 20),
+            OverdueFromDate = new DateOnly(2026, 9, 20),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        database.Context.Accruals.Add(existing);
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).CalculateGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var actual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(existing.Id, actual.Id);
+        Assert.Null(actual.AccountingYear);
+        Assert.Equal(125m, actual.Amount);
+    }
+
+    [Fact]
     public async Task CalculateGarageIncomeWorksheetAsync_KeepsIssuedUnpaidAccrualWhenRegularServiceStops()
     {
         await using var database = await TestDatabase.CreateAsync();

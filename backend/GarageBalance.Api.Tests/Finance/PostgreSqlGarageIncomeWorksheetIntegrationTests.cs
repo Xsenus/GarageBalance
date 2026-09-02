@@ -439,6 +439,71 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task CalculateWorksheet_ReusesUniqueMonthlyKeyWhenExistingAccrualHasLegacyAnnualYear()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var incomeType = new IncomeType
+        {
+            Name = "Периодичность изменена на ежемесячную",
+            Code = "pg_periodicity_changed_to_monthly"
+        };
+        var tariff = new Tariff
+        {
+            Name = "Ежемесячный тариф после изменения периодичности",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 125m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Ежемесячная услуга после изменения периодичности",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        };
+        var garage = new Garage
+        {
+            Number = "PG-PERIODICITY-CHANGE",
+            PeopleCount = 1,
+            FloorCount = 1,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var existing = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            AccountingYear = 2026,
+            DueDate = new DateOnly(2026, 8, 20),
+            OverdueFromDate = new DateOnly(2026, 9, 20),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        context.AddRange(setting, garage, existing);
+        await context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(context).CalculateGarageIncomeWorksheetAsync(
+            garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var actual = await context.Accruals.SingleAsync(item =>
+            item.GarageId == garage.Id && item.IncomeTypeId == incomeType.Id);
+        Assert.Equal(existing.Id, actual.Id);
+        Assert.Null(actual.AccountingYear);
+        Assert.Equal(125m, actual.Amount);
+    }
+
+    [PostgreSqlFact]
     public async Task Worksheet_ReturnsMeterIdentityAndVersionForInlineEditing()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
