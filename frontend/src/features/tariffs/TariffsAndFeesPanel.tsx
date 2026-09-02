@@ -1493,10 +1493,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const backendTariff = targetRow.backendTariffId
       ? backendTariffs.find((tariff) => tariff.id === targetRow.backendTariffId)
       : findTariffForPrototypeRow(backendTariffs, targetRow)
-    // An inline edit is a correction from today, not a rewrite of the tariff
-    // version whose start date happens to be displayed in the loaded DTO.
-    // The backend inserts/replaces the version at this date and keeps the
-    // preceding and already scheduled future periods intact.
+    // The row displays the tariff selected by the backend for the working date.
+    // An inline edit therefore corrects that exact period instead of inserting
+    // a new period from today and silently closing a deliberately saved gap.
     const effectiveFrom = getInlineTariffChangeEffectiveFrom(backendTariff?.effectiveFrom)
     const amount = parseTariffAmount(targetRow.amount ?? '')
     if (amount == null) {

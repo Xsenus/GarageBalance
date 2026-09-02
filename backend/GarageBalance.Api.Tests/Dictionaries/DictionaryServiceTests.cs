@@ -5246,6 +5246,124 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceTariffScheduleAsync_ReplacesLegacyRepeatedTariffAndPreservesExplicitGap()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Водоснабжение", 10);
+        var incomeType = new IncomeType { Name = "Вода", Code = "water", DestinationFundId = fund.Id };
+        var firstTariff = new Tariff { Name = "Вода 101", CalculationBase = "meter_water", Rate = 101m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var repeatedTariff = new Tariff { Name = "Вода 105", CalculationBase = "meter_water", Rate = 105m, EffectiveFrom = new DateOnly(2026, 8, 17) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = repeatedTariff.Id,
+            IsMetered = true,
+            UnitName = "м³"
+        };
+        database.Context.AddRange(fund, incomeType, firstTariff, repeatedTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = firstTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 1, 1),
+                EffectiveTo = new DateOnly(2026, 8, 16)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = repeatedTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 8, 17),
+                EffectiveTo = new DateOnly(2026, 8, 25)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = repeatedTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 9, 2)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context, new DateOnly(2026, 9, 2))
+            .UpdateChargeServiceTariffScheduleAsync(
+                setting.Id,
+                new UpsertChargeServiceTariffScheduleRequest(
+                    [
+                        new(firstTariff.Id, new DateOnly(2026, 1, 1), new DateOnly(2026, 8, 16), 101m, firstTariff.Version),
+                        new(repeatedTariff.Id, new DateOnly(2026, 8, 17), new DateOnly(2026, 8, 25), 103m, repeatedTariff.Version),
+                        new(repeatedTariff.Id, new DateOnly(2026, 9, 2), null, 105m, repeatedTariff.Version)
+                    ],
+                    true,
+                    "Исправление тарифной сетки",
+                    setting.Version),
+                Guid.NewGuid(),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal([101m, 103m, 105m], result.Value!.Periods.Select(item => item.Rate));
+        Assert.Equal(3, result.Value.Periods.Select(item => item.TariffId).Distinct().Count());
+        Assert.Null((await new EfChargeServiceSettingRepository(database.Context)
+            .GetActiveRegularAsync(new DateOnly(2026, 8, 28), CancellationToken.None)).Single().Tariff);
+        Assert.Equal(new DateOnly(2026, 9, 2), result.Value.Periods[^1].EffectiveFrom);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_CorrectsOnlyActiveLegacyPeriodWithoutClosingGap()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Водоснабжение", 10);
+        var incomeType = new IncomeType { Name = "Вода", Code = "water", DestinationFundId = fund.Id };
+        var firstTariff = new Tariff { Name = "Вода 101", CalculationBase = "meter_water", Rate = 101m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var repeatedTariff = new Tariff { Name = "Вода 105", CalculationBase = "meter_water", Rate = 105m, EffectiveFrom = new DateOnly(2026, 8, 17) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = repeatedTariff.Id,
+            IsMetered = true,
+            UnitName = "м³"
+        };
+        database.Context.AddRange(fund, incomeType, firstTariff, repeatedTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion { ChargeServiceSettingId = setting.Id, TariffId = firstTariff.Id, EffectiveFrom = new DateOnly(2026, 1, 1), EffectiveTo = new DateOnly(2026, 8, 16) },
+            new ChargeServiceTariffVersion { ChargeServiceSettingId = setting.Id, TariffId = repeatedTariff.Id, EffectiveFrom = new DateOnly(2026, 8, 17), EffectiveTo = new DateOnly(2026, 8, 25) },
+            new ChargeServiceTariffVersion { ChargeServiceSettingId = setting.Id, TariffId = repeatedTariff.Id, EffectiveFrom = new DateOnly(2026, 9, 2) });
+        await database.Context.SaveChangesAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context, new DateOnly(2026, 9, 2)).UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name, true, 1, 1, 30, null, 30, true, false, "м³", incomeType.Id, repeatedTariff.Id, setting.Version),
+                103m,
+                TariffMode: "metered",
+                EffectiveFrom: new DateOnly(2026, 8, 17),
+                TariffVersion: repeatedTariff.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.NotEqual(repeatedTariff.Id, result.Value!.Tariff.Id);
+        Assert.Equal(105m, repeatedTariff.Rate);
+        Assert.Equal(103m, result.Value.Tariff.Rate);
+        var repository = new EfChargeServiceSettingRepository(database.Context);
+        Assert.Equal(105m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 20), CancellationToken.None)).Single().Tariff!.Rate);
+        Assert.Null((await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 28), CancellationToken.None)).Single().Tariff);
+        Assert.Equal(103m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 9, 2), CancellationToken.None)).Single().Tariff!.Rate);
+    }
+
+    [Fact]
     public async Task MeteredCatalog_SelectsHistoricalModeAndExcludesLegacyDisabledMeterTariff()
     {
         await using var database = await TestDatabase.CreateAsync();

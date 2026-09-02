@@ -38,11 +38,13 @@ describe('tariff service presentation', () => {
     expect(getServiceTariffDisplayName('Льготный тариф', 'Вода')).toBe('Льготный тариф')
   })
 
-  it('starts an inline tariff correction on the current calendar date', () => {
+  it('changes the tariff period displayed for the working date without creating a new period today', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-12T10:00:00+07:00'))
 
-    expect(getInlineTariffChangeEffectiveFrom('2026-01-01')).toBe('2026-08-12')
+    expect(getInlineTariffChangeEffectiveFrom('2026-01-01')).toBe('2026-01-01')
     expect(getInlineTariffChangeEffectiveFrom('2026-09-01')).toBe('2026-09-01')
+    expect(getInlineTariffChangeEffectiveFrom(null)).toBe('2026-08-12')
   })
+
 })

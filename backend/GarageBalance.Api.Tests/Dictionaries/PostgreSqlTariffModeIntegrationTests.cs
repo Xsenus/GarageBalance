@@ -134,6 +134,83 @@ public sealed class PostgreSqlTariffModeIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task TariffSchedule_ReplacesRepeatedLegacyTariffAndKeepsGapOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid serviceId;
+        Guid serviceVersion;
+        Guid firstTariffId;
+        Guid firstTariffVersion;
+        Guid repeatedTariffId;
+        Guid repeatedTariffVersion;
+        await using (var setupContext = database.CreateContext())
+        {
+            var incomeTypeId = await setupContext.IncomeTypes
+                .Where(item => item.Code == "water" && !item.IsArchived)
+                .Select(item => item.Id)
+                .SingleAsync();
+            var firstTariff = new Tariff { Name = "Вода 101 — PostgreSQL", CalculationBase = "meter_water", Rate = 101m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+            var repeatedTariff = new Tariff { Name = "Вода 105 — PostgreSQL", CalculationBase = "meter_water", Rate = 105m, EffectiveFrom = new DateOnly(2026, 8, 17) };
+            var setting = new ChargeServiceSetting
+            {
+                Name = "Вода — сетка PostgreSQL",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 30,
+                OverdueGraceDays = 30,
+                IncomeTypeId = incomeTypeId,
+                TariffId = repeatedTariff.Id,
+                IsMetered = true,
+                UnitName = "м³"
+            };
+            setupContext.AddRange(firstTariff, repeatedTariff, setting);
+            setupContext.ChargeServiceTariffVersions.AddRange(
+                new ChargeServiceTariffVersion { ChargeServiceSettingId = setting.Id, TariffId = firstTariff.Id, EffectiveFrom = new DateOnly(2026, 1, 1), EffectiveTo = new DateOnly(2026, 8, 16) },
+                new ChargeServiceTariffVersion { ChargeServiceSettingId = setting.Id, TariffId = repeatedTariff.Id, EffectiveFrom = new DateOnly(2026, 8, 17), EffectiveTo = new DateOnly(2026, 8, 25) },
+                new ChargeServiceTariffVersion { ChargeServiceSettingId = setting.Id, TariffId = repeatedTariff.Id, EffectiveFrom = new DateOnly(2026, 9, 2) });
+            await setupContext.SaveChangesAsync();
+            serviceId = setting.Id;
+            serviceVersion = setting.Version;
+            firstTariffId = firstTariff.Id;
+            firstTariffVersion = firstTariff.Version;
+            repeatedTariffId = repeatedTariff.Id;
+            repeatedTariffVersion = repeatedTariff.Version;
+        }
+
+        await using (var commandContext = database.CreateContext())
+        {
+            var result = await DictionaryServiceTestFactory.Create(commandContext, new DateOnly(2026, 9, 2))
+                .UpdateChargeServiceTariffScheduleAsync(
+                    serviceId,
+                    new UpsertChargeServiceTariffScheduleRequest(
+                        [
+                            new(firstTariffId, new DateOnly(2026, 1, 1), new DateOnly(2026, 8, 16), 101m, firstTariffVersion),
+                            new(repeatedTariffId, new DateOnly(2026, 8, 17), new DateOnly(2026, 8, 25), 103m, repeatedTariffVersion),
+                            new(repeatedTariffId, new DateOnly(2026, 9, 2), null, 105m, repeatedTariffVersion)
+                        ],
+                        true,
+                        "Исправление сетки PostgreSQL",
+                        serviceVersion),
+                    Guid.NewGuid(),
+                    CancellationToken.None);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            Assert.Equal([101m, 103m, 105m], result.Value!.Periods.Select(item => item.Rate));
+        }
+
+        await using var verificationContext = database.CreateContext();
+        var periods = await verificationContext.ChargeServiceTariffVersions
+            .Where(item => item.ChargeServiceSettingId == serviceId && !item.IsArchived)
+            .OrderBy(item => item.EffectiveFrom)
+            .ToListAsync();
+        Assert.Equal(3, periods.Count);
+        Assert.Equal(3, periods.Select(item => item.TariffId).Distinct().Count());
+        Assert.Equal(new DateOnly(2026, 8, 25), periods[1].EffectiveTo);
+        Assert.Equal(new DateOnly(2026, 9, 2), periods[2].EffectiveFrom);
+    }
+
+    [PostgreSqlFact]
     public async Task ConcurrentTariffModeChanges_AreSerializedWithoutPartialServiceStateOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

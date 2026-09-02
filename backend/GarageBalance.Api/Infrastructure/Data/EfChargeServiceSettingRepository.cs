@@ -450,6 +450,33 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Select(item => item.Tariff)
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<ChargeServiceTariffVersion?> FindApplicableTariffPeriodAsync(
+        Guid serviceId,
+        DateOnly businessDate,
+        CancellationToken cancellationToken) =>
+        dbContext.ChargeServiceTariffVersions
+            .Include(item => item.Tariff)
+            .Where(item =>
+                item.ChargeServiceSettingId == serviceId &&
+                !item.IsArchived &&
+                !item.Tariff.IsArchived &&
+                item.EffectiveFrom <= businessDate &&
+                (!item.EffectiveTo.HasValue || item.EffectiveTo.Value >= businessDate))
+            .OrderByDescending(item => item.EffectiveFrom)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<bool> HasOtherTariffPeriodAsync(
+        Guid serviceId,
+        Guid tariffId,
+        DateOnly effectiveFrom,
+        CancellationToken cancellationToken) =>
+        dbContext.ChargeServiceTariffVersions.AsNoTracking().AnyAsync(item =>
+            item.ChargeServiceSettingId == serviceId &&
+            !item.IsArchived &&
+            item.TariffId == tariffId &&
+            item.EffectiveFrom != effectiveFrom,
+            cancellationToken);
+
     public async Task<ChargeServiceTariffScheduleData> GetActiveTariffScheduleAsync(
         Guid serviceId,
         CancellationToken cancellationToken)
@@ -493,14 +520,14 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         var previous = selectedVersions.SingleOrDefault(item => item.EffectiveFrom < effectiveFrom);
         var existing = selectedVersions.SingleOrDefault(item => item.EffectiveFrom == effectiveFrom);
         var next = selectedVersions.SingleOrDefault(item => item.EffectiveFrom > effectiveFrom);
-        if (previous is not null)
+        if (previous is not null && (!previous.EffectiveTo.HasValue || previous.EffectiveTo.Value >= effectiveFrom))
         {
             previous.EffectiveTo = effectiveFrom.AddDays(-1);
         }
 
-        effectiveTo ??= next?.EffectiveFrom.AddDays(-1);
         if (existing is null)
         {
+            effectiveTo ??= next?.EffectiveFrom.AddDays(-1);
             dbContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
             {
                 ChargeServiceSettingId = serviceId,
@@ -512,7 +539,10 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         }
 
         existing.TariffId = tariffId;
-        existing.EffectiveTo = effectiveTo;
+        if (effectiveTo.HasValue || existing.IsArchived)
+        {
+            existing.EffectiveTo = effectiveTo ?? next?.EffectiveFrom.AddDays(-1);
+        }
         existing.IsArchived = false;
     }
 

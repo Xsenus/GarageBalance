@@ -2472,6 +2472,34 @@ public sealed class DictionaryService(
             }
         };
 
+        if (IsInlineTariffRateCorrection(setting, request))
+        {
+            request = request with { TariffMode = null, EffectiveFrom = null };
+        }
+
+        var forceTariffClone = false;
+        ChargeServiceTariffVersion? applicablePeriod = null;
+        if (!request.EffectiveFrom.HasValue && string.IsNullOrWhiteSpace(request.TariffMode))
+        {
+            applicablePeriod = await chargeServiceSettingRepository.FindApplicableTariffPeriodAsync(
+                setting.Id,
+                businessDateProvider.Today,
+                cancellationToken);
+            if (applicablePeriod is not null)
+            {
+                request = request with
+                {
+                    Service = request.Service with { TariffId = applicablePeriod.TariffId },
+                    EffectiveFrom = applicablePeriod.EffectiveFrom
+                };
+                forceTariffClone = await chargeServiceSettingRepository.HasOtherTariffPeriodAsync(
+                    setting.Id,
+                    applicablePeriod.TariffId,
+                    applicablePeriod.EffectiveFrom,
+                    cancellationToken);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(request.TariffMode))
         {
             return await ChangeChargeServiceTariffModeAsync(setting, request, name, actorUserId, cancellationToken);
@@ -2483,7 +2511,8 @@ public sealed class DictionaryService(
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
         }
 
-        var tariff = await tariffRepository.FindActiveAsync(request.Service.TariffId!.Value, cancellationToken);
+        var tariff = applicablePeriod?.Tariff
+            ?? await tariffRepository.FindActiveAsync(request.Service.TariffId!.Value, cancellationToken);
         if (tariff is null)
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
@@ -2494,7 +2523,8 @@ public sealed class DictionaryService(
         OptimisticConcurrencyGuard.EnsureCurrent(request.TariffVersion, tariff);
 
         var roundedRate = MoneyMath.RoundRate(request.Rate);
-        if (tariff.Rate != roundedRate && request.EffectiveFrom.HasValue && request.EffectiveFrom.Value != tariff.EffectiveFrom)
+        if (tariff.Rate != roundedRate && request.EffectiveFrom.HasValue &&
+            (request.EffectiveFrom.Value != tariff.EffectiveFrom || forceTariffClone))
         {
             return await CreateChargeServiceTariffRateVersionAsync(
                 setting,
@@ -2503,7 +2533,8 @@ public sealed class DictionaryService(
                 name,
                 roundedRate,
                 actorUserId,
-                cancellationToken);
+                cancellationToken,
+                forceTariffClone);
         }
 
         var serviceChanged = !ChargeServiceSettingMatches(setting, request.Service);
@@ -2602,7 +2633,9 @@ public sealed class DictionaryService(
 
         var allExisting = await chargeServiceSettingRepository.GetTrackedTariffPeriodsAsync(id, cancellationToken);
         var existing = allExisting.Where(item => !item.IsArchived).ToList();
-        var existingByTariff = existing.ToDictionary(item => item.TariffId);
+        var existingByTariff = existing
+            .GroupBy(item => item.TariffId)
+            .ToDictionary(group => group.Key, group => group.OrderBy(item => item.EffectiveFrom).ToList());
         var fallbackTariff = existing.LastOrDefault()?.Tariff
             ?? await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
         if (fallbackTariff is null)
@@ -2617,17 +2650,19 @@ public sealed class DictionaryService(
         foreach (var period in request.Periods.OrderBy(item => item.EffectiveFrom ?? OpenTariffScheduleStart))
         {
             var startsOn = period.EffectiveFrom ?? OpenTariffScheduleStart;
-            var source = period.TariffId.HasValue && existingByTariff.TryGetValue(period.TariffId.Value, out var existingPeriod)
-                ? existingPeriod.Tariff
-                : fallbackTariff;
+            var matchingExistingPeriod = period.TariffId.HasValue
+                && existingByTariff.TryGetValue(period.TariffId.Value, out var tariffPeriods)
+                    ? tariffPeriods.FirstOrDefault(item => item.EffectiveFrom == startsOn) ?? tariffPeriods[0]
+                    : null;
+            var source = matchingExistingPeriod?.Tariff ?? fallbackTariff;
             if (period.TariffVersion.HasValue)
             {
                 OptimisticConcurrencyGuard.EnsureCurrent(period.TariffVersion, source);
             }
 
             var roundedRate = MoneyMath.RoundRate(period.Rate);
-            var canReuse = existingByTariff.TryGetValue(source.Id, out var sourcePeriod)
-                && sourcePeriod.EffectiveFrom == startsOn
+            var canReuse = matchingExistingPeriod is not null
+                && matchingExistingPeriod.EffectiveFrom == startsOn
                 && source.Rate == roundedRate
                 && usedTariffIds.Add(source.Id);
             var tariff = canReuse ? source : CloneTariffForSchedule(source, setting.Name, startsOn, roundedRate, request.ChangeReason);
@@ -2727,6 +2762,18 @@ public sealed class DictionaryService(
         return DictionaryResult<bool>.Success(true);
     }
 
+    private static bool IsInlineTariffRateCorrection(
+        ChargeServiceSetting setting,
+        UpdateChargeServiceWithTariffRequest request) =>
+        request.ElectricityTiers is null &&
+        string.IsNullOrWhiteSpace(request.ChangeReason) &&
+        request.TariffMode?.Trim().ToLowerInvariant() switch
+        {
+            "regular" => !setting.IsMetered,
+            "metered" => setting.IsMetered && !setting.HasTieredTariff,
+            _ => false
+        };
+
     private static Tariff CloneTariffForSchedule(
         Tariff source,
         string serviceName,
@@ -2767,33 +2814,38 @@ public sealed class DictionaryService(
         string serviceName,
         decimal roundedRate,
         Guid? actorUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceClone = false)
     {
         var effectiveFrom = request.EffectiveFrom!.Value;
         var tariff = await chargeServiceSettingRepository.FindTariffVersionAsync(
             setting.Id,
             effectiveFrom,
             cancellationToken);
-        var createdTariff = tariff is null;
-        tariff ??= new Tariff
+        var createdTariff = forceClone || tariff is null || tariff.Id == sourceTariff.Id && effectiveFrom != sourceTariff.EffectiveFrom;
+        if (createdTariff)
         {
-            Name = CreateServiceTariffVersionName(
-                serviceName,
-                setting.HasTieredTariff ? "metered_tiered" : setting.IsMetered ? "metered" : "regular"),
-            CalculationBase = sourceTariff.CalculationBase,
-            Rate = roundedRate,
-            EffectiveFrom = effectiveFrom,
-            Comment = NormalizeOptional(request.ChangeReason) ?? $"Изменение ставки услуги «{serviceName}».",
-            ElectricityFirstThreshold = sourceTariff.ElectricityFirstThreshold,
-            ElectricitySecondThreshold = sourceTariff.ElectricitySecondThreshold,
-            ElectricityFirstTierName = sourceTariff.ElectricityFirstTierName,
-            ElectricitySecondTierName = sourceTariff.ElectricitySecondTierName,
-            ElectricityThirdTierName = sourceTariff.ElectricityThirdTierName,
-            ElectricityFirstRate = sourceTariff.ElectricityFirstRate,
-            ElectricitySecondRate = sourceTariff.ElectricitySecondRate,
-            ElectricityThirdRate = sourceTariff.ElectricityThirdRate,
-            ElectricityTiersJson = sourceTariff.ElectricityTiersJson,
-        };
+            tariff = new Tariff
+            {
+                Name = CreateServiceTariffVersionName(
+                    serviceName,
+                    setting.HasTieredTariff ? "metered_tiered" : setting.IsMetered ? "metered" : "regular"),
+                CalculationBase = sourceTariff.CalculationBase,
+                Rate = roundedRate,
+                EffectiveFrom = effectiveFrom,
+                Comment = NormalizeOptional(request.ChangeReason) ?? $"Изменение ставки услуги «{serviceName}».",
+                ElectricityFirstThreshold = sourceTariff.ElectricityFirstThreshold,
+                ElectricitySecondThreshold = sourceTariff.ElectricitySecondThreshold,
+                ElectricityFirstTierName = sourceTariff.ElectricityFirstTierName,
+                ElectricitySecondTierName = sourceTariff.ElectricitySecondTierName,
+                ElectricityThirdTierName = sourceTariff.ElectricityThirdTierName,
+                ElectricityFirstRate = sourceTariff.ElectricityFirstRate,
+                ElectricitySecondRate = sourceTariff.ElectricitySecondRate,
+                ElectricityThirdRate = sourceTariff.ElectricityThirdRate,
+                ElectricityTiersJson = sourceTariff.ElectricityTiersJson,
+            };
+        }
+        ArgumentNullException.ThrowIfNull(tariff);
         CopyTariffVersionTerms(
             tariff,
             sourceTariff,

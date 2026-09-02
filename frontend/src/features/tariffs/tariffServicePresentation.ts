@@ -14,6 +14,5 @@ export function getServiceMeasurementUnit(setting: Pick<ChargeServiceSettingDto,
 }
 
 export function getInlineTariffChangeEffectiveFrom(displayedTariffStartsOn?: string | null) {
-  const today = getLocalDateInputValue()
-  return displayedTariffStartsOn && displayedTariffStartsOn > today ? displayedTariffStartsOn : today
+  return displayedTariffStartsOn ?? getLocalDateInputValue()
 }
