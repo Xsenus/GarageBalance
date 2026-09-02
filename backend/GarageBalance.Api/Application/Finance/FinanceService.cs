@@ -410,6 +410,14 @@ public sealed class FinanceService(
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("income_worksheet_period_too_large", $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
+        // Reading the worksheet may create or normalize a fee-campaign accrual. Serialize
+        // every worksheet workflow for one garage, not only the explicit calculation POST,
+        // so a read request cannot race that calculation and attempt the same insert.
+        await using var garageWorksheetLock =
+            await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(
+                garageId,
+                cancellationToken);
+
         var feeCampaignOptions = await EnsureFeeCampaignAccrualsForWorksheetAsync(garageId, monthFrom, monthTo, cancellationToken);
         var worksheetData = await garageIncomeWorksheetQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
         if (worksheetData is null)

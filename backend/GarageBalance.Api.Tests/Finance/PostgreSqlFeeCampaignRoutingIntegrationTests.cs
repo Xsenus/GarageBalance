@@ -1037,6 +1037,41 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task WorksheetRead_WaitsForGarageWorkflowLockBeforeCreatingCampaignAccrual()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var (campaignId, garageId) = await SeedConcurrencyCampaignAsync(database, "CONCURRENT-WORKSHEET-READ");
+        await using var blockerContext = database.CreateContext();
+        var blocker = await new EfAccrualPaymentAllocationRepository(blockerContext)
+            .AcquireGarageIncomeWorksheetLockAsync(garageId, CancellationToken.None);
+        Task<FinanceResult<GarageIncomeWorksheetDto>> worksheetTask;
+        try
+        {
+            worksheetTask = Task.Run(async () =>
+            {
+                await using var worksheetContext = database.CreateContext();
+                return await FinanceServiceTestFactory.Create(worksheetContext).GetGarageIncomeWorksheetAsync(
+                    garageId,
+                    new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+                    CancellationToken.None);
+            });
+            await WaitForAdvisoryLockWaiterAsync(database.ConnectionString, TimeSpan.FromSeconds(10));
+            Assert.False(worksheetTask.IsCompleted);
+        }
+        finally
+        {
+            await blocker.DisposeAsync();
+        }
+
+        var worksheet = await worksheetTask.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        await using var verificationContext = database.CreateContext();
+        Assert.Single(await verificationContext.Accruals
+            .Where(item => item.FeeCampaignId == campaignId && item.GarageId == garageId && !item.IsCanceled)
+            .ToArrayAsync());
+    }
+
+    [PostgreSqlFact]
     public async Task OrdinaryPaymentQueuedBeforeClose_IsIncludedInFreshCampaignSettlement()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
