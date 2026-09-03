@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -75,7 +76,7 @@ public sealed class PostgreSqlRegularAccrualSnapshotBackfillMigrationTests
             var regularWithSnapshot = await migratedContext.Accruals.SingleAsync(item => item.Id == existingSnapshotAccrualId);
             Assert.Equal(1234.56m, regular.Amount);
             Assert.Null(manual.CalculationDetailsJson);
-            Assert.Equal(existingSnapshot, regularWithSnapshot.CalculationDetailsJson);
+            AssertJsonEqual(existingSnapshot, regularWithSnapshot.CalculationDetailsJson);
             var details = RegularAccrualCalculator.Deserialize(regular.CalculationDetailsJson);
             Assert.NotNull(details);
             Assert.Equal(0, details.Version);
@@ -90,14 +91,20 @@ public sealed class PostgreSqlRegularAccrualSnapshotBackfillMigrationTests
         var repeated = await repeatedContext.Accruals.SingleAsync(item => item.Id == regularAccrualId);
         Assert.Equal(1234.56m, repeated.Amount);
         Assert.Equal(firstSnapshot, repeated.CalculationDetailsJson);
-        Assert.Equal(existingSnapshot, (await repeatedContext.Accruals.SingleAsync(item => item.Id == existingSnapshotAccrualId)).CalculationDetailsJson);
+        AssertJsonEqual(existingSnapshot, (await repeatedContext.Accruals.SingleAsync(item => item.Id == existingSnapshotAccrualId)).CalculationDetailsJson);
 
         await repeatedContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
         repeatedContext.ChangeTracker.Clear();
         Assert.Null((await repeatedContext.Accruals.SingleAsync(item => item.Id == regularAccrualId)).CalculationDetailsJson);
-        Assert.Equal(existingSnapshot, (await repeatedContext.Accruals.SingleAsync(item => item.Id == existingSnapshotAccrualId)).CalculationDetailsJson);
+        AssertJsonEqual(existingSnapshot, (await repeatedContext.Accruals.SingleAsync(item => item.Id == existingSnapshotAccrualId)).CalculationDetailsJson);
         await repeatedContext.Database.MigrateAsync();
         repeatedContext.ChangeTracker.Clear();
         Assert.NotNull((await repeatedContext.Accruals.SingleAsync(item => item.Id == regularAccrualId)).CalculationDetailsJson);
+    }
+
+    private static void AssertJsonEqual(string expected, string? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(expected), JsonNode.Parse(actual)));
     }
 }
