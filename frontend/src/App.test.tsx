@@ -3804,7 +3804,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Контрагенты')
     const panel = await screen.findByRole('region', { name: 'Контрагенты' })
-    const row = within(await within(panel).findByRole('table', { name: 'Гаражи' })).getByRole('row', { name: /106/ })
+    const row = await within(await within(panel).findByRole('table', { name: 'Гаражи' })).findByRole('row', { name: /106/ })
     await user.click(within(row).getByRole('button', { name: 'Открыть финансовый отчет гаража 106' }))
 
     await screen.findByRole('dialog', { name: 'Гараж 106' })
