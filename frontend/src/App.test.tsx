@@ -6152,6 +6152,140 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
   })
 
+  it('refreshes stale versions and retries a water service mode switch without changing its meter kind', async () => {
+    const user = userEvent.setup()
+    const waterIncomeType = createAccountingType({
+      id: 'income-water-mode-retry',
+      name: 'Вода',
+      code: 'water',
+      destinationFundId: 'fund-water-mode-retry',
+      destinationFundName: 'Вода',
+    })
+    const initialTariff = createTariff({
+      id: 'tariff-water-mode-initial',
+      name: 'Вода — по счётчику',
+      calculationBase: 'meter_water',
+      rate: 103,
+      version: 'tariff-water-version-1',
+    })
+    const regularTariff = createTariff({
+      id: 'tariff-water-mode-regular',
+      name: 'Вода — обычный',
+      calculationBase: 'fixed',
+      rate: 103,
+      version: 'tariff-water-version-2',
+    })
+    const refreshedTariff = createTariff({
+      ...regularTariff,
+      version: 'tariff-water-version-3',
+    })
+    const tieredTariff = createTariff({
+      id: regularTariff.id,
+      name: 'Вода — по счётчику с порогами',
+      calculationBase: 'meter_water',
+      rate: 103,
+      version: 'tariff-water-version-4',
+      electricityTiers: [
+        { id: 'water-tier-1', name: '0–100 м³', upperBound: 100, rate: 103, isCustom: false },
+        { id: 'water-tier-2', name: '100+ м³', upperBound: null, rate: 120, isCustom: false },
+      ],
+    })
+    const initialService = createChargeServiceSetting({
+      id: 'service-water-mode-retry',
+      name: 'Вода',
+      isRegular: true,
+      periodicityMonths: 1,
+      accrualStartMonth: 1,
+      paymentDueDay: 20,
+      overdueGraceDays: 30,
+      incomeTypeId: waterIncomeType.id,
+      tariffId: initialTariff.id,
+      isMetered: true,
+      hasTieredTariff: false,
+      unitName: 'м³',
+      tariffCalculationBase: 'meter_water',
+      meterKind: 'water',
+      version: 'service-water-version-1',
+    })
+    const regularService = createChargeServiceSetting({
+      ...initialService,
+      tariffId: regularTariff.id,
+      isMetered: false,
+      hasTieredTariff: false,
+      tariffCalculationBase: 'fixed',
+      version: 'service-water-version-2',
+    })
+    const refreshedService = createChargeServiceSetting({
+      ...regularService,
+      version: 'service-water-version-3',
+    })
+    const tieredService = createChargeServiceSetting({
+      ...refreshedService,
+      isMetered: true,
+      hasTieredTariff: true,
+      tariffCalculationBase: 'meter_water',
+      version: 'service-water-version-4',
+    })
+    let tariffLoadCount = 0
+    let serviceLoadCount = 0
+    const updateRequests: UpdateChargeServiceWithTariffRequest[] = []
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [waterIncomeType],
+      getTariffs: async () => (++tariffLoadCount === 1 ? [initialTariff] : [refreshedTariff]),
+      getChargeServiceSettings: async () => (++serviceLoadCount === 1 ? [initialService] : [refreshedService]),
+      updateChargeServiceWithTariff: async (_token, _id, request) => {
+        updateRequests.push(request)
+        if (updateRequests.length === 1) {
+          return { service: regularService, tariff: regularTariff }
+        }
+        if (updateRequests.length === 2) {
+          throw new DictionaryApiError(
+            'concurrent_write_conflict',
+            'Запись уже была добавлена или изменена другим запросом. Обновите данные и повторите действие.',
+            409,
+          )
+        }
+        return { service: tieredService, tariff: tieredTariff }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const meterControl = await within(tariffsPanel).findByRole('combobox', { name: 'Вода: по счетчику' })
+
+    await user.click(meterControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
+    await waitFor(() => expect(updateRequests).toHaveLength(1))
+    await waitFor(() => expect(within(tariffsPanel).getByRole('combobox', { name: 'Вода: по счетчику' })).toHaveTextContent('Нет'))
+
+    const tieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Вода: пороговая тарификация' })
+    await user.click(tieredControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
+
+    await waitFor(() => expect(updateRequests).toHaveLength(3))
+    expect(tariffLoadCount).toBe(2)
+    expect(serviceLoadCount).toBe(2)
+    expect(updateRequests[2]).toMatchObject({
+      tariffMode: 'metered_tiered',
+      calculationBase: 'meter_water',
+      tariffVersion: refreshedTariff.version,
+      service: {
+        version: refreshedService.version,
+        tariffId: refreshedTariff.id,
+        isMetered: true,
+        hasTieredTariff: true,
+      },
+    })
+    expect(within(tariffsPanel).queryByText('Запись уже была добавлена или изменена другим запросом.')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Вода: по счетчику' })).toHaveTextContent('Да')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Вода: пороговая тарификация' })).toHaveTextContent('Да')
+    expect(within(tariffsPanel).getByRole('cell', { name: 'Вода: 0.00–100.00: единица' })).toHaveTextContent('м³')
+  })
+
   it('blocks service saving locally when its income type has no active fund', async () => {
     const user = userEvent.setup()
     const incomeTypeWithoutFund = createAccountingType({

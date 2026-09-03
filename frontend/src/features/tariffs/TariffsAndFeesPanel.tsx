@@ -624,6 +624,24 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
   ]
 }
 
+function resolveServiceMeterCalculationBase(
+  setting: ChargeServiceSettingDto,
+  tariff: TariffDto,
+  fallbackCalculationBase?: string,
+) {
+  const configuredBase = [tariff.calculationBase, setting.tariffCalculationBase, fallbackCalculationBase]
+    .find((value) => value === 'meter_water' || value === 'meter_electricity')
+  if (configuredBase) {
+    return configuredBase
+  }
+
+  if (setting.meterKind === 'water') {
+    return 'meter_water'
+  }
+
+  return 'meter_electricity'
+}
+
 function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], payments: IrregularPaymentDto[], preferBackend = false) {
   const sourceRows = preferBackend && payments.length > 0
     ? rows.filter((row) => row.backendPaymentId || payments.some((payment) => payment.name.toLocaleLowerCase('ru') === row.name.toLocaleLowerCase('ru')))
@@ -1420,9 +1438,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
 
     const targetCalculationBase = nextMetered
-      ? sourceTariff.calculationBase === 'meter_water' || sourceTariff.calculationBase === 'meter_electricity'
-        ? sourceTariff.calculationBase
-        : 'meter_electricity'
+      ? resolveServiceMeterCalculationBase(serviceSetting, sourceTariff, row.calculationBase)
       : sourceTariff.calculationBase === 'people'
         ? 'people'
         : 'fixed'
@@ -1435,36 +1451,37 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const targetUnit = row.unit?.trim()
       || serviceSetting.unitName?.trim()
       || getTariffCalculationUnitName(targetCalculationBase)
-    const nextRows = tariffRows.map((currentRow) => currentRow.id === row.id
-      ? {
-        ...currentRow,
-        byMeter: nextMetered,
-        tiered: nextTiered,
-        calculationBase: targetCalculationBase,
-        unit: targetUnit,
-      }
-      : currentRow)
-    const rate = parseTariffAmount(row.amount ?? '') ?? sourceTariff.rate
-    const electricityTiers = nextTiered
-      ? getElectricityTariffTiers(sourceTariff).map((tier) => ({
-        id: tier.id,
-        name: tier.name,
-        upperBound: tier.upperBound ?? undefined,
-        rate: tier.rate,
-      }))
-      : null
+    function createModeRequest(
+      currentSetting: ChargeServiceSettingDto,
+      currentTariff: TariffDto,
+      calculationBase: string,
+      unitName: string,
+      rate: number,
+    ): UpdateChargeServiceWithTariffRequest {
+      const electricityTiers = nextTiered
+        ? getElectricityTariffTiers(currentTariff).map((tier) => ({
+          id: tier.id,
+          name: tier.name,
+          upperBound: tier.upperBound ?? undefined,
+          rate: tier.rate,
+        }))
+        : null
 
-    setTariffSavingRowId(row.id)
-    setTariffPersistenceError(null)
-    try {
-      const serviceRequest = buildChargeServiceRequest(serviceSetting, nextRows)
-      const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, serviceSetting.id, {
+      return {
         service: {
-          ...serviceRequest,
-          tariffId: sourceTariff.id,
+          name: currentSetting.name,
+          isRegular: currentSetting.isRegular,
+          periodicityMonths: currentSetting.periodicityMonths,
+          accrualStartMonth: currentSetting.accrualStartMonth,
+          paymentDueDay: currentSetting.paymentDueDay,
+          paymentDueMonth: currentSetting.paymentDueMonth,
+          overdueGraceDays: currentSetting.overdueGraceDays,
+          incomeTypeId: currentSetting.incomeTypeId,
+          tariffId: currentTariff.id,
           isMetered: nextMetered,
           hasTieredTariff: nextTiered,
-          unitName: targetUnit,
+          unitName,
+          version: currentSetting.version,
         },
         rate,
         tariffMode,
@@ -1473,12 +1490,63 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         effectiveFrom: getLocalDateInputValue(),
         electricityTiers: electricityTiers && electricityTiers.length >= 2 ? electricityTiers : null,
         changeReason: 'Смена режима тарифа в таблице услуг.',
-        calculationBase: targetCalculationBase,
-        tariffVersion: sourceTariff.version,
-      })
+        calculationBase,
+        tariffVersion: currentTariff.version,
+      }
+    }
+
+    const rate = parseTariffAmount(row.amount ?? '') ?? sourceTariff.rate
+    const request = createModeRequest(serviceSetting, sourceTariff, targetCalculationBase, targetUnit, rate)
+
+    setTariffSavingRowId(row.id)
+    setTariffPersistenceError(null)
+    try {
+      const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, serviceSetting.id, request)
       applySavedServiceTariff(saved)
       return true
     } catch (caught) {
+      if (caught instanceof DictionaryApiError && caught.code === 'concurrent_write_conflict') {
+        try {
+          const refreshController = new AbortController()
+          const [latestTariffs, latestSettings] = await Promise.all([
+            dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, refreshController.signal),
+            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, undefined, undefined, refreshController.signal),
+          ])
+          const latestSetting = latestSettings.find((setting) => setting.id === serviceSetting.id)
+          const latestTariff = latestSetting?.tariffId
+            ? latestTariffs.find((tariff) => tariff.id === latestSetting.tariffId)
+            : null
+          if (latestSetting && latestTariff) {
+            const latestCalculationBase = nextMetered
+              ? resolveServiceMeterCalculationBase(latestSetting, latestTariff, row.calculationBase)
+              : latestTariff.calculationBase === 'people'
+                ? 'people'
+                : 'fixed'
+            const latestUnit = latestSetting.unitName?.trim()
+              || row.unit?.trim()
+              || getTariffCalculationUnitName(latestCalculationBase)
+            const saved = await dictionaryClient.updateChargeServiceWithTariff(
+              auth.accessToken,
+              latestSetting.id,
+              createModeRequest(
+                latestSetting,
+                latestTariff,
+                latestCalculationBase,
+                latestUnit,
+                latestTariff.rate,
+              ),
+            )
+            applyTariffRows(
+              [...latestTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
+              [...latestSettings.filter((setting) => setting.id !== saved.service.id), saved.service],
+            )
+            return true
+          }
+        } catch (retryError) {
+          setTariffPersistenceError(getErrorMessage(retryError, 'Не удалось обновить тариф и повторить смену режима.'))
+          return false
+        }
+      }
       setTariffPersistenceError(getErrorMessage(caught, 'Не удалось сменить режим тарифа.'))
       return false
     } finally {

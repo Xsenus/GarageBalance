@@ -211,6 +211,128 @@ public sealed class PostgreSqlTariffModeIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task ConsecutiveWaterModeChanges_OnSameDateUseReturnedVersionsOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid incomeTypeId;
+        Guid serviceId;
+        Guid sourceTariffId;
+        Guid serviceVersion;
+        Guid tariffVersion;
+        await using (var setupContext = database.CreateContext())
+        {
+            incomeTypeId = await setupContext.IncomeTypes
+                .Where(item => item.Code == "water" && !item.IsArchived)
+                .Select(item => item.Id)
+                .SingleAsync();
+            var sourceTariff = new Tariff
+            {
+                Name = "Вода — последовательная смена режима",
+                CalculationBase = "meter_water",
+                Rate = 103m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            };
+            var setting = new ChargeServiceSetting
+            {
+                Name = "Вода — последовательная смена режима",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 20,
+                OverdueGraceDays = 30,
+                IncomeTypeId = incomeTypeId,
+                TariffId = sourceTariff.Id,
+                IsMetered = true,
+                UnitName = "м³",
+                MeterKind = "water"
+            };
+            setupContext.AddRange(sourceTariff, setting);
+            await setupContext.SaveChangesAsync();
+            serviceId = setting.Id;
+            sourceTariffId = sourceTariff.Id;
+            serviceVersion = setting.Version;
+            tariffVersion = sourceTariff.Version;
+        }
+
+        UpdatedChargeServiceWithTariffDto regular;
+        await using (var regularContext = database.CreateContext())
+        {
+            var result = await DictionaryServiceTestFactory.Create(regularContext, new DateOnly(2026, 9, 3))
+                .UpdateChargeServiceWithTariffAsync(
+                    serviceId,
+                    new UpdateChargeServiceWithTariffRequest(
+                        new UpsertChargeServiceSettingRequest(
+                            "Вода — последовательная смена режима",
+                            true,
+                            1,
+                            1,
+                            20,
+                            null,
+                            30,
+                            false,
+                            false,
+                            "м³",
+                            incomeTypeId,
+                            sourceTariffId,
+                            serviceVersion),
+                        103m,
+                        "regular",
+                        new DateOnly(2026, 9, 3),
+                        ChangeReason: "Отключение счетчика",
+                        CalculationBase: "fixed",
+                        TariffVersion: tariffVersion),
+                    Guid.NewGuid(),
+                    CancellationToken.None);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            regular = result.Value!;
+            Assert.False(regular.Service.IsMetered);
+        }
+
+        await using (var tieredContext = database.CreateContext())
+        {
+            var result = await DictionaryServiceTestFactory.Create(tieredContext, new DateOnly(2026, 9, 3))
+                .UpdateChargeServiceWithTariffAsync(
+                    serviceId,
+                    new UpdateChargeServiceWithTariffRequest(
+                        new UpsertChargeServiceSettingRequest(
+                            regular.Service.Name,
+                            true,
+                            regular.Service.PeriodicityMonths,
+                            regular.Service.AccrualStartMonth,
+                            regular.Service.PaymentDueDay,
+                            regular.Service.PaymentDueMonth,
+                            regular.Service.OverdueGraceDays,
+                            true,
+                            true,
+                            regular.Service.UnitName,
+                            regular.Service.IncomeTypeId,
+                            regular.Tariff.Id,
+                            regular.Service.Version),
+                        regular.Tariff.Rate,
+                        "metered_tiered",
+                        new DateOnly(2026, 9, 3),
+                        [
+                            new(null, "До 100", 100m, 103m),
+                            new(null, "Свыше 100", null, 120m)
+                        ],
+                        "Включение порогов воды",
+                        "meter_water",
+                        regular.Tariff.Version),
+                    Guid.NewGuid(),
+                    CancellationToken.None);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            Assert.True(result.Value!.Service.IsMetered);
+            Assert.True(result.Value.Service.HasTieredTariff);
+            Assert.Equal("water", result.Value.Service.MeterKind);
+            Assert.Equal("meter_water", result.Value.Tariff.CalculationBase);
+            Assert.Equal(regular.Tariff.Id, result.Value.Tariff.Id);
+            Assert.NotEqual(regular.Tariff.Version, result.Value.Tariff.Version);
+        }
+    }
+
+    [PostgreSqlFact]
     public async Task ConcurrentTariffModeChanges_AreSerializedWithoutPartialServiceStateOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
