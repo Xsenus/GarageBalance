@@ -282,6 +282,46 @@ public sealed record GenerateRegularCatalogAccrualsRequest(
     DateOnly AccountingMonth,
     [MaxLength(1000)] string? Comment);
 
+public sealed record PreviewRegularAccrualRecalculationRequest(
+    Guid IncomeTypeId,
+    Guid TariffId,
+    DateOnly AccountingMonth);
+
+public sealed record ApplyRegularAccrualRecalculationRequest(
+    Guid IncomeTypeId,
+    Guid TariffId,
+    DateOnly AccountingMonth,
+    [Required, MaxLength(128)] string ExpectedPreviewFingerprint,
+    [Required, MaxLength(1000)] string Reason);
+
+public sealed record RegularAccrualRecalculationRowDto(
+    Guid AccrualId,
+    string GarageNumber,
+    decimal CurrentAmount,
+    decimal? ProposedAmount,
+    decimal? Difference,
+    string Action,
+    string Explanation,
+    bool IsPaid);
+
+public sealed record RegularAccrualRecalculationPreviewDto(
+    DateOnly AccountingMonth,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    Guid TariffId,
+    string TariffName,
+    int TotalCount,
+    int ChangeCount,
+    int SnapshotOnlyCount,
+    int UnchangedCount,
+    int ProtectedPaidCount,
+    int ErrorCount,
+    decimal CurrentTotal,
+    decimal ProposedTotal,
+    string PreviewFingerprint,
+    bool Applied,
+    IReadOnlyList<RegularAccrualRecalculationRowDto> Rows);
+
 public sealed record GenerateFeeCampaignAccrualsRequest(
     Guid FeeCampaignId,
     DateOnly AccountingMonth,

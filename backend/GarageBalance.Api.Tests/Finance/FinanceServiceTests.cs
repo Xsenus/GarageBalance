@@ -5823,6 +5823,137 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RegularAccrualRecalculation_UpdatesOnlyUnpaidRowsAndReportsProtectedPaidRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var secondGarage = new Garage
+        {
+            Number = "13",
+            PeopleCount = 1,
+            FloorCount = 1,
+            CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var tariff = new Tariff
+        {
+            Name = "Тариф для безопасного перерасчёта",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.AddRange(secondGarage, tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 9, 1);
+
+        var generated = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, month, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        Assert.Equal(2, generated.Value!.CreatedCount);
+
+        var paidAccrual = await database.Context.Accruals.SingleAsync(accrual => accrual.GarageId == fixtures.Garage.Id);
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = month,
+            AccountingMonth = month,
+            Amount = paidAccrual.Amount,
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        };
+        database.Context.AddRange(
+            payment,
+            new AccrualPaymentAllocation
+            {
+                FinancialOperation = payment,
+                Accrual = paidAccrual,
+                Amount = paidAccrual.Amount,
+                IsActive = true
+            });
+        tariff.Rate = 400m;
+        await database.Context.SaveChangesAsync();
+
+        var preview = await service.PreviewRegularAccrualRecalculationAsync(
+            new PreviewRegularAccrualRecalculationRequest(fixtures.IncomeType.Id, tariff.Id, month),
+            CancellationToken.None);
+
+        Assert.True(preview.Succeeded, preview.ErrorMessage);
+        Assert.Equal(2, preview.Value!.TotalCount);
+        Assert.Equal(1, preview.Value.ChangeCount);
+        Assert.Equal(1, preview.Value.ProtectedPaidCount);
+        Assert.Equal(600m, preview.Value.CurrentTotal);
+        Assert.Equal(700m, preview.Value.ProposedTotal);
+        Assert.Contains(preview.Value.Rows, row => row.AccrualId == paidAccrual.Id && row.Action == "paid" && row.ProposedAmount == 300m);
+        Assert.Contains(preview.Value.Rows, row => row.GarageNumber == "13" && row.Action == "update" && row.ProposedAmount == 400m);
+
+        var actorUserId = Guid.NewGuid();
+        var applied = await service.ApplyRegularAccrualRecalculationAsync(
+            new ApplyRegularAccrualRecalculationRequest(
+                fixtures.IncomeType.Id,
+                tariff.Id,
+                month,
+                preview.Value.PreviewFingerprint,
+                "Проверенная смена тарифа"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(applied.Succeeded, applied.ErrorMessage);
+        Assert.True(applied.Value!.Applied);
+        Assert.Equal(300m, paidAccrual.Amount);
+        Assert.Equal(400m, await database.Context.Accruals.Where(accrual => accrual.GarageId == secondGarage.Id).Select(accrual => accrual.Amount).SingleAsync());
+        Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "finance.regular_accrual_safely_recalculated" && audit.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "finance.regular_accrual_safe_recalculation_applied");
+    }
+
+    [Fact]
+    public async Task ApplyRegularAccrualRecalculation_RejectsMissingReasonAndStalePreview()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff
+        {
+            Name = "Тариф конфликта перерасчёта",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 9, 1);
+        Assert.True((await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, month, null),
+            null,
+            CancellationToken.None)).Succeeded);
+        tariff.Rate = 400m;
+        await database.Context.SaveChangesAsync();
+        var preview = await service.PreviewRegularAccrualRecalculationAsync(
+            new PreviewRegularAccrualRecalculationRequest(fixtures.IncomeType.Id, tariff.Id, month),
+            CancellationToken.None);
+        Assert.True(preview.Succeeded);
+
+        var missingReason = await service.ApplyRegularAccrualRecalculationAsync(
+            new ApplyRegularAccrualRecalculationRequest(fixtures.IncomeType.Id, tariff.Id, month, preview.Value!.PreviewFingerprint, " "),
+            null,
+            CancellationToken.None);
+        Assert.False(missingReason.Succeeded);
+        Assert.Equal("regular_accrual_recalculation_reason_required", missingReason.ErrorCode);
+
+        var accrual = await database.Context.Accruals.SingleAsync();
+        accrual.Amount = 301m;
+        await database.Context.SaveChangesAsync();
+        var stale = await service.ApplyRegularAccrualRecalculationAsync(
+            new ApplyRegularAccrualRecalculationRequest(fixtures.IncomeType.Id, tariff.Id, month, preview.Value.PreviewFingerprint, "Повторная проверка"),
+            null,
+            CancellationToken.None);
+        Assert.False(stale.Succeeded);
+        Assert.Equal("regular_accrual_recalculation_preview_stale", stale.ErrorCode);
+        Assert.Equal(301m, accrual.Amount);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_SkipsGarageCreatedAfterAccountingMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

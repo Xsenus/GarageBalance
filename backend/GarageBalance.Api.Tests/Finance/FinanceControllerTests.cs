@@ -2519,6 +2519,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<SupplierAccrualDto> RestoreSupplierAccrualResult { get; init; } = FinanceResult<SupplierAccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularAccrualGenerationResultDto> GenerateRegularAccrualsResult { get; init; } = FinanceResult<RegularAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<RegularCatalogAccrualGenerationResultDto> GenerateRegularCatalogAccrualsResult { get; init; } = FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<RegularAccrualRecalculationPreviewDto> RegularAccrualRecalculationResult { get; init; } = FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FeeCampaignAccrualGenerationResultDto> GenerateFeeCampaignAccrualsResult { get; init; } = FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto> GenerateSupplierGroupSalaryAccrualsResult { get; init; } = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
@@ -2864,6 +2865,20 @@ public sealed class FinanceControllerTests
             LastActorUserId = actorUserId;
             LastRegularCatalogAccrualGenerationRequest = request;
             return Task.FromResult(GenerateRegularCatalogAccrualsResult);
+        }
+
+        public Task<FinanceResult<RegularAccrualRecalculationPreviewDto>> PreviewRegularAccrualRecalculationAsync(
+            PreviewRegularAccrualRecalculationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(RegularAccrualRecalculationResult);
+
+        public Task<FinanceResult<RegularAccrualRecalculationPreviewDto>> ApplyRegularAccrualRecalculationAsync(
+            ApplyRegularAccrualRecalculationRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(RegularAccrualRecalculationResult);
         }
 
         public Task<RegularAccrualAutomationPreviewDto> PreviewRegularAccrualAutomationAsync(

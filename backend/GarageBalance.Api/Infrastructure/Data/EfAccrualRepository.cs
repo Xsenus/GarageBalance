@@ -490,6 +490,24 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .ThenBy(accrual => accrual.IncomeTypeId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Accrual>> GetActiveRegularForRecalculationAsync(
+        Guid incomeTypeId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        await TrackedAggregate()
+            .Include(accrual => accrual.Tariff)
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.Source == AccrualSources.Regular &&
+                accrual.IncomeTypeId == incomeTypeId &&
+                accrual.AccountingMonth == accountingMonth &&
+                accrual.FeeCampaignId == null &&
+                accrual.IrregularPaymentId == null &&
+                accrual.Basis == null)
+            .OrderBy(accrual => accrual.Garage.Number)
+            .ThenBy(accrual => accrual.Id)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlySet<Guid>> GetActiveRegularIncomeTypeIdsAsync(
         Guid garageId,
         DateOnly monthFrom,

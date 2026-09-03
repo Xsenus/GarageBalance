@@ -33,7 +33,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularAccrualRecalculationPreviewDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -24572,6 +24572,77 @@ describe('App', () => {
     view.unmount()
 
     expect(loadMoreSignal?.aborted).toBe(true)
+  })
+
+  it('previews and applies only the checked unpaid regular accrual recalculation', async () => {
+    const user = userEvent.setup()
+    const preview: RegularAccrualRecalculationPreviewDto = {
+      accountingMonth: '2026-06-01',
+      incomeTypeId: 'income-type-1',
+      incomeTypeName: 'Членский взнос',
+      tariffId: 'tariff-1',
+      tariffName: 'Тариф воды',
+      totalCount: 2,
+      changeCount: 1,
+      snapshotOnlyCount: 0,
+      unchangedCount: 0,
+      protectedPaidCount: 1,
+      errorCount: 0,
+      currentTotal: 4000,
+      proposedTotal: 4200,
+      previewFingerprint: 'safe-preview-fingerprint',
+      applied: false,
+      rows: [
+        { accrualId: 'accrual-unpaid', garageNumber: '12', currentAmount: 2000, proposedAmount: 2200, difference: 200, action: 'update', explanation: 'Сумма будет обновлена.', isPaid: false },
+        { accrualId: 'accrual-paid', garageNumber: '13', currentAmount: 2000, proposedAmount: 2000, difference: 0, action: 'paid', explanation: 'Оплаченная строка защищена.', isPaid: true },
+      ],
+    }
+    const previewRegularAccrualRecalculation = vi.fn(async () => preview)
+    const applyRegularAccrualRecalculation = vi.fn(async () => ({ ...preview, applied: true }))
+    render(
+      <App
+        authClient={createAuthClient()}
+        dictionaryClient={createDictionaryClient()}
+        financeClient={createFinanceClient({ previewRegularAccrualRecalculation, applyRegularAccrualRecalculation })}
+        fundsClient={createFundsClient()}
+        importClient={createImportClient()}
+        reportClient={createReportClient()}
+        releaseClient={createReleaseClient()}
+        userClient={createUserClient()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = await screen.findByRole('region', { name: 'Платежи' })
+    const trigger = within(panel).getByRole('button', { name: 'Перерасчёт неоплаченных начислений' })
+    await user.click(trigger)
+    const dialog = await screen.findByRole('dialog', { name: 'Перерасчёт неоплаченных начислений' })
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Закрыть перерасчёт начислений' })).toHaveFocus())
+    await selectStyledOption(user, dialog, 'Вид начисления для перерасчёта', 'Членский взнос')
+    await selectStyledOption(user, dialog, 'Тариф для перерасчёта', 'Тариф воды')
+    await user.click(within(dialog).getByRole('button', { name: 'Показать затронутые строки' }))
+
+    expect(await within(dialog).findByRole('table', { name: 'Строки безопасного перерасчёта' })).toBeInTheDocument()
+    expect(within(dialog).getByText('Изменить сумму и снимок')).toBeInTheDocument()
+    expect(within(dialog).getByText('Оплачено — защищено')).toBeInTheDocument()
+    expect(previewRegularAccrualRecalculation).toHaveBeenCalledWith('token', { incomeTypeId: 'income-type-1', tariffId: 'tariff-1', accountingMonth: '2026-06-01' })
+    await user.click(within(dialog).getByRole('button', { name: 'Применить проверенный перерасчёт' }))
+    expect(within(dialog).getByText('Укажите основание перерасчёта.')).toBeInTheDocument()
+    await user.type(within(dialog).getByRole('textbox', { name: 'Основание перерасчёта начислений' }), 'Исправлена дата тарифа')
+    await user.click(within(dialog).getByRole('button', { name: 'Применить проверенный перерасчёт' }))
+
+    await waitFor(() => expect(applyRegularAccrualRecalculation).toHaveBeenCalledWith('token', {
+      incomeTypeId: 'income-type-1',
+      tariffId: 'tariff-1',
+      accountingMonth: '2026-06-01',
+      expectedPreviewFingerprint: 'safe-preview-fingerprint',
+      reason: 'Исправлена дата тарифа',
+    }))
+    expect(await within(dialog).findByText('Перерасчёт применён. Оплаченные строки сохранены без изменений.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть' }))
+    await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('shows workspace loading errors inside the related panel', async () => {

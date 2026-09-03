@@ -671,6 +671,33 @@ public sealed class FinanceController(
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("accruals/recalculation-preview")]
+    [ProducesResponseType<RegularAccrualRecalculationPreviewDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<RegularAccrualRecalculationPreviewDto>> PreviewRegularAccrualRecalculation(
+        PreviewRegularAccrualRecalculationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.PreviewRegularAccrualRecalculationAsync(request, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("accruals/recalculate-unpaid")]
+    [ProducesResponseType<RegularAccrualRecalculationPreviewDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<RegularAccrualRecalculationPreviewDto>> ApplyRegularAccrualRecalculation(
+        ApplyRegularAccrualRecalculationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.ApplyRegularAccrualRecalculationAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("income/full-payment")]
     [ProducesResponseType<FullGaragePaymentDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

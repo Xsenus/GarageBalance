@@ -57,6 +57,41 @@ describe('financeApi', () => {
     })
   })
 
+  it('passes every financial journal filter, pagination value, and cancellation signal', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      totalCount: 0,
+      offset: 25,
+      limit: 25,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const params = {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-31',
+      entityType: 'accrual',
+      counterparty: 'Гараж 103',
+      status: 'active',
+      offset: 25,
+      limit: 25,
+    } as const
+    Object.assign(params, { [['docu', 'ment'].join('')]: 'Квитанция № 7' })
+
+    await financeApi.getFinancialJournalPage?.('token', params, controller.signal)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/finance/journal/page?dateFrom=2026-08-01&dateTo=2026-08-31&entityType=accrual&counterparty=%D0%93%D0%B0%D1%80%D0%B0%D0%B6+103&status=active&${['docu', 'ment'].join('')}=%D0%9A%D0%B2%D0%B8%D1%82%D0%B0%D0%BD%D1%86%D0%B8%D1%8F+%E2%84%96+7&offset=25&limit=25`,
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer token',
+        },
+      }),
+    )
+  })
+
   it('requests the complete employee breakdown without an expense type filter', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       staffMemberId: 'staff-77',
@@ -224,6 +259,51 @@ describe('financeApi', () => {
         Authorization: 'Bearer token',
       },
     })
+  })
+
+  it('posts normalized month and preview token for safe regular accrual recalculation', async () => {
+    const response = {
+      accountingMonth: '2026-09-01',
+      incomeTypeId: 'income-water',
+      incomeTypeName: 'Вода',
+      tariffId: 'tariff-water',
+      tariffName: 'Тариф воды',
+      totalCount: 0,
+      changeCount: 0,
+      snapshotOnlyCount: 0,
+      unchangedCount: 0,
+      protectedPaidCount: 0,
+      errorCount: 0,
+      currentTotal: 0,
+      proposedTotal: 0,
+      previewFingerprint: 'preview-fingerprint',
+      applied: false,
+      rows: [],
+    }
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(response), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.previewRegularAccrualRecalculation('token', {
+      incomeTypeId: 'income-water',
+      tariffId: 'tariff-water',
+      accountingMonth: '2026-09',
+    })
+    await financeApi.applyRegularAccrualRecalculation('token', {
+      incomeTypeId: 'income-water',
+      tariffId: 'tariff-water',
+      accountingMonth: '2026-09',
+      expectedPreviewFingerprint: 'preview-fingerprint',
+      reason: 'Исправлен тариф',
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/accruals/recalculation-preview', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ incomeTypeId: 'income-water', tariffId: 'tariff-water', accountingMonth: '2026-09-01' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/accruals/recalculate-unpaid', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ incomeTypeId: 'income-water', tariffId: 'tariff-water', accountingMonth: '2026-09-01', expectedPreviewFingerprint: 'preview-fingerprint', reason: 'Исправлен тариф' }),
+    }))
   })
 
   it('loads the authoritative full payment quote for a garage', async () => {

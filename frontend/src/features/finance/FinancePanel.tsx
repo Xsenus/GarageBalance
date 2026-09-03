@@ -1,10 +1,12 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, ExpenseWorksheetSupplierBreakdownEntryDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, ExpenseWorksheetSupplierBreakdownEntryDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialJournalEntryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualRecalculationPreviewDto, StaffSalaryAdjustmentDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
+import type { FundsClient } from '../../services/fundsApi'
+import { fundsApi } from '../../services/fundsApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
 import type { AccrualReasonDisplayMode, ApplicationSettingsClient } from '../../services/settingsApi'
@@ -39,6 +41,18 @@ import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, su
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 import { overdueDebtDetailsPreference } from './financeDisplayPreferences'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
+
+const FinancialJournalPanel = lazy(() => import('./FinancialJournalPanel').then((module) => ({ default: module.FinancialJournalPanel })))
+
+const regularAccrualRecalculationActionLabels: Record<RegularAccrualRecalculationPreviewDto['rows'][number]['action'], string> = {
+  update: 'Изменить сумму и снимок',
+  cancel: 'Отменить неоплаченное начисление',
+  snapshot: 'Обновить расчётный снимок',
+  unchanged: 'Без изменений',
+  paid: 'Оплачено — защищено',
+  error: 'Требует исправления',
+}
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -329,13 +343,19 @@ export function FinancePanel({
   auth,
   dictionaryClient,
   financeClient,
+  fundsClient = fundsApi,
   settingsClient,
+  onOpenAudit,
+  onOpenWorkspaceSection,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
+  fundsClient?: FundsClient
   integrationClient: IntegrationClient
   settingsClient: ApplicationSettingsClient
+  onOpenAudit?: (preset: AuditPanelPreset) => void
+  onOpenWorkspaceSection?: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void
 }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const today = getLocalDateInputValue()
@@ -377,6 +397,17 @@ export function FinancePanel({
   const [incomeGarageSearch, setIncomeGarageSearch] = useState('')
   const [incomeGarageSearchStatus, setIncomeGarageSearchStatus] = useState<string | null>(null)
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>('income')
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [recalculationOpen, setRecalculationOpen] = useState(false)
+  const [recalculationTariffs, setRecalculationTariffs] = useState<TariffDto[]>([])
+  const [recalculationForm, setRecalculationForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, reason: '' })
+  const [recalculationPreview, setRecalculationPreview] = useState<RegularAccrualRecalculationPreviewDto | null>(null)
+  const [recalculationError, setRecalculationError] = useState<string | null>(null)
+  const [recalculationPending, setRecalculationPending] = useState(false)
+  useRestoreFocusOnClose(recalculationOpen)
+  const recalculationDialogRef = useFocusTrap<HTMLElement>(recalculationOpen)
+  const recalculationCloseRef = useFocusOnOpen<HTMLButtonElement>(recalculationOpen && !recalculationPending)
+  useEscapeKey(recalculationOpen && !recalculationPending, () => setRecalculationOpen(false))
   const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
   const [financeSearchInput, setFinanceSearchInput] = useState('')
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
@@ -1617,6 +1648,104 @@ export function FinancePanel({
     setActiveFinanceSection(section)
   }
 
+  function editJournalEntry(entry: FinancialJournalEntryDto) {
+    if (entry.entityType === 'fund_operation') {
+      onOpenWorkspaceSection?.('funds')
+      return
+    }
+    if (entry.entityType === 'staff_salary_adjustment') {
+      onOpenWorkspaceSection?.('contractors', { contractorTarget: { section: 'staff', displayName: entry.counterparty } })
+      return
+    }
+
+    const section: FinanceSectionKey | null = entry.entityType === 'financial_operation'
+      ? entry.operationType === 'income' ? 'income' : 'expense'
+      : entry.entityType === 'accrual'
+        ? 'accruals'
+        : entry.entityType === 'supplier_accrual'
+          ? 'supplierAccruals'
+          : null
+    if (!section) {
+      setError(entry.correctionHint ?? 'Прямое изменение этой строки недоступно.')
+      return
+    }
+
+    const monthValue = `${entry.operationDate.slice(0, 7)}-01`
+    const search = entry.documentNumber ?? entry.counterparty
+    setShowAllGarageOperations(true)
+    setActiveFinanceSection(section)
+    setFinanceSearchInput(search)
+    setFinanceFilter({ monthFrom: monthValue, monthTo: monthValue, search })
+    setJournalOpen(false)
+  }
+
+  async function openRecalculation() {
+    setRecalculationOpen(true)
+    setRecalculationPreview(null)
+    setRecalculationError(null)
+    setRecalculationPending(true)
+    try {
+      const tariffs = await dictionaryClient.getTariffs(auth.accessToken, undefined, 100, false)
+      setRecalculationTariffs(tariffs)
+    } catch (caught) {
+      setRecalculationError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы для перерасчёта.')
+    } finally {
+      setRecalculationPending(false)
+    }
+  }
+
+  async function previewRecalculation() {
+    if (!financeClient.previewRegularAccrualRecalculation) {
+      setRecalculationError('Предпросмотр перерасчёта недоступен в этой версии клиента.')
+      return
+    }
+    if (!recalculationForm.incomeTypeId || !recalculationForm.tariffId || !recalculationForm.accountingMonth) {
+      setRecalculationError('Выберите вид начисления, тариф и месяц.')
+      return
+    }
+    setRecalculationPending(true)
+    setRecalculationError(null)
+    try {
+      const preview = await financeClient.previewRegularAccrualRecalculation(auth.accessToken, {
+        incomeTypeId: recalculationForm.incomeTypeId,
+        tariffId: recalculationForm.tariffId,
+        accountingMonth: recalculationForm.accountingMonth,
+      })
+      setRecalculationPreview(preview)
+    } catch (caught) {
+      setRecalculationPreview(null)
+      setRecalculationError(caught instanceof Error ? caught.message : 'Не удалось подготовить предпросмотр перерасчёта.')
+    } finally {
+      setRecalculationPending(false)
+    }
+  }
+
+  async function applyRecalculation() {
+    if (!financeClient.applyRegularAccrualRecalculation || !recalculationPreview) return
+    if (!recalculationForm.reason.trim()) {
+      setRecalculationError('Укажите основание перерасчёта.')
+      return
+    }
+    setRecalculationPending(true)
+    setRecalculationError(null)
+    try {
+      const result = await financeClient.applyRegularAccrualRecalculation(auth.accessToken, {
+        incomeTypeId: recalculationPreview.incomeTypeId,
+        tariffId: recalculationPreview.tariffId,
+        accountingMonth: recalculationPreview.accountingMonth,
+        expectedPreviewFingerprint: recalculationPreview.previewFingerprint,
+        reason: recalculationForm.reason.trim(),
+      })
+      setRecalculationPreview(result)
+      setFinanceReloadRevision((value) => value + 1)
+      setFinancePreviewReloadRevision((value) => value + 1)
+    } catch (caught) {
+      setRecalculationError(caught instanceof Error ? caught.message : 'Не удалось применить перерасчёт.')
+    } finally {
+      setRecalculationPending(false)
+    }
+  }
+
   function editFinanceRecord(section: FinanceSectionKey, record: FinanceRecord, trigger?: HTMLElement | null) {
     if (loading) {
       return
@@ -2176,6 +2305,60 @@ export function FinancePanel({
           <strong>{summary.meterReadingCount}</strong>
         </div>
       </div>
+
+      <div className="finance-toolbar-actions">
+        <button className="secondary-button" type="button" aria-expanded={journalOpen} onClick={() => setJournalOpen((value) => !value)}>
+          <History size={16} aria-hidden="true" />
+          <span>{journalOpen ? 'Скрыть единый журнал' : 'Единый журнал операций'}</span>
+        </button>
+        {canWritePayments ? <button className="secondary-button" type="button" onClick={() => void openRecalculation()}><RotateCcw size={16} aria-hidden="true" /><span>Перерасчёт неоплаченных начислений</span></button> : null}
+      </div>
+      {journalOpen ? (
+        <Suspense fallback={<TableLoadingState label="Загружаем единый журнал" />}>
+          <FinancialJournalPanel
+            auth={auth}
+            financeClient={financeClient}
+            fundsClient={fundsClient}
+            onEdit={editJournalEntry}
+            onOpenAudit={onOpenAudit}
+          />
+        </Suspense>
+      ) : null}
+
+      {recalculationOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section ref={recalculationDialogRef} className="detail-dialog detail-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="regular-recalculation-title">
+            <div className="detail-dialog-header">
+              <div><p className="eyebrow">Безопасная операция</p><h3 id="regular-recalculation-title">Перерасчёт неоплаченных начислений</h3><p>Оплаченные строки не изменяются. Перед применением система повторно проверит, что исходные данные не менялись.</p></div>
+              <button ref={recalculationCloseRef} className="icon-button" type="button" aria-label="Закрыть перерасчёт начислений" disabled={recalculationPending} onClick={() => setRecalculationOpen(false)}><X size={18} aria-hidden="true" /></button>
+            </div>
+            <div className="inline-fields">
+              <SelectControl aria-label="Вид начисления для перерасчёта" value={recalculationForm.incomeTypeId} options={[{ value: '', label: 'Выберите вид начисления' }, ...incomeTypes.map((item) => ({ value: item.id, label: item.name }))]} disabled={recalculationPending} onChange={(incomeTypeId) => { setRecalculationForm((current) => ({ ...current, incomeTypeId })); setRecalculationPreview(null) }} />
+              <SelectControl aria-label="Тариф для перерасчёта" value={recalculationForm.tariffId} options={[{ value: '', label: 'Выберите тариф' }, ...recalculationTariffs.map((item) => ({ value: item.id, label: item.name }))]} disabled={recalculationPending} onChange={(tariffId) => { setRecalculationForm((current) => ({ ...current, tariffId })); setRecalculationPreview(null) }} />
+              <LocalizedDatePicker ariaLabel="Месяц перерасчёта" mode="month" value={recalculationForm.accountingMonth} disabled={recalculationPending} onChange={(accountingMonth) => { setRecalculationForm((current) => ({ ...current, accountingMonth })); setRecalculationPreview(null) }} />
+            </div>
+            <button className="secondary-button" type="button" disabled={recalculationPending} onClick={() => void previewRecalculation()}>{recalculationPending ? 'Проверяем…' : 'Показать затронутые строки'}</button>
+            {recalculationError ? <FormError>{recalculationError}</FormError> : null}
+            {recalculationPreview ? (
+              <section aria-label="Отчёт предпросмотра перерасчёта">
+                <div className="summary-strip">
+                  <div><span>Изменятся</span><strong>{recalculationPreview.changeCount}</strong></div>
+                  <div><span>Только снимок</span><strong>{recalculationPreview.snapshotOnlyCount}</strong></div>
+                  <div><span>Оплачены и защищены</span><strong>{recalculationPreview.protectedPaidCount}</strong></div>
+                  <div><span>Было</span><strong>{formatMoney(recalculationPreview.currentTotal)}</strong></div>
+                  <div><span>Станет</span><strong>{formatMoney(recalculationPreview.proposedTotal)}</strong></div>
+                </div>
+                <div className="dictionary-table-scroll"><table className="dictionary-table" aria-label="Строки безопасного перерасчёта"><thead><tr><th>Гараж</th><th>Было</th><th>Станет</th><th>Действие</th><th>Пояснение</th></tr></thead><tbody>{recalculationPreview.rows.map((row) => <tr key={row.accrualId}><td>{row.garageNumber}</td><td>{formatMoney(row.currentAmount)}</td><td>{row.proposedAmount === null ? '—' : formatMoney(row.proposedAmount)}</td><td>{regularAccrualRecalculationActionLabels[row.action]}</td><td>{row.explanation}</td></tr>)}</tbody></table></div>
+                {!recalculationPreview.applied ? <FormField label="Основание перерасчёта"><textarea aria-label="Основание перерасчёта начислений" value={recalculationForm.reason} onChange={(event) => setRecalculationForm((current) => ({ ...current, reason: event.target.value }))} /></FormField> : <StatusMessage>Перерасчёт применён. Оплаченные строки сохранены без изменений.</StatusMessage>}
+              </section>
+            ) : null}
+            <div className="detail-dialog-actions">
+              <button className="ghost-button" type="button" disabled={recalculationPending} onClick={() => setRecalculationOpen(false)}>Закрыть</button>
+              {recalculationPreview && !recalculationPreview.applied ? <button className="primary-button" type="button" disabled={recalculationPending || recalculationPreview.errorCount > 0} onClick={() => void applyRecalculation()}>{recalculationPending ? 'Применяем…' : 'Применить проверенный перерасчёт'}</button> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <div className="finance-workbench">
         <div className="finance-tabs" role="tablist" aria-label={getFinanceToolbarLabel('sectionTabs')}>

@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
@@ -5009,6 +5011,298 @@ public sealed class FinanceService(
         return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Success(result);
     }
 
+    public Task<FinanceResult<RegularAccrualRecalculationPreviewDto>> PreviewRegularAccrualRecalculationAsync(
+        PreviewRegularAccrualRecalculationRequest request,
+        CancellationToken cancellationToken) =>
+        BuildRegularAccrualRecalculationPreviewAsync(
+            request.IncomeTypeId,
+            request.TariffId,
+            request.AccountingMonth,
+            applied: false,
+            cancellationToken);
+
+    public async Task<FinanceResult<RegularAccrualRecalculationPreviewDto>> ApplyRegularAccrualRecalculationAsync(
+        ApplyRegularAccrualRecalculationRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure(
+                "regular_accrual_recalculation_reason_required",
+                "Укажите основание безопасного перерасчёта.");
+        }
+
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(Guid.Empty, request.IncomeTypeId)],
+            cancellationToken);
+        var candidates = await accrualRepository.GetActiveRegularForRecalculationAsync(
+            request.IncomeTypeId,
+            month,
+            cancellationToken);
+        await using var garageLocks = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            candidates
+                .Select(accrual => new AccrualPaymentAllocationKey(accrual.GarageId, request.IncomeTypeId))
+                .Distinct()
+                .ToArray(),
+            cancellationToken);
+
+        var previewResult = await BuildRegularAccrualRecalculationPreviewAsync(
+            request.IncomeTypeId,
+            request.TariffId,
+            month,
+            applied: false,
+            cancellationToken);
+        if (!previewResult.Succeeded || previewResult.Value is null)
+        {
+            return previewResult;
+        }
+
+        var preview = previewResult.Value;
+        if (!string.Equals(preview.PreviewFingerprint, request.ExpectedPreviewFingerprint.Trim(), StringComparison.Ordinal))
+        {
+            return FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure(
+                "regular_accrual_recalculation_preview_stale",
+                "Начисления или исходные данные изменились после предпросмотра. Обновите предпросмотр и проверьте строки заново.");
+        }
+
+        var accruals = await accrualRepository.GetActiveRegularForRecalculationAsync(
+            request.IncomeTypeId,
+            month,
+            cancellationToken);
+        var rowsById = preview.Rows.ToDictionary(row => row.AccrualId);
+        var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
+        foreach (var accrual in accruals)
+        {
+            if (!rowsById.TryGetValue(accrual.Id, out var row) || row.IsPaid || row.ProposedAmount is null || row.Action is "unchanged" or "error")
+            {
+                continue;
+            }
+
+            var before = AccrualAuditSnapshot.From(accrual);
+            var oldAmount = accrual.Amount;
+            var previousDetails = accrual.CalculationDetailsJson;
+            if (row.Action == "cancel")
+            {
+                accrual.IsCanceled = true;
+            }
+            else
+            {
+                accrual.Amount = row.ProposedAmount.Value;
+                var planned = regularAccrualRecalculationDetails.GetValueOrDefault(accrual.Id);
+                if (planned is not null)
+                {
+                    accrual.TariffId = request.TariffId;
+                    accrual.CalculationDetailsJson = RegularAccrualCalculator.Serialize(planned);
+                    accrual.RequiresMeterReading = planned.RequiresMeter;
+                    accrual.CalculationMeterKind = planned.RequiresMeter
+                        ? ResolveMeterKind(planned.Lines.Select(line => line.CalculationBase))
+                        : null;
+                }
+            }
+
+            accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+            changedKeys.Add(new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId));
+            AddAudit(
+                actorUserId,
+                row.Action == "cancel" ? "finance.regular_accrual_canceled_by_safe_recalculation" : "finance.regular_accrual_safely_recalculated",
+                accrual,
+                $"Безопасный перерасчёт неоплаченного начисления по гаражу {accrual.Garage.Number} за {month:MM.yyyy}: {MoneyFormatting.Format(oldAmount)} → {MoneyFormatting.Format(row.ProposedAmount.Value)}. Основание: {reason}",
+                new Dictionary<string, object?>
+                {
+                    ["amount"] = oldAmount,
+                    ["calculationDetails"] = previousDetails is null ? "missing" : "present"
+                },
+                new Dictionary<string, object?>
+                {
+                    ["amount"] = row.ProposedAmount.Value,
+                    ["calculationDetails"] = accrual.CalculationDetailsJson is null ? "missing" : "present",
+                    ["isCanceled"] = accrual.IsCanceled
+                },
+                reason: reason);
+        }
+
+        if (changedKeys.Count > 0)
+        {
+            await RebuildPaymentAllocationsAsync(
+                changedKeys.ToArray(),
+                actorUserId,
+                "Безопасный перерасчёт неоплаченных начислений",
+                request.IncomeTypeId,
+                cancellationToken);
+        }
+
+        AddAudit(
+            actorUserId,
+            "finance.regular_accrual_safe_recalculation_applied",
+            "accrual",
+            Guid.NewGuid(),
+            $"Применён безопасный перерасчёт «{preview.IncomeTypeName}» за {month:MM.yyyy}: изменено {preview.ChangeCount}, обновлено снимков {preview.SnapshotOnlyCount}, оплаченных строк сохранено {preview.ProtectedPaidCount}.",
+            relatedAccountingMonth: month,
+            relatedDocumentNumber: $"Перерасчёт {preview.IncomeTypeName} {month:MM.yyyy}",
+            metadata: new Dictionary<string, object?>
+            {
+                ["incomeTypeId"] = request.IncomeTypeId,
+                ["tariffId"] = request.TariffId,
+                ["changeCount"] = preview.ChangeCount,
+                ["snapshotOnlyCount"] = preview.SnapshotOnlyCount,
+                ["protectedPaidCount"] = preview.ProtectedPaidCount,
+                ["currentTotal"] = preview.CurrentTotal,
+                ["proposedTotal"] = preview.ProposedTotal
+            },
+            reason: reason);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return FinanceResult<RegularAccrualRecalculationPreviewDto>.Success(preview with { Applied = true });
+    }
+
+    private readonly Dictionary<Guid, AccrualCalculationDetailsDto> regularAccrualRecalculationDetails = [];
+
+    private async Task<FinanceResult<RegularAccrualRecalculationPreviewDto>> BuildRegularAccrualRecalculationPreviewAsync(
+        Guid incomeTypeId,
+        Guid tariffId,
+        DateOnly accountingMonth,
+        bool applied,
+        CancellationToken cancellationToken)
+    {
+        regularAccrualRecalculationDetails.Clear();
+        var month = MonthPeriod.Normalize(accountingMonth);
+        var incomeType = await incomeTypeRepository.FindActiveAsync(incomeTypeId, cancellationToken);
+        if (incomeType is null)
+        {
+            return FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure("income_type_not_found", "Вид начисления не найден.");
+        }
+
+        var tariff = await tariffRepository.FindActiveAsync(tariffId, cancellationToken);
+        if (tariff is null)
+        {
+            return FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure("tariff_not_found", "Тариф для перерасчёта не найден.");
+        }
+
+        var setting = SelectChargeServiceSettingForDueDates(
+            await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(incomeTypeId, tariffId, month, cancellationToken),
+            month);
+        if (setting is null && !IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))
+        {
+            return FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure(
+                "regular_accrual_tariff_mismatch",
+                "Выбранный тариф не подходит для этого вида регулярного начисления.");
+        }
+
+        var accruals = await accrualRepository.GetActiveRegularForRecalculationAsync(incomeTypeId, month, cancellationToken);
+        var paidIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
+            accruals.Select(accrual => accrual.Id).ToArray(),
+            cancellationToken);
+        var segments = BuildRegularAccrualSegments(month, setting, tariff);
+        var meterKind = ResolveMeterKind(segments.Select(segment => segment.CalculationBase));
+        var readings = meterKind is null
+            ? new Dictionary<Guid, MeterReading>()
+            : await meterReadingRepository.GetActiveByGarageIdsAsync(
+                accruals.Select(accrual => accrual.GarageId).ToArray(),
+                meterKind,
+                month,
+                cancellationToken);
+        var rows = new List<RegularAccrualRecalculationRowDto>(accruals.Count);
+        foreach (var accrual in accruals)
+        {
+            if (paidIds.Contains(accrual.Id))
+            {
+                rows.Add(new RegularAccrualRecalculationRowDto(
+                    accrual.Id,
+                    accrual.Garage.Number,
+                    accrual.Amount,
+                    accrual.Amount,
+                    0m,
+                    "paid",
+                    "Есть активное распределение платежа: сумма и снимок сохранены без изменений.",
+                    true));
+                continue;
+            }
+
+            readings.TryGetValue(accrual.GarageId, out var reading);
+            var calculation = RegularAccrualCalculator.Calculate(accrual.Garage, month, reading, segments);
+            if (!calculation.Succeeded || calculation.Details is null)
+            {
+                rows.Add(new RegularAccrualRecalculationRowDto(
+                    accrual.Id,
+                    accrual.Garage.Number,
+                    accrual.Amount,
+                    null,
+                    null,
+                    "error",
+                    calculation.ErrorMessage ?? "Расчёт не выполнен.",
+                    false));
+                continue;
+            }
+
+            regularAccrualRecalculationDetails[accrual.Id] = calculation.Details;
+            var detailsJson = RegularAccrualCalculator.Serialize(calculation.Details);
+            var action = calculation.Amount <= 0m
+                ? "cancel"
+                : accrual.Amount != calculation.Amount
+                    ? "update"
+                    : !string.Equals(accrual.CalculationDetailsJson, detailsJson, StringComparison.Ordinal) || accrual.TariffId != tariffId
+                        ? "snapshot"
+                        : "unchanged";
+            var explanation = action switch
+            {
+                "cancel" => "Расчётная сумма равна нулю: неоплаченное начисление будет отменено с аудитом.",
+                "update" => "Сумма и расчётный снимок будут обновлены.",
+                "snapshot" => "Сумма не меняется; будет обновлён только расчётный снимок и ссылка на тариф.",
+                _ => "Сумма и расчётный снимок уже актуальны."
+            };
+            rows.Add(new RegularAccrualRecalculationRowDto(
+                accrual.Id,
+                accrual.Garage.Number,
+                accrual.Amount,
+                calculation.Amount,
+                MoneyMath.RoundMoney(calculation.Amount - accrual.Amount),
+                action,
+                explanation,
+                false));
+        }
+
+        var tokenSource = string.Join('|', rows.OrderBy(row => row.AccrualId).Select(row =>
+        {
+            var details = regularAccrualRecalculationDetails.GetValueOrDefault(row.AccrualId);
+            var detailsJson = details is null ? string.Empty : RegularAccrualCalculator.Serialize(details);
+            return $"{row.AccrualId:N}:{row.CurrentAmount.ToString("0.00", CultureInfo.InvariantCulture)}:{row.ProposedAmount?.ToString("0.00", CultureInfo.InvariantCulture)}:{row.Action}:{row.IsPaid}:{detailsJson}";
+        }));
+        var previewFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(tokenSource))).ToLowerInvariant();
+        var proposedTotal = rows.Sum(row => row.ProposedAmount ?? row.CurrentAmount);
+        var result = new RegularAccrualRecalculationPreviewDto(
+            month,
+            incomeType.Id,
+            incomeType.Name,
+            tariff.Id,
+            tariff.Name,
+            rows.Count,
+            rows.Count(row => row.Action is "update" or "cancel"),
+            rows.Count(row => row.Action == "snapshot"),
+            rows.Count(row => row.Action == "unchanged"),
+            rows.Count(row => row.Action == "paid"),
+            rows.Count(row => row.Action == "error"),
+            rows.Sum(row => row.CurrentAmount),
+            proposedTotal,
+            previewFingerprint,
+            applied,
+            rows);
+        return FinanceResult<RegularAccrualRecalculationPreviewDto>.Success(result);
+    }
+
+    private static string? ResolveMeterKind(IEnumerable<string?> calculationBases)
+    {
+        var meteredBase = calculationBases.FirstOrDefault(value => value is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
+        return meteredBase switch
+        {
+            TariffCalculationBases.MeterWater => MeterKinds.Water,
+            TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
+            _ => null
+        };
+    }
+
     public async Task<RegularAccrualAutomationPreviewDto> PreviewRegularAccrualAutomationAsync(
         DateOnly businessDate,
         CancellationToken cancellationToken)
@@ -6614,7 +6908,7 @@ public sealed class FinanceService(
                     HasGapWarning = change.HasGapWarning
                 };
                 var previousDetails = RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson);
-                var calculation = previousDetails is null
+                var calculation = previousDetails is null || previousDetails.Version == 0
                     ? CalculateLegacyRegularAccrual(change.Reading.Garage, accrual, prospectiveReading)
                     : RegularAccrualCalculator.Calculate(
                         change.Reading.Garage,
@@ -7522,7 +7816,8 @@ public sealed class FinanceService(
         Accrual accrual,
         string summary,
         IReadOnlyDictionary<string, object?>? oldValues = null,
-        IReadOnlyDictionary<string, object?>? newValues = null)
+        IReadOnlyDictionary<string, object?>? newValues = null,
+        string? reason = null)
     {
         AddAudit(
             actorUserId,
@@ -7546,7 +7841,8 @@ public sealed class FinanceService(
                 ["amount"] = accrual.Amount
             },
             oldValues,
-            newValues);
+            newValues,
+            reason);
     }
 
     private void AddAudit(

@@ -174,6 +174,14 @@ run_check "invalid_overdue_dates" "critical" \
   "SELECT count(*) FROM accruals WHERE NOT \"IsCanceled\" AND \"OverdueFromDate\" IS NOT NULL AND \"OverdueFromDate\" <= \"DueDate\";"
 run_check "backdated_accrual_due_dates" "warning" \
   "SELECT count(*) FROM accruals WHERE NOT \"IsCanceled\" AND \"DueDate\" < \"AccountingMonth\";"
+run_check "missing_regular_accrual_calculation_snapshots" "critical" \
+  "SELECT count(*) FROM accruals WHERE \"Source\" = 'regular' AND \"CalculationDetailsJson\" IS NULL;"
+run_check "historical_snapshot_amount_mismatches" "critical" \
+  "SELECT count(*) FROM accruals WHERE \"CalculationDetailsJson\" ->> 'version' = '0' AND round((\"CalculationDetailsJson\" ->> 'totalAmount')::numeric, 2) <> round(\"Amount\", 2);"
+run_check "customer_target_garage_match" "warning" \
+  "SELECT CASE WHEN count(*) = 1 THEN 0 ELSE 1 END FROM garages WHERE NOT \"IsArchived\" AND btrim(\"Number\") = '103';"
+run_check "customer_target_garage_due_date_review" "warning" \
+  "SELECT count(*) FROM accruals a INNER JOIN garages g ON g.\"Id\" = a.\"GarageId\" WHERE NOT a.\"IsCanceled\" AND btrim(g.\"Number\") = '103' AND a.\"DueDateNeedsReview\";"
 
 run_check "nonpositive_active_financial_operations" "critical" \
   "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"Amount\" <= 0;"
@@ -208,6 +216,16 @@ run_check "nonpositive_active_supplier_accruals" "critical" \
   "SELECT count(*) FROM supplier_accruals WHERE NOT \"IsCanceled\" AND \"Amount\" <= 0;"
 run_check "linked_supplier_accrual_mismatches" "critical" \
   "SELECT count(*) FROM supplier_accruals a JOIN financial_operations f ON f.\"Id\" = a.\"SourceFinancialOperationId\" WHERE a.\"SourceFinancialOperationId\" IS NOT NULL AND (a.\"IsCanceled\" IS DISTINCT FROM f.\"IsCanceled\" OR f.\"OperationKind\" <> 'expense' OR a.\"SupplierId\" IS DISTINCT FROM f.\"SupplierId\" OR a.\"ExpenseTypeId\" IS DISTINCT FROM f.\"ExpenseTypeId\" OR a.\"ExpenseFundId\" IS DISTINCT FROM f.\"ExpenseFundId\" OR a.\"AccountingMonth\" <> f.\"AccountingMonth\" OR a.\"Amount\" <> f.\"Amount\");"
+run_check "staff_without_salary_rate_history" "critical" \
+  "SELECT count(*) FROM staff_members s WHERE NOT EXISTS (SELECT 1 FROM staff_salary_rate_periods r WHERE r.\"StaffMemberId\" = s.\"Id\");"
+run_check "staff_without_employment_history" "critical" \
+  "SELECT count(*) FROM staff_members s WHERE NOT EXISTS (SELECT 1 FROM staff_employment_periods e WHERE e.\"StaffMemberId\" = s.\"Id\");"
+run_check "overlapping_staff_salary_rate_periods" "critical" \
+  "SELECT count(*) FROM staff_salary_rate_periods a JOIN staff_salary_rate_periods b ON a.\"StaffMemberId\" = b.\"StaffMemberId\" AND a.\"Id\" < b.\"Id\" AND daterange(a.\"EffectiveFrom\", COALESCE(a.\"EffectiveTo\" + 1, 'infinity'::date), '[)') && daterange(b.\"EffectiveFrom\", COALESCE(b.\"EffectiveTo\" + 1, 'infinity'::date), '[)');"
+run_check "overlapping_staff_employment_periods" "critical" \
+  "SELECT count(*) FROM staff_employment_periods a JOIN staff_employment_periods b ON a.\"StaffMemberId\" = b.\"StaffMemberId\" AND a.\"Id\" < b.\"Id\" AND daterange(a.\"EffectiveFrom\", COALESCE(a.\"EffectiveTo\" + 1, 'infinity'::date), '[)') && daterange(b.\"EffectiveFrom\", COALESCE(b.\"EffectiveTo\" + 1, 'infinity'::date), '[)');"
+run_check "customer_target_staff_match" "warning" \
+  "SELECT CASE WHEN count(*) >= 1 THEN 0 ELSE 1 END FROM staff_members WHERE \"FullName\" ILIKE 'Петров%';"
 
 run_check "invalid_opening_balance_adjustment_targets" "critical" \
   "SELECT count(*) FROM opening_balance_adjustments a WHERE (a.\"TargetKind\" = 'garage' AND NOT EXISTS (SELECT 1 FROM garages g WHERE g.\"Id\" = a.\"TargetId\")) OR (a.\"TargetKind\" = 'supplier' AND NOT EXISTS (SELECT 1 FROM suppliers s WHERE s.\"Id\" = a.\"TargetId\")) OR a.\"TargetKind\" NOT IN ('garage', 'supplier');"
@@ -236,6 +254,8 @@ run_check "fund_operation_same_timestamp_order" "warning" \
   "SELECT count(*) FROM (SELECT \"FundId\", \"CreatedAtUtc\", \"BalanceBefore\", lag(\"CreatedAtUtc\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_created_at, lag(\"BalanceAfter\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_balance_after FROM fund_operations) q WHERE previous_created_at = \"CreatedAtUtc\" AND \"BalanceBefore\" <> previous_balance_after;"
 run_check "fund_balance_mismatch" "critical" \
   "SELECT count(*) FROM funds f JOIN LATERAL (SELECT o.\"BalanceAfter\" FROM fund_operations o WHERE o.\"FundId\" = f.\"Id\" ORDER BY o.\"CreatedAtUtc\" DESC, o.\"Id\" DESC LIMIT 1) latest ON true WHERE f.\"Balance\" <> latest.\"BalanceAfter\";"
+run_check "cash_bank_fund_reconciliation_mismatch" "critical" \
+  "WITH financial AS (SELECT coalesce(sum(CASE WHEN \"OperationKind\" = 'income' THEN \"Amount\" ELSE -\"Amount\" END), 0) AS total FROM financial_operations WHERE NOT \"IsCanceled\" AND \"OperationKind\" IN ('income', 'expense')), adjustments AS (SELECT coalesce(sum(CASE WHEN \"Direction\" = 'increase' THEN \"Amount\" ELSE -\"Amount\" END), 0) AS total FROM cash_bank_balance_operations), named AS (SELECT coalesce(sum(\"Balance\"), 0) AS total FROM funds WHERE NOT \"IsArchived\"), pool_events AS (SELECT operation.\"CreatedAtUtc\", operation.\"Id\", CASE WHEN operation.\"OperationKind\" = 'income' THEN operation.\"Amount\" ELSE -operation.\"Amount\" END AS delta FROM financial_operations operation WHERE NOT operation.\"IsCanceled\" AND operation.\"OperationKind\" IN ('income', 'expense') AND NOT EXISTS (SELECT 1 FROM fund_operations fund_operation WHERE fund_operation.\"SourceFinancialOperationId\" = operation.\"Id\" AND NOT fund_operation.\"IsCanceled\") UNION ALL SELECT operation.\"CreatedAtUtc\", operation.\"Id\", CASE WHEN operation.\"OperationKind\" = 'withdraw' THEN operation.\"Amount\" ELSE -operation.\"Amount\" END FROM fund_operations operation WHERE NOT operation.\"IsCanceled\" AND operation.\"SourceFinancialOperationId\" IS NULL UNION ALL SELECT operation.\"CreatedAtUtc\", operation.\"Id\", CASE WHEN operation.\"Direction\" = 'increase' THEN operation.\"Amount\" ELSE -operation.\"Amount\" END FROM cash_bank_balance_operations operation), running_pool AS (SELECT delta, sum(delta) OVER (ORDER BY \"CreatedAtUtc\", \"Id\") AS running_total FROM pool_events), available AS (SELECT round(greatest(coalesce(sum(delta), 0) - least(coalesce(min(running_total), 0), 0), 0), 2) AS total FROM running_pool) SELECT CASE WHEN round(financial.total + adjustments.total - named.total - available.total, 2) = 0 THEN 0 ELSE 1 END FROM financial CROSS JOIN adjustments CROSS JOIN named CROSS JOIN available;"
 run_check "invalid_fee_campaign_dates" "critical" \
   "SELECT count(*) FROM fee_campaigns WHERE NOT \"IsArchived\" AND \"EndsOn\" IS NOT NULL AND \"EndsOn\" < \"StartsOn\";"
 run_check "fee_campaign_income_mismatch" "critical" \

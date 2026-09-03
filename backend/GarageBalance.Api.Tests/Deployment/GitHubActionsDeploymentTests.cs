@@ -126,6 +126,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("invalid_garage_starting_overdue_debt", script, StringComparison.Ordinal);
         Assert.Contains("overlapping_tariff_periods", script, StringComparison.Ordinal);
         Assert.Contains("duplicate_regular_accruals", script, StringComparison.Ordinal);
+        Assert.Contains("missing_regular_accrual_calculation_snapshots", script, StringComparison.Ordinal);
+        Assert.Contains("historical_snapshot_amount_mismatches", script, StringComparison.Ordinal);
+        Assert.Contains("customer_target_garage_due_date_review", script, StringComparison.Ordinal);
         Assert.Contains("income_operations_without_type_or_allocation_evidence", script, StringComparison.Ordinal);
         Assert.Contains("legacy_income_types_inferred_from_allocations", script, StringComparison.Ordinal);
         Assert.Contains("allocations_to_invalid_operations", script, StringComparison.Ordinal);
@@ -134,6 +137,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("allocation_income_type_mismatches", script, StringComparison.Ordinal);
         Assert.Contains("duplicate_active_supplier_accruals", script, StringComparison.Ordinal);
         Assert.Contains("linked_supplier_accrual_mismatches", script, StringComparison.Ordinal);
+        Assert.Contains("staff_without_salary_rate_history", script, StringComparison.Ordinal);
+        Assert.Contains("overlapping_staff_employment_periods", script, StringComparison.Ordinal);
+        Assert.Contains("customer_target_staff_match", script, StringComparison.Ordinal);
         Assert.Contains("invalid_opening_balance_adjustment_targets", script, StringComparison.Ordinal);
         Assert.Contains("negative_cash_or_bank_balance", script, StringComparison.Ordinal);
         Assert.Contains("exact_duplicate_financial_operations", script, StringComparison.Ordinal);
@@ -142,6 +148,7 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("fund_operation_chain_breaks", script, StringComparison.Ordinal);
         Assert.Contains("fund_operation_same_timestamp_order", script, StringComparison.Ordinal);
         Assert.Contains("fund_balance_mismatch", script, StringComparison.Ordinal);
+        Assert.Contains("cash_bank_fund_reconciliation_mismatch", script, StringComparison.Ordinal);
         Assert.Contains("codex_marked_business_records", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--dbname=\"$database_name\"", script, StringComparison.Ordinal);
         Assert.Contains("OPERATIONAL_BACKUP_RETENTION_COUNT=30", script, StringComparison.Ordinal);

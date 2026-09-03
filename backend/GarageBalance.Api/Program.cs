@@ -126,6 +126,7 @@ builder.Services.AddScoped<IExpenseWorksheetQuery, EfExpenseWorksheetQuery>();
 builder.Services.AddScoped<IFinancialOperationDisplayQuery, EfFinancialOperationDisplayQuery>();
 builder.Services.AddScoped<IFinanceTotalsQuery, EfFinanceTotalsQuery>();
 builder.Services.AddScoped<IFinancialReportPeriodQuery, EfFinancialReportPeriodQuery>();
+builder.Services.AddScoped<IFinancialJournalQuery, EfFinancialJournalQuery>();
 builder.Services.AddScoped<IMeterReadingRepository, EfMeterReadingRepository>();
 builder.Services.AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>();
 builder.Services.AddScoped<IAccrualRepository, EfAccrualRepository>();

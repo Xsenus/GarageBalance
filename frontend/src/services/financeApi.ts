@@ -96,6 +96,69 @@ export type FinancePageParams = {
   limit?: number
 }
 
+export type FinancialJournalEntryDto = {
+  id: string
+  entityType: 'financial_operation' | 'accrual' | 'supplier_accrual' | 'staff_salary_adjustment' | 'fund_operation' | 'cash_bank_transfer' | 'cash_bank_balance_operation'
+  operationType: string
+  operationDate: string
+  accountingMonth: string | null
+  amount: number
+  counterparty: string
+  category: string
+  documentNumber: string | null
+  comment: string | null
+  source: string
+  isCanceled: boolean
+  createdAtUtc: string
+  version: string | null
+  canEdit: boolean
+  canCancel: boolean
+  canRestore: boolean
+  protectionReason: string | null
+  correctionHint: string | null
+}
+
+export type FinancialJournalPageParams = {
+  dateFrom?: string
+  dateTo?: string
+  entityType?: string
+  counterparty?: string
+  status?: 'active' | 'canceled' | ''
+  document?: string
+  offset?: number
+  limit?: number
+}
+
+export type RegularAccrualRecalculationRowDto = {
+  accrualId: string
+  garageNumber: string
+  currentAmount: number
+  proposedAmount: number | null
+  difference: number | null
+  action: 'update' | 'cancel' | 'snapshot' | 'unchanged' | 'paid' | 'error'
+  explanation: string
+  isPaid: boolean
+}
+
+export type RegularAccrualRecalculationPreviewDto = {
+  accountingMonth: string
+  incomeTypeId: string
+  incomeTypeName: string
+  tariffId: string
+  tariffName: string
+  totalCount: number
+  changeCount: number
+  snapshotOnlyCount: number
+  unchangedCount: number
+  protectedPaidCount: number
+  errorCount: number
+  currentTotal: number
+  proposedTotal: number
+  previewFingerprint: string
+  applied: boolean
+  rows: RegularAccrualRecalculationRowDto[]
+}
+
 export type AccrualDto = {
   id: string
   garageId: string
@@ -728,6 +791,7 @@ export type CorrectHistoricalMeterReadingRequest = {
 }
 
 export type FinanceClient = {
+  getFinancialJournalPage?(accessToken: string, params?: FinancialJournalPageParams, signal?: AbortSignal): Promise<FinancePagedResult<FinancialJournalEntryDto>>
   getOperations(accessToken: string, limit?: number, signal?: AbortSignal): Promise<FinancialOperationDto[]>
   getOperationsPage(accessToken: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }, signal?: AbortSignal): Promise<FinancePagedResult<FinancialOperationDto>>
   getAccruals(accessToken: string, limit?: number, signal?: AbortSignal): Promise<AccrualDto[]>
@@ -776,6 +840,8 @@ export type FinanceClient = {
   restoreSupplierAccrual(accessToken: string, supplierAccrualId: string): Promise<SupplierAccrualDto>
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
   generateRegularCatalogAccruals(accessToken: string, request: GenerateRegularCatalogAccrualsRequest): Promise<RegularCatalogAccrualGenerationResultDto>
+  previewRegularAccrualRecalculation?(accessToken: string, request: { incomeTypeId: string; tariffId: string; accountingMonth: string }, signal?: AbortSignal): Promise<RegularAccrualRecalculationPreviewDto>
+  applyRegularAccrualRecalculation?(accessToken: string, request: { incomeTypeId: string; tariffId: string; accountingMonth: string; expectedPreviewFingerprint: string; reason: string }): Promise<RegularAccrualRecalculationPreviewDto>
   generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
   generateFeeCampaignAccruals(accessToken: string, request: GenerateFeeCampaignAccrualsRequest): Promise<FeeCampaignAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
@@ -833,6 +899,18 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 }
 
 export const financeApi: FinanceClient = {
+  getFinancialJournalPage(accessToken, params = {}, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/journal/page', {
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+      entityType: params.entityType,
+      counterparty: params.counterparty,
+      status: params.status,
+      document: params.document,
+      offset: params.offset,
+      limit: params.limit,
+    }), { signal })
+  },
   getOperations(accessToken, limit, signal) {
     return requestJson(accessToken, withLimit('/api/finance/operations', limit), { signal })
   },
@@ -1056,6 +1134,19 @@ export const financeApi: FinanceClient = {
   },
   generateRegularCatalogAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals/generate-regular-catalog', { method: 'POST', body: JSON.stringify(request) })
+  },
+  previewRegularAccrualRecalculation(accessToken, request, signal) {
+    return requestJson(accessToken, '/api/finance/accruals/recalculation-preview', {
+      method: 'POST',
+      body: JSON.stringify({ ...request, accountingMonth: toMonthStart(request.accountingMonth) }),
+      signal,
+    })
+  },
+  applyRegularAccrualRecalculation(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals/recalculate-unpaid', {
+      method: 'POST',
+      body: JSON.stringify({ ...request, accountingMonth: toMonthStart(request.accountingMonth) }),
+    })
   },
   generateSupplierGroupSalaryAccruals(accessToken, request) {
     return requestJson(accessToken, '/api/finance/supplier-accruals/generate-salary', { method: 'POST', body: JSON.stringify(request) })
