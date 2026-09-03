@@ -196,8 +196,8 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
             .ToListAsync();
         Assert.Collection(
             lifecycleAccruals,
-            item => Assert.Equal((500m, AccrualSources.Regular, membershipIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)),
-            item => Assert.Equal((400m, AccrualSources.Regular, electricityIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)));
+            item => Assert.Equal((400m, AccrualSources.Regular, electricityIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)),
+            item => Assert.Equal((500m, AccrualSources.Regular, membershipIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)));
 
         var reports = CreateReportService(context);
         var consolidatedRequest = new ConsolidatedReportRequest(month, month, marker);
