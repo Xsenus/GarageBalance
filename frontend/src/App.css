@@ -3726,6 +3726,7 @@ h1 {
 .tariffs-page .contractors-bottom-grid {
   grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 12px minmax(0, 1fr);
   gap: 0;
+  align-items: stretch;
 }
 
 .tariffs-panels-splitter {

@@ -19,7 +19,10 @@ describe('responsive layout styles', () => {
     })
   }
 
-  it('stacks the configurable tariff panels and hides their splitter on narrow screens', () => {
+  it('keeps configurable tariff panels level on desktop and stacks them on narrow screens', () => {
+    expect(normalizedAppCss).toContain('.tariffs-page .contractors-bottom-grid {\n  grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 12px minmax(0, 1fr);\n  gap: 0;\n  align-items: stretch;')
+    expect(normalizedAppCss).toContain('.tariffs-summary-card {\n  display: flex;\n  min-height: 390px;\n  flex-direction: column;')
+    expect(normalizedAppCss).toContain('.tariffs-summary-card > .dictionary-pagination {\n  margin-top: auto;')
     expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n  align-self: stretch;\n  min-height: 48px;')
     expect(normalizedAppCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: 1fr;\n    gap: 12px;')
     expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n    display: none;')
