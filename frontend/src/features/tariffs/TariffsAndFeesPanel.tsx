@@ -607,8 +607,19 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
     return [common]
   })
   const unmatchedSettings = settings.filter((setting) => !matchedSettingIds.has(setting.id))
+  const mergedScheduleKeys = new Set(mergedRows
+    .filter((row) => row.backendServiceSettingId && row.serviceSettingKind)
+    .map((row) => `${row.backendServiceSettingId}:${row.serviceSettingKind}`))
+  const missingScheduleRows = settings
+    .filter((setting) => matchedSettingIds.has(setting.id))
+    .flatMap((setting) => createChargeServiceRows(setting, tariffs)
+      .filter((row) => (
+        row.serviceSettingKind !== 'main'
+        && !mergedScheduleKeys.has(`${setting.id}:${row.serviceSettingKind}`)
+      )))
   return [
     ...mergedRows,
+    ...missingScheduleRows,
     ...unmatchedSettings.flatMap((setting) => createChargeServiceRows(setting, tariffs)),
   ]
 }
@@ -3058,8 +3069,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     key={campaign.id}
                   >
                     <span className="contractors-fee-name-cell">
-                      <strong>{campaign.name}</strong>
-                      <small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>
+                      <span>{campaign.name}</span>
                       {campaign.closedAtUtc ? (
                         <small>
                           {campaign.isClosedEarly ? 'Закрыт досрочно' : 'Закрыт после выполнения плана'}

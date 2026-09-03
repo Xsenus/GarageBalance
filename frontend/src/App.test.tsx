@@ -889,8 +889,11 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
-    expect(await within(feeCampaignsSection).findByText('Сбор на ворота')).toBeInTheDocument()
+    const activeCampaignName = await within(feeCampaignsSection).findByText('Сбор на ворота')
+    expect(activeCampaignName.tagName).toBe('SPAN')
     expect(within(feeCampaignsSection).getByText('Старый сбор')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByText('Прочие доходы')).not.toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByText('Ремонт ворот')).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('Фонд')).toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('Собрано')).toBeInTheDocument()
     expect(within(feeCampaignsSection).getAllByText('Членские взносы')).toHaveLength(2)
@@ -5632,7 +5635,30 @@ describe('App', () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceTariffRequest: UpdateChargeServiceWithTariffRequest | null = null
-    let serviceSettings: ChargeServiceSettingDto[] = []
+    let serviceSettings: ChargeServiceSettingDto[] = [createChargeServiceSetting({
+      id: 'service-water',
+      name: 'Вода',
+      isRegular: true,
+      periodicityMonths: 1,
+      accrualStartMonth: 1,
+      paymentDueDay: 20,
+      paymentDueMonth: null,
+      overdueGraceDays: 30,
+      tariffId: 'tariff-water',
+      isMetered: true,
+      unitName: 'м³',
+    }), createChargeServiceSetting({
+      id: 'service-membership',
+      name: 'Членский взнос',
+      isRegular: true,
+      periodicityMonths: 12,
+      accrualStartMonth: 1,
+      paymentDueDay: 30,
+      paymentDueMonth: 6,
+      overdueGraceDays: 30,
+      tariffId: 'tariff-membership',
+      unitName: 'руб.',
+    })]
     const serviceIncomeType = createAccountingType({
       id: 'income-security',
       name: 'Охрана',
@@ -5649,10 +5675,11 @@ describe('App', () => {
     })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф воды', calculationBase: 'meter_water', rate: 48.5 })
+    const membershipTariff = createTariff({ id: 'tariff-membership', name: 'Членский взнос', calculationBase: 'fixed', rate: 1500 })
     let incomeTypes = [serviceIncomeType, waterIncomeType]
     const dictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => incomeTypes,
-      getTariffs: async () => [serviceTariff, waterTariff],
+      getTariffs: async () => [serviceTariff, waterTariff, membershipTariff],
       getChargeServiceSettings: async (_token, _search, _limit, includeArchived = false) => (
         serviceSettings.filter((setting) => includeArchived || !setting.isArchived)
       ),
@@ -5729,6 +5756,18 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    const waterRow = (await within(tariffsPanel).findByLabelText('Вода: оплата до: день')).closest('[role="row"]')
+    expect(waterRow).not.toBeNull()
+    expect(within(waterRow as HTMLElement).getByText('Ежемесячно')).toBeInTheDocument()
+    expect(within(waterRow as HTMLElement).getByLabelText('Вода: оплата до: день')).toHaveValue('20')
+    expect(within(waterRow as HTMLElement).getByText('следующего месяца')).toBeInTheDocument()
+    const membershipRow = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: день').closest('[role="row"]')
+    expect(membershipRow).not.toBeNull()
+    expect(within(membershipRow as HTMLElement).getByText('Ежегодно')).toBeInTheDocument()
+    expect(within(membershipRow as HTMLElement).getByText('Январь')).toBeInTheDocument()
+    expect(within(membershipRow as HTMLElement).getByLabelText('Членский взнос: оплата до: день')).toHaveValue('30')
+    expect(within(membershipRow as HTMLElement).getByLabelText('Членский взнос: оплата до: месяц')).toHaveTextContent('Июнь')
 
     await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' }))
     const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
@@ -5829,12 +5868,14 @@ describe('App', () => {
     expect(savedServiceUnitControl).toHaveTextContent('упаковка')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана: Охрана — тариф: единица' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: по счетчику' })).toHaveTextContent('Нет')
+    const savedServiceRow = savedServiceCostInput.closest('[role="row"]')
+    expect(savedServiceRow).not.toBeNull()
     const tariffTable = within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })
     expect(within(tariffTable).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
       'Основание', 'Ед.', 'Значение / ставка', 'Периодичность', 'Месяц начисления', 'Оплата до', 'Просрочка, дн.', 'Пороговая тарификация', 'По счетчику', 'Действия',
     ])
-    expect(within(tariffsPanel).getByText('Ежегодно')).toBeInTheDocument()
-    expect(within(tariffsPanel).getByText('Январь')).toBeInTheDocument()
+    expect(within(savedServiceRow as HTMLElement).getByText('Ежегодно')).toBeInTheDocument()
+    expect(within(savedServiceRow as HTMLElement).getByText('Январь')).toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана: периодичность' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана: месяц начисления' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана: оплата до: день')).toHaveValue('28')

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 describe('responsive layout styles', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const contractorsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
+  const tariffsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const settingsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
@@ -444,6 +445,13 @@ describe('responsive layout styles', () => {
 
   it('centers the announced-fee period heading and every date on one axis', () => {
     expect(normalizedAppCss).toContain('.fee-period {\n  display: grid;\n  place-content: center;')
+  })
+
+  it('aligns an announced fee name like the irregular-payment name without a second metadata line', () => {
+    expect(normalizedAppCss).toContain('.contractors-fee-name-cell {\n  display: flex;\n  min-width: 0;\n  flex-direction: column;\n  align-items: flex-start;\n  justify-content: center;')
+    expect(tariffsPanel).toContain('<span>{campaign.name}</span>')
+    expect(tariffsPanel).not.toContain('<strong>{campaign.name}</strong>')
+    expect(tariffsPanel).not.toContain("<small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>")
   })
 
   it('keeps the supplier editor wide, compact and responsive', () => {
