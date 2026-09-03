@@ -138,6 +138,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("duplicate_active_supplier_accruals", script, StringComparison.Ordinal);
         Assert.Contains("linked_supplier_accrual_mismatches", script, StringComparison.Ordinal);
         Assert.Contains("staff_without_salary_rate_history", script, StringComparison.Ordinal);
+        Assert.Contains("duplicate_staff_salary_rate_period_starts", script, StringComparison.Ordinal);
+        Assert.Contains("FROM (SELECT \\\"StaffMemberId\\\", \\\"EffectiveFrom\\\" FROM staff_salary_rate_periods GROUP BY \\\"StaffMemberId\\\", \\\"EffectiveFrom\\\" HAVING count(*) > 1) q", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("staff_salary_rate_periods a JOIN staff_salary_rate_periods b", script, StringComparison.Ordinal);
         Assert.Contains("overlapping_staff_employment_periods", script, StringComparison.Ordinal);
         Assert.Contains("customer_target_staff_match", script, StringComparison.Ordinal);
         Assert.Contains("invalid_opening_balance_adjustment_targets", script, StringComparison.Ordinal);

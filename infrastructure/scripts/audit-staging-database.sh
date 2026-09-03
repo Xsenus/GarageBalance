@@ -220,8 +220,8 @@ run_check "staff_without_salary_rate_history" "critical" \
   "SELECT count(*) FROM staff_members s WHERE NOT EXISTS (SELECT 1 FROM staff_salary_rate_periods r WHERE r.\"StaffMemberId\" = s.\"Id\");"
 run_check "staff_without_employment_history" "critical" \
   "SELECT count(*) FROM staff_members s WHERE NOT EXISTS (SELECT 1 FROM staff_employment_periods e WHERE e.\"StaffMemberId\" = s.\"Id\");"
-run_check "overlapping_staff_salary_rate_periods" "critical" \
-  "SELECT count(*) FROM staff_salary_rate_periods a JOIN staff_salary_rate_periods b ON a.\"StaffMemberId\" = b.\"StaffMemberId\" AND a.\"Id\" < b.\"Id\" AND daterange(a.\"EffectiveFrom\", COALESCE(a.\"EffectiveTo\" + 1, 'infinity'::date), '[)') && daterange(b.\"EffectiveFrom\", COALESCE(b.\"EffectiveTo\" + 1, 'infinity'::date), '[)');"
+run_check "duplicate_staff_salary_rate_period_starts" "critical" \
+  "SELECT count(*) FROM (SELECT \"StaffMemberId\", \"EffectiveFrom\" FROM staff_salary_rate_periods GROUP BY \"StaffMemberId\", \"EffectiveFrom\" HAVING count(*) > 1) q;"
 run_check "overlapping_staff_employment_periods" "critical" \
   "SELECT count(*) FROM staff_employment_periods a JOIN staff_employment_periods b ON a.\"StaffMemberId\" = b.\"StaffMemberId\" AND a.\"Id\" < b.\"Id\" AND daterange(a.\"EffectiveFrom\", COALESCE(a.\"EffectiveTo\" + 1, 'infinity'::date), '[)') && daterange(b.\"EffectiveFrom\", COALESCE(b.\"EffectiveTo\" + 1, 'infinity'::date), '[)');"
 run_check "customer_target_staff_match" "warning" \
