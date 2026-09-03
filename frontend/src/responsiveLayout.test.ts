@@ -452,6 +452,17 @@ describe('responsive layout styles', () => {
     expect(tariffsPanel).toContain('<span>{campaign.name}</span>')
     expect(tariffsPanel).not.toContain('<strong>{campaign.name}</strong>')
     expect(tariffsPanel).not.toContain("<small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>")
+    expect(tariffsPanel).toContain('campaign.closedAtUtc && campaign.isClosedEarly')
+    expect(tariffsPanel).not.toContain("'Закрыт после выполнения плана'")
+  })
+
+  it('uses calm centered tariff names and separates the salary fund from regular services', () => {
+    expect(normalizedAppCss).toContain('.tariffs-page .contractors-sheet-row > .tariffs-service-name-cell {\n  display: flex;\n  align-items: center;\n  justify-content: flex-start;')
+    expect(normalizedAppCss).toContain('.tariffs-service-name {\n  color: #101828;\n  font-size: inherit;\n  font-weight: 400;')
+    expect(normalizedAppCss).toContain('.tariffs-page .contractors-sheet-row > .tariffs-salary-group-heading {\n  display: flex;\n  grid-column: 1 / -1;')
+    expect(tariffsPanel).toContain('className="contractors-sheet-row tariffs-salary-group-row"')
+    expect(tariffsPanel).toContain('<span className="tariffs-service-name">{row.title}</span>')
+    expect(tariffsPanel).not.toContain('<strong>{row.group ?? row.category}</strong>')
   })
 
   it('keeps the supplier editor wide, compact and responsive', () => {

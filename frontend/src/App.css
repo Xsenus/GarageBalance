@@ -3567,9 +3567,39 @@ h1 {
   line-height: 1.35;
 }
 
-.tariffs-page .contractors-sheet-row strong {
+.tariffs-page .contractors-sheet-row > .tariffs-service-name-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.tariffs-service-name {
+  color: #101828;
   font-size: inherit;
+  font-weight: 400;
   line-height: inherit;
+}
+
+.tariffs-page .contractors-sheet-row.tariffs-salary-group-row {
+  min-height: 38px;
+  background: #f2f4f7;
+}
+
+.tariffs-page .contractors-sheet-row.tariffs-salary-group-row:hover {
+  background: #f2f4f7;
+}
+
+.tariffs-page .contractors-sheet-row > .tariffs-salary-group-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  border-top: 1px solid #d0d5dd;
+  color: #344054;
+  font-weight: 700;
+}
+
+.tariffs-page .tariffs-salary-summary-row {
+  background: #fcfcfd;
 }
 
 .tariffs-page .contractors-sheet-header > span:last-child {

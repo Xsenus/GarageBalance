@@ -2586,6 +2586,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 : null
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
               const isSalaryFundSummary = row.category === salaryFundCategory
+              const isSalaryFundGroupStart = isSalaryFundSummary && (
+                pageIndex === 0 || tariffPage.items[pageIndex - 1]?.category !== salaryFundCategory
+              )
+              const showsPrimaryName = isSalaryFundSummary || Boolean(row.group) || pageIndex === 0
               const isRowDisabled = tariffsLoading || isSalaryFundSummary || row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const thresholdRowsForTariff = getElectricityThresholdRows(tariffRows, row)
               const canDeleteThreshold = Boolean(row.threshold && thresholdRowsForTariff.length > 2)
@@ -2617,15 +2621,25 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 : null
               return (
                 <Fragment key={row.id}>
+                {isSalaryFundGroupStart ? (
+                  <div className="contractors-sheet-row tariffs-salary-group-row" role="row">
+                    <span className="tariffs-salary-group-heading" role="cell">Зарплатный фонд</span>
+                  </div>
+                ) : null}
                 <div
                   className={[
-                    row.group ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row',
+                    row.group && !isSalaryFundSummary ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row',
+                    isSalaryFundSummary ? 'tariffs-salary-summary-row' : '',
                     row.isDeleted ? 'contractors-sheet-row--deleted' : '',
                   ].filter(Boolean).join(' ')}
                   role="row"
                 >
-                  <span role="cell">
-                    {row.group || pageIndex === 0 ? <strong>{row.group ?? row.category}</strong> : null}
+                  <span className={showsPrimaryName ? 'tariffs-service-name-cell' : undefined} role="cell">
+                    {isSalaryFundSummary ? (
+                      <span className="tariffs-service-name">{row.title}</span>
+                    ) : row.group || pageIndex === 0 ? (
+                      <span className="tariffs-service-name">{row.group ?? row.category}</span>
+                    ) : null}
                     {showsElectricityRange ? (
                       <div className="tariffs-threshold-range" role="group" aria-label={`${row.category}: диапазон ${row.title}`}>
                         <span>От</span>
@@ -2664,7 +2678,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       </div>
                     ) : incomeFundName ? (
                       <span>{incomeFundName}</span>
-                    ) : row.serviceSettingKind !== 'main' && row.title !== (row.group ?? row.category) && (
+                    ) : !isSalaryFundSummary && row.serviceSettingKind !== 'main' && row.title !== (row.group ?? row.category) && (
                       <span>{row.title}</span>
                     )}
                   </span>
@@ -3070,9 +3084,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   >
                     <span className="contractors-fee-name-cell">
                       <span>{campaign.name}</span>
-                      {campaign.closedAtUtc ? (
+                      {campaign.closedAtUtc && campaign.isClosedEarly ? (
                         <small>
-                          {campaign.isClosedEarly ? 'Закрыт досрочно' : 'Закрыт после выполнения плана'}
+                          Закрыт досрочно
                           {campaign.closureComment ? ` · ${campaign.closureComment}` : ''}
                         </small>
                       ) : null}
