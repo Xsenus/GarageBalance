@@ -15,7 +15,7 @@ public sealed class EfApplicationUnitOfWork(GarageBalanceDbContext dbContext) : 
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException exception) when (
-            exception.Entries.Any(entry => entry.Entity is MeterReading))
+            exception.Entries.Any(entry => entry.Entity is MeterReading or StaffSalaryAdjustment))
         {
             throw new ApplicationConcurrencyException(exception);
         }

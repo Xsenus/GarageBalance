@@ -3251,7 +3251,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               </button>
             </div>
             <p className="confirmation-text" id="threshold-delete-description">Порог будет удалён из текущего тарифа.</p>
-            <label className="field-label" htmlFor="threshold-delete-reason">Причина удаления</label>
+            <label className="field-label" htmlFor="threshold-delete-reason">Причина удаления {actionCommentsRequired ? '*' : '(необязательно)'}</label>
             <textarea
               id="threshold-delete-reason"
               aria-label="Причина удаления порога"
@@ -3262,6 +3262,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               disabled={Boolean(tariffSavingRowId)}
               required={actionCommentsRequired}
             />
+            <p className="form-hint">{actionCommentsRequired ? 'Причина обязательна. Настройка: «Настройки» → «Отображение».' : 'Причина необязательна; изменение всё равно сохранится в истории.'}</p>
             {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={thresholdDeleteCancelRef} className="ghost-button" type="button" onClick={closeThresholdDeleteDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
@@ -4460,7 +4461,10 @@ function AddFeePrototypeDialog({
                 <FormField label="Наименование сбора">
                   <input aria-label="Наименование сбора" value={name} disabled={formBusy} onChange={(event) => setName(event.target.value)} />
                 </FormField>
-                <FormField label="Назначение поступления">
+                <FormField
+                  label="Назначение поступления"
+                  help="Деньги сбора будут учтены в фонде, который назначен выбранному виду поступления."
+                >
                   <SelectControl
                     aria-label="Назначение поступления для сбора"
                     value={incomeTypeId}
@@ -4475,16 +4479,12 @@ function AddFeePrototypeDialog({
                     onChange={setIncomeTypeId}
                   />
                 </FormField>
-                <p className="form-hint" role="status">
-                  Фонд назначения: {incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.destinationFundName ?? 'не назначен'}
-                </p>
                 <FormField label="Цель">
                   <input aria-label="Цель сбора" value={goal} disabled={formBusy} onChange={(event) => setGoal(event.target.value)} />
                 </FormField>
                 <label className="contractors-switch-row contractors-fee-participant-switch">
                   <span className="contractors-fee-participant-label">
                     <strong>Участники</strong>
-                    <small>все гаражи</small>
                   </span>
                   <span className="contractors-switch-control">
                     <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} disabled={formBusy} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />

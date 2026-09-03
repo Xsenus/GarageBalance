@@ -50,6 +50,14 @@ export type CreateFundOperationRequest = {
   reason?: string
 }
 
+export type FundReconciliationDto = {
+  cashAndBankTotal: number
+  namedFundTotal: number
+  availableToDistribute: number
+  difference: number
+  isReconciled: boolean
+}
+
 export type UpdateFundOperationRequest = {
   amount: number
   reason: string
@@ -71,6 +79,7 @@ export type CancelFundOperationRequest = {
 export type FundsClient = {
   getFunds(accessToken: string, signal?: AbortSignal): Promise<FundDto[]>
   getFundOptions(accessToken: string, signal?: AbortSignal): Promise<FundOptionDto[]>
+  getReconciliation?(accessToken: string, signal?: AbortSignal): Promise<FundReconciliationDto>
   createFund(accessToken: string, request: UpsertFundRequest): Promise<FundDto>
   updateFund(accessToken: string, fundId: string, request: UpsertFundRequest): Promise<FundDto>
   deleteFund(accessToken: string, fundId: string, request: DeleteFundRequest): Promise<void>
@@ -159,6 +168,9 @@ export const fundsApi: FundsClient = {
   },
   getFundOptions(accessToken, signal) {
     return requestJson<FundOptionDto[]>(accessToken, '/api/funds/options', signal ? { signal } : undefined)
+  },
+  getReconciliation(accessToken, signal) {
+    return requestJson<FundReconciliationDto>(accessToken, '/api/funds/reconciliation', signal ? { signal } : undefined)
   },
   async createFund(accessToken, request) {
     const result = await requestJson<FundDto>(accessToken, '/api/funds', { method: 'POST', body: JSON.stringify(request) })

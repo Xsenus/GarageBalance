@@ -431,41 +431,6 @@ function buildContractorFinancialReport(entries: Array<Omit<ContractorFinancialR
   }
 }
 
-function getContractorReportMonthStarts(monthFrom: string, monthTo: string) {
-  const [fromYear, fromMonth] = monthFrom.split('-').map(Number)
-  const [toYear, toMonth] = monthTo.split('-').map(Number)
-  if (!fromYear || !fromMonth || !toYear || !toMonth) {
-    return []
-  }
-
-  const months: string[] = []
-  const cursor = new Date(fromYear, fromMonth - 1, 1)
-  const last = new Date(toYear, toMonth - 1, 1)
-  while (cursor <= last) {
-    months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-01`)
-    cursor.setMonth(cursor.getMonth() + 1)
-  }
-
-  return months
-}
-
-function createStaffFinancialReportEntries(row: ContractorStaffRow, monthFrom: string, monthTo: string) {
-  const rate = parsePrototypeMoney(row.rate)
-  if (rate <= 0) {
-    return []
-  }
-
-  return getContractorReportMonthStarts(monthFrom, monthTo).map((month) => ({
-    id: `staff-accrual-${row.id}-${month}`,
-    accountingMonth: month,
-    date: month,
-    documentNumber: '—',
-    description: 'Начисление зарплаты',
-    accrualAmount: rate,
-    paymentAmount: 0,
-  }))
-}
-
 function formatPrototypeNumber(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return ''
@@ -778,6 +743,24 @@ function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   }
 
   return target.item.fullName || 'Сотрудник без имени'
+}
+
+async function loadAllContractorReportPages<T>(
+  loadPage: (offset: number, limit: number) => Promise<{ items: T[]; totalCount: number }>,
+) {
+  const pageSize = 500
+  const items: T[] = []
+  let totalCount: number
+  do {
+    const page = await loadPage(items.length, pageSize)
+    totalCount = page.totalCount
+    if (page.items.length === 0) {
+      break
+    }
+    items.push(...page.items)
+  } while (items.length < totalCount)
+
+  return items
 }
 
 function applyGarageOwner(row: ContractorGarageRow, owner?: OwnerDto | null): ContractorGarageRow {
@@ -1611,15 +1594,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setContractorFinancialReportError(null)
 
     try {
-      const operationsRequest = financeClient.getOperationsPage(auth.accessToken, {
-        monthFrom: filters.monthFrom,
-        monthTo: filters.monthTo,
-        operationKind: 'expense',
-        supplierId: target.type === 'supplier' ? target.row.id : undefined,
-        staffMemberId: target.type === 'employee' ? target.row.id : undefined,
-        limit: 500,
-      }, request.controller.signal)
-      const createOperationEntries = (operationsPage: Awaited<ReturnType<FinanceClient['getOperationsPage']>>) => operationsPage.items
+      const operationsRequest = target.type === 'supplier'
+        ? loadAllContractorReportPages((offset, limit) => financeClient.getOperationsPage(auth.accessToken, {
+          monthFrom: filters.monthFrom,
+          monthTo: filters.monthTo,
+          operationKind: 'expense',
+          supplierId: target.row.id,
+          offset,
+          limit,
+        }, request.controller.signal))
+        : null
+      const createOperationEntries = (operations: Awaited<ReturnType<FinanceClient['getOperationsPage']>>['items']) => operations
         .filter((operation) => !operation.isCanceled)
         .map((operation) => ({
           id: `operation-${operation.id}`,
@@ -1634,18 +1619,19 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         }))
 
       if (target.type === 'supplier') {
-        const [operationsPage, accrualsPage, openingBalance] = await Promise.all([
-          operationsRequest,
-          financeClient.getSupplierAccrualsPage(auth.accessToken, {
+        const [operations, accruals, openingBalance] = await Promise.all([
+          operationsRequest!,
+          loadAllContractorReportPages((offset, limit) => financeClient.getSupplierAccrualsPage(auth.accessToken, {
             monthFrom: filters.monthFrom,
             monthTo: filters.monthTo,
             supplierId: target.row.id,
-            limit: 500,
-          }, request.controller.signal),
+            offset,
+            limit,
+          }, request.controller.signal)),
           financeClient.getSupplierOpeningBalance(auth.accessToken, target.row.id, filters.monthFrom, request.controller.signal),
         ])
-        const operationEntries = createOperationEntries(operationsPage)
-        const accrualEntries = accrualsPage.items
+        const operationEntries = createOperationEntries(operations)
+        const accrualEntries = accruals
           .filter((accrual) => !accrual.isCanceled)
           .map((accrual) => ({
             id: `supplier-accrual-${accrual.id}`,
@@ -1668,11 +1654,36 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           openingBalance.openingBalance,
         ))
       } else {
-        const operationsPage = await operationsRequest
-        const operationEntries = createOperationEntries(operationsPage)
-        const staffAccrualEntries = createStaffFinancialReportEntries(target.row, filters.monthFrom, filters.monthTo)
+        const staffItems = await loadAllContractorReportPages((offset, limit) => financeClient.getExpenseWorksheetStaffBreakdown(auth.accessToken, {
+          staffMemberId: target.row.id,
+          monthFrom: filters.monthFrom,
+          monthTo: filters.monthTo,
+          offset,
+          limit,
+        }, request.controller.signal))
+        const staffEntries = staffItems
+          .filter((entry) => !entry.isCanceled)
+          .map((entry) => ({
+            id: `staff-${entry.entryKind}-${entry.id}`,
+            accountingMonth: entry.accountingMonth,
+            date: entry.operationDate ?? entry.accountingMonth,
+            documentNumber: entry.documentNumber ?? '—',
+            description: entry.entryKind === 'salary'
+              ? 'Начисление зарплаты'
+              : entry.entryKind === 'bonus'
+                ? entry.comment ? `Премия: ${entry.comment}` : 'Премия'
+                : entry.entryKind === 'penalty'
+                  ? entry.comment ? `Штраф: ${entry.comment}` : 'Штраф'
+                  : entry.comment ?? 'Выплата сотруднику',
+            accrualAmount: entry.entryKind === 'salary' || entry.entryKind === 'bonus'
+              ? entry.amount
+              : entry.entryKind === 'penalty'
+                ? -entry.amount
+                : 0,
+            paymentAmount: entry.entryKind === 'payment' ? entry.amount : 0,
+          }))
         if (!isCurrentFinancialReportRequest(request)) return
-        setContractorFinancialReport(buildContractorFinancialReport([...staffAccrualEntries, ...operationEntries]))
+        setContractorFinancialReport(buildContractorFinancialReport(staffEntries))
       }
     } catch (error) {
       if (!isCurrentFinancialReportRequest(request)) return

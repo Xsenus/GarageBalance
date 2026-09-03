@@ -128,9 +128,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.DoesNotContain("SaveChangesAsync", serviceSource[
             serviceSource.IndexOf("public async Task<IReadOnlyList<FundDto>> GetFundsAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<FundResult<FundDto>> CreateFundAsync", StringComparison.Ordinal)], StringComparison.Ordinal);
         Assert.DoesNotContain("GetNormalizedFundNamesAsync", serviceSource, StringComparison.Ordinal);
-        Assert.Equal(3, CountOccurrences(totalsMethod, ".Sum("));
-        Assert.Equal(2, CountOccurrences(totalsMethod, ".GroupBy("));
-        Assert.Equal(1, CountOccurrences(totalsMethod, ".Concat("));
+        Assert.Equal(4, CountOccurrences(totalsMethod, ".Sum("));
+        Assert.Equal(3, CountOccurrences(totalsMethod, ".GroupBy("));
+        Assert.Equal(2, CountOccurrences(totalsMethod, ".Concat("));
         Assert.Equal(1, CountOccurrences(totalsMethod, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("FirstOrDefaultAsync", totalsMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync", totalsMethod, StringComparison.Ordinal);
@@ -642,7 +642,9 @@ public sealed class BackendPerformanceGuardTests
     {
         var source = ReadApiSource("Infrastructure/Data/EfExpenseWorksheetQuery.cs");
         Assert.Contains("class EfExpenseWorksheetQuery", source, StringComparison.Ordinal);
-        Assert.Contains(".Where(member => !member.IsArchived)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Where(member => !member.IsArchived)", source, StringComparison.Ordinal);
+        Assert.Contains("StaffEmploymentPeriodStartCategory", source, StringComparison.Ordinal);
+        Assert.Contains("StaffSalaryRatePeriodCategory", source, StringComparison.Ordinal);
         Assert.Contains("availableBalance", source, StringComparison.Ordinal);
         Assert.Contains("bankDeposits", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 4);

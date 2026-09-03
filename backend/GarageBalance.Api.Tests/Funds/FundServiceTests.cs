@@ -38,6 +38,78 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task GetReconciliationAsync_ReturnsExactCashFundAndUnallocatedEquation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var sequenceStart = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var fund = new Fund
+        {
+            Name = "Резервный фонд",
+            NormalizedName = "РЕЗЕРВНЫЙ ФОНД",
+            Balance = 700m
+        };
+        database.Context.Funds.Add(fund);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 9, 2),
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            Amount = 1000m,
+            CreatedAtUtc = sequenceStart
+        });
+        database.Context.FundOperations.Add(new FundOperation
+        {
+            Fund = fund,
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 700m,
+            BalanceBefore = 0m,
+            BalanceAfter = 700m,
+            Reason = "Распределение",
+            CreatedAtUtc = sequenceStart.AddMinutes(1)
+        });
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context, seedSystemFunds: false);
+
+        var result = await service.GetReconciliationAsync(CancellationToken.None);
+
+        Assert.Equal(1000m, result.CashAndBankTotal);
+        Assert.Equal(700m, result.NamedFundTotal);
+        Assert.Equal(300m, result.AvailableToDistribute);
+        Assert.Equal(0m, result.Difference);
+        Assert.True(result.IsReconciled);
+    }
+
+    [Fact]
+    public async Task GetReconciliationAsync_ExposesLegacyMismatchInsteadOfHidingIt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = new Fund
+        {
+            Name = "Резервный фонд",
+            NormalizedName = "РЕЗЕРВНЫЙ ФОНД",
+            Balance = 700m
+        };
+        database.Context.Funds.Add(fund);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 9, 2),
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            Amount = 1000m
+        });
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context, seedSystemFunds: false);
+
+        var result = await service.GetReconciliationAsync(CancellationToken.None);
+
+        Assert.Equal(1000m, result.CashAndBankTotal);
+        Assert.Equal(700m, result.NamedFundTotal);
+        Assert.Equal(1000m, result.AvailableToDistribute);
+        Assert.Equal(-700m, result.Difference);
+        Assert.False(result.IsReconciled);
+    }
+
+    [Fact]
     public async Task GetFundOptionsAsync_ReturnsOnlyActiveFundsInConfigurationOrder()
     {
         await using var database = await TestDatabase.CreateAsync();

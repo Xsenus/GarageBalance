@@ -20,10 +20,11 @@ public interface IExpenseWorksheetQuery
 
     Task<ExpenseWorksheetStaffBreakdownData> GetStaffBreakdownAsync(
         Guid staffMemberId,
-        Guid expenseTypeId,
+        Guid? expenseTypeId,
         DateOnly monthFrom,
         DateOnly monthTo,
         DateOnly businessDate,
+        string businessTimeZoneId,
         int offset,
         int limit,
         CancellationToken cancellationToken);
@@ -44,7 +45,10 @@ public sealed record ExpenseWorksheetSupplierBreakdownEntryData(
     string? DocumentNumber,
     string? Comment,
     string? Source,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    bool IsCanceled = false,
+    Guid? Version = null,
+    string? CancellationReason = null);
 
 public sealed record ExpenseWorksheetStaffBreakdownData(
     IReadOnlyList<ExpenseWorksheetSupplierBreakdownEntryData> Items,
@@ -112,6 +116,10 @@ public sealed record ExpenseWorksheetStaffData(
     public string? ExpenseTypeCode { get; init; }
 
     public DateTimeOffset CreatedAtUtc { get; init; }
+
+    public decimal BaseAccrualAmount { get; init; }
+
+    public decimal OpeningBaseAccrualAmount { get; init; }
 }
 
 public sealed record ExpenseWorksheetStaffExpenseData(Guid StaffMemberId, decimal Amount)

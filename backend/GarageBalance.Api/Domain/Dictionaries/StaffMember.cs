@@ -11,4 +11,6 @@ public sealed class StaffMember
 
     public Guid DepartmentId { get; set; }
     public StaffDepartment Department { get; set; } = null!;
+    public ICollection<StaffSalaryRatePeriod> SalaryRatePeriods { get; set; } = [];
+    public ICollection<StaffEmploymentPeriod> EmploymentPeriods { get; set; } = [];
 }

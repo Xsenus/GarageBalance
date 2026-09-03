@@ -127,6 +127,27 @@ describe('fundsApi configuration options', () => {
     }))
   })
 
+  it('loads the fund reconciliation from the dedicated endpoint', async () => {
+    const reconciliation = {
+      cashAndBankTotal: 1000,
+      namedFundTotal: 700,
+      availableToDistribute: 250,
+      difference: 50,
+      isReconciled: false,
+    }
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(reconciliation), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fundsApi.getReconciliation?.('token')).resolves.toEqual(reconciliation)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/funds/reconciliation', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
+
   it('returns the server error for a retryable options load', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: 'Каталог фондов временно недоступен.' }), { status: 503 }))
     vi.stubGlobal('fetch', fetchMock)

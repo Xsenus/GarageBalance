@@ -1310,6 +1310,18 @@ public sealed class DictionaryService(
         };
 
         staffMemberRepository.Add(member);
+        var currentMonth = MonthPeriod.Normalize(businessDateProvider.Today);
+        staffMemberRepository.AddSalaryRatePeriod(new StaffSalaryRatePeriod
+        {
+            StaffMember = member,
+            EffectiveFrom = currentMonth,
+            Rate = member.Rate
+        });
+        staffMemberRepository.AddEmploymentPeriod(new StaffEmploymentPeriod
+        {
+            StaffMember = member,
+            EffectiveFrom = currentMonth
+        });
         AddAudit(actorUserId, "dictionary.staff_member_created", "staff_member", member.Id, $"Создан сотрудник {member.FullName}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
@@ -1349,11 +1361,31 @@ public sealed class DictionaryService(
             ["rate"] = rate
         };
 
+        var rateChanged = member.Rate != rate;
         member.FullName = fullName;
         member.DepartmentId = department.Id;
         member.Department = department;
         member.Rate = rate;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        if (rateChanged)
+        {
+            var effectiveFrom = MonthPeriod.Normalize(businessDateProvider.Today);
+            var ratePeriod = await staffMemberRepository.FindSalaryRatePeriodAsync(member.Id, effectiveFrom, cancellationToken);
+            if (ratePeriod is null)
+            {
+                staffMemberRepository.AddSalaryRatePeriod(new StaffSalaryRatePeriod
+                {
+                    StaffMemberId = member.Id,
+                    EffectiveFrom = effectiveFrom,
+                    Rate = rate
+                });
+            }
+            else
+            {
+                ratePeriod.Rate = rate;
+            }
+        }
 
         AddAudit(actorUserId, "dictionary.staff_member_updated", "staff_member", member.Id, $"Обновлен сотрудник {member.FullName}.", oldValues: oldValues, newValues: newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1375,6 +1407,17 @@ public sealed class DictionaryService(
 
         member.IsArchived = true;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var employmentPeriod = await staffMemberRepository.FindOpenEmploymentPeriodAsync(member.Id, cancellationToken);
+        if (employmentPeriod is null)
+        {
+            employmentPeriod = new StaffEmploymentPeriod
+            {
+                StaffMemberId = member.Id,
+                EffectiveFrom = MonthPeriod.Normalize(businessDateProvider.ToBusinessDate(member.CreatedAtUtc))
+            };
+            staffMemberRepository.AddEmploymentPeriod(employmentPeriod);
+        }
+        employmentPeriod.EffectiveTo = MonthPeriod.Normalize(businessDateProvider.Today);
         AddAudit(actorUserId, "dictionary.staff_member_archived", "staff_member", member.Id, $"Архивирован сотрудник {member.FullName}.", archiveReason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
@@ -1395,6 +1438,24 @@ public sealed class DictionaryService(
 
         member.IsArchived = false;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var restoreMonth = MonthPeriod.Normalize(businessDateProvider.Today);
+        var latestEmploymentPeriod = await staffMemberRepository.FindLatestEmploymentPeriodAsync(member.Id, cancellationToken);
+        if (latestEmploymentPeriod is not null && latestEmploymentPeriod.EffectiveTo == restoreMonth)
+        {
+            latestEmploymentPeriod.EffectiveTo = null;
+        }
+        else if (latestEmploymentPeriod?.EffectiveTo is null)
+        {
+            // Backward-compatible data may already contain an open interval.
+        }
+        else
+        {
+            staffMemberRepository.AddEmploymentPeriod(new StaffEmploymentPeriod
+            {
+                StaffMemberId = member.Id,
+                EffectiveFrom = restoreMonth
+            });
+        }
         AddAudit(actorUserId, "dictionary.staff_member_restored", "staff_member", member.Id, $"Восстановлен сотрудник {member.FullName}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));

@@ -23,6 +23,13 @@ public sealed record FundLinkedServiceDto(
     Guid Id,
     string Name);
 
+public sealed record FundReconciliationDto(
+    decimal CashAndBankTotal,
+    decimal NamedFundTotal,
+    decimal AvailableToDistribute,
+    decimal Difference,
+    bool IsReconciled);
+
 public sealed record UpsertFundRequest(
     [Required, MaxLength(200)] string Name,
     Guid? Version = null);

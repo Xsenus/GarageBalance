@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, ExpenseWorksheetSupplierBreakdownEntryDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
@@ -226,6 +226,14 @@ type StaffPaymentPrototypeDialogPreset = {
 type StaffSalaryAdjustmentPrototypeDialogPreset = {
   adjustmentType: StaffSalaryAdjustmentType
   accountingMonth: string
+  record?: StaffSalaryAdjustmentDto
+}
+
+type StaffSalaryAdjustmentCancelState = {
+  adjustment: StaffSalaryAdjustmentDto
+  accountingMonth: string
+  reason: string
+  error: string | null
 }
 
 type ExpensePrototypeSubmitRequest = {
@@ -2920,6 +2928,9 @@ function PaymentsPrototypePanel({
   const staffPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [staffSalaryAdjustmentDialogPreset, setStaffSalaryAdjustmentDialogPreset] = useState<StaffSalaryAdjustmentPrototypeDialogPreset | null>(null)
   const staffSalaryAdjustmentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [staffSalaryAdjustmentCancel, setStaffSalaryAdjustmentCancel] = useState<StaffSalaryAdjustmentCancelState | null>(null)
+  const staffSalaryAdjustmentCancelTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [staffSalaryAdjustmentActionSaving, setStaffSalaryAdjustmentActionSaving] = useState(false)
   const [historyEdit, setHistoryEdit] = useState<GaragePaymentHistoryEditState | null>(null)
   const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
@@ -3328,6 +3339,112 @@ function PaymentsPrototypePanel({
   function closeStaffSalaryAdjustmentDialog() {
     setStaffSalaryAdjustmentDialogPreset(null)
     restoreFocusAfterClose(staffSalaryAdjustmentTriggerRef)
+  }
+
+  async function openStaffSalaryAdjustmentEdit(
+    row: PaymentPrototypeRow,
+    item: ExpenseWorksheetSupplierBreakdownEntryDto,
+    trigger: HTMLButtonElement,
+  ) {
+    if (!row.staffMemberId || !item.version || (item.entryKind !== 'bonus' && item.entryKind !== 'penalty')) {
+      return
+    }
+    staffSalaryAdjustmentTriggerRef.current = trigger
+    setPaymentError(null)
+    if (await onEnsureReferences()) {
+      setStaffSalaryAdjustmentDialogPreset({
+        adjustmentType: item.entryKind,
+        accountingMonth: item.accountingMonth.slice(0, 7),
+        record: {
+          id: item.id,
+          staffMemberId: row.staffMemberId,
+          staffMemberName: row.counterparty ?? '',
+          accountingMonth: item.accountingMonth,
+          adjustmentType: item.entryKind,
+          amount: item.amount,
+          documentNumber: item.documentNumber,
+          reason: item.comment ?? '',
+          isCanceled: item.isCanceled,
+          cancellationReason: item.cancellationReason,
+          version: item.version,
+        },
+      })
+    }
+  }
+
+  function openStaffSalaryAdjustmentCancel(
+    row: PaymentPrototypeRow,
+    item: ExpenseWorksheetSupplierBreakdownEntryDto,
+    trigger: HTMLButtonElement,
+  ) {
+    if (!row.staffMemberId || !item.version || (item.entryKind !== 'bonus' && item.entryKind !== 'penalty')) {
+      return
+    }
+    staffSalaryAdjustmentCancelTriggerRef.current = trigger
+    setStaffSalaryAdjustmentCancel({
+      adjustment: {
+        id: item.id,
+        staffMemberId: row.staffMemberId,
+        staffMemberName: row.counterparty ?? '',
+        accountingMonth: item.accountingMonth,
+        adjustmentType: item.entryKind,
+        amount: item.amount,
+        documentNumber: item.documentNumber,
+        reason: item.comment ?? '',
+        isCanceled: item.isCanceled,
+        cancellationReason: item.cancellationReason,
+        version: item.version,
+      },
+      accountingMonth: item.accountingMonth,
+      reason: '',
+      error: null,
+    })
+  }
+
+  function closeStaffSalaryAdjustmentCancel() {
+    if (staffSalaryAdjustmentActionSaving) return
+    setStaffSalaryAdjustmentCancel(null)
+    restoreFocusAfterClose(staffSalaryAdjustmentCancelTriggerRef)
+  }
+
+  async function confirmStaffSalaryAdjustmentCancel() {
+    if (!staffSalaryAdjustmentCancel?.adjustment.version) return
+    const reason = staffSalaryAdjustmentCancel.reason.trim()
+    if (actionCommentsRequired && !reason) {
+      setStaffSalaryAdjustmentCancel((current) => current ? { ...current, error: 'Укажите причину отмены.' } : current)
+      return
+    }
+    setStaffSalaryAdjustmentActionSaving(true)
+    try {
+      await financeClient.cancelStaffSalaryAdjustment(auth.accessToken, staffSalaryAdjustmentCancel.adjustment.id, {
+        reason,
+        expectedVersion: staffSalaryAdjustmentCancel.adjustment.version,
+      })
+      const month = staffSalaryAdjustmentCancel.accountingMonth
+      setStaffSalaryAdjustmentCancel(null)
+      refreshExpenseWorksheetAfterSave(month)
+    } catch (error) {
+      setStaffSalaryAdjustmentCancel((current) => current ? {
+        ...current,
+        error: error instanceof Error ? error.message : 'Не удалось отменить корректировку зарплаты.',
+      } : current)
+    } finally {
+      setStaffSalaryAdjustmentActionSaving(false)
+    }
+  }
+
+  async function restoreStaffSalaryAdjustment(item: ExpenseWorksheetSupplierBreakdownEntryDto) {
+    if (!item.version) return
+    setStaffSalaryAdjustmentActionSaving(true)
+    setPaymentError(null)
+    try {
+      await financeClient.restoreStaffSalaryAdjustment(auth.accessToken, item.id, item.version)
+      refreshExpenseWorksheetAfterSave(item.accountingMonth)
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Не удалось восстановить корректировку зарплаты.')
+    } finally {
+      setStaffSalaryAdjustmentActionSaving(false)
+    }
   }
 
   async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
@@ -4026,7 +4143,7 @@ function PaymentsPrototypePanel({
       const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
       if (existingRow) {
         return currentRows.map((row) => row.id === existingRow.id
-          ? { ...row, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
+          ? { ...row, accrued: row.accrued + savedAccrual.amount, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
           : row)
       }
 
@@ -4048,6 +4165,7 @@ function PaymentsPrototypePanel({
           meterDraft: '',
           meterError: null,
           difference: null,
+          accrued: savedAccrual.amount,
           payable: savedAccrual.amount,
           paymentDraft: '',
           paid: 0,
@@ -4094,7 +4212,7 @@ function PaymentsPrototypePanel({
       const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
       if (existingRow) {
         return currentRows.map((row) => row.id === existingRow.id
-          ? { ...row, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
+          ? { ...row, accrued: row.accrued + savedAccrual.amount, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
           : row)
       }
 
@@ -4116,6 +4234,7 @@ function PaymentsPrototypePanel({
           meterDraft: '',
           meterError: null,
           difference: null,
+          accrued: savedAccrual.amount,
           payable: savedAccrual.amount,
           paymentDraft: '',
           paid: 0,
@@ -4200,14 +4319,23 @@ function PaymentsPrototypePanel({
       return 'Выберите сотрудника из справочника персонала.'
     }
 
-    await financeClient.createStaffSalaryAdjustment(auth.accessToken, {
+    const payload = {
       staffMemberId: staffMember.id,
       accountingMonth: request.accountingMonth,
       adjustmentType: request.adjustmentType,
       amount: request.amount,
       documentNumber: request.documentNumber.trim() || undefined,
       reason: request.reason.trim(),
-    })
+    }
+    const editedRecord = staffSalaryAdjustmentDialogPreset?.record
+    if (editedRecord?.version) {
+      await financeClient.updateStaffSalaryAdjustment(auth.accessToken, editedRecord.id, {
+        ...payload,
+        expectedVersion: editedRecord.version,
+      })
+    } else {
+      await financeClient.createStaffSalaryAdjustment(auth.accessToken, payload)
+    }
 
     refreshExpenseWorksheetAfterSave(request.accountingMonth)
 
@@ -4287,8 +4415,8 @@ function PaymentsPrototypePanel({
     return groups
   }, [])
 
-  const paymentTotal = garageWorksheetSummary?.accrualTotal ?? garageRows.reduce((sum, row) => sum + row.payable, 0)
-  const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
+  const paymentTotal = garageWorksheetSummary?.accrualTotal ?? garageRows.reduce((sum, row) => sum + row.accrued, 0)
+  const paidTotal = garageWorksheetSummary?.incomeTotal ?? garageRows.reduce((sum, row) => sum + row.paid + row.advance, 0)
   const openingBalanceTotal = toSignedGarageNetBalance(garageWorksheetSummary?.openingBalance ?? 0)
   const closingBalanceTotal = garageWorksheetSummary
     ? toSignedGarageNetBalance(garageWorksheetSummary.closingBalance)
@@ -4296,6 +4424,16 @@ function PaymentsPrototypePanel({
         garageRows.reduce((sum, row) => sum + row.debt, 0),
         garageRows.reduce((sum, row) => sum + row.advance, 0),
       )
+  const garageMonthlyBalances = new Map<string, number>()
+  if (garageWorksheetSummary) {
+    let runningBalance = garageWorksheetSummary.openingBalance
+    for (const group of [...groupedGarageRows].sort((left, right) => left.month.localeCompare(right.month))) {
+      const monthlyAccrual = group.rows.reduce((sum, row) => sum + row.accrued, 0)
+      const monthlyIncome = group.rows.reduce((sum, row) => sum + row.paid + row.advance, 0)
+      runningBalance = roundPaymentMoney(runningBalance + monthlyAccrual - monthlyIncome)
+      garageMonthlyBalances.set(group.month, toSignedGarageNetBalance(runningBalance))
+    }
+  }
   const fullPaymentRowsDebt = sumPaymentDebt(getRowsForFullPayment('full'))
   const selectedGarageFullPaymentQuote = fullPaymentQuote && fullPaymentQuote.garageId === selectedGarage?.id
     ? fullPaymentQuote
@@ -4793,7 +4931,7 @@ function PaymentsPrototypePanel({
                     <th scope="col">Услуга</th>
                     <th scope="col">Счётчик</th>
                     <th scope="col">Разница</th>
-                    <th scope="col">К оплате</th>
+                    <th scope="col">Начислено</th>
                     <th scope="col">Платёж</th>
                     <th scope="col">Оплачено</th>
                     <th scope="col">Баланс</th>
@@ -4801,11 +4939,12 @@ function PaymentsPrototypePanel({
                 </thead>
                 <tbody>
                   {groupedGarageRows.map((group) => {
-                    const groupPayable = group.rows.reduce((sum, row) => sum + row.payable, 0)
-                    const groupPaid = group.rows.reduce((sum, row) => sum + row.paid, 0)
+                    const groupPayable = group.rows.reduce((sum, row) => sum + row.accrued, 0)
+                    const groupPaid = group.rows.reduce((sum, row) => sum + row.paid + row.advance, 0)
                     const groupAdvance = group.rows.reduce((sum, row) => sum + row.advance, 0)
                     const groupDebt = group.rows.reduce((sum, row) => sum + row.debt, 0)
-                    const groupBalance = toSignedGarageSplitBalance(groupDebt, groupAdvance)
+                    const groupBalance = garageMonthlyBalances.get(group.month)
+                      ?? toSignedGarageSplitBalance(groupDebt, groupAdvance)
                     return (
                       <Fragment key={group.month}>
                         <tr className="payments-prototype-month-total">
@@ -4874,7 +5013,7 @@ function PaymentsPrototypePanel({
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
                             <td>
                               <div className="payments-prototype-payable">
-                                {row.calculationDetails || row.payable > 0 ? (
+                                {row.calculationDetails || row.accrued > 0 ? (
                                   <span className="field-help">
                                     <button
                                       type="button"
@@ -4887,12 +5026,12 @@ function PaymentsPrototypePanel({
                                     <span className="field-help__tooltip payments-prototype-calculation-tooltip">
                                       {getAccrualCalculationSummary(
                                         row.calculationDetails,
-                                        `Сохранённое начисление: ${formatPaymentMoney(row.payable)}`,
+                                        `Сохранённое начисление: ${formatPaymentMoney(row.accrued)}`,
                                       )}
                                     </span>
                                   </span>
                                 ) : null}
-                                <span className="payments-prototype-payable-amount">{formatPaymentMoney(row.payable)}</span>
+                                <span className="payments-prototype-payable-amount">{formatPaymentMoney(row.accrued)}</span>
                               </div>
                             </td>
                             <td>
@@ -5148,17 +5287,43 @@ function PaymentsPrototypePanel({
                                         <th scope="col">Основание</th>
                                         <th scope="col">Комментарий</th>
                                         <th scope="col">Сумма</th>
+                                        {'staffMemberId' in breakdownState.value ? <th scope="col">Действия</th> : null}
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {breakdownState.value.items.map((item) => (
-                                        <tr key={`${item.entryKind}-${item.id}`}>
+                                        <tr className={item.isCanceled ? 'is-canceled' : undefined} key={`${item.entryKind}-${item.id}`}>
                                           <td>{getExpenseBreakdownEntryLabel(item.entryKind)}</td>
                                           <td>{formatMonth(item.accountingMonth)}</td>
                                           <td>{item.operationDate ? formatDateOnly(item.operationDate) : '—'}</td>
                                           <td>{item.documentNumber?.trim() || getExpenseBreakdownSourceLabel(item.source ?? item.entryKind)}</td>
-                                          <td>{item.comment?.trim() || '—'}</td>
+                                          <td>
+                                            {item.comment?.trim() || '—'}
+                                            {item.isCanceled ? <small className="payments-prototype-cell-note">Отменено{item.cancellationReason ? `: ${item.cancellationReason}` : ''}</small> : null}
+                                          </td>
                                           <td className={item.entryKind === 'payment' ? 'money-income' : item.entryKind === 'penalty' ? 'money-expense' : undefined}>{formatPaymentMoney(item.amount)}</td>
+                                          {breakdownState.value && 'staffMemberId' in breakdownState.value ? (
+                                            <td>
+                                              {(item.entryKind === 'bonus' || item.entryKind === 'penalty') && item.version ? (
+                                                <div className="table-actions">
+                                                  {!item.isCanceled ? (
+                                                    <>
+                                                      <button className="icon-button" type="button" aria-label={`Изменить: ${getExpenseBreakdownEntryLabel(item.entryKind)}`} title="Изменить" disabled={!canWritePayments || staffSalaryAdjustmentActionSaving} onClick={(event) => void openStaffSalaryAdjustmentEdit(row, item, event.currentTarget)}>
+                                                        <Pencil size={16} aria-hidden="true" />
+                                                      </button>
+                                                      <button className="icon-button danger-icon-button" type="button" aria-label={`Отменить: ${getExpenseBreakdownEntryLabel(item.entryKind)}`} title="Отменить" disabled={!canWritePayments || staffSalaryAdjustmentActionSaving} onClick={(event) => openStaffSalaryAdjustmentCancel(row, item, event.currentTarget)}>
+                                                        <Trash2 size={16} aria-hidden="true" />
+                                                      </button>
+                                                    </>
+                                                  ) : (
+                                                    <button className="icon-button" type="button" aria-label={`Восстановить: ${getExpenseBreakdownEntryLabel(item.entryKind)}`} title="Восстановить" disabled={!canWritePayments || staffSalaryAdjustmentActionSaving} onClick={() => void restoreStaffSalaryAdjustment(item)}>
+                                                      <RotateCcw size={16} aria-hidden="true" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ) : null}
+                                            </td>
+                                          ) : null}
                                         </tr>
                                       ))}
                                     </tbody>
@@ -5264,7 +5429,7 @@ function PaymentsPrototypePanel({
                       <ul>
                         {line.tiers.map((tier, tierIndex) => (
                           <li key={`${tier.from}-${tier.to ?? 'max'}-${tierIndex}`}>
-                            {tier.from.toLocaleString('ru-RU')}–{tier.to?.toLocaleString('ru-RU') ?? 'без верхней границы'} {line.unitName}: {tier.quantity.toLocaleString('ru-RU')} × {formatPaymentMoney(tier.rate)} = {formatPaymentMoney(tier.amount)}
+                            {tier.from.toLocaleString('ru-RU')}–{tier.to?.toLocaleString('ru-RU') ?? 'без верхней границы'} {line.unitName}: расчётный объём с учётом дней {tier.quantity.toLocaleString('ru-RU')}, ставка {formatPaymentMoney(tier.rate)}, начислено {formatPaymentMoney(tier.amount)}
                           </li>
                         ))}
                       </ul>
@@ -5402,6 +5567,16 @@ function PaymentsPrototypePanel({
           staffMembers={staffMembers.filter((staffMember) => !staffMember.isArchived)}
           onClose={closeStaffSalaryAdjustmentDialog}
           onSubmit={commitStaffSalaryAdjustment}
+        />
+      ) : null}
+      {staffSalaryAdjustmentCancel ? (
+        <StaffSalaryAdjustmentCancelDialog
+          state={staffSalaryAdjustmentCancel}
+          saving={staffSalaryAdjustmentActionSaving}
+          required={actionCommentsRequired}
+          onChange={(reason) => setStaffSalaryAdjustmentCancel((current) => current ? { ...current, reason, error: null } : current)}
+          onClose={closeStaffSalaryAdjustmentCancel}
+          onConfirm={confirmStaffSalaryAdjustmentCancel}
         />
       ) : null}
       {penaltyAccrualDialogOpen ? (
@@ -6126,6 +6301,49 @@ function StaffPaymentPrototypeDialog({
   )
 }
 
+function StaffSalaryAdjustmentCancelDialog({
+  state,
+  saving,
+  required,
+  onChange,
+  onClose,
+  onConfirm,
+}: {
+  state: StaffSalaryAdjustmentCancelState
+  saving: boolean
+  required: boolean
+  onChange: (reason: string) => void
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useEscapeKey(!saving, onClose)
+  const label = state.adjustment.adjustmentType === 'bonus' ? 'премию' : 'штраф'
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-adjustment-cancel-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="staff-adjustment-cancel-title">Отменить {label}</h3>
+            <p>{state.adjustment.staffMemberName} · {formatMonth(state.adjustment.accountingMonth)} · {formatPaymentMoney(state.adjustment.amount)}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть отмену корректировки зарплаты" onClick={onClose} disabled={saving}><X size={18} aria-hidden="true" /></button>
+        </div>
+        <FormField label="Причина отмены">
+          <textarea aria-label="Причина отмены премии или штрафа" rows={4} value={state.reason} required={required} disabled={saving} onChange={(event) => onChange(event.target.value)} />
+        </FormField>
+        {state.error ? <FormError>{state.error}</FormError> : null}
+        <div className="detail-dialog-actions">
+          <button className="secondary-button danger" type="button" disabled={saving} onClick={onConfirm}>{saving ? 'Отменяем…' : 'Отменить запись'}</button>
+          <button ref={cancelRef} className="secondary-button" type="button" disabled={saving} onClick={onClose}>Назад</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function StaffSalaryAdjustmentPrototypeDialog({
   preset,
   staffMembers,
@@ -6140,11 +6358,11 @@ function StaffSalaryAdjustmentPrototypeDialog({
   const [actionCommentsRequired] = useActionCommentSettings()
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [staffMemberId, setStaffMemberId] = useState(staffMembers[0]?.id ?? '')
+  const [staffMemberId, setStaffMemberId] = useState(preset.record?.staffMemberId ?? staffMembers[0]?.id ?? '')
   const [accountingMonth, setAccountingMonth] = useState(preset.accountingMonth)
-  const [amount, setAmount] = useState('')
-  const [documentNumber, setDocumentNumber] = useState('')
-  const [reason, setReason] = useState('')
+  const [amount, setAmount] = useState(preset.record ? String(preset.record.amount) : '')
+  const [documentNumber, setDocumentNumber] = useState(preset.record?.documentNumber ?? '')
+  const [reason, setReason] = useState(preset.record?.reason ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isBonus = preset.adjustmentType === 'bonus'
@@ -6195,7 +6413,9 @@ function StaffSalaryAdjustmentPrototypeDialog({
     }
   }
 
-  const title = isBonus ? 'Начислить премию сотруднику' : 'Начислить штраф сотруднику'
+  const title = preset.record
+    ? isBonus ? 'Изменить премию сотруднику' : 'Изменить штраф сотруднику'
+    : isBonus ? 'Начислить премию сотруднику' : 'Начислить штраф сотруднику'
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-salary-adjustment-title" onMouseDown={(event) => event.stopPropagation()}>

@@ -331,6 +331,7 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
     {
         const int financialTotalsCategory = 1;
         const int allocatedFundTotalsCategory = 2;
+        const int balanceAdjustmentTotalsCategory = 3;
         var financialTotalsQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
@@ -344,7 +345,8 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                     operation.OperationKind == FinancialOperationKinds.Income ? operation.Amount : 0m),
                 ExpenseTotal = group.Sum(operation =>
                     operation.OperationKind == FinancialOperationKinds.Expense ? operation.Amount : 0m),
-                AllocatedFundTotal = 0m
+                AllocatedFundTotal = 0m,
+                BalanceAdjustmentTotal = 0m
             });
         var allocatedFundTotalsQuery = dbContext.Funds.AsNoTracking()
             .Where(fund => !fund.IsArchived)
@@ -354,19 +356,34 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                 Category = allocatedFundTotalsCategory,
                 IncomeTotal = 0m,
                 ExpenseTotal = 0m,
-                AllocatedFundTotal = group.Sum(fund => fund.Balance)
+                AllocatedFundTotal = group.Sum(fund => fund.Balance),
+                BalanceAdjustmentTotal = 0m
+            });
+        var balanceAdjustmentTotalsQuery = dbContext.CashBankBalanceOperations.AsNoTracking()
+            .GroupBy(_ => balanceAdjustmentTotalsCategory)
+            .Select(group => new
+            {
+                Category = balanceAdjustmentTotalsCategory,
+                IncomeTotal = 0m,
+                ExpenseTotal = 0m,
+                AllocatedFundTotal = 0m,
+                BalanceAdjustmentTotal = group.Sum(operation =>
+                    operation.Direction == CashBankBalanceDirections.Increase ? operation.Amount : -operation.Amount)
             });
         var totals = await financialTotalsQuery
             .Concat(allocatedFundTotalsQuery)
+            .Concat(balanceAdjustmentTotalsQuery)
             .ToListAsync(cancellationToken);
 
         var financialTotals = totals.FirstOrDefault(item => item.Category == financialTotalsCategory);
         var allocatedFundTotals = totals.FirstOrDefault(item => item.Category == allocatedFundTotalsCategory);
+        var balanceAdjustmentTotals = totals.FirstOrDefault(item => item.Category == balanceAdjustmentTotalsCategory);
 
         return new FundTotalsData(
             financialTotals?.IncomeTotal ?? 0m,
             financialTotals?.ExpenseTotal ?? 0m,
-            allocatedFundTotals?.AllocatedFundTotal ?? 0m);
+            allocatedFundTotals?.AllocatedFundTotal ?? 0m,
+            balanceAdjustmentTotals?.BalanceAdjustmentTotal ?? 0m);
     }
 
     public async Task<decimal> GetAvailableToDistributeAsync(CancellationToken cancellationToken)

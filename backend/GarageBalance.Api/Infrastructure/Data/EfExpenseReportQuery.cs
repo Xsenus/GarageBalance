@@ -1,11 +1,15 @@
 using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Application.Settings;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
-public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IExpenseReportQuery
+public sealed class EfExpenseReportQuery(
+    GarageBalanceDbContext dbContext,
+    IBusinessDateProvider? businessDateProvider = null) : IExpenseReportQuery
 {
     private const int StartingBalanceTotalCategory = 1;
     private const int AccrualTotalCategory = 2;
@@ -53,6 +57,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         ReportSort sort,
         CancellationToken cancellationToken)
     {
+        var staffSalaryMonthTo = await GetStaffSalaryMonthToAsync(dateTo, cancellationToken);
         if (IsNpgsql())
         {
             return await GetPostgresRowsAsync(
@@ -66,6 +71,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 limit,
                 offset,
                 sort,
+                staffSalaryMonthTo,
                 cancellationToken);
         }
 
@@ -270,7 +276,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             var normalizedMonthTo = NormalizeMonth(dateTo);
             var adjustmentTotalsQuery =
                 from adjustment in dbContext.StaffSalaryAdjustments.AsNoTracking()
-                where adjustment.AccountingMonth >= normalizedMonthFrom &&
+                where !adjustment.IsCanceled &&
+                      adjustment.AccountingMonth >= normalizedMonthFrom &&
                       adjustment.AccountingMonth <= normalizedMonthTo &&
                       (staffMemberIds.Count == 0 || staffMemberIds.Contains(adjustment.StaffMemberId))
                 group adjustment by new { adjustment.StaffMemberId, adjustment.AccountingMonth }
@@ -286,7 +293,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 };
             var staffAccrualSourceRows = await (
                     from member in dbContext.StaffMembers.AsNoTracking()
-                    where !member.IsArchived && (staffMemberIds.Count == 0 || staffMemberIds.Contains(member.Id))
+                    where staffMemberIds.Count == 0 || staffMemberIds.Contains(member.Id)
                     from expenseType in dbContext.ExpenseTypes.AsNoTracking()
                     where !expenseType.IsArchived && expenseType.Code == "salary" && (expenseTypeIds.Count == 0 || expenseTypeIds.Contains(expenseType.Id))
                     join adjustmentTotal in adjustmentTotalsQuery
@@ -297,7 +304,9 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                         member.Id,
                         member.FullName,
                         member.Rate,
+                        member.IsArchived,
                         member.CreatedAtUtc,
+                        member.UpdatedAtUtc,
                         ExpenseTypeId = expenseType.Id,
                         ExpenseTypeName = expenseType.Name,
                         AdjustmentMonth = (DateOnly?)adjustmentTotal.AccountingMonth,
@@ -310,12 +319,25 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     source.Id,
                     source.FullName,
                     source.Rate,
+                    source.IsArchived,
                     source.CreatedAtUtc,
+                    source.UpdatedAtUtc,
                     source.ExpenseTypeId,
                     source.ExpenseTypeName
                 })
                 .Select(group => group.Key)
                 .ToList();
+            var staffAccrualIds = staffAccrualSources.Select(source => source.Id).ToArray();
+            var staffRatePeriods = await dbContext.StaffSalaryRatePeriods.AsNoTracking()
+                .Where(period => staffAccrualIds.Contains(period.StaffMemberId) && period.EffectiveFrom <= normalizedMonthTo)
+                .OrderBy(period => period.EffectiveFrom)
+                .ToListAsync(cancellationToken);
+            var staffEmploymentPeriods = await dbContext.StaffEmploymentPeriods.AsNoTracking()
+                .Where(period => staffAccrualIds.Contains(period.StaffMemberId) && period.EffectiveFrom <= normalizedMonthTo)
+                .OrderBy(period => period.EffectiveFrom)
+                .ToListAsync(cancellationToken);
+            var staffRatePeriodsByMember = staffRatePeriods.ToLookup(period => period.StaffMemberId);
+            var staffEmploymentPeriodsByMember = staffEmploymentPeriods.ToLookup(period => period.StaffMemberId);
             var months = EnumerateMonths(dateFrom, dateTo).ToArray();
             var staffAdjustmentTotals = staffAccrualSourceRows
                 .Where(source => source.AdjustmentMonth.HasValue)
@@ -325,9 +347,19 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             staffRows.AddRange(
                 from source in staffAccrualSources
                 from month in months
-                where month >= NormalizeMonth(DateOnly.FromDateTime(source.CreatedAtUtc.UtcDateTime))
+                where month >= NormalizeMonth(ToBusinessDate(source.CreatedAtUtc))
+                where StaffSalaryTimeline.IsEmployed(
+                    month,
+                    NormalizeMonth(ToBusinessDate(source.CreatedAtUtc)),
+                    source.IsArchived,
+                    NormalizeMonth(ToBusinessDate(source.UpdatedAtUtc)),
+                    staffEmploymentPeriodsByMember[source.Id].ToList())
                 let adjustmentAmount = staffAdjustmentTotals.GetValueOrDefault((source.Id, month))
-                let accrualAmount = source.Rate + adjustmentAmount
+                let baseAccrualAmount = month <= staffSalaryMonthTo
+                    ? StaffSalaryTimeline.GetRate(month, source.Rate, staffRatePeriodsByMember[source.Id].ToList())
+                    : 0m
+                let accrualAmount = baseAccrualAmount + adjustmentAmount
+                where baseAccrualAmount != 0m || adjustmentAmount != 0m
                 select new ExpenseReportRowDto(
                     AccrualRows,
                     month,
@@ -453,6 +485,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         int? limit,
         int offset,
         ReportSort sort,
+        DateOnly staffSalaryMonthTo,
         CancellationToken cancellationToken)
     {
         if (rowMode == AllRows)
@@ -467,6 +500,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 limit,
                 offset,
                 sort,
+                staffSalaryMonthTo,
                 cancellationToken);
         }
 
@@ -482,6 +516,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 limit,
                 offset,
                 sort,
+                staffSalaryMonthTo,
                 cancellationToken);
         }
 
@@ -677,9 +712,11 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     member."FullName" AS "SupplierName",
                     expense_type."Id" AS "ExpenseTypeId",
                     expense_type."Name" AS "ExpenseTypeName",
-                    member."Rate" + COALESCE(adjustment_totals.amount, 0) AS "AccrualAmount",
+                    CASE WHEN month_value::date <= @staff_salary_month_to::date THEN COALESCE(salary_rate."Rate", member."Rate") ELSE 0 END
+                        + COALESCE(adjustment_totals.amount, 0) AS "AccrualAmount",
                     0::numeric AS "ExpenseAmount",
-                    member."Rate" + COALESCE(adjustment_totals.amount, 0) AS "Difference",
+                    CASE WHEN month_value::date <= @staff_salary_month_to::date THEN COALESCE(salary_rate."Rate", member."Rate") ELSE 0 END
+                        + COALESCE(adjustment_totals.amount, 0) AS "Difference",
                     NULL::text AS "DocumentNumber",
                     CASE WHEN COALESCE(adjustment_totals.amount, 0) = 0
                          THEN 'Расчетная ставка сотрудника'
@@ -699,12 +736,33 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     END) AS amount
                     FROM staff_salary_adjustments salary_adjustment
                     WHERE salary_adjustment."StaffMemberId" = member."Id"
+                      AND salary_adjustment."IsCanceled" = FALSE
                       AND salary_adjustment."AccountingMonth" = month_value::date
                 ) adjustment_totals ON TRUE
-                WHERE member."IsArchived" = FALSE
+                LEFT JOIN LATERAL (
+                    SELECT rate_period."Rate"
+                    FROM staff_salary_rate_periods rate_period
+                    WHERE rate_period."StaffMemberId" = member."Id"
+                      AND rate_period."EffectiveFrom" <= month_value::date
+                    ORDER BY rate_period."EffectiveFrom" DESC
+                    LIMIT 1
+                ) salary_rate ON TRUE
+                WHERE (
+                    EXISTS (
+                        SELECT 1 FROM staff_employment_periods employment_period
+                        WHERE employment_period."StaffMemberId" = member."Id"
+                          AND employment_period."EffectiveFrom" <= month_value::date
+                          AND (employment_period."EffectiveTo" IS NULL OR employment_period."EffectiveTo" >= month_value::date)
+                    )
+                    OR (
+                        NOT EXISTS (SELECT 1 FROM staff_employment_periods any_employment WHERE any_employment."StaffMemberId" = member."Id")
+                        AND (member."IsArchived" = FALSE OR month_value::date <= date_trunc('month', member."UpdatedAtUtc" AT TIME ZONE @business_time_zone)::date)
+                    )
+                  )
                   AND expense_type."IsArchived" = FALSE
                   AND expense_type."Code" = 'salary'
-                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date
+                  AND (month_value::date <= @staff_salary_month_to::date OR COALESCE(adjustment_totals.amount, 0) <> 0)
                   AND (@has_staff_filter = FALSE OR member."Id" = ANY(@staff_ids))
                   AND (@has_type_filter = FALSE OR expense_type."Id" = ANY(@expense_type_ids))
                   AND (@has_search = FALSE OR lower(member."FullName") LIKE '%' || @search || '%' OR lower(expense_type."Name") LIKE '%' || @search || '%')
@@ -713,6 +771,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 staffAccrualSql,
                 new NpgsqlParameter<DateOnly>("month_from", NormalizeMonth(dateFrom)),
                 new NpgsqlParameter<DateOnly>("month_to", NormalizeMonth(dateTo)),
+                new NpgsqlParameter<DateOnly>("staff_salary_month_to", staffSalaryMonthTo),
+                new NpgsqlParameter<string>("business_time_zone", businessDateProvider?.TimeZoneId ?? "UTC"),
                 new NpgsqlParameter<bool>("has_staff_filter", staffMemberIds.Count > 0),
                 new NpgsqlParameter<Guid[]>("staff_ids", staffMemberIds.ToArray()),
                 new NpgsqlParameter<bool>("has_type_filter", expenseTypeIds.Count > 0),
@@ -868,6 +928,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         int? limit,
         int offset,
         ReportSort sort,
+        DateOnly staffSalaryMonthTo,
         CancellationToken cancellationToken)
     {
         const int PageCategory = 1;
@@ -927,8 +988,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             WITH source_rows AS (
                 SELECT supplier."Id" AS id,
                        'starting_balance'::text AS row_type,
-                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS row_date,
-                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS accounting_month,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date AS row_date,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date AS accounting_month,
                        supplier."Id" AS counterparty_id,
                        supplier."Name" AS counterparty_name,
                        '00000000-0000-0000-0000-000000000000'::uuid AS expense_type_id,
@@ -945,7 +1006,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 WHERE @include_starting_balances = TRUE
                   AND supplier."IsArchived" = FALSE
                   AND supplier."StartingBalance" <> 0
-                  AND date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                  AND date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date
                       BETWEEN @month_from::date AND @month_to::date
                   {{supplierClause}}
                   {{startingSearchClause}}
@@ -986,8 +1047,10 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 SELECT md5(member."Id"::text || ':' || expense_type."Id"::text || ':' || month_value::date::text)::uuid,
                        'accruals'::text, month_value::date, month_value::date,
                        member."Id", member."FullName", expense_type."Id", expense_type."Name",
-                       member."Rate" + COALESCE(adjustment_totals.amount, 0), 0::numeric,
-                       member."Rate" + COALESCE(adjustment_totals.amount, 0), NULL::text,
+                       CASE WHEN month_value::date <= @staff_salary_month_to::date THEN COALESCE(salary_rate."Rate", member."Rate") ELSE 0 END
+                           + COALESCE(adjustment_totals.amount, 0), 0::numeric,
+                       CASE WHEN month_value::date <= @staff_salary_month_to::date THEN COALESCE(salary_rate."Rate", member."Rate") ELSE 0 END
+                           + COALESCE(adjustment_totals.amount, 0), NULL::text,
                        CASE WHEN COALESCE(adjustment_totals.amount, 0) = 0
                             THEN 'Расчетная ставка сотрудника'
                             ELSE 'Оклад с учетом премий и штрафов'
@@ -1002,13 +1065,34 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     END) AS amount
                     FROM staff_salary_adjustments salary_adjustment
                     WHERE salary_adjustment."StaffMemberId" = member."Id"
+                      AND salary_adjustment."IsCanceled" = FALSE
                       AND salary_adjustment."AccountingMonth" = month_value::date
                 ) adjustment_totals ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT rate_period."Rate"
+                    FROM staff_salary_rate_periods rate_period
+                    WHERE rate_period."StaffMemberId" = member."Id"
+                      AND rate_period."EffectiveFrom" <= month_value::date
+                    ORDER BY rate_period."EffectiveFrom" DESC
+                    LIMIT 1
+                ) salary_rate ON TRUE
                 WHERE @include_staff = TRUE
-                  AND member."IsArchived" = FALSE
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM staff_employment_periods employment_period
+                          WHERE employment_period."StaffMemberId" = member."Id"
+                            AND employment_period."EffectiveFrom" <= month_value::date
+                            AND (employment_period."EffectiveTo" IS NULL OR employment_period."EffectiveTo" >= month_value::date)
+                      )
+                      OR (
+                          NOT EXISTS (SELECT 1 FROM staff_employment_periods any_employment WHERE any_employment."StaffMemberId" = member."Id")
+                          AND (member."IsArchived" = FALSE OR month_value::date <= date_trunc('month', member."UpdatedAtUtc" AT TIME ZONE @business_time_zone)::date)
+                      )
+                  )
                   AND expense_type."IsArchived" = FALSE
                   AND expense_type."Code" = 'salary'
-                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date
+                  AND (month_value::date <= @staff_salary_month_to::date OR COALESCE(adjustment_totals.amount, 0) <> 0)
                   {{staffClause}}
                   {{expenseTypeClause}}
                   {{staffAccrualSearchClause}}
@@ -1094,6 +1178,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             new NpgsqlParameter<DateOnly>("date_to", dateTo),
             new NpgsqlParameter<DateOnly>("month_from", NormalizeMonth(dateFrom)),
             new NpgsqlParameter<DateOnly>("month_to", NormalizeMonth(dateTo)),
+            new NpgsqlParameter<DateOnly>("staff_salary_month_to", staffSalaryMonthTo),
+            new NpgsqlParameter<string>("business_time_zone", businessDateProvider?.TimeZoneId ?? "UTC"),
             new NpgsqlParameter<int>("offset", offset)
         };
         if (supplierIds.Count > 0)
@@ -1152,6 +1238,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         int? limit,
         int offset,
         ReportSort sort,
+        DateOnly staffSalaryMonthTo,
         CancellationToken cancellationToken)
     {
         const int PageCategory = 1;
@@ -1197,8 +1284,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             WITH filtered_rows AS (
                 SELECT supplier."Id" AS id,
                        'starting_balance'::text AS row_type,
-                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS row_date,
-                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS accounting_month,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date AS row_date,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date AS accounting_month,
                        supplier."Id" AS counterparty_id,
                        supplier."Name" AS counterparty_name,
                        '00000000-0000-0000-0000-000000000000'::uuid AS expense_type_id,
@@ -1215,7 +1302,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 WHERE @include_starting_balances = TRUE
                   AND supplier."IsArchived" = FALSE
                   AND supplier."StartingBalance" <> 0
-                  AND date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                  AND date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date
                       BETWEEN @month_from::date AND @month_to::date
                   {{supplierClause}}
                   {{startingSearchClause}}
@@ -1238,8 +1325,10 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 SELECT md5(member."Id"::text || ':' || expense_type."Id"::text || ':' || month_value::date::text)::uuid,
                        'accruals'::text, month_value::date, month_value::date,
                        member."Id", member."FullName", expense_type."Id", expense_type."Name",
-                       member."Rate" + COALESCE(adjustment_totals.amount, 0), 0::numeric,
-                       member."Rate" + COALESCE(adjustment_totals.amount, 0), NULL::text,
+                       CASE WHEN month_value::date <= @staff_salary_month_to::date THEN COALESCE(salary_rate."Rate", member."Rate") ELSE 0 END
+                           + COALESCE(adjustment_totals.amount, 0), 0::numeric,
+                       CASE WHEN month_value::date <= @staff_salary_month_to::date THEN COALESCE(salary_rate."Rate", member."Rate") ELSE 0 END
+                           + COALESCE(adjustment_totals.amount, 0), NULL::text,
                        CASE WHEN COALESCE(adjustment_totals.amount, 0) = 0
                             THEN 'Расчетная ставка сотрудника'
                             ELSE 'Оклад с учетом премий и штрафов'
@@ -1254,13 +1343,34 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     END) AS amount
                     FROM staff_salary_adjustments salary_adjustment
                     WHERE salary_adjustment."StaffMemberId" = member."Id"
+                      AND salary_adjustment."IsCanceled" = FALSE
                       AND salary_adjustment."AccountingMonth" = month_value::date
                 ) adjustment_totals ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT rate_period."Rate"
+                    FROM staff_salary_rate_periods rate_period
+                    WHERE rate_period."StaffMemberId" = member."Id"
+                      AND rate_period."EffectiveFrom" <= month_value::date
+                    ORDER BY rate_period."EffectiveFrom" DESC
+                    LIMIT 1
+                ) salary_rate ON TRUE
                 WHERE @include_staff = TRUE
-                  AND member."IsArchived" = FALSE
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM staff_employment_periods employment_period
+                          WHERE employment_period."StaffMemberId" = member."Id"
+                            AND employment_period."EffectiveFrom" <= month_value::date
+                            AND (employment_period."EffectiveTo" IS NULL OR employment_period."EffectiveTo" >= month_value::date)
+                      )
+                      OR (
+                          NOT EXISTS (SELECT 1 FROM staff_employment_periods any_employment WHERE any_employment."StaffMemberId" = member."Id")
+                          AND (member."IsArchived" = FALSE OR month_value::date <= date_trunc('month', member."UpdatedAtUtc" AT TIME ZONE @business_time_zone)::date)
+                      )
+                  )
                   AND expense_type."IsArchived" = FALSE
                   AND expense_type."Code" = 'salary'
-                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE @business_time_zone)::date
+                  AND (month_value::date <= @staff_salary_month_to::date OR COALESCE(adjustment_totals.amount, 0) <> 0)
                   {{staffClause}}
                   {{expenseTypeClause}}
                   {{staffAccrualSearchClause}}
@@ -1298,6 +1408,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             new NpgsqlParameter<DateOnly>("date_to", dateTo),
             new NpgsqlParameter<DateOnly>("month_from", NormalizeMonth(dateFrom)),
             new NpgsqlParameter<DateOnly>("month_to", NormalizeMonth(dateTo)),
+            new NpgsqlParameter<DateOnly>("staff_salary_month_to", staffSalaryMonthTo),
+            new NpgsqlParameter<string>("business_time_zone", businessDateProvider?.TimeZoneId ?? "UTC"),
             new NpgsqlParameter<int>("offset", offset)
         };
         if (supplierIds.Count > 0)
@@ -1596,6 +1708,38 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     group.Key.CounterpartyKind);
             })
             .ToList();
+
+    private async Task<DateOnly> GetStaffSalaryMonthToAsync(
+        DateOnly dateTo,
+        CancellationToken cancellationToken)
+    {
+        var requestedMonthTo = NormalizeMonth(dateTo);
+        if (businessDateProvider is null)
+        {
+            return requestedMonthTo;
+        }
+
+        var businessDate = businessDateProvider.Today;
+        var currentBusinessMonth = NormalizeMonth(businessDate);
+        if (requestedMonthTo < currentBusinessMonth)
+        {
+            return requestedMonthTo;
+        }
+
+        var configuredDay = await dbContext.ApplicationSettings
+            .AsNoTracking()
+            .Where(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey)
+            .Select(setting => setting.IntegerValue)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? ApplicationSettingsService.DefaultSalaryAccrualDay;
+
+        return businessDate.Day < configuredDay
+            ? currentBusinessMonth.AddMonths(-1)
+            : currentBusinessMonth;
+    }
+
+    private DateOnly ToBusinessDate(DateTimeOffset value) =>
+        businessDateProvider?.ToBusinessDate(value) ?? DateOnly.FromDateTime(value.UtcDateTime);
 
     private bool IsNpgsql() =>
         dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;

@@ -3,6 +3,7 @@ using System;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GarageBalanceDbContext))]
-    partial class GarageBalanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903001728_AddEditableStaffSalaryAdjustments")]
+    partial class AddEditableStaffSalaryAdjustments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -655,39 +658,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.ToTable("staff_departments", (string)null);
                 });
 
-            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffEmploymentPeriod", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("EffectiveFrom")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("EffectiveTo")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("StaffMemberId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StaffMemberId")
-                        .IsUnique()
-                        .HasFilter("\"EffectiveTo\" IS NULL");
-
-                    b.HasIndex("StaffMemberId", "EffectiveFrom")
-                        .IsUnique();
-
-                    b.ToTable("staff_employment_periods", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_staff_employment_periods_Dates", "\"EffectiveTo\" IS NULL OR \"EffectiveTo\" >= \"EffectiveFrom\"");
-                        });
-                });
-
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -722,36 +692,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.HasIndex("FullName");
 
                     b.ToTable("staff_members", (string)null);
-                });
-
-            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffSalaryRatePeriod", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("EffectiveFrom")
-                        .HasColumnType("date");
-
-                    b.Property<decimal>("Rate")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("StaffMemberId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StaffMemberId", "EffectiveFrom")
-                        .IsUnique();
-
-                    b.ToTable("staff_salary_rate_periods", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_staff_salary_rate_periods_Rate", "\"Rate\" >= 0");
-                        });
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.Supplier", b =>
@@ -2622,17 +2562,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Navigation("DestinationFund");
                 });
 
-            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffEmploymentPeriod", b =>
-                {
-                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.StaffMember", "StaffMember")
-                        .WithMany("EmploymentPeriods")
-                        .HasForeignKey("StaffMemberId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("StaffMember");
-                });
-
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffMember", b =>
                 {
                     b.HasOne("GarageBalance.Api.Domain.Dictionaries.StaffDepartment", "Department")
@@ -2642,17 +2571,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Department");
-                });
-
-            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffSalaryRatePeriod", b =>
-                {
-                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.StaffMember", "StaffMember")
-                        .WithMany("SalaryRatePeriods")
-                        .HasForeignKey("StaffMemberId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("StaffMember");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.Supplier", b =>
@@ -2971,13 +2889,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffDepartment", b =>
                 {
                     b.Navigation("StaffMembers");
-                });
-
-            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.StaffMember", b =>
-                {
-                    b.Navigation("EmploymentPeriods");
-
-                    b.Navigation("SalaryRatePeriods");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.SupplierGroup", b =>

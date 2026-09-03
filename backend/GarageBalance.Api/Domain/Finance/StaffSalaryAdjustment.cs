@@ -12,6 +12,10 @@ public sealed class StaffSalaryAdjustment
     public decimal Amount { get; set; }
     public string? DocumentNumber { get; set; }
     public required string Reason { get; set; }
+    public bool IsCanceled { get; set; }
+    public string? CancellationReason { get; set; }
+    public DateTimeOffset? CanceledAtUtc { get; set; }
+    public Guid Version { get; set; } = Guid.NewGuid();
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

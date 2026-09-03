@@ -719,6 +719,9 @@ describe('App', () => {
     expect(feeDialog).toHaveClass('contractors-fee-dialog')
     expect(within(feeDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toHaveTextContent('Прочие доходы')
     expect(within(feeDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toBeEnabled()
+    expect(within(feeDialog).getByLabelText('Справка: Назначение поступления')).toHaveAccessibleDescription('Деньги сбора будут учтены в фонде, который назначен выбранному виду поступления.')
+    expect(within(feeDialog).queryByText(/^Фонд назначения:/)).not.toBeInTheDocument()
+    expect(within(feeDialog).queryByText(/^все гаражи$/i)).not.toBeInTheDocument()
     expect(within(feeDialog).getByRole('heading', { name: 'Настройки сбора' })).toBeInTheDocument()
     expect(within(feeDialog).getByRole('heading', { name: 'Параметры сбора' })).toBeInTheDocument()
     expect(within(feeDialog).getByLabelText('Цель сбора')).toBeInTheDocument()
@@ -2187,6 +2190,8 @@ describe('App', () => {
     const thresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
     const thresholdDeleteCancelButton = within(thresholdDeleteDialog).getByRole('button', { name: 'Отмена' })
     const thresholdDeleteConfirmButton = within(thresholdDeleteDialog).getByRole('button', { name: 'Удалить' })
+    expect(within(thresholdDeleteDialog).getByText('Причина удаления *')).toBeInTheDocument()
+    expect(within(thresholdDeleteDialog).getByText('Причина обязательна. Настройка: «Настройки» → «Отображение».')).toBeInTheDocument()
     expect(thresholdDeleteConfirmButton).toBeDisabled()
     await waitFor(() => expect(thresholdDeleteCancelButton).toHaveFocus())
     await user.keyboard('{Escape}')
@@ -2306,6 +2311,77 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   }, 180000)
+
+  it('deletes an electricity threshold without a reason when action comments are optional', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-electricity-optional-comment', name: 'Электроэнергия', code: 'electricity' })
+    const electricityTariff = createTariff({
+      id: 'tariff-electricity-optional-comment',
+      name: 'Электроэнергия',
+      calculationBase: 'meter_electricity',
+      rate: 2,
+      electricityTiers: [
+        { id: '11111111-1111-4111-8111-111111111111', name: '0–50 кВт·ч', upperBound: 50, rate: 2, isCustom: true },
+        { id: '22222222-2222-4222-8222-222222222222', name: '50–100 кВт·ч', upperBound: 100, rate: 3, isCustom: true },
+        { id: '33333333-3333-4333-8333-333333333333', name: '100+ кВт·ч', upperBound: null, rate: 5, isCustom: true },
+      ],
+    })
+    const electricitySetting = createChargeServiceSetting({
+      id: 'service-electricity-optional-comment',
+      name: 'Электроэнергия',
+      isRegular: true,
+      isMetered: true,
+      hasTieredTariff: true,
+      incomeTypeId: incomeType.id,
+      tariffId: electricityTariff.id,
+      unitName: 'кВт·ч',
+    })
+    const updateChargeServiceWithTariff = vi.fn(async (_token: string, _id: string, request: UpdateChargeServiceWithTariffRequest) => ({
+      service: electricitySetting,
+      tariff: {
+        ...electricityTariff,
+        electricityTiers: (request.electricityTiers ?? []).map((tier, index) => ({
+          id: tier.id ?? `44444444-4444-4444-8444-${String(index).padStart(12, '0')}`,
+          name: tier.name,
+          upperBound: tier.upperBound ?? null,
+          rate: tier.rate,
+          isCustom: true,
+        })),
+      },
+    }))
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [electricityTariff],
+      getIncomeTypes: async () => [incomeType],
+      getChargeServiceSettings: async () => [electricitySetting],
+      updateChargeServiceWithTariff,
+    })
+    const settingsClient = createSettingsClient({
+      getActionCommentSettings: async () => ({ required: false, version: 'optional-comments-v1' }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const deleteButtons = await within(tariffsPanel).findAllByRole('button', { name: /Удалить порог/ })
+    await user.click(deleteButtons[0])
+
+    const dialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
+    expect(within(dialog).getByText('Причина удаления (необязательно)')).toBeInTheDocument()
+    expect(within(dialog).getByText('Причина необязательна; изменение всё равно сохранится в истории.')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Причина удаления порога')).not.toBeRequired()
+    const deleteButton = within(dialog).getByRole('button', { name: 'Удалить' })
+    expect(deleteButton).toBeEnabled()
+    await user.click(deleteButton)
+
+    await waitFor(() => expect(updateChargeServiceWithTariff).toHaveBeenCalledWith(
+      'token',
+      electricitySetting.id,
+      expect.objectContaining({ changeReason: '', electricityTiers: expect.any(Array) }),
+    ))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить порог тарификации?' })).not.toBeInTheDocument())
+  })
 
   it('shows salary fund by departments from active staff rates and keeps it read-only', async () => {
     const user = userEvent.setup()
@@ -4563,6 +4639,28 @@ describe('App', () => {
     const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1]) => params.supplierId
       ? { monthFrom: '2024-03-01', monthTo: '2026-07-01' }
       : { monthFrom: '2026-05-01', monthTo: '2026-07-01' })
+    const getExpenseWorksheetStaffBreakdown = vi.fn(async () => ({
+      staffMemberId,
+      expenseTypeId: null,
+      monthFrom: '2026-05-01',
+      monthTo: '2026-07-01',
+      baseAccrualTotal: 110000,
+      bonusTotal: 1000,
+      penaltyTotal: 500,
+      accrualTotal: 110500,
+      expenseTotal: 15000,
+      items: [
+        { id: 'salary-may', entryKind: 'salary', accountingMonth: '2026-05-01', operationDate: null, amount: 30000, documentNumber: null, comment: null, source: 'salary', isCanceled: false },
+        { id: 'salary-june', entryKind: 'salary', accountingMonth: '2026-06-01', operationDate: null, amount: 40000, documentNumber: null, comment: null, source: 'salary', isCanceled: false },
+        { id: 'bonus-june', entryKind: 'bonus', accountingMonth: '2026-06-01', operationDate: null, amount: 1000, documentNumber: 'PR-1', comment: 'за подмену', source: null, isCanceled: false },
+        { id: 'penalty-june', entryKind: 'penalty', accountingMonth: '2026-06-01', operationDate: null, amount: 500, documentNumber: 'SH-1', comment: 'за опоздание', source: null, isCanceled: false },
+        { id: 'payment-june', entryKind: 'payment', accountingMonth: '2026-06-01', operationDate: '2026-06-21', amount: 15000, documentNumber: 'RKO-2', comment: null, source: 'cash', isCanceled: false },
+        { id: 'salary-july', entryKind: 'salary', accountingMonth: '2026-07-01', operationDate: null, amount: 40000, documentNumber: null, comment: null, source: 'salary', isCanceled: false },
+      ],
+      totalCount: 6,
+      offset: 0,
+      limit: 500,
+    }))
     const dictionaryClient = createDictionaryClient({
       getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
       getSuppliers: async () => [supplier],
@@ -4583,7 +4681,7 @@ describe('App', () => {
     ])
     const auditClient = createAuditClient({ getEvents })
 
-    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage, getSupplierOpeningBalance, getFinancialReportPeriod })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage, getSupplierOpeningBalance, getFinancialReportPeriod, getExpenseWorksheetStaffBreakdown })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4650,9 +4748,17 @@ describe('App', () => {
     expect(within(staffReport).getByRole('table', { name: 'Финансовый отчет сотрудника' })).toBeInTheDocument()
     expect(within(staffReport).getByLabelText('Начало периода финансового отчета контрагента')).toHaveValue('05.2026')
     expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(3)
+    expect(within(staffReport).getByText('Премия: за подмену')).toBeInTheDocument()
+    expect(within(staffReport).getByText('Штраф: за опоздание')).toBeInTheDocument()
     expect(within(staffReport).getByText('RKO-2')).toBeInTheDocument()
     expect(within(staffReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
-    expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }), expect.any(AbortSignal))
+    expect(getExpenseWorksheetStaffBreakdown).toHaveBeenCalledWith('token', {
+      staffMemberId,
+      monthFrom: '2026-05',
+      monthTo: '2026-07',
+      offset: 0,
+      limit: 500,
+    }, expect.any(AbortSignal))
     expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { staffMemberId }, expect.any(AbortSignal))
     await user.click(within(staffReport).getByRole('button', { name: 'Открыть в истории изменений' }))
     expect(screen.queryByRole('dialog', { name: 'Петрова Ольга' })).not.toBeInTheDocument()
@@ -9561,16 +9667,16 @@ describe('App', () => {
           incomeAmount: 1000,
           debt: 4674,
           calculationDetails: {
-            version: 3,
+            version: 4,
             accountingMonth: '2026-06-01',
             previousMeterValue: 68,
             currentMeterValue: 86,
             meterConsumption: 18,
             requiresMeter: true,
-            volumeAllocationRule: null,
+            volumeAllocationRule: 'Месячный расход распределяется по ступеням прогрессивно; объём каждой ступени умножается на ставки с учётом календарных дней их действия.',
             averageRate: 315.2222,
-            rateAveragingRule: 'Средняя ставка за месяц: (300 + 330,4444) / 2 = 315,2222. Количество дней действия ставок на среднее не влияет.',
-            monthlyCalculationFormula: 'Расчёт за месяц: 18 кВт·ч × 315,2222 = 5 674,00.',
+            rateAveragingRule: 'Ставка каждой ступени взвешивается по календарным дням действия тарифов из 30 дней месяца; дни без тарифа дают нулевое начисление.',
+            monthlyCalculationFormula: 'Прогрессивный расчёт за месяц: 10 × 315,2222 = 3 152,22; 8 × 315,2222 = 2 521,78; итого 5 674,00.',
             totalAmount: 5674,
             lines: [
               {
@@ -9579,13 +9685,16 @@ describe('App', () => {
                 days: 15,
                 monthDays: 30,
                 calculationBase: 'meter_electricity',
-                calculationMode: 'metered',
+                calculationMode: 'metered_tiered',
                 unitName: 'кВт·ч',
                 rate: 300,
                 quantity: 9,
                 amount: 2700,
-                tiers: [],
-                formula: 'Равный вес 1/2: 18 × 300 / 2 = 2 700,00',
+                tiers: [
+                  { from: 0, to: 10, quantity: 5, rate: 300, amount: 1500 },
+                  { from: 10, to: null, quantity: 4, rate: 300, amount: 1200 },
+                ],
+                formula: 'Прогрессивные ступени × 15/30: 10 × 300 × 15/30 + 8 × 300 × 15/30 = 2 700,00',
                 hasTariff: true,
               },
               {
@@ -9594,13 +9703,16 @@ describe('App', () => {
                 days: 15,
                 monthDays: 30,
                 calculationBase: 'meter_electricity',
-                calculationMode: 'metered',
+                calculationMode: 'metered_tiered',
                 unitName: 'кВт·ч',
                 rate: 330.4444,
                 quantity: 9,
                 amount: 2974,
-                tiers: [],
-                formula: 'Равный вес 1/2: 18 × 330,4444 / 2 = 2 974,00',
+                tiers: [
+                  { from: 0, to: 10, quantity: 5, rate: 330.4444, amount: 1652.22 },
+                  { from: 10, to: null, quantity: 4, rate: 330.4444, amount: 1321.78 },
+                ],
+                formula: 'Прогрессивные ступени × 15/30: 10 × 330,4444 × 15/30 + 8 × 330,4444 × 15/30 = 2 974,00',
                 hasTariff: true,
               },
             ],
@@ -9645,7 +9757,7 @@ describe('App', () => {
     const payableLayout = calculationButton.closest('.payments-prototype-payable') as HTMLElement
     expect(payableLayout.firstElementChild).toContainElement(calculationButton)
     expect(payableLayout.firstElementChild).toHaveClass('field-help')
-    expect(within(payableLayout).getByText('Расчёт за месяц: 18 кВт·ч × 315,2222 = 5 674,00.')).toHaveClass('field-help__tooltip', 'payments-prototype-calculation-tooltip')
+    expect(within(payableLayout).getByText('Прогрессивный расчёт за месяц: 10 × 315,2222 = 3 152,22; 8 × 315,2222 = 2 521,78; итого 5 674,00.')).toHaveClass('field-help__tooltip', 'payments-prototype-calculation-tooltip')
     expect(payableLayout.lastElementChild).toHaveClass('payments-prototype-payable-amount')
     expect(payableLayout.lastElementChild).toHaveTextContent('5 674.00')
     await user.click(calculationButton)
@@ -9654,8 +9766,10 @@ describe('App', () => {
     expect(calculation).toHaveTextContent('Показания: 68 → 86; расход 18')
     expect(calculation).toHaveTextContent('01.06.2026–15.06.2026')
     expect(calculation).toHaveTextContent('16.06.2026–30.06.2026')
-    expect(calculation).toHaveTextContent('Средняя ставка за месяц: (300 + 330,4444) / 2 = 315,2222. Количество дней действия ставок на среднее не влияет.')
-    expect(calculation).toHaveTextContent('Расчёт за месяц: 18 кВт·ч × 315,2222 = 5 674,00.')
+    expect(calculation).toHaveTextContent('Ставка каждой ступени взвешивается по календарным дням действия тарифов из 30 дней месяца')
+    expect(calculation).toHaveTextContent('Месячный расход распределяется по ступеням прогрессивно')
+    expect(calculation).toHaveTextContent('Прогрессивный расчёт за месяц: 10 × 315,2222 = 3 152,22; 8 × 315,2222 = 2 521,78; итого 5 674,00.')
+    expect(calculation).toHaveTextContent('0–10 кВт·ч: расчётный объём с учётом дней 5, ставка 300.00, начислено 1 500.00')
     expect(within(incomeTable).queryByText('Как рассчитано 5 674.00')).not.toBeInTheDocument()
     await user.click(within(calculation).getByRole('button', { name: 'Закрыть расчёт суммы' }))
     expect(screen.queryByRole('dialog', { name: 'Расчёт суммы: Серверная электроэнергия, июн.26' })).not.toBeInTheDocument()
@@ -10238,6 +10352,14 @@ describe('App', () => {
     expect(cells[7]).toHaveTextContent('250.00')
     expect(cells).toHaveLength(8)
     expect(cells[6]).not.toHaveTextContent('1 250.00')
+    const monthTotalCells = incomeTable.querySelector('.payments-prototype-month-total')!.querySelectorAll('td')
+    expect(monthTotalCells[4]).toHaveTextContent('1 000.00')
+    expect(monthTotalCells[6]).toHaveTextContent('1 250.00')
+    expect(monthTotalCells[7]).toHaveTextContent('250.00')
+    const periodTotalCells = incomeTable.querySelector('.payments-prototype-total-row')!.querySelectorAll('td')
+    expect(periodTotalCells[4]).toHaveTextContent('1 000.00')
+    expect(periodTotalCells[6]).toHaveTextContent('1 250.00')
+    expect(periodTotalCells[7]).toHaveTextContent('250.00')
     const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(periodSummary).toHaveTextContent(/Внесено1 250\.00/)
     expect(periodSummary).toHaveTextContent(/Баланс на конец250\.00/)
@@ -12466,7 +12588,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const getExpenseWorksheetSupplierBreakdown = vi.fn(async (_token: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }) => ({
       supplierId: params.supplierId,
-      expenseTypeId: params.expenseTypeId,
+      expenseTypeId: params.expenseTypeId ?? null,
       monthFrom: '2026-06-01',
       monthTo: '2026-06-01',
       accrualTotal: 1250,
@@ -12533,8 +12655,36 @@ describe('App', () => {
 
   it('expands an employee total into salary bonus penalty and payment details', async () => {
     const user = userEvent.setup()
+    let penaltyCanceled = false
+    const updateStaffSalaryAdjustment = vi.fn(async (_token: string, adjustmentId: string, request: Parameters<FinanceClient['updateStaffSalaryAdjustment']>[2]) => ({
+      id: adjustmentId,
+      staffMemberId: request.staffMemberId,
+      staffMemberName: 'Петрова Ольга',
+      accountingMonth: request.accountingMonth,
+      adjustmentType: request.adjustmentType,
+      amount: request.amount,
+      documentNumber: request.documentNumber ?? null,
+      reason: request.reason,
+      isCanceled: false,
+      cancellationReason: null,
+      version: 'version-updated',
+    }))
+    const cancelStaffSalaryAdjustment = vi.fn(async (_token: string, adjustmentId: string, request: Parameters<FinanceClient['cancelStaffSalaryAdjustment']>[2]) => {
+      penaltyCanceled = true
+      return {
+        id: adjustmentId, staffMemberId: 'staff-member-1', staffMemberName: 'Петрова Ольга', accountingMonth: '2026-08-01', adjustmentType: 'penalty' as const,
+        amount: 2111, documentNumber: 'ШТ-8', reason: 'Нарушение графика', isCanceled: true, cancellationReason: request.reason, version: 'version-canceled',
+      }
+    })
+    const restoreStaffSalaryAdjustment = vi.fn(async (_token: string, adjustmentId: string, expectedVersion: string) => {
+      penaltyCanceled = false
+      return {
+        id: adjustmentId, staffMemberId: 'staff-member-1', staffMemberName: 'Петрова Ольга', accountingMonth: '2026-08-01', adjustmentType: 'penalty' as const,
+        amount: 2111, documentNumber: 'ШТ-8', reason: 'Нарушение графика', isCanceled: false, cancellationReason: null, version: `${expectedVersion}-restored`,
+      }
+    })
     const getExpenseWorksheetStaffBreakdown = vi.fn(async () => ({
-      staffMemberId: 'staff-petrov',
+      staffMemberId: 'staff-member-1',
       expenseTypeId: 'expense-salary',
       monthFrom: '2026-08-01',
       monthTo: '2026-08-01',
@@ -12545,8 +12695,8 @@ describe('App', () => {
       expenseTotal: 48002,
       items: [
         { id: 'payment-1', entryKind: 'payment', accountingMonth: '2026-08-01', operationDate: '2026-08-25', amount: 48002, documentNumber: 'РКО-8', comment: 'Выплата зарплаты', source: 'cash' },
-        { id: 'bonus-1', entryKind: 'bonus', accountingMonth: '2026-08-01', operationDate: null, amount: 5123, documentNumber: 'ПР-8', comment: 'За срочный ремонт ворот', source: null },
-        { id: 'penalty-1', entryKind: 'penalty', accountingMonth: '2026-08-01', operationDate: null, amount: 2111, documentNumber: 'ШТ-8', comment: 'Нарушение графика', source: null },
+        { id: 'bonus-1', entryKind: 'bonus', accountingMonth: '2026-08-01', operationDate: null, amount: 5123, documentNumber: 'ПР-8', comment: 'За срочный ремонт ворот', source: null, isCanceled: false, version: 'version-bonus', cancellationReason: null },
+        { id: 'penalty-1', entryKind: 'penalty', accountingMonth: '2026-08-01', operationDate: null, amount: 2111, documentNumber: 'ШТ-8', comment: 'Нарушение графика', source: null, isCanceled: penaltyCanceled, version: penaltyCanceled ? 'version-canceled' : 'version-penalty', cancellationReason: penaltyCanceled ? 'Ошибка начисления' : null },
         { id: 'salary-1', entryKind: 'salary', accountingMonth: '2026-08-01', operationDate: null, amount: 45000, documentNumber: null, comment: null, source: 'salary' },
       ],
       totalCount: 4,
@@ -12560,7 +12710,7 @@ describe('App', () => {
       rows: [{
         rowKind: 'staff',
         supplierId: null,
-        staffMemberId: 'staff-petrov',
+        staffMemberId: 'staff-member-1',
         counterpartyName: 'Петров Валентин Семенович',
         expenseTypeId: 'expense-salary',
         expenseTypeName: 'Зарплата',
@@ -12574,7 +12724,7 @@ describe('App', () => {
         difference: null,
       }],
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetStaffBreakdown })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetStaffBreakdown, updateStaffSalaryAdjustment, cancelStaffSalaryAdjustment, restoreStaffSalaryAdjustment })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -12594,8 +12744,39 @@ describe('App', () => {
     expect(within(detailsTable).getByText('Оклад по ставке')).toBeInTheDocument()
     expect(within(detailsTable).getAllByText('Премия')).toHaveLength(1)
     expect(within(detailsTable).getAllByText('Штраф')).toHaveLength(1)
+    await user.click(within(detailsTable).getByRole('button', { name: 'Изменить: Премия' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить премию сотруднику' })
+    expect(within(editDialog).getByLabelText('Сумма премии')).toHaveValue('5 123.00')
+    await user.clear(within(editDialog).getByLabelText('Сумма премии'))
+    await user.type(within(editDialog).getByLabelText('Сумма премии'), '5500')
+    await user.click(within(editDialog).getByRole('button', { name: 'Изменить премию сотруднику' }))
+    await waitFor(() => expect(updateStaffSalaryAdjustment).toHaveBeenCalledWith('token', 'bonus-1', {
+      staffMemberId: 'staff-member-1',
+      accountingMonth: '2026-08-01',
+      adjustmentType: 'bonus',
+      amount: 5500,
+      documentNumber: 'ПР-8',
+      reason: 'За срочный ремонт ворот',
+      expectedVersion: 'version-bonus',
+    }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить премию сотруднику' })).not.toBeInTheDocument())
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Петров Валентин Семенович, Зарплата' }))
+    const tableAfterUpdate = await within(prototype).findByRole('table', { name: 'Операции: Петров Валентин Семенович, Зарплата' })
+    await user.click(within(tableAfterUpdate).getByRole('button', { name: 'Отменить: Штраф' }))
+    const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить штраф' })
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены премии или штрафа'), 'Ошибка начисления')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
+    await waitFor(() => expect(cancelStaffSalaryAdjustment).toHaveBeenCalledWith('token', 'penalty-1', {
+      reason: 'Ошибка начисления',
+      expectedVersion: 'version-penalty',
+    }))
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Петров Валентин Семенович, Зарплата' }))
+    const tableAfterCancel = await within(prototype).findByRole('table', { name: 'Операции: Петров Валентин Семенович, Зарплата' })
+    expect(within(tableAfterCancel).getByText('Отменено: Ошибка начисления')).toBeInTheDocument()
+    await user.click(within(tableAfterCancel).getByRole('button', { name: 'Восстановить: Штраф' }))
+    await waitFor(() => expect(restoreStaffSalaryAdjustment).toHaveBeenCalledWith('token', 'penalty-1', 'version-canceled'))
     expect(getExpenseWorksheetStaffBreakdown).toHaveBeenCalledWith('token', {
-      staffMemberId: 'staff-petrov',
+      staffMemberId: 'staff-member-1',
       expenseTypeId: 'expense-salary',
       monthFrom: '2026-06',
       monthTo: '2026-06',
@@ -12767,6 +12948,31 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» переименован в «Резерв правления».')).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Резерв правления' })).toBeInTheDocument()
     expect(within(fundsPanel).queryByRole('button', { name: 'Открыть карточку фонда Резервный фонд' })).not.toBeInTheDocument()
+  })
+
+  it('shows the exact fund equation and warns when cash and bank do not reconcile', async () => {
+    const user = userEvent.setup()
+    const fundsClient = createFundsClient({
+      getReconciliation: async () => ({
+        cashAndBankTotal: 1000,
+        namedFundTotal: 700,
+        availableToDistribute: 250,
+        difference: 50,
+        isReconciled: false,
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await user.click(within(await screen.findByRole('group', { name: 'Главные разделы' })).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    await screen.findByText('1 000.00 руб.')
+    const reconciliation = screen.getByRole('group', { name: 'Итого средств в фондах, кассе и на счёте' })
+    expect(within(reconciliation).getByText('1 000.00 руб.')).toBeInTheDocument()
+    expect(within(reconciliation).getByText('700.00 руб.')).toBeInTheDocument()
+    expect(within(reconciliation).getByText('250.00 руб.')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Обнаружено расхождение 50.00 руб.')
   })
 
   it('keeps a fund name after a save error and allows retry', async () => {
@@ -25534,6 +25740,45 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       amount: request.amount,
       documentNumber: request.documentNumber ?? null,
       reason: request.reason,
+    }),
+    updateStaffSalaryAdjustment: async (_token, adjustmentId, request) => ({
+      id: adjustmentId,
+      staffMemberId: request.staffMemberId,
+      staffMemberName: 'Петрова Ольга',
+      accountingMonth: request.accountingMonth,
+      adjustmentType: request.adjustmentType,
+      amount: request.amount,
+      documentNumber: request.documentNumber ?? null,
+      reason: request.reason,
+      isCanceled: false,
+      cancellationReason: null,
+      version: 'staff-adjustment-version-2',
+    }),
+    cancelStaffSalaryAdjustment: async (_token, adjustmentId, request) => ({
+      id: adjustmentId,
+      staffMemberId: 'staff-1',
+      staffMemberName: 'Петрова Ольга',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'bonus',
+      amount: 500,
+      documentNumber: null,
+      reason: 'Премия',
+      isCanceled: true,
+      cancellationReason: request.reason,
+      version: 'staff-adjustment-version-2',
+    }),
+    restoreStaffSalaryAdjustment: async (_token, adjustmentId) => ({
+      id: adjustmentId,
+      staffMemberId: 'staff-1',
+      staffMemberName: 'Петрова Ольга',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'bonus',
+      amount: 500,
+      documentNumber: null,
+      reason: 'Премия',
+      isCanceled: false,
+      cancellationReason: null,
+      version: 'staff-adjustment-version-3',
     }),
     createCashBankTransfer: async (_token, request) => ({
       id: 'cash-bank-transfer-1',

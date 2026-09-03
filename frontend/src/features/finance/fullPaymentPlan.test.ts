@@ -20,6 +20,7 @@ function createRow(overrides: Partial<GarageIncomePrototypeRow> = {}): GarageInc
     meterDraft: '',
     meterError: null,
     difference: null,
+    accrued: 0,
     payable: 0,
     paymentDraft: '',
     paid: 0,

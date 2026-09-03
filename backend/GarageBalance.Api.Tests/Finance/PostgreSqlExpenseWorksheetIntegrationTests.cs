@@ -134,6 +134,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             month,
             month,
             month.AddDays(27),
+            "UTC",
             0,
             25,
             CancellationToken.None);

@@ -33,6 +33,21 @@ public sealed class FundService(
             .ToList();
     }
 
+    public async Task<FundReconciliationDto> GetReconciliationAsync(CancellationToken cancellationToken)
+    {
+        var totals = await repository.GetTotalsAsync(cancellationToken);
+        var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+        var cashAndBankTotal = MoneyMath.RoundMoney(totals.IncomeTotal - totals.ExpenseTotal + totals.BalanceAdjustmentTotal);
+        var namedFundTotal = MoneyMath.RoundMoney(totals.AllocatedFundTotal);
+        var difference = MoneyMath.RoundMoney(cashAndBankTotal - namedFundTotal - availableToDistribute);
+        return new FundReconciliationDto(
+            cashAndBankTotal,
+            namedFundTotal,
+            availableToDistribute,
+            difference,
+            difference == 0m);
+    }
+
     public async Task<FundResult<FundDto>> CreateFundAsync(
         UpsertFundRequest request,
         Guid? actorUserId,

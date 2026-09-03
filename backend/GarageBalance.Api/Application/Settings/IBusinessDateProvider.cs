@@ -8,6 +8,8 @@ public interface IBusinessDateProvider
     DateOnly SystemDate { get; }
     DateOnly Today { get; }
     DateOnly? OverrideDate { get; }
+    string TimeZoneId => "UTC";
+    DateOnly ToBusinessDate(DateTimeOffset value) => DateOnly.FromDateTime(value.UtcDateTime);
     void SetOverride(DateOnly? value);
 }
 
@@ -28,6 +30,11 @@ public sealed class BusinessDateProvider(
     }
 
     public DateOnly Today => OverrideDate ?? SystemDate;
+
+    public string TimeZoneId => _timeZone.Id;
+
+    public DateOnly ToBusinessDate(DateTimeOffset value) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(value, _timeZone).DateTime);
 
     public DateOnly? OverrideDate
     {

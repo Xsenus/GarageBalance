@@ -6,6 +6,8 @@ public interface IFundService
 
     Task<IReadOnlyList<FundOptionDto>> GetFundOptionsAsync(CancellationToken cancellationToken);
 
+    Task<FundReconciliationDto> GetReconciliationAsync(CancellationToken cancellationToken);
+
     Task<FundResult<FundDto>> CreateFundAsync(UpsertFundRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FundResult<FundDto>> UpdateFundAsync(Guid fundId, UpsertFundRequest request, Guid? actorUserId, CancellationToken cancellationToken);

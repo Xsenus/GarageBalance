@@ -147,7 +147,25 @@ public sealed record StaffSalaryAdjustmentDto(
     string AdjustmentType,
     decimal Amount,
     string? DocumentNumber,
-    string Reason);
+    string Reason,
+    bool IsCanceled = false,
+    string? CancellationReason = null,
+    Guid Version = default);
+
+public sealed record UpdateStaffSalaryAdjustmentRequest(
+    Guid StaffMemberId,
+    DateOnly AccountingMonth,
+    [Required, MaxLength(20)] string AdjustmentType,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(120)] string? DocumentNumber,
+    [ActionComment, MaxLength(1000)] string Reason,
+    Guid ExpectedVersion);
+
+public sealed record CancelStaffSalaryAdjustmentRequest(
+    [ActionComment, MaxLength(1000)] string Reason,
+    Guid ExpectedVersion);
+
+public sealed record RestoreStaffSalaryAdjustmentRequest(Guid ExpectedVersion);
 
 public sealed record CreateCashBankTransferRequest(
     DateOnly TransferDate,
@@ -598,7 +616,10 @@ public sealed record ExpenseWorksheetSupplierBreakdownEntryDto(
     decimal Amount,
     string? DocumentNumber,
     string? Comment,
-    string? Source);
+    string? Source,
+    bool IsCanceled = false,
+    Guid? Version = null,
+    string? CancellationReason = null);
 
 public sealed record ExpenseWorksheetSupplierBreakdownDto(
     Guid SupplierId,
@@ -614,7 +635,7 @@ public sealed record ExpenseWorksheetSupplierBreakdownDto(
 
 public sealed record ExpenseWorksheetStaffBreakdownRequest(
     Guid StaffMemberId,
-    Guid ExpenseTypeId,
+    Guid? ExpenseTypeId,
     DateOnly? MonthFrom,
     DateOnly? MonthTo,
     int? Offset = null,
@@ -622,7 +643,7 @@ public sealed record ExpenseWorksheetStaffBreakdownRequest(
 
 public sealed record ExpenseWorksheetStaffBreakdownDto(
     Guid StaffMemberId,
-    Guid ExpenseTypeId,
+    Guid? ExpenseTypeId,
     DateOnly MonthFrom,
     DateOnly MonthTo,
     decimal BaseAccrualTotal,

@@ -23,6 +23,7 @@ export type GarageIncomePrototypeRow = {
   meterDraft: string
   meterError: string | null
   difference: number | null
+  accrued: number
   payable: number
   paymentDraft: string
   paid: number
@@ -57,6 +58,7 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       meterDraft: row.meterValue === null ? '' : String(row.meterValue),
       meterError: null,
       difference: row.meterConsumption,
+      accrued: row.accrualAmount,
       payable: row.payableAmount ?? row.accrualAmount,
       paymentDraft: '',
       paid: row.incomeAmount,

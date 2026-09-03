@@ -1,5 +1,7 @@
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Settings;
+using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,6 +31,10 @@ public sealed class EfExpenseWorksheetQuery(
     private const int SalaryConfigurationCategory = 18;
     private const int SupplierStartingBalanceCategory = 19;
     private const int EpisodicExpenseCategory = 20;
+    private const int StaffStateCategory = 21;
+    private const int StaffSalaryRatePeriodCategory = 22;
+    private const int StaffEmploymentPeriodStartCategory = 23;
+    private const int StaffEmploymentPeriodEndCategory = 24;
 
     public Task<ExpenseWorksheetSupplierBreakdownData> GetSupplierBreakdownAsync(
         Guid supplierId,
@@ -50,16 +56,18 @@ public sealed class EfExpenseWorksheetQuery(
 
     public Task<ExpenseWorksheetStaffBreakdownData> GetStaffBreakdownAsync(
         Guid staffMemberId,
-        Guid expenseTypeId,
+        Guid? expenseTypeId,
         DateOnly monthFrom,
         DateOnly monthTo,
         DateOnly businessDate,
+        string businessTimeZoneId,
         int offset,
         int limit,
         CancellationToken cancellationToken) =>
         EfExpenseWorksheetStaffBreakdownQuery.GetAsync(
             dbContext,
             businessDate,
+            businessTimeZoneId,
             staffMemberId,
             expenseTypeId,
             monthFrom,
@@ -153,7 +161,6 @@ public sealed class EfExpenseWorksheetQuery(
             });
 
         var staffMembers = dbContext.StaffMembers.AsNoTracking()
-            .Where(member => !member.IsArchived)
             .SelectMany(
                 _ => dbContext.ExpenseTypes.AsNoTracking()
                     .Where(expenseType => !expenseType.IsArchived && expenseType.Code == "salary"),
@@ -179,6 +186,85 @@ public sealed class EfExpenseWorksheetQuery(
                     HistoryStartMonth = (DateOnly?)null,
                     StaffCreatedAtUtc = (DateTimeOffset?)member.CreatedAtUtc
                 });
+
+        var staffStates = dbContext.StaffMembers.AsNoTracking()
+            .Select(member => new
+            {
+                Category = StaffStateCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)member.Id,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = member.IsArchived ? 1m : 0m,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)member.UpdatedAtUtc
+            });
+
+        var staffSalaryRatePeriods = dbContext.StaffSalaryRatePeriods.AsNoTracking()
+            .Where(period => period.EffectiveFrom <= monthTo)
+            .Select(period => new
+            {
+                Category = StaffSalaryRatePeriodCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)period.StaffMemberId,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)period.Id,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = period.Rate,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)period.EffectiveFrom,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
+        var staffEmploymentPeriodStarts = dbContext.StaffEmploymentPeriods.AsNoTracking()
+            .Where(period => period.EffectiveFrom <= monthTo)
+            .Select(period => new
+            {
+                Category = StaffEmploymentPeriodStartCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)period.StaffMemberId,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)period.Id,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = 0m,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)period.EffectiveFrom,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
+        var staffEmploymentPeriodEnds = dbContext.StaffEmploymentPeriods.AsNoTracking()
+            .Where(period => period.EffectiveFrom <= monthTo && period.EffectiveTo != null)
+            .Select(period => new
+            {
+                Category = StaffEmploymentPeriodEndCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)period.StaffMemberId,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)period.Id,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = 0m,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = period.EffectiveTo,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
 
         var staffExpenses = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
@@ -365,6 +451,7 @@ public sealed class EfExpenseWorksheetQuery(
 
         var staffBonuses = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
+                !adjustment.IsCanceled &&
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus &&
                 adjustment.AccountingMonth >= monthFrom && adjustment.AccountingMonth <= monthTo)
             .GroupBy(adjustment => adjustment.StaffMemberId)
@@ -387,6 +474,7 @@ public sealed class EfExpenseWorksheetQuery(
             });
         var staffPenalties = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
+                !adjustment.IsCanceled &&
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Penalty &&
                 adjustment.AccountingMonth >= monthFrom && adjustment.AccountingMonth <= monthTo)
             .GroupBy(adjustment => adjustment.StaffMemberId)
@@ -409,6 +497,7 @@ public sealed class EfExpenseWorksheetQuery(
             });
         var staffOpeningBonuses = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
+                !adjustment.IsCanceled &&
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus &&
                 adjustment.AccountingMonth < monthFrom)
             .GroupBy(adjustment => adjustment.StaffMemberId)
@@ -431,6 +520,7 @@ public sealed class EfExpenseWorksheetQuery(
             });
         var staffOpeningPenalties = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
+                !adjustment.IsCanceled &&
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Penalty &&
                 adjustment.AccountingMonth < monthFrom)
             .GroupBy(adjustment => adjustment.StaffMemberId)
@@ -653,6 +743,10 @@ public sealed class EfExpenseWorksheetQuery(
             .Concat(supplierExpenses)
             .Concat(episodicExpenses)
             .Concat(staffMembers)
+            .Concat(staffStates)
+            .Concat(staffSalaryRatePeriods)
+            .Concat(staffEmploymentPeriodStarts)
+            .Concat(staffEmploymentPeriodEnds)
             .Concat(staffExpenses)
             .Concat(incomes)
             .Concat(openingIncomes)
@@ -687,6 +781,40 @@ public sealed class EfExpenseWorksheetQuery(
             }
         }
 
+        var staffRows = rows.Where(row => row.Category == StaffMemberCategory).ToList();
+        var salaryRatePeriods = rows
+            .Where(row => row.Category == StaffSalaryRatePeriodCategory)
+            .Select(row => new StaffSalaryRatePeriod
+            {
+                Id = row.TypeId!.Value,
+                StaffMemberId = row.StaffMemberId!.Value,
+                EffectiveFrom = row.HistoryStartMonth!.Value,
+                Rate = row.Amount
+            })
+            .OrderBy(period => period.EffectiveFrom)
+            .ToList();
+        var employmentEnds = rows
+            .Where(row => row.Category == StaffEmploymentPeriodEndCategory)
+            .ToDictionary(row => row.TypeId!.Value, row => row.HistoryStartMonth!.Value);
+        var employmentPeriods = rows
+            .Where(row => row.Category == StaffEmploymentPeriodStartCategory)
+            .Select(row => new StaffEmploymentPeriod
+            {
+                Id = row.TypeId!.Value,
+                StaffMemberId = row.StaffMemberId!.Value,
+                EffectiveFrom = row.HistoryStartMonth!.Value,
+                EffectiveTo = employmentEnds.TryGetValue(row.TypeId!.Value, out var effectiveTo) ? effectiveTo : null
+            })
+            .OrderBy(period => period.EffectiveFrom)
+            .ToList();
+        var ratePeriodsByStaff = salaryRatePeriods.ToLookup(period => period.StaffMemberId);
+        var employmentPeriodsByStaff = employmentPeriods.ToLookup(period => period.StaffMemberId);
+        var staffStateByMember = rows
+            .Where(row => row.Category == StaffStateCategory)
+            .ToDictionary(
+                row => row.StaffMemberId.GetValueOrDefault(),
+                row => new StaffState(row.StaffMemberId.GetValueOrDefault(), row.Amount != 0m, row.StaffCreatedAtUtc.GetValueOrDefault()));
+
         return new ExpenseWorksheetData(
             rows.Where(row => row.Category == SupplierAccrualCategory)
                 .Select(row => new ExpenseWorksheetSupplierData(
@@ -706,7 +834,7 @@ public sealed class EfExpenseWorksheetQuery(
                     row.TypeCode,
                     row.Amount))
                 .ToList(),
-            rows.Where(row => row.Category == StaffMemberCategory)
+            staffRows
                 .Select(row => new ExpenseWorksheetStaffData(
                     row.StaffMemberId!.Value,
                     row.CounterpartyName!,
@@ -715,7 +843,30 @@ public sealed class EfExpenseWorksheetQuery(
                 {
                     ExpenseTypeId = row.TypeId!.Value,
                     ExpenseTypeCode = row.TypeCode,
-                    CreatedAtUtc = row.StaffCreatedAtUtc!.Value
+                    CreatedAtUtc = row.StaffCreatedAtUtc!.Value,
+                    BaseAccrualAmount = StaffSalaryTimeline.CalculateBaseAccrual(
+                        monthFrom,
+                        salaryAccrualMonthTo,
+                        row.Amount,
+                        MonthPeriod.Normalize(businessDateProvider?.ToBusinessDate(row.StaffCreatedAtUtc!.Value)
+                            ?? DateOnly.FromDateTime(row.StaffCreatedAtUtc.Value.UtcDateTime)),
+                        staffStateByMember[row.StaffMemberId.Value].IsArchived,
+                        MonthPeriod.Normalize(businessDateProvider?.ToBusinessDate(staffStateByMember[row.StaffMemberId.Value].UpdatedAtUtc)
+                            ?? DateOnly.FromDateTime(staffStateByMember[row.StaffMemberId.Value].UpdatedAtUtc.UtcDateTime)),
+                        ratePeriodsByStaff[row.StaffMemberId.Value].ToList(),
+                        employmentPeriodsByStaff[row.StaffMemberId.Value].ToList()),
+                    OpeningBaseAccrualAmount = StaffSalaryTimeline.CalculateBaseAccrual(
+                        MonthPeriod.Normalize(businessDateProvider?.ToBusinessDate(row.StaffCreatedAtUtc!.Value)
+                            ?? DateOnly.FromDateTime(row.StaffCreatedAtUtc.Value.UtcDateTime)),
+                        monthFrom.AddMonths(-1),
+                        row.Amount,
+                        MonthPeriod.Normalize(businessDateProvider?.ToBusinessDate(row.StaffCreatedAtUtc.Value)
+                            ?? DateOnly.FromDateTime(row.StaffCreatedAtUtc.Value.UtcDateTime)),
+                        staffStateByMember[row.StaffMemberId.Value].IsArchived,
+                        MonthPeriod.Normalize(businessDateProvider?.ToBusinessDate(staffStateByMember[row.StaffMemberId.Value].UpdatedAtUtc)
+                            ?? DateOnly.FromDateTime(staffStateByMember[row.StaffMemberId.Value].UpdatedAtUtc.UtcDateTime)),
+                        ratePeriodsByStaff[row.StaffMemberId.Value].ToList(),
+                        employmentPeriodsByStaff[row.StaffMemberId.Value].ToList())
                 })
                 .ToList(),
             rows.Where(row => row.Category == StaffExpenseCategory)
@@ -801,5 +952,7 @@ public sealed class EfExpenseWorksheetQuery(
             SalaryAccrualMonthTo = salaryAccrualMonthTo >= monthFrom ? salaryAccrualMonthTo : null
         };
     }
+
+    private sealed record StaffState(Guid StaffMemberId, bool IsArchived, DateTimeOffset UpdatedAtUtc);
 
 }

@@ -57,6 +57,39 @@ describe('financeApi', () => {
     })
   })
 
+  it('requests the complete employee breakdown without an expense type filter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      staffMemberId: 'staff-77',
+      expenseTypeId: null,
+      monthFrom: '2026-05-01',
+      monthTo: '2026-06-01',
+      baseAccrualTotal: 0,
+      bonusTotal: 0,
+      penaltyTotal: 0,
+      accrualTotal: 0,
+      expenseTotal: 0,
+      items: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 100,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.getExpenseWorksheetStaffBreakdown('token', {
+      staffMemberId: 'staff-77',
+      monthFrom: '2026-05',
+      monthTo: '2026-06',
+      limit: 100,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/expenses-worksheet/staff-breakdown?staffMemberId=staff-77&monthFrom=2026-05-01&monthTo=2026-06-01&limit=100', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('forwards cancellation for compact previews and financial report reads', async () => {
     const fetchSignals: AbortSignal[] = []
     const fetchMock = vi.fn().mockImplementation((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
@@ -272,6 +305,40 @@ describe('financeApi', () => {
         Authorization: 'Bearer token',
       },
     })
+  })
+
+  it('updates, cancels and restores a staff salary adjustment with concurrency versions', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'adjustment-1' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const updateRequest = {
+      staffMemberId: 'staff-1',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'penalty' as const,
+      amount: 750,
+      documentNumber: 'SH-1',
+      reason: 'Исправленное основание',
+      expectedVersion: 'version-1',
+    }
+
+    await financeApi.updateStaffSalaryAdjustment('token', 'adjustment-1', updateRequest)
+    await financeApi.cancelStaffSalaryAdjustment('token', 'adjustment-1', { reason: 'Ошибка', expectedVersion: 'version-2' })
+    await financeApi.restoreStaffSalaryAdjustment('token', 'adjustment-1', 'version-3')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/staff-salary-adjustments/adjustment-1', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(updateRequest),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/staff-salary-adjustments/adjustment-1/cancel', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Ошибка', expectedVersion: 'version-2' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/finance/staff-salary-adjustments/adjustment-1/restore', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ expectedVersion: 'version-3' }),
+    }))
   })
 
   it('posts a cash-to-bank transfer without a fund', async () => {

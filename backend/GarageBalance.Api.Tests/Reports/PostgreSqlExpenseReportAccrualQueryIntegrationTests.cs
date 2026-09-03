@@ -1,5 +1,6 @@
 using System.Data.Common;
 using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -11,6 +12,92 @@ namespace GarageBalance.Api.Tests.Reports;
 
 public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task StaffAccrual_UsesBusinessMonthAndSalaryDayButKeepsAdjustments()
+    {
+        var january = new DateOnly(2043, 1, 1);
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid staffId;
+        Guid salaryTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var salarySetting = await seedContext.ApplicationSettings
+                .SingleAsync(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey);
+            salarySetting.IntegerValue = 15;
+            var salaryType = await seedContext.ExpenseTypes.SingleAsync(type => type.Code == "salary");
+            var department = new StaffDepartment { Name = $"Отдел Петрова {Guid.NewGuid():N}" };
+            var staff = new StaffMember
+            {
+                FullName = $"Петров {Guid.NewGuid():N}",
+                Rate = 300m,
+                Department = department,
+                CreatedAtUtc = new DateTimeOffset(2042, 12, 31, 18, 30, 0, TimeSpan.Zero)
+            };
+            seedContext.AddRange(department, staff);
+            seedContext.StaffSalaryAdjustments.AddRange(
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staff,
+                    AccountingMonth = january,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                    Amount = 50m,
+                    Reason = "Премия"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staff,
+                    AccountingMonth = january,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                    Amount = 20m,
+                    Reason = "Штраф"
+                });
+            await seedContext.SaveChangesAsync();
+            staffId = staff.Id;
+            salaryTypeId = salaryType.Id;
+        }
+
+        await using var context = database.CreateContext();
+        var beforeDay = await new EfExpenseReportQuery(
+                context,
+                new TestBusinessDateProvider(new DateOnly(2043, 1, 2), "Asia/Novosibirsk"))
+            .GetRowsAsync(
+                january.AddMonths(-1),
+                january.AddMonths(1).AddDays(-1),
+                "accruals",
+                new HashSet<Guid>(),
+                new HashSet<Guid> { staffId },
+                new HashSet<Guid> { salaryTypeId },
+                null,
+                25,
+                0,
+                new ReportSort("date", false),
+                CancellationToken.None);
+
+        var beforeRow = Assert.Single(beforeDay.Rows);
+        Assert.Equal(january, beforeRow.AccountingMonth);
+        Assert.Equal(30m, beforeDay.AccrualTotal);
+
+        var afterDay = await new EfExpenseReportQuery(
+                context,
+                new TestBusinessDateProvider(new DateOnly(2043, 1, 15), "Asia/Novosibirsk"))
+            .GetRowsAsync(
+                january.AddMonths(-1),
+                january.AddMonths(1).AddDays(-1),
+                "accruals",
+                new HashSet<Guid>(),
+                new HashSet<Guid> { staffId },
+                new HashSet<Guid> { salaryTypeId },
+                null,
+                25,
+                0,
+                new ReportSort("date", false),
+                CancellationToken.None);
+
+        var afterRow = Assert.Single(afterDay.Rows);
+        Assert.Equal(january, afterRow.AccountingMonth);
+        Assert.Equal(330m, afterDay.AccrualTotal);
+    }
+
     [PostgreSqlFact]
     public async Task AccrualPageLoadsStartingBalanceSupplierAndStaffTotalsInOneCommand()
     {

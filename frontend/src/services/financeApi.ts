@@ -436,6 +436,9 @@ export type ExpenseWorksheetSupplierBreakdownEntryDto = {
   documentNumber: string | null
   comment: string | null
   source: string | null
+  isCanceled?: boolean
+  version?: string | null
+  cancellationReason?: string | null
 }
 
 export type ExpenseWorksheetSupplierBreakdownDto = {
@@ -453,7 +456,7 @@ export type ExpenseWorksheetSupplierBreakdownDto = {
 
 export type ExpenseWorksheetStaffBreakdownDto = {
   staffMemberId: string
-  expenseTypeId: string
+  expenseTypeId: string | null
   monthFrom: string
   monthTo: string
   baseAccrualTotal: number
@@ -689,6 +692,13 @@ export type StaffSalaryAdjustmentDto = {
   amount: number
   documentNumber: string | null
   reason: string
+  isCanceled?: boolean
+  cancellationReason?: string | null
+  version?: string
+}
+
+export type UpdateStaffSalaryAdjustmentRequest = CreateStaffSalaryAdjustmentRequest & {
+  expectedVersion: string
 }
 
 export type CreateCashBankTransferRequest = {
@@ -738,7 +748,7 @@ export type FinanceClient = {
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
-  getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
+  getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId?: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest, signal?: AbortSignal): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -747,6 +757,9 @@ export type FinanceClient = {
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
   createStaffSalaryAdjustment(accessToken: string, request: CreateStaffSalaryAdjustmentRequest): Promise<StaffSalaryAdjustmentDto>
+  updateStaffSalaryAdjustment(accessToken: string, adjustmentId: string, request: UpdateStaffSalaryAdjustmentRequest): Promise<StaffSalaryAdjustmentDto>
+  cancelStaffSalaryAdjustment(accessToken: string, adjustmentId: string, request: { reason: string; expectedVersion: string }): Promise<StaffSalaryAdjustmentDto>
+  restoreStaffSalaryAdjustment(accessToken: string, adjustmentId: string, expectedVersion: string): Promise<StaffSalaryAdjustmentDto>
   createCashBankTransfer(accessToken: string, request: CreateCashBankTransferRequest): Promise<CashBankTransferDto>
   updateExpense(accessToken: string, operationId: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
@@ -986,6 +999,15 @@ export const financeApi: FinanceClient = {
   },
   createStaffSalaryAdjustment(accessToken, request) {
     return requestJson(accessToken, '/api/finance/staff-salary-adjustments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateStaffSalaryAdjustment(accessToken, adjustmentId, request) {
+    return requestJson(accessToken, `/api/finance/staff-salary-adjustments/${adjustmentId}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  cancelStaffSalaryAdjustment(accessToken, adjustmentId, request) {
+    return requestJson(accessToken, `/api/finance/staff-salary-adjustments/${adjustmentId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
+  },
+  restoreStaffSalaryAdjustment(accessToken, adjustmentId, expectedVersion) {
+    return requestJson(accessToken, `/api/finance/staff-salary-adjustments/${adjustmentId}/restore`, { method: 'POST', body: JSON.stringify({ expectedVersion }) })
   },
   createCashBankTransfer(accessToken, request) {
     return requestJson(accessToken, '/api/finance/cash-bank-transfers', { method: 'POST', body: JSON.stringify(request) })

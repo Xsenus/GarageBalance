@@ -28,6 +28,14 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return Ok(await fundService.GetFundOptionsAsync(cancellationToken));
     }
 
+    [Authorize(Policy = SystemPermissions.ReportsRead)]
+    [HttpGet("reconciliation")]
+    [ProducesResponseType<FundReconciliationDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FundReconciliationDto>> GetReconciliation(CancellationToken cancellationToken)
+    {
+        return Ok(await fundService.GetReconciliationAsync(cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost]
     [ProducesResponseType<FundDto>(StatusCodes.Status201Created)]

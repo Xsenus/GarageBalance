@@ -21,6 +21,19 @@ public sealed class TestBusinessDateProviderTests
         Assert.Equal(new DateOnly(2026, 7, 31), provider.Today);
     }
 
+    [Fact]
+    public void ToBusinessDate_UsesConfiguredTimeZoneAcrossUtcMonthBoundary()
+    {
+        var provider = new TestBusinessDateProvider(
+            new DateOnly(2026, 9, 1),
+            "Asia/Novosibirsk");
+
+        var result = provider.ToBusinessDate(
+            new DateTimeOffset(2026, 8, 31, 18, 30, 0, TimeSpan.Zero));
+
+        Assert.Equal(new DateOnly(2026, 9, 1), result);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;

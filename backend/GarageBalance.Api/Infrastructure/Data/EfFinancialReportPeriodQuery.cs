@@ -68,14 +68,17 @@ public sealed class EfFinancialReportPeriodQuery(GarageBalanceDbContext dbContex
         return dbContext.StaffMembers.AsNoTracking()
             .Where(staffMember => staffMember.Id == staffId)
             .Select(_ => new FinancialReportPeriodData(
-                dbContext.StaffSalaryAdjustments
-                    .Where(adjustment => adjustment.StaffMemberId == staffId)
-                    .Min(adjustment => (DateOnly?)adjustment.AccountingMonth),
+                dbContext.StaffEmploymentPeriods
+                    .Where(period => period.StaffMemberId == staffId)
+                    .Min(period => (DateOnly?)period.EffectiveFrom)
+                    ?? dbContext.StaffSalaryAdjustments
+                        .Where(adjustment => adjustment.StaffMemberId == staffId && !adjustment.IsCanceled)
+                        .Min(adjustment => (DateOnly?)adjustment.AccountingMonth),
                 dbContext.FinancialOperations
                     .Where(operation => operation.StaffMemberId == staffId && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
                     .Min(operation => (DateOnly?)operation.AccountingMonth),
                 dbContext.StaffSalaryAdjustments
-                    .Where(adjustment => adjustment.StaffMemberId == staffId)
+                    .Where(adjustment => adjustment.StaffMemberId == staffId && !adjustment.IsCanceled)
                     .Max(adjustment => (DateOnly?)adjustment.AccountingMonth),
                 dbContext.FinancialOperations
                     .Where(operation => operation.StaffMemberId == staffId && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)

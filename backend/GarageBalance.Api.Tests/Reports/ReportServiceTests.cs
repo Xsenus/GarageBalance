@@ -143,6 +143,14 @@ public sealed class ReportServiceTests
         Assert.Equal(SeededBankAmount + 480m, juneRow.BankBalanceClosing);
         Assert.Equal(juneRow.BankBalanceClosing, julyRow.BankBalanceOpening);
         Assert.Equal(SeededBankAmount + 400m, julyRow.BankBalanceClosing);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.IncomeTotal), result.Value.IncomeTotal);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.ExpenseTotal), result.Value.ExpenseTotal);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.AccrualTotal), result.Value.AccrualTotal);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.Balance), result.Value.Balance);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.Debt), result.Value.Debt);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.OperationCount), result.Value.OperationCount);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.AccrualCount), result.Value.AccrualCount);
+        Assert.Equal(result.Value.MonthlyRows.Sum(row => row.MeterReadingCount), result.Value.MeterReadingCount);
     }
 
     [Fact]
@@ -1708,7 +1716,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ExpenseAllRowsQuery_LoadsSupplierAndStaffSectionsInSixSelects()
+    public async Task ExpenseAllRowsQuery_LoadsSupplierAndHistoricalStaffSectionsInEightBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -1752,7 +1760,7 @@ public sealed class ReportServiceTests
             0,
             CancellationToken.None);
 
-        Assert.Equal(6, commandCounter.Count);
+        Assert.Equal(8, commandCounter.Count);
         Assert.Equal(10100m, result.AccrualTotal);
         Assert.Equal(4000m, result.ExpenseTotal);
         Assert.Equal(2, result.RowCount);
@@ -1839,6 +1847,139 @@ public sealed class ReportServiceTests
             Assert.Equal("staff", row.CounterpartyKind);
             Assert.Equal(staff.Id, row.StaffMemberId);
         });
+    }
+
+    [Fact]
+    public async Task ExpenseQuery_UsesSalaryAccrualDayAndBusinessTimeZoneWhileKeepingAdjustments()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Отдел Петрова" };
+        var staff = new StaffMember
+        {
+            FullName = "Петров Петр Петрович",
+            Rate = 300m,
+            Department = department,
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 31, 18, 30, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.AddRange(department, staff, salaryType);
+        database.Context.ApplicationSettings.Add(new GarageBalance.Api.Domain.Settings.ApplicationSetting
+        {
+            Key = ApplicationSettingsService.SalaryAccrualDayKey,
+            IntegerValue = 15
+        });
+        database.Context.StaffSalaryAdjustments.AddRange(
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staff,
+                AccountingMonth = new DateOnly(2026, 9, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                Amount = 50m,
+                Reason = "Премия"
+            },
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staff,
+                AccountingMonth = new DateOnly(2026, 9, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                Amount = 20m,
+                Reason = "Штраф"
+            });
+        await database.Context.SaveChangesAsync();
+
+        var beforeAccrualDay = await new EfExpenseReportQuery(
+                database.Context,
+                new TestBusinessDateProvider(new DateOnly(2026, 9, 2), "Asia/Novosibirsk"))
+            .GetRowsAsync(
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 9, 30),
+                "accruals",
+                new HashSet<Guid>(),
+                new HashSet<Guid> { staff.Id },
+                new HashSet<Guid> { salaryType.Id },
+                null,
+                25,
+                0,
+                new ReportSort("date", false),
+                CancellationToken.None);
+
+        var beforeRow = Assert.Single(beforeAccrualDay.Rows);
+        Assert.Equal(new DateOnly(2026, 9, 1), beforeRow.AccountingMonth);
+        Assert.Equal(30m, beforeAccrualDay.AccrualTotal);
+        Assert.Equal(30m, beforeRow.AccrualAmount);
+        Assert.Equal("Оклад с учетом премий и штрафов", beforeRow.Comment);
+
+        var afterAccrualDay = await new EfExpenseReportQuery(
+                database.Context,
+                new TestBusinessDateProvider(new DateOnly(2026, 9, 15), "Asia/Novosibirsk"))
+            .GetRowsAsync(
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 9, 30),
+                "accruals",
+                new HashSet<Guid>(),
+                new HashSet<Guid> { staff.Id },
+                new HashSet<Guid> { salaryType.Id },
+                null,
+                25,
+                0,
+                new ReportSort("date", false),
+                CancellationToken.None);
+
+        var afterRow = Assert.Single(afterAccrualDay.Rows);
+        Assert.Equal(new DateOnly(2026, 9, 1), afterRow.AccountingMonth);
+        Assert.Equal(330m, afterAccrualDay.AccrualTotal);
+        Assert.Equal(330m, afterRow.AccrualAmount);
+    }
+
+    [Fact]
+    public async Task ExpenseQuery_UsesHistoricalSalaryRatesAndSkipsArchivedEmploymentGap()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Отдел исторических ставок" };
+        var staff = new StaffMember
+        {
+            FullName = "Петров Петр Петрович",
+            Rate = 200m,
+            Department = department,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 10, 8, 0, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.AddRange(
+            department,
+            staff,
+            salaryType,
+            new StaffSalaryRatePeriod { StaffMember = staff, EffectiveFrom = new DateOnly(2026, 1, 1), Rate = 100m },
+            new StaffSalaryRatePeriod { StaffMember = staff, EffectiveFrom = new DateOnly(2026, 3, 1), Rate = 200m },
+            new StaffEmploymentPeriod { StaffMember = staff, EffectiveFrom = new DateOnly(2026, 1, 1), EffectiveTo = new DateOnly(2026, 2, 1) },
+            new StaffEmploymentPeriod { StaffMember = staff, EffectiveFrom = new DateOnly(2026, 4, 1) });
+        await database.Context.SaveChangesAsync();
+
+        var result = await new EfExpenseReportQuery(
+                database.Context,
+                new TestBusinessDateProvider(new DateOnly(2026, 6, 1)))
+            .GetRowsAsync(
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 5, 31),
+                "accruals",
+                new HashSet<Guid>(),
+                new HashSet<Guid> { staff.Id },
+                new HashSet<Guid> { salaryType.Id },
+                null,
+                25,
+                0,
+                new ReportSort("date", false),
+                CancellationToken.None);
+
+        Assert.Equal(600m, result.AccrualTotal);
+        Assert.Equal(
+            [
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 2, 1),
+                new DateOnly(2026, 4, 1),
+                new DateOnly(2026, 5, 1)
+            ],
+            result.Rows.Select(row => row.AccountingMonth).ToArray());
+        Assert.Equal([100m, 100m, 200m, 200m], result.Rows.Select(row => row.AccrualAmount).ToArray());
     }
 
     [Fact]

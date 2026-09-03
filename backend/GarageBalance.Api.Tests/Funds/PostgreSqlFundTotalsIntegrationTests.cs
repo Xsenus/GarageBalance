@@ -19,6 +19,9 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
                 CreateOperation(FinancialOperationKinds.Income, 125m),
                 CreateOperation(FinancialOperationKinds.Expense, 40m),
                 CreateOperation(FinancialOperationKinds.Income, 999m, isCanceled: true));
+            setupContext.CashBankBalanceOperations.AddRange(
+                CreateBalanceAdjustment(CashBankBalanceDirections.Increase, 25m),
+                CreateBalanceAdjustment(CashBankBalanceDirections.Decrease, 5m));
             await setupContext.SaveChangesAsync();
         }
 
@@ -34,6 +37,7 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
         Assert.Equal(125m, totals.IncomeTotal);
         Assert.Equal(40m, totals.ExpenseTotal);
         Assert.Equal(0m, totals.AllocatedFundTotal);
+        Assert.Equal(20m, totals.BalanceAdjustmentTotal);
         var command = Assert.Single(capture.Commands);
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
     }
@@ -59,6 +63,7 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
         Assert.Equal(0m, totals.IncomeTotal);
         Assert.Equal(0m, totals.ExpenseTotal);
         Assert.Equal(300m, totals.AllocatedFundTotal);
+        Assert.Equal(0m, totals.BalanceAdjustmentTotal);
     }
 
     [PostgreSqlFact]
@@ -141,6 +146,17 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
             Amount = amount,
             IsCanceled = isCanceled,
             CreatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow
+        };
+
+    private static CashBankBalanceOperation CreateBalanceAdjustment(string direction, decimal amount) =>
+        new()
+        {
+            Account = CashBankAccounts.Bank,
+            OperationKind = CashBankBalanceOperationKinds.Adjustment,
+            Direction = direction,
+            OperationDate = new DateOnly(2026, 7, 20),
+            Amount = amount,
+            Reason = "Сверка остатка"
         };
 
     private sealed class SelectCommandCapture : DbCommandInterceptor

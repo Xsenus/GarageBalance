@@ -87,7 +87,7 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
     }
 
     [PostgreSqlFact]
-    public async Task MidMonthTariffChange_PersistsArithmeticMeanAndTwoCalculationSegments()
+    public async Task MidMonthTariffChange_PersistsDayWeightedRateAndTwoCalculationSegments()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid garageId;
@@ -167,11 +167,10 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
             var row = Assert.Single(
                 result.Value!.Rows,
                 item => item.IncomeTypeId == incomeTypeId);
-            Assert.Equal(465m, row.AccrualAmount);
+            Assert.Equal(470m, row.AccrualAmount);
             Assert.NotNull(row.CalculationDetails);
-            Assert.Equal(465m, row.CalculationDetails!.AverageRate);
-            Assert.Contains("(310 + 620) / 2 = 465", row.CalculationDetails.RateAveragingRule, StringComparison.Ordinal);
-            Assert.Contains("Количество дней действия ставок на среднее не влияет", row.CalculationDetails.RateAveragingRule, StringComparison.Ordinal);
+            Assert.Equal(470m, row.CalculationDetails!.AverageRate);
+            Assert.Contains("(310 × 15 + 620 × 16) / 31 = 470", row.CalculationDetails.RateAveragingRule, StringComparison.Ordinal);
             Assert.Collection(
                 row.CalculationDetails.Lines,
                 firstHalf =>
@@ -180,7 +179,7 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
                     Assert.Equal(new DateOnly(2026, 8, 15), firstHalf.EffectiveTo);
                     Assert.Equal(15, firstHalf.Days);
                     Assert.Equal(31, firstHalf.MonthDays);
-                    Assert.Equal(155m, firstHalf.Amount);
+                    Assert.Equal(150m, firstHalf.Amount);
                 },
                 secondHalf =>
                 {
@@ -188,7 +187,7 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
                     Assert.Equal(new DateOnly(2026, 8, 31), secondHalf.EffectiveTo);
                     Assert.Equal(16, secondHalf.Days);
                     Assert.Equal(31, secondHalf.MonthDays);
-                    Assert.Equal(310m, secondHalf.Amount);
+                    Assert.Equal(320m, secondHalf.Amount);
                 });
         }
 
@@ -198,12 +197,12 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
                 accrual.GarageId == garageId &&
                 accrual.IncomeTypeId == incomeTypeId &&
                 !accrual.IsCanceled);
-        Assert.Equal(465m, persisted.Amount);
+        Assert.Equal(470m, persisted.Amount);
         var persistedDetails = RegularAccrualCalculator.Deserialize(persisted.CalculationDetailsJson);
         Assert.NotNull(persistedDetails);
-        Assert.Equal(465m, persistedDetails!.TotalAmount);
-        Assert.Equal(465m, persistedDetails.AverageRate);
-        Assert.Equal("Расчёт за месяц: 1 месяц × 465 = 465,00.", persistedDetails.MonthlyCalculationFormula);
+        Assert.Equal(470m, persistedDetails!.TotalAmount);
+        Assert.Equal(470m, persistedDetails.AverageRate);
+        Assert.Equal("Расчёт за месяц: 1 месяц × 470 = 470,00.", persistedDetails.MonthlyCalculationFormula);
         Assert.Equal([15, 16], persistedDetails.Lines.Select(line => line.Days));
         Assert.Contains(
             await verificationContext.AuditEvents.ToListAsync(),
@@ -270,8 +269,126 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
         Assert.Contains($"Комментарий: {reason}", audit.Summary, StringComparison.Ordinal);
     }
 
+    [PostgreSqlFact]
+    public async Task CustomerThresholdExample_PersistsProgressiveDayWeightedAmount17755()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        Guid incomeTypeId;
+        await using (var setupContext = database.CreateContext())
+        {
+            var garage = new Garage
+            {
+                Number = "PG-CUSTOMER-THRESHOLD-EXAMPLE",
+                PeopleCount = 1,
+                FloorCount = 1,
+                CreatedAtUtc = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var incomeType = new IncomeType
+            {
+                Name = "Электроэнергия по порогам",
+                Code = "customer_threshold_example"
+            };
+            var oldTariff = CreateThresholdTariff("До смены", new DateOnly(2026, 9, 1), 7.5m, 7.5m, 7.5m);
+            var newTariff = CreateThresholdTariff("После смены", new DateOnly(2026, 9, 2), 7.5m, 10m, 12m);
+            var setting = new ChargeServiceSetting
+            {
+                Name = "Электроэнергия по порогам",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 20,
+                OverdueGraceDays = 30,
+                IncomeType = incomeType,
+                Tariff = newTariff,
+                IsMetered = true,
+                MeterKind = MeterKinds.Electricity,
+                HasTieredTariff = true,
+                UnitName = "кВт·ч"
+            };
+            setupContext.AddRange(
+                garage,
+                incomeType,
+                oldTariff,
+                newTariff,
+                setting,
+                new MeterReading
+                {
+                    Garage = garage,
+                    MeterKind = MeterKinds.Electricity,
+                    AccountingMonth = new DateOnly(2026, 9, 1),
+                    ReadingDate = new DateOnly(2026, 9, 30),
+                    PreviousValue = 0m,
+                    CurrentValue = 2000m,
+                    Consumption = 2000m
+                });
+            setupContext.ChargeServiceTariffVersions.AddRange(
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSetting = setting,
+                    Tariff = oldTariff,
+                    EffectiveFrom = new DateOnly(2026, 9, 1),
+                    EffectiveTo = new DateOnly(2026, 9, 1)
+                },
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSetting = setting,
+                    Tariff = newTariff,
+                    EffectiveFrom = new DateOnly(2026, 9, 2)
+                });
+            await setupContext.SaveChangesAsync();
+            garageId = garage.Id;
+            incomeTypeId = incomeType.Id;
+        }
+
+        await using (var commandContext = database.CreateContext())
+        {
+            var result = await FinanceServiceTestFactory.Create(commandContext)
+                .CalculateGarageIncomeWorksheetAsync(
+                    garageId,
+                    new GarageIncomeWorksheetRequest(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 1)),
+                    Guid.NewGuid(),
+                    CancellationToken.None);
+
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            var row = Assert.Single(result.Value!.Rows, item => item.IncomeTypeId == incomeTypeId);
+            Assert.Equal(17755m, row.AccrualAmount);
+            Assert.Equal(4, row.CalculationDetails!.Version);
+            Assert.Equal(17755m, row.CalculationDetails.TotalAmount);
+            Assert.Contains("1100 × 7,5 = 8250,00", row.CalculationDetails.MonthlyCalculationFormula, StringComparison.Ordinal);
+            Assert.Contains("600 × 9,9167 = 5950,00", row.CalculationDetails.MonthlyCalculationFormula, StringComparison.Ordinal);
+            Assert.Contains("300 × 11,85 = 3555,00", row.CalculationDetails.MonthlyCalculationFormula, StringComparison.Ordinal);
+        }
+
+        await using var verificationContext = database.CreateContext();
+        var persisted = await verificationContext.Accruals.SingleAsync(accrual =>
+            accrual.GarageId == garageId &&
+            accrual.IncomeTypeId == incomeTypeId &&
+            !accrual.IsCanceled);
+        Assert.Equal(17755m, persisted.Amount);
+        Assert.Equal(17755m, RegularAccrualCalculator.Deserialize(persisted.CalculationDetailsJson)!.TotalAmount);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
     }
+
+    private static Tariff CreateThresholdTariff(
+        string name,
+        DateOnly effectiveFrom,
+        decimal firstRate,
+        decimal secondRate,
+        decimal thirdRate) => new()
+        {
+            Name = name,
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = firstRate,
+            ElectricityFirstThreshold = 1100m,
+            ElectricitySecondThreshold = 1700m,
+            ElectricityFirstRate = firstRate,
+            ElectricitySecondRate = secondRate,
+            ElectricityThirdRate = thirdRate,
+            EffectiveFrom = effectiveFrom
+        };
 }

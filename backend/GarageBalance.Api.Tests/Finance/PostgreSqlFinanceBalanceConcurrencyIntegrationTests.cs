@@ -59,6 +59,47 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task StaffPenalties_SerializeMonthlySalaryBalance()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid staffMemberId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = "Отдел конкурентных штрафов" };
+            var staffMember = new StaffMember
+            {
+                FullName = "Сотрудник конкурентных штрафов",
+                Department = department,
+                Rate = 100m,
+                CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            staffMemberId = staffMember.Id;
+            seedContext.AddRange(department, staffMember);
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var firstContext = database.CreateContext();
+        await using var secondContext = database.CreateContext();
+        var results = await Task.WhenAll(
+            FinanceServiceTestFactory.Create(firstContext).CreateStaffSalaryAdjustmentAsync(
+                new CreateStaffSalaryAdjustmentRequest(staffMemberId, June, "penalty", 60m, "PENALTY-RACE-1", "Первый конкурентный штраф"),
+                Guid.NewGuid(),
+                CancellationToken.None),
+            FinanceServiceTestFactory.Create(secondContext).CreateStaffSalaryAdjustmentAsync(
+                new CreateStaffSalaryAdjustmentRequest(staffMemberId, June, "penalty", 60m, "PENALTY-RACE-2", "Второй конкурентный штраф"),
+                Guid.NewGuid(),
+                CancellationToken.None));
+
+        Assert.Single(results, result => result.Succeeded);
+        Assert.Single(results, result => !result.Succeeded && result.ErrorCode == "staff_penalty_exceeds_available");
+
+        await using var assertionContext = database.CreateContext();
+        Assert.Equal(60m, await assertionContext.StaffSalaryAdjustments
+            .Where(adjustment => adjustment.StaffMemberId == staffMemberId && adjustment.AccountingMonth == June)
+            .SumAsync(adjustment => adjustment.Amount));
+    }
+
+    [PostgreSqlFact]
     public async Task IncomeReductionAndCashBankTransfer_CannotSpendTheSameCash()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

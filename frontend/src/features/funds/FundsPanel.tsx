@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Landmark, Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
+import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundReconciliationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
@@ -90,6 +90,24 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   }
 }
 
+function fallbackReconciliation(funds: FundDto[]): FundReconciliationDto {
+  const namedFundTotal = funds.reduce((sum, fund) => sum + fund.balance, 0)
+  const availableToDistribute = funds[0]?.availableToDistribute ?? 0
+  return {
+    cashAndBankTotal: namedFundTotal + availableToDistribute,
+    namedFundTotal,
+    availableToDistribute,
+    difference: 0,
+    isReconciled: true,
+  }
+}
+
+async function getFundReconciliation(fundsClient: FundsClient, accessToken: string, funds: FundDto[], signal?: AbortSignal) {
+  return fundsClient.getReconciliation
+    ? fundsClient.getReconciliation(accessToken, signal)
+    : fallbackReconciliation(funds)
+}
+
 async function getFundOperationsPage(fundsClient: FundsClient, accessToken: string, pageNumber: number, limit: number, signal?: AbortSignal) {
   const offset = (pageNumber - 1) * limit
   if (fundsClient.getOperationsPage) {
@@ -105,6 +123,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
   const [operationPage, setOperationPage] = useState(() => createEmptyPage<FundOperationDto>(25))
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
+  const [reconciliation, setReconciliation] = useState<FundReconciliationDto | null>(null)
   const [fundEditor, setFundEditor] = useState<FundEditorDraft | null>(null)
   const [fundEditorError, setFundEditorError] = useState<string | null>(null)
   const [fundDelete, setFundDelete] = useState<FundDeleteDraft | null>(null)
@@ -184,9 +203,15 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           'Сервер не ответил при загрузке фондов. Повторите загрузку.',
           loadController.signal,
         )
+        const loadedReconciliation = await loadFundsRequest(
+          (signal) => getFundReconciliation(fundsClient, auth.accessToken, funds, signal),
+          'Сервер не ответил при сверке фондов. Повторите загрузку.',
+          loadController.signal,
+        )
         if (!cancelled) {
           setRows(funds.map(mapFundDtoToPrototypeRow))
-          setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
+          setAvailableToDistribute(funds.length > 0 || fundsClient.getReconciliation ? loadedReconciliation.availableToDistribute : null)
+          setReconciliation(funds.length > 0 || fundsClient.getReconciliation ? loadedReconciliation : null)
         }
       } catch (error: unknown) {
         if (!cancelled) {
@@ -254,17 +279,23 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
 
   async function refreshFundsPanel(signal: AbortSignal) {
     const currentPageNumber = Math.floor(operationPage.offset / operationPage.limit) + 1
-    const [funds, operations] = await Promise.all([
-      loadFundsRequest(
-        (signal) => fundsClient.getFunds(auth.accessToken, signal),
-        'Сервер не ответил при загрузке фондов. Повторите загрузку.',
-        signal,
-      ),
+    const fundsPromise = loadFundsRequest(
+      (signal) => fundsClient.getFunds(auth.accessToken, signal),
+      'Сервер не ответил при загрузке фондов. Повторите загрузку.',
+      signal,
+    )
+    const [funds, operations, loadedReconciliation] = await Promise.all([
+      fundsPromise,
       loadFundsRequest(
         (signal) => getFundOperationsPage(fundsClient, auth.accessToken, currentPageNumber, operationPage.limit, signal),
         'Сервер не ответил при загрузке операций фондов. Повторите загрузку.',
         signal,
       ),
+      fundsPromise.then((funds) => loadFundsRequest(
+          (requestSignal) => getFundReconciliation(fundsClient, auth.accessToken, funds, requestSignal),
+          'Сервер не ответил при сверке фондов. Повторите загрузку.',
+          signal,
+        )),
     ])
     if (signal.aborted) {
       return
@@ -273,7 +304,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     setRows(funds.map(mapFundDtoToPrototypeRow))
     setOperationPage(operations)
     setLoadedOperationsState({ accessToken: auth.accessToken, client: fundsClient, loaded: true })
-    setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
+    setAvailableToDistribute(funds.length > 0 || fundsClient.getReconciliation ? loadedReconciliation.availableToDistribute : null)
+    setReconciliation(funds.length > 0 || fundsClient.getReconciliation ? loadedReconciliation : null)
   }
 
   function refreshFundsPanelAfterMutation() {
@@ -628,10 +660,6 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const operationReverseKind = operationReverse ? getReverseFundOperationKind(operationReverse.operation.operationKind) : null
   const operationReverseLabel = operationReverseKind === 'deposit' ? 'Пополнение' : 'Изъятие'
 
-  const accountedFundsTotal = availableToDistribute === null
-    ? null
-    : rows.reduce((sum, row) => sum + (row.amount ?? 0), availableToDistribute)
-
   return (
     <section className="funds-page" aria-label="Управление фондами">
       <div className="funds-heading">
@@ -715,19 +743,29 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         )}
           </div>
 
-          <div className="funds-distribution" aria-label="Итого средств в фондах, кассе и на счёте">
+          <div className="funds-distribution funds-reconciliation" role="group" aria-label="Итого средств в фондах, кассе и на счёте">
             {fundsLoading ? (
               <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Считаем общий остаток" rows={1} columns={2} />
             ) : (
               <>
                 <div className="funds-distribution-copy">
-                  <span>Итого учтено средств</span>
-                  <small>Сумма всех фондов и нераспределённого остатка. Она должна совпадать с общим остатком кассы и банковского счёта.</small>
+                  <span>Сверка общего остатка</span>
+                  <small>Касса и банковский счёт = фонды + нераспределённый остаток.</small>
                 </div>
-                <strong>{accountedFundsTotal === null ? '—' : `${formatMoney(accountedFundsTotal)} руб.`}</strong>
+                <dl className="funds-reconciliation-values">
+                  <div><dt>Касса и счёт</dt><dd>{reconciliation ? `${formatMoney(reconciliation.cashAndBankTotal)} руб.` : '—'}</dd></div>
+                  <div><dt>Фонды</dt><dd>{reconciliation ? `${formatMoney(reconciliation.namedFundTotal)} руб.` : '—'}</dd></div>
+                  <div><dt>Нераспределено</dt><dd>{reconciliation ? `${formatMoney(reconciliation.availableToDistribute)} руб.` : '—'}</dd></div>
+                </dl>
               </>
             )}
           </div>
+
+          {!fundsLoading && reconciliation && !reconciliation.isReconciled ? (
+            <p className="funds-reconciliation-warning" role="alert">
+              Обнаружено расхождение {formatMoney(Math.abs(reconciliation.difference))} руб. Проверьте начальные остатки и историю операций перед исправлением данных.
+            </p>
+          ) : null}
 
           {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
         </div>

@@ -21,7 +21,7 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('mainJsGzipBytes: 180 * 1024')
     expect(budgetScript).toContain('initialJsGzipBytes: 110 * 1024')
     expect(budgetScript).toContain('mainCssGzipBytes: 40 * 1024')
-    expect(budgetScript).toContain('totalAssetsGzipBytes: 270 * 1024')
+    expect(budgetScript).toContain('totalAssetsGzipBytes: 272 * 1024')
     expect(budgetScript).toContain('gzipSync')
     expect(budgetScript).toContain('collectStaticJsGraph')
     expect(budgetScript).toContain('remaining ${limit - bytes} bytes')

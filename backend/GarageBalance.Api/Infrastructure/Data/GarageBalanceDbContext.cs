@@ -28,6 +28,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<SupplierContact> SupplierContacts => Set<SupplierContact>();
     public DbSet<StaffDepartment> StaffDepartments => Set<StaffDepartment>();
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+    public DbSet<StaffSalaryRatePeriod> StaffSalaryRatePeriods => Set<StaffSalaryRatePeriod>();
+    public DbSet<StaffEmploymentPeriod> StaffEmploymentPeriods => Set<StaffEmploymentPeriod>();
     public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
@@ -345,6 +347,36 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany(department => department.StaffMembers)
                 .HasForeignKey(member => member.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StaffSalaryRatePeriod>(entity =>
+        {
+            entity.ToTable("staff_salary_rate_periods");
+            entity.HasKey(period => period.Id);
+            entity.Property(period => period.Rate).HasPrecision(18, 2);
+            entity.HasIndex(period => new { period.StaffMemberId, period.EffectiveFrom }).IsUnique();
+            entity.ToTable(table => table.HasCheckConstraint("CK_staff_salary_rate_periods_Rate", "\"Rate\" >= 0"));
+            entity.HasOne(period => period.StaffMember)
+                .WithMany(member => member.SalaryRatePeriods)
+                .HasForeignKey(period => period.StaffMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StaffEmploymentPeriod>(entity =>
+        {
+            entity.ToTable("staff_employment_periods");
+            entity.HasKey(period => period.Id);
+            entity.HasIndex(period => new { period.StaffMemberId, period.EffectiveFrom }).IsUnique();
+            entity.HasIndex(period => period.StaffMemberId)
+                .IsUnique()
+                .HasFilter("\"EffectiveTo\" IS NULL");
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_staff_employment_periods_Dates",
+                "\"EffectiveTo\" IS NULL OR \"EffectiveTo\" >= \"EffectiveFrom\""));
+            entity.HasOne(period => period.StaffMember)
+                .WithMany(member => member.EmploymentPeriods)
+                .HasForeignKey(period => period.StaffMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<IncomeType>(entity =>
@@ -826,6 +858,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(adjustment => adjustment.Amount).HasPrecision(18, 2);
             entity.Property(adjustment => adjustment.DocumentNumber).HasMaxLength(120);
             entity.Property(adjustment => adjustment.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(adjustment => adjustment.CancellationReason).HasMaxLength(1000);
+            entity.Property(adjustment => adjustment.IsCanceled).HasDefaultValue(false);
+            entity.Property(adjustment => adjustment.Version).IsConcurrencyToken();
             entity.HasIndex(adjustment => adjustment.AccountingMonth);
             entity.HasIndex(adjustment => adjustment.StaffMemberId);
             entity.HasIndex(adjustment => new

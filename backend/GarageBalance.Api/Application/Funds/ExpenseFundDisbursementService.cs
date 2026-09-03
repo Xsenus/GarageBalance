@@ -75,6 +75,7 @@ public sealed class ExpenseFundDisbursementService(
         FinancialOperation sourceOperation,
         Guid expenseFundId,
         string supplierName,
+        string expenseTypeName,
         decimal amount,
         Guid? actorUserId,
         bool allowNegativeBalance,
@@ -104,30 +105,43 @@ public sealed class ExpenseFundDisbursementService(
                 "Фонд расходования услуги не найден.");
         }
 
-        sourceOperation.ExpenseFundId = destinationFund.Id;
-        sourceOperation.ExpenseFund = destinationFund;
         var destinationOperations = destinationFund.Id == oldFund.Id
             ? oldOperations
             : (await repository.GetOperationsSinceAsync(
                 destinationFund.Id,
                 disbursement.CreatedAtUtc,
                 cancellationToken)).ToList();
-        var availableAmount = destinationFund.Id == oldFund.Id
-            ? MoneyMath.RoundMoney(destinationFund.Balance + disbursement.Amount)
-            : destinationFund.Balance;
-        if (normalizedAmount > availableAmount && !allowNegativeBalance)
-        {
-            return InsufficientBalance(availableAmount);
-        }
-
         var oldValues = Snapshot(disbursement);
         var destinationOpeningBalance = destinationOperations.Count == 0
             ? destinationFund.Balance
             : destinationOperations[0].BalanceBefore;
+        var destinationProjection = destinationOperations
+            .Where(operation => operation.Id != disbursement.Id)
+            .Select(operation => new FundOperationProjection(
+                operation.Id,
+                operation.CreatedAtUtc,
+                operation.OperationKind,
+                operation.Amount,
+                operation.IsCanceled))
+            .Append(new FundOperationProjection(
+                disbursement.Id,
+                disbursement.CreatedAtUtc,
+                FundOperationKinds.Withdraw,
+                normalizedAmount,
+                false))
+            .ToArray();
+        var projectedMinimumBalance = CalculateMinimumBalance(destinationProjection, destinationOpeningBalance);
+        if (projectedMinimumBalance < 0m && !allowNegativeBalance)
+        {
+            return InsufficientBalance(MoneyMath.RoundMoney(Math.Max(0m, normalizedAmount + projectedMinimumBalance)));
+        }
+
+        sourceOperation.ExpenseFundId = destinationFund.Id;
+        sourceOperation.ExpenseFund = destinationFund;
         disbursement.FundId = destinationFund.Id;
         disbursement.Fund = destinationFund;
         disbursement.Amount = normalizedAmount;
-        disbursement.Reason = BuildReason(supplierName, sourceOperation.ExpenseType?.Name);
+        disbursement.Reason = BuildReason(supplierName, expenseTypeName);
         disbursement.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
         if (destinationFund.Id != oldFund.Id)
@@ -140,7 +154,7 @@ public sealed class ExpenseFundDisbursementService(
             destinationFund,
             destinationOperations,
             destinationOpeningBalance);
-        var negativeBalanceConfirmed = allowNegativeBalance && disbursement.BalanceAfter < 0m;
+        var negativeBalanceConfirmed = allowNegativeBalance && projectedMinimumBalance < 0m;
         AddAudit("fund.expense_disbursement_updated", "update", disbursement, actorUserId, null, oldValues, negativeBalanceConfirmed);
         return ExpenseFundDisbursementResult.Success(negativeBalanceConfirmed);
     }
@@ -190,19 +204,26 @@ public sealed class ExpenseFundDisbursementService(
             return ExpenseFundDisbursementResult.Success();
         }
 
-        if (disbursement.Amount > disbursement.Fund.Balance &&
-            !sourceOperation.NegativeFundBalanceConfirmed)
-        {
-            return InsufficientBalance(disbursement.Fund.Balance);
-        }
-
-        disbursement.IsCanceled = false;
-        disbursement.UpdatedAtUtc = DateTimeOffset.UtcNow;
         var operations = await repository.GetOperationsFromAsync(
             disbursement.FundId,
             disbursement.Id,
             disbursement.CreatedAtUtc,
             cancellationToken);
+        var projectedMinimumBalance = CalculateMinimumBalance(
+            operations.Select(operation => new FundOperationProjection(
+                operation.Id,
+                operation.CreatedAtUtc,
+                operation.OperationKind,
+                operation.Amount,
+                operation.Id == disbursement.Id ? false : operation.IsCanceled)),
+            disbursement.BalanceBefore);
+        if (projectedMinimumBalance < 0m && !sourceOperation.NegativeFundBalanceConfirmed)
+        {
+            return InsufficientBalance(MoneyMath.RoundMoney(Math.Max(0m, disbursement.Amount + projectedMinimumBalance)));
+        }
+
+        disbursement.IsCanceled = false;
+        disbursement.UpdatedAtUtc = DateTimeOffset.UtcNow;
         RecalculateTail(disbursement.Fund, operations, disbursement.BalanceBefore);
         AddAudit(
             "fund.expense_disbursement_restored",
@@ -210,7 +231,7 @@ public sealed class ExpenseFundDisbursementService(
             disbursement,
             actorUserId,
             null,
-            negativeBalanceConfirmed: sourceOperation.NegativeFundBalanceConfirmed && disbursement.Fund.Balance < 0m);
+            negativeBalanceConfirmed: sourceOperation.NegativeFundBalanceConfirmed && projectedMinimumBalance < 0m);
         return ExpenseFundDisbursementResult.Success();
     }
 
@@ -243,6 +264,27 @@ public sealed class ExpenseFundDisbursementService(
 
         fund.Balance = MoneyMath.RoundMoney(balance);
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
+    private static decimal CalculateMinimumBalance(
+        IEnumerable<FundOperationProjection> source,
+        decimal openingBalance)
+    {
+        var balance = openingBalance;
+        var minimumBalance = balance;
+        foreach (var operation in source.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
+        {
+            if (operation.IsCanceled)
+            {
+                continue;
+            }
+
+            balance += operation.OperationKind == FundOperationKinds.Deposit ? operation.Amount : -operation.Amount;
+            balance = MoneyMath.RoundMoney(balance);
+            minimumBalance = Math.Min(minimumBalance, balance);
+        }
+
+        return minimumBalance;
     }
 
     private void AddAudit(
@@ -289,4 +331,11 @@ public sealed class ExpenseFundDisbursementService(
             ["amount"] = operation.Amount,
             ["isCanceled"] = operation.IsCanceled
         };
+
+    private sealed record FundOperationProjection(
+        Guid Id,
+        DateTimeOffset CreatedAtUtc,
+        string OperationKind,
+        decimal Amount,
+        bool IsCanceled);
 }

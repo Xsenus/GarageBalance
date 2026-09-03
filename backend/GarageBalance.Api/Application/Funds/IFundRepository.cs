@@ -37,7 +37,7 @@ public interface IFundRepository
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }
 
-public sealed record FundTotalsData(decimal IncomeTotal, decimal ExpenseTotal, decimal AllocatedFundTotal);
+public sealed record FundTotalsData(decimal IncomeTotal, decimal ExpenseTotal, decimal AllocatedFundTotal, decimal BalanceAdjustmentTotal = 0m);
 
 public sealed record FundOperationPageData(IReadOnlyList<FundOperation> Items, int TotalCount);
 

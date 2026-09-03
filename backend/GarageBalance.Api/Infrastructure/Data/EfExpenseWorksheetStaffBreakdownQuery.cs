@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +11,9 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
     public static async Task<ExpenseWorksheetStaffBreakdownData> GetAsync(
         GarageBalanceDbContext dbContext,
         DateOnly businessDate,
+        string businessTimeZoneId,
         Guid staffMemberId,
-        Guid expenseTypeId,
+        Guid? expenseTypeId,
         DateOnly monthFrom,
         DateOnly monthTo,
         int offset,
@@ -24,7 +26,9 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
             .Select(member => new
             {
                 member.Rate,
+                member.IsArchived,
                 member.CreatedAtUtc,
+                member.UpdatedAtUtc,
                 SalaryAccrualDay = dbContext.ApplicationSettings
                     .Where(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey)
                     .Select(setting => setting.IntegerValue)
@@ -48,20 +52,39 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
             salaryMonthTo = currentBusinessMonth;
         }
 
-        var staffCreatedMonth = new DateOnly(
-            staffMember.CreatedAtUtc.UtcDateTime.Year,
-            staffMember.CreatedAtUtc.UtcDateTime.Month,
-            1);
+        var businessTimeZone = TimeZoneInfo.FindSystemTimeZoneById(businessTimeZoneId);
+        var staffCreatedMonth = MonthPeriod.Normalize(DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(staffMember.CreatedAtUtc, businessTimeZone).DateTime));
         var salaryMonthFrom = staffCreatedMonth > monthFrom ? staffCreatedMonth : monthFrom;
+        var ratePeriods = await dbContext.StaffSalaryRatePeriods.AsNoTracking()
+            .Where(period => period.StaffMemberId == staffMemberId && period.EffectiveFrom <= salaryMonthTo)
+            .OrderBy(period => period.EffectiveFrom)
+            .ToListAsync(cancellationToken);
+        var employmentPeriods = await dbContext.StaffEmploymentPeriods.AsNoTracking()
+            .Where(period => period.StaffMemberId == staffMemberId && period.EffectiveFrom <= salaryMonthTo)
+            .OrderBy(period => period.EffectiveFrom)
+            .ToListAsync(cancellationToken);
+        var staffUpdatedMonth = MonthPeriod.Normalize(DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(staffMember.UpdatedAtUtc, businessTimeZone).DateTime));
         var salaryEntries = new List<ExpenseWorksheetSupplierBreakdownEntryData>();
         for (var month = salaryMonthFrom; month <= salaryMonthTo; month = month.AddMonths(1))
         {
+            if (!StaffSalaryTimeline.IsEmployed(
+                    month,
+                    staffCreatedMonth,
+                    staffMember.IsArchived,
+                    staffUpdatedMonth,
+                    employmentPeriods))
+            {
+                continue;
+            }
+
             salaryEntries.Add(new ExpenseWorksheetSupplierBreakdownEntryData(
                 CreateSalaryEntryId(staffMemberId, month),
                 "salary",
                 month,
                 null,
-                staffMember.Rate,
+                StaffSalaryTimeline.GetRate(month, staffMember.Rate, ratePeriods),
                 null,
                 null,
                 "salary",
@@ -84,15 +107,17 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
                 adjustment.DocumentNumber,
                 Comment = (string?)adjustment.Reason,
                 Source = (string?)null,
-                adjustment.CreatedAtUtc
+                adjustment.CreatedAtUtc,
+                adjustment.IsCanceled,
+                Version = (Guid?)adjustment.Version,
+                adjustment.CancellationReason
             });
         var payments = dbContext.FinancialOperations
             .AsNoTracking()
             .Where(operation =>
-                !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
                 operation.StaffMemberId == staffMemberId &&
-                operation.ExpenseTypeId == expenseTypeId &&
+                (!expenseTypeId.HasValue || operation.ExpenseTypeId == expenseTypeId) &&
                 operation.AccountingMonth >= monthFrom &&
                 operation.AccountingMonth <= monthTo)
             .Select(operation => new
@@ -105,10 +130,14 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
                 operation.DocumentNumber,
                 operation.Comment,
                 Source = operation.ExpensePaymentSource,
-                operation.CreatedAtUtc
+                operation.CreatedAtUtc,
+                operation.IsCanceled,
+                Version = (Guid?)null,
+                CancellationReason = (string?)null
             });
         var persistedEntries = adjustments.Concat(payments);
         var summaries = await persistedEntries
+            .Where(item => !item.IsCanceled)
             .GroupBy(item => item.EntryKind)
             .Select(group => new
             {
@@ -117,15 +146,15 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
                 Amount = group.Sum(item => item.Amount)
             })
             .ToListAsync(cancellationToken);
+        var persistedCount = await persistedEntries.CountAsync(cancellationToken);
 
-        var persistedSkip = Math.Max(0, offset - salaryEntries.Count);
+        var persistedTake = offset > int.MaxValue - limit ? int.MaxValue : offset + limit;
         var rawItems = await persistedEntries
             .OrderByDescending(item => item.AccountingMonth)
             .ThenByDescending(item => item.OperationDate.HasValue)
             .ThenByDescending(item => item.OperationDate)
             .ThenBy(item => item.Id)
-            .Skip(persistedSkip)
-            .Take(limit + salaryEntries.Count)
+            .Take(persistedTake)
             .ToListAsync(cancellationToken);
         var persistedItems = rawItems.Select(item => new ExpenseWorksheetSupplierBreakdownEntryData(
             item.Id,
@@ -136,14 +165,17 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
             item.DocumentNumber,
             item.Comment,
             item.Source,
-            item.CreatedAtUtc));
+            item.CreatedAtUtc,
+            item.IsCanceled,
+            item.Version,
+            item.CancellationReason));
         var items = salaryEntries
             .Concat(persistedItems)
             .OrderByDescending(item => item.AccountingMonth)
             .ThenByDescending(item => item.OperationDate.HasValue)
             .ThenByDescending(item => item.OperationDate)
             .ThenBy(item => item.Id)
-            .Skip(offset - persistedSkip)
+            .Skip(offset)
             .Take(limit)
             .ToList();
         var bonusSummary = summaries.FirstOrDefault(item => item.EntryKind == StaffSalaryAdjustmentTypes.Bonus);
@@ -152,8 +184,8 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
 
         return new ExpenseWorksheetStaffBreakdownData(
             items,
-            salaryEntries.Count + summaries.Sum(item => item.Count),
-            staffMember.Rate * salaryEntries.Count,
+            salaryEntries.Count + persistedCount,
+            MoneyMath.RoundMoney(salaryEntries.Sum(entry => entry.Amount)),
             bonusSummary?.Amount ?? 0m,
             penaltySummary?.Amount ?? 0m,
             paymentSummary?.Amount ?? 0m);

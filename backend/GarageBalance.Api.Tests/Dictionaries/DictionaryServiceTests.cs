@@ -1885,6 +1885,10 @@ public sealed class DictionaryServiceTests
         Assert.False(archiveDepartment.Succeeded);
         Assert.Equal("staff_department_used", archiveDepartment.ErrorCode);
         Assert.True(updatedMember.Succeeded);
+        var salaryRatePeriod = Assert.Single(database.Context.StaffSalaryRatePeriods);
+        Assert.Equal(new DateOnly(2026, 8, 1), salaryRatePeriod.EffectiveFrom);
+        Assert.Equal(41000m, salaryRatePeriod.Rate);
+        Assert.Single(database.Context.StaffEmploymentPeriods);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.staff_department_created");
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.staff_member_created");
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.staff_member_updated");
@@ -1952,6 +1956,8 @@ public sealed class DictionaryServiceTests
         Assert.True(restoredDepartment.Succeeded);
         Assert.True(restoredMember.Succeeded);
         Assert.False(restoredMember.Value!.IsArchived);
+        var employmentPeriod = Assert.Single(database.Context.StaffEmploymentPeriods);
+        Assert.Null(employmentPeriod.EffectiveTo);
         Assert.Contains(activeMembersAfterRestore, item => item.Id == member.Value.Id && !item.IsArchived);
         Assert.Contains(database.Context.AuditEvents, item =>
             item.Action == "dictionary.staff_member_archived" &&

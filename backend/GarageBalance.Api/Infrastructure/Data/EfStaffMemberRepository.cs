@@ -150,11 +150,54 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         dbContext.StaffMembers.Include(member => member.Department)
             .SingleOrDefaultAsync(member => member.Id == id && !member.IsArchived, cancellationToken);
 
+    public Task<StaffMember?> FindAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.StaffMembers.Include(member => member.Department)
+            .SingleOrDefaultAsync(member => member.Id == id, cancellationToken);
+
     public Task<StaffMember?> FindArchivedAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.StaffMembers.Include(member => member.Department)
             .SingleOrDefaultAsync(member => member.Id == id && member.IsArchived, cancellationToken);
 
+    public Task<StaffSalaryRatePeriod?> FindSalaryRatePeriodAsync(Guid staffMemberId, DateOnly effectiveFrom, CancellationToken cancellationToken) =>
+        dbContext.StaffSalaryRatePeriods.SingleOrDefaultAsync(
+            period => period.StaffMemberId == staffMemberId && period.EffectiveFrom == effectiveFrom,
+            cancellationToken);
+
+    public Task<StaffEmploymentPeriod?> FindOpenEmploymentPeriodAsync(Guid staffMemberId, CancellationToken cancellationToken) =>
+        dbContext.StaffEmploymentPeriods.SingleOrDefaultAsync(
+            period => period.StaffMemberId == staffMemberId && period.EffectiveTo == null,
+            cancellationToken);
+
+    public Task<StaffEmploymentPeriod?> FindLatestEmploymentPeriodAsync(Guid staffMemberId, CancellationToken cancellationToken) =>
+        dbContext.StaffEmploymentPeriods
+            .Where(period => period.StaffMemberId == staffMemberId)
+            .OrderByDescending(period => period.EffectiveFrom)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<StaffSalaryStateData?> GetSalaryStateAsync(Guid staffMemberId, DateOnly accountingMonth, CancellationToken cancellationToken)
+    {
+        var month = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);
+        return dbContext.StaffMembers.AsNoTracking()
+            .Where(member => member.Id == staffMemberId)
+            .Select(member => new StaffSalaryStateData(
+                dbContext.StaffSalaryRatePeriods
+                    .Where(period => period.StaffMemberId == member.Id && period.EffectiveFrom <= month)
+                    .OrderByDescending(period => period.EffectiveFrom)
+                    .Select(period => (decimal?)period.Rate)
+                    .FirstOrDefault() ?? member.Rate,
+                dbContext.StaffEmploymentPeriods.Any(period => period.StaffMemberId == member.Id),
+                dbContext.StaffEmploymentPeriods.Any(period =>
+                    period.StaffMemberId == member.Id &&
+                    period.EffectiveFrom <= month &&
+                    (period.EffectiveTo == null || period.EffectiveTo >= month))))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public void Add(StaffMember member) => dbContext.StaffMembers.Add(member);
+
+    public void AddSalaryRatePeriod(StaffSalaryRatePeriod period) => dbContext.StaffSalaryRatePeriods.Add(period);
+
+    public void AddEmploymentPeriod(StaffEmploymentPeriod period) => dbContext.StaffEmploymentPeriods.Add(period);
 
     private IQueryable<StaffMember> ApplyFilters(Guid? departmentId, string? normalizedSearch, bool includeArchived)
     {

@@ -17,6 +17,7 @@ public interface IExpenseFundDisbursementService
         FinancialOperation sourceOperation,
         Guid expenseFundId,
         string supplierName,
+        string expenseTypeName,
         decimal amount,
         Guid? actorUserId,
         bool allowNegativeBalance,

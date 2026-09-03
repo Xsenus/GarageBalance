@@ -10,6 +10,37 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlStaffSalaryAdjustmentMigrationIntegrationTests
 {
     private const string PreviousMigration = "20260723123802_SeparateExpensePaymentType";
+    private const string SalaryHistoryPreviousMigration = "20260903001728_AddEditableStaffSalaryAdjustments";
+
+    [PostgreSqlFact]
+    public async Task SalaryHistoryMigrationBackfillsExistingStaffAndProtectsIntervals()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync(SalaryHistoryPreviousMigration);
+        Guid staffMemberId;
+        await using (var oldContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = $"История ставки {Guid.NewGuid():N}" };
+            var staffMember = new StaffMember
+            {
+                FullName = $"Сотрудник {Guid.NewGuid():N}",
+                Department = department,
+                Rate = 12345m,
+                CreatedAtUtc = new DateTimeOffset(2026, 2, 28, 20, 0, 0, TimeSpan.Zero)
+            };
+            staffMemberId = staffMember.Id;
+            oldContext.AddRange(department, staffMember);
+            await oldContext.SaveChangesAsync();
+            await oldContext.Database.MigrateAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var ratePeriod = await context.StaffSalaryRatePeriods.SingleAsync(period => period.StaffMemberId == staffMemberId);
+        var employmentPeriod = await context.StaffEmploymentPeriods.SingleAsync(period => period.StaffMemberId == staffMemberId);
+        Assert.Equal(new DateOnly(2026, 3, 1), ratePeriod.EffectiveFrom);
+        Assert.Equal(12345m, ratePeriod.Rate);
+        Assert.Equal(new DateOnly(2026, 3, 1), employmentPeriod.EffectiveFrom);
+        Assert.Null(employmentPeriod.EffectiveTo);
+    }
 
     [PostgreSqlFact]
     public async Task MigrationCreatesProtectedStaffSalaryAdjustmentTable()
