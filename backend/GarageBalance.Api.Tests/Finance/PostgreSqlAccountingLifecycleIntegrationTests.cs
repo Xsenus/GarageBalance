@@ -130,13 +130,13 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
             CancellationToken.None);
         Assert.True(calculatedWorksheet.Succeeded, calculatedWorksheet.ErrorMessage);
         Assert.Contains(calculatedWorksheet.Value!.Rows, item =>
-            item.IncomeTypeId == electricityIncome.Id && item.AccrualAmount == 650m);
+            item.IncomeTypeId == electricityIncome.Id && item.AccrualAmount == 400m);
         Assert.Contains(calculatedWorksheet.Value.Rows, item =>
             item.IncomeTypeId == membershipIncome.Id && item.AccrualAmount == 500m);
 
         var electricityAccrual = await context.Accruals
             .SingleAsync(item => item.GarageId == garage.Id && item.IncomeTypeId == electricityIncome.Id);
-        Assert.Equal(650m, electricityAccrual.Amount);
+        Assert.Equal(400m, electricityAccrual.Amount);
         Assert.Equal(AccrualSources.Regular, electricityAccrual.Source);
 
         var receiptBatchId = Guid.NewGuid();
@@ -145,14 +145,14 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
                 garage.Id,
                 month.AddDays(19),
                 [
-                    new CreateFullGaragePaymentLineRequest(electricityIncome.Id, month, 650m, marker),
+                    new CreateFullGaragePaymentLineRequest(electricityIncome.Id, month, 400m, marker),
                     new CreateFullGaragePaymentLineRequest(membershipIncome.Id, month, 500m, marker)
                 ],
                 receiptBatchId),
             null,
             CancellationToken.None);
         Assert.True(payment.Succeeded, payment.ErrorMessage);
-        Assert.Equal(1150m, payment.Value!.TotalAmount);
+        Assert.Equal(900m, payment.Value!.TotalAmount);
 
         var bankDeposit = await finance.CreateCashBankTransferAsync(
             new CreateCashBankTransferRequest(month.AddDays(20), 400m, marker),
@@ -185,7 +185,7 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
         Assert.Null(staffPayment.Value.ExpenseFundId);
 
         context.ChangeTracker.Clear();
-        Assert.Equal(400m, await context.Funds.Where(item => item.Id == electricityFund.Id).Select(item => item.Balance).SingleAsync());
+        Assert.Equal(150m, await context.Funds.Where(item => item.Id == electricityFund.Id).Select(item => item.Balance).SingleAsync());
         Assert.Equal(500m, await context.Funds.Where(item => item.Id == membershipFund.Id).Select(item => item.Balance).SingleAsync());
         Assert.Equal(2, await context.FundOperations.CountAsync(item => item.OperationKind == FundOperationKinds.Deposit));
         Assert.Equal(1, await context.FundOperations.CountAsync(item => item.OperationKind == FundOperationKinds.Withdraw));
@@ -197,7 +197,7 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
         Assert.Collection(
             lifecycleAccruals,
             item => Assert.Equal((500m, AccrualSources.Regular, membershipIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)),
-            item => Assert.Equal((650m, AccrualSources.Regular, electricityIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)));
+            item => Assert.Equal((400m, AccrualSources.Regular, electricityIncome.Id), (item.Amount, item.Source, item.IncomeTypeId)));
 
         var reports = CreateReportService(context);
         var consolidatedRequest = new ConsolidatedReportRequest(month, month, marker);
@@ -219,16 +219,16 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
         var fees = await reports.GetFeeReportAsync(feeRequest, CancellationToken.None);
 
         Assert.True(consolidated.Succeeded, consolidated.ErrorMessage);
-        Assert.Equal((1150m, 350m), (consolidated.Value!.IncomeTotal, consolidated.Value.ExpenseTotal));
-        Assert.True(consolidated.Value.AccrualTotal >= 1150m);
+        Assert.Equal((900m, 350m), (consolidated.Value!.IncomeTotal, consolidated.Value.ExpenseTotal));
+        Assert.True(consolidated.Value.AccrualTotal >= 900m);
         Assert.True(garages.Succeeded, garages.ErrorMessage);
-        Assert.Equal((1150m, 1150m, 0m), (garages.Value!.AccrualTotal, garages.Value.IncomeTotal, garages.Value.Difference));
+        Assert.Equal((900m, 900m, 0m), (garages.Value!.AccrualTotal, garages.Value.IncomeTotal, garages.Value.Difference));
         Assert.True(income.Succeeded, income.ErrorMessage);
-        Assert.Equal((1150m, 1150m, 0m), (income.Value!.AccrualTotal, income.Value.IncomeTotal, income.Value.Debt));
+        Assert.Equal((900m, 900m, 0m), (income.Value!.AccrualTotal, income.Value.IncomeTotal, income.Value.Debt));
         Assert.True(expenses.Succeeded, expenses.ErrorMessage);
         Assert.Equal((400m, 350m, 50m), (expenses.Value!.AccrualTotal, expenses.Value.ExpenseTotal, expenses.Value.Difference));
         Assert.True(fundChanges.Succeeded, fundChanges.ErrorMessage);
-        Assert.Equal((1150m, 250m), (fundChanges.Value!.DepositTotal, fundChanges.Value.WithdrawalTotal));
+        Assert.Equal((900m, 250m), (fundChanges.Value!.DepositTotal, fundChanges.Value.WithdrawalTotal));
         Assert.True(cash.Succeeded, cash.ErrorMessage);
         Assert.Equal(100m, cash.Value!.Total);
         Assert.Single(cash.Value.Rows);

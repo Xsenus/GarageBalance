@@ -3,6 +3,7 @@ using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,12 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
         await using (var seedContext = database.CreateContext())
         {
             var salarySetting = await seedContext.ApplicationSettings
-                .SingleAsync(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey);
+                .SingleOrDefaultAsync(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey);
+            if (salarySetting is null)
+            {
+                salarySetting = new ApplicationSetting { Key = ApplicationSettingsService.SalaryAccrualDayKey };
+                seedContext.ApplicationSettings.Add(salarySetting);
+            }
             salarySetting.IntegerValue = 15;
             var salaryType = await seedContext.ExpenseTypes.SingleAsync(type => type.Code == "salary");
             var department = new StaffDepartment { Name = $"Отдел Петрова {Guid.NewGuid():N}" };
