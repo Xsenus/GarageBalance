@@ -53,6 +53,7 @@ export type CreateFundOperationRequest = {
 export type FundReconciliationDto = {
   cashAndBankTotal: number
   namedFundTotal: number
+  unallocatedTotal: number
   availableToDistribute: number
   difference: number
   isReconciled: boolean

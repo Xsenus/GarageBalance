@@ -120,8 +120,8 @@ public sealed class BackendPerformanceGuardTests
         var repositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
         var totalsMethod = repositorySource[
             repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<decimal> GetAvailableToDistributeAsync", StringComparison.Ordinal)];
-        var availableToDistributePostgreSqlBranch = repositorySource[
-            repositorySource.IndexOf("public async Task<decimal> GetAvailableToDistributeAsync", StringComparison.Ordinal)..repositorySource.IndexOf("var linkedFinancialOperationIds", StringComparison.Ordinal)];
+        var poolBalancesPostgreSqlBranch = repositorySource[
+            repositorySource.IndexOf("public async Task<FundPoolBalancesData> GetPoolBalancesAsync", StringComparison.Ordinal)..repositorySource.IndexOf("var linkedFinancialOperationIds", StringComparison.Ordinal)];
 
         Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsureDefaultFundsAsync", serviceSource, StringComparison.Ordinal);
@@ -134,10 +134,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(totalsMethod, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("FirstOrDefaultAsync", totalsMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync", totalsMethod, StringComparison.Ordinal);
-        Assert.Contains("SUM(delta) OVER", availableToDistributePostgreSqlBranch, StringComparison.Ordinal);
-        Assert.Contains("SqlQueryRaw<decimal>", availableToDistributePostgreSqlBranch, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(availableToDistributePostgreSqlBranch, ".SingleAsync(cancellationToken)"));
-        Assert.DoesNotContain("ToListAsync", availableToDistributePostgreSqlBranch, StringComparison.Ordinal);
+        Assert.Contains("SUM(delta) OVER", poolBalancesPostgreSqlBranch, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<FundPoolBalancesData>", poolBalancesPostgreSqlBranch, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(poolBalancesPostgreSqlBranch, ".SingleAsync(cancellationToken)"));
+        Assert.DoesNotContain("ToListAsync", poolBalancesPostgreSqlBranch, StringComparison.Ordinal);
     }
 
     [Fact]

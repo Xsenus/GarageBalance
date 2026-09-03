@@ -12956,7 +12956,8 @@ describe('App', () => {
       getReconciliation: async () => ({
         cashAndBankTotal: 1000,
         namedFundTotal: 700,
-        availableToDistribute: 250,
+        unallocatedTotal: 250,
+        availableToDistribute: 300,
         difference: 50,
         isReconciled: false,
       }),
@@ -12972,6 +12973,7 @@ describe('App', () => {
     expect(within(reconciliation).getByText('1 000.00 руб.')).toBeInTheDocument()
     expect(within(reconciliation).getByText('700.00 руб.')).toBeInTheDocument()
     expect(within(reconciliation).getByText('250.00 руб.')).toBeInTheDocument()
+    expect(within(reconciliation).queryByText('300.00 руб.')).not.toBeInTheDocument()
     expect(await screen.findByRole('alert')).toHaveTextContent('Обнаружено расхождение 50.00 руб.')
   })
 

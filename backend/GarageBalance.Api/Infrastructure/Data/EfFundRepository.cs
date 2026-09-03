@@ -388,6 +388,11 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
 
     public async Task<decimal> GetAvailableToDistributeAsync(CancellationToken cancellationToken)
     {
+        return (await GetPoolBalancesAsync(cancellationToken)).AvailableToDistribute;
+    }
+
+    public async Task<FundPoolBalancesData> GetPoolBalancesAsync(CancellationToken cancellationToken)
+    {
         if (dbContext.Database.IsNpgsql())
         {
             const string sql = """
@@ -431,13 +436,15 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                         SUM(delta) OVER (ORDER BY "CreatedAtUtc", "Id") AS running_total
                     FROM pool_events
                 )
-                SELECT ROUND(GREATEST(
-                    COALESCE(SUM(delta), 0) - LEAST(COALESCE(MIN(running_total), 0), 0),
-                    0), 2) AS "Value"
+                SELECT
+                    ROUND(COALESCE(SUM(delta), 0), 2) AS "AccountingBalance",
+                    ROUND(GREATEST(
+                        COALESCE(SUM(delta), 0) - LEAST(COALESCE(MIN(running_total), 0), 0),
+                        0), 2) AS "AvailableToDistribute"
                 FROM running_pool
                 """;
 
-            return await dbContext.Database.SqlQueryRaw<decimal>(sql).SingleAsync(cancellationToken);
+            return await dbContext.Database.SqlQueryRaw<FundPoolBalancesData>(sql).SingleAsync(cancellationToken);
         }
 
         var linkedFinancialOperationIds = await dbContext.FundOperations
@@ -481,17 +488,21 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                     : -operation.Amount))
             .ToListAsync(cancellationToken);
 
-        var balance = 0m;
+        var accountingBalance = 0m;
+        var availableToDistribute = 0m;
         foreach (var poolEvent in financialEvents
                      .Concat(manualFundEvents)
                      .Concat(cashBankEvents)
                      .OrderBy(poolEvent => poolEvent.CreatedAtUtc)
                      .ThenBy(poolEvent => poolEvent.Id))
         {
-            balance = Math.Max(balance + poolEvent.Amount, 0m);
+            accountingBalance += poolEvent.Amount;
+            availableToDistribute = Math.Max(availableToDistribute + poolEvent.Amount, 0m);
         }
 
-        return MoneyMath.RoundMoney(balance);
+        return new FundPoolBalancesData(
+            MoneyMath.RoundMoney(accountingBalance),
+            MoneyMath.RoundMoney(availableToDistribute));
     }
 
     public async Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync(

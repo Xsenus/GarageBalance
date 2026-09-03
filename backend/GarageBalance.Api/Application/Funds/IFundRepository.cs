@@ -23,6 +23,7 @@ public interface IFundRepository
     Task<FundOperation?> FindIncomeAssignmentForUpdateAsync(Guid sourceFinancialOperationId, CancellationToken cancellationToken);
     Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken);
     Task<decimal> GetAvailableToDistributeAsync(CancellationToken cancellationToken);
+    Task<FundPoolBalancesData> GetPoolBalancesAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync(
         Guid fundId,
         Guid operationId,
@@ -38,6 +39,8 @@ public interface IFundRepository
 }
 
 public sealed record FundTotalsData(decimal IncomeTotal, decimal ExpenseTotal, decimal AllocatedFundTotal, decimal BalanceAdjustmentTotal = 0m);
+
+public sealed record FundPoolBalancesData(decimal AccountingBalance, decimal AvailableToDistribute);
 
 public sealed record FundOperationPageData(IReadOnlyList<FundOperation> Items, int TotalCount);
 

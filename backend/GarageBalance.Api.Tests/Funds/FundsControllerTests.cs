@@ -48,7 +48,7 @@ public sealed class FundsControllerTests
     [Fact]
     public async Task GetReconciliation_ReturnsCashFundAndDifferenceTotals()
     {
-        var reconciliation = new FundReconciliationDto(1000m, 700m, 250m, 50m, false);
+        var reconciliation = new FundReconciliationDto(1000m, 700m, 250m, 300m, 50m, false);
         var controller = CreateController(new FakeFundService { Reconciliation = reconciliation });
 
         var result = await controller.GetReconciliation(CancellationToken.None);
@@ -394,7 +394,7 @@ public sealed class FundsControllerTests
         public IReadOnlyList<FundOperationDto> Operations { get; init; } = [];
         public IReadOnlyList<FundDto> Funds { get; init; } = [];
         public IReadOnlyList<FundOptionDto> FundOptions { get; init; } = [];
-        public FundReconciliationDto Reconciliation { get; init; } = new(0m, 0m, 0m, 0m, true);
+        public FundReconciliationDto Reconciliation { get; init; } = new(0m, 0m, 0m, 0m, 0m, true);
         public FundOperationPageDto OperationsPage { get; init; } = new([], 0, 0, 25);
         public FundResult<FundDto> CreateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundDto> UpdateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");

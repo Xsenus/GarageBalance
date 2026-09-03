@@ -36,14 +36,16 @@ public sealed class FundService(
     public async Task<FundReconciliationDto> GetReconciliationAsync(CancellationToken cancellationToken)
     {
         var totals = await repository.GetTotalsAsync(cancellationToken);
-        var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+        var poolBalances = await repository.GetPoolBalancesAsync(cancellationToken);
         var cashAndBankTotal = MoneyMath.RoundMoney(totals.IncomeTotal - totals.ExpenseTotal + totals.BalanceAdjustmentTotal);
         var namedFundTotal = MoneyMath.RoundMoney(totals.AllocatedFundTotal);
-        var difference = MoneyMath.RoundMoney(cashAndBankTotal - namedFundTotal - availableToDistribute);
+        var unallocatedTotal = MoneyMath.RoundMoney(poolBalances.AccountingBalance);
+        var difference = MoneyMath.RoundMoney(cashAndBankTotal - namedFundTotal - unallocatedTotal);
         return new FundReconciliationDto(
             cashAndBankTotal,
             namedFundTotal,
-            availableToDistribute,
+            unallocatedTotal,
+            MoneyMath.RoundMoney(poolBalances.AvailableToDistribute),
             difference,
             difference == 0m);
     }

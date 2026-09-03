@@ -96,6 +96,7 @@ function fallbackReconciliation(funds: FundDto[]): FundReconciliationDto {
   return {
     cashAndBankTotal: namedFundTotal + availableToDistribute,
     namedFundTotal,
+    unallocatedTotal: availableToDistribute,
     availableToDistribute,
     difference: 0,
     isReconciled: true,
@@ -755,7 +756,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 <dl className="funds-reconciliation-values">
                   <div><dt>Касса и счёт</dt><dd>{reconciliation ? `${formatMoney(reconciliation.cashAndBankTotal)} руб.` : '—'}</dd></div>
                   <div><dt>Фонды</dt><dd>{reconciliation ? `${formatMoney(reconciliation.namedFundTotal)} руб.` : '—'}</dd></div>
-                  <div><dt>Нераспределено</dt><dd>{reconciliation ? `${formatMoney(reconciliation.availableToDistribute)} руб.` : '—'}</dd></div>
+                  <div><dt>Нераспределено / дефицит</dt><dd>{reconciliation ? `${formatMoney(reconciliation.unallocatedTotal)} руб.` : '—'}</dd></div>
                 </dl>
               </>
             )}

@@ -131,6 +131,7 @@ describe('fundsApi configuration options', () => {
     const reconciliation = {
       cashAndBankTotal: 1000,
       namedFundTotal: 700,
+      unallocatedTotal: 250,
       availableToDistribute: 250,
       difference: 50,
       isReconciled: false,

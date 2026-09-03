@@ -124,9 +124,10 @@ public sealed class PostgreSqlFundTotalsIntegrationTests
             .Options;
         await using var queryContext = new GarageBalanceDbContext(options);
 
-        var available = await new EfFundRepository(queryContext).GetAvailableToDistributeAsync(CancellationToken.None);
+        var poolBalances = await new EfFundRepository(queryContext).GetPoolBalancesAsync(CancellationToken.None);
 
-        Assert.Equal(6231m, available);
+        Assert.Equal(-41769m, poolBalances.AccountingBalance);
+        Assert.Equal(6231m, poolBalances.AvailableToDistribute);
         var command = Assert.Single(capture.Commands);
         Assert.Contains("SUM(delta) OVER", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("NOT EXISTS", command, StringComparison.OrdinalIgnoreCase);

@@ -151,6 +151,7 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("fund_operation_chain_breaks", script, StringComparison.Ordinal);
         Assert.Contains("fund_operation_same_timestamp_order", script, StringComparison.Ordinal);
         Assert.Contains("fund_balance_mismatch", script, StringComparison.Ordinal);
+        Assert.Contains("unallocated_historical_floor_adjustment", script, StringComparison.Ordinal);
         Assert.Contains("cash_bank_fund_reconciliation_mismatch", script, StringComparison.Ordinal);
         Assert.Contains("codex_marked_business_records", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--dbname=\"$database_name\"", script, StringComparison.Ordinal);

@@ -26,6 +26,7 @@ public sealed record FundLinkedServiceDto(
 public sealed record FundReconciliationDto(
     decimal CashAndBankTotal,
     decimal NamedFundTotal,
+    decimal UnallocatedTotal,
     decimal AvailableToDistribute,
     decimal Difference,
     bool IsReconciled);

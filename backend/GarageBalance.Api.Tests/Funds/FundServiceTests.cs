@@ -74,6 +74,7 @@ public sealed class FundServiceTests
 
         Assert.Equal(1000m, result.CashAndBankTotal);
         Assert.Equal(700m, result.NamedFundTotal);
+        Assert.Equal(300m, result.UnallocatedTotal);
         Assert.Equal(300m, result.AvailableToDistribute);
         Assert.Equal(0m, result.Difference);
         Assert.True(result.IsReconciled);
@@ -104,9 +105,53 @@ public sealed class FundServiceTests
 
         Assert.Equal(1000m, result.CashAndBankTotal);
         Assert.Equal(700m, result.NamedFundTotal);
+        Assert.Equal(1000m, result.UnallocatedTotal);
         Assert.Equal(1000m, result.AvailableToDistribute);
         Assert.Equal(-700m, result.Difference);
         Assert.False(result.IsReconciled);
+    }
+
+    [Fact]
+    public async Task GetReconciliationAsync_UsesSignedAccountingPoolWithoutAllowingNegativeDistribution()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var sequenceStart = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var fund = new Fund
+        {
+            Name = "Резервный фонд",
+            NormalizedName = "РЕЗЕРВНЫЙ ФОНД",
+            Balance = 100m
+        };
+        database.Context.Funds.Add(fund);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 9, 2),
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            Amount = 100m,
+            CreatedAtUtc = sequenceStart
+        });
+        database.Context.FundOperations.Add(new FundOperation
+        {
+            Fund = fund,
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 100m,
+            BalanceBefore = 0m,
+            BalanceAfter = 100m,
+            Reason = "Историческое распределение",
+            CreatedAtUtc = sequenceStart.AddMinutes(1)
+        });
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context, seedSystemFunds: false);
+
+        var result = await service.GetReconciliationAsync(CancellationToken.None);
+
+        Assert.Equal(-100m, result.CashAndBankTotal);
+        Assert.Equal(100m, result.NamedFundTotal);
+        Assert.Equal(-200m, result.UnallocatedTotal);
+        Assert.Equal(0m, result.AvailableToDistribute);
+        Assert.Equal(0m, result.Difference);
+        Assert.True(result.IsReconciled);
     }
 
     [Fact]
