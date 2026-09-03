@@ -465,6 +465,15 @@ describe('responsive layout styles', () => {
     expect(tariffsPanel).not.toContain('<strong>{row.group ?? row.category}</strong>')
   })
 
+  it('places a tiered service heading above its centered threshold rows', () => {
+    expect(tariffsPanel).toContain('className="contractors-sheet-row tariffs-threshold-group-row"')
+    expect(tariffsPanel).toContain('className="tariffs-threshold-group-heading"')
+    expect(tariffsPanel).toContain("showsElectricityRange ? 'tariffs-threshold-tier-row' : ''")
+    expect(tariffsPanel).toContain("showsElectricityRange ? 'tariffs-threshold-tier-cell' : ''")
+    expect(normalizedAppCss).toContain('.tariffs-page .contractors-sheet-row > .tariffs-threshold-group-heading {\n  display: flex;\n  grid-column: 1 / -1;')
+    expect(normalizedAppCss).toContain('.tariffs-page .contractors-sheet-row > .tariffs-threshold-tier-cell {\n  display: flex;\n  align-items: center;\n  justify-content: center;')
+  })
+
   it('keeps the supplier editor wide, compact and responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--supplier {\n  width: min(1280px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.contractors-dialog--supplier .contractors-modal-form {\n  gap: 9px;')

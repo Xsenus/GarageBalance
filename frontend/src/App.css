@@ -3598,6 +3598,33 @@ h1 {
   font-weight: 700;
 }
 
+.tariffs-page .contractors-sheet-row.tariffs-threshold-group-row {
+  min-height: 40px;
+  background: #f8fafc;
+}
+
+.tariffs-page .contractors-sheet-row.tariffs-threshold-group-row:hover {
+  background: #f8fafc;
+}
+
+.tariffs-page .contractors-sheet-row > .tariffs-threshold-group-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  border-top: 1px solid #e4e7ec;
+}
+
+.tariffs-page .tariffs-threshold-tier-row {
+  background: #ffffff;
+}
+
+.tariffs-page .contractors-sheet-row > .tariffs-threshold-tier-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 18px;
+}
+
 .tariffs-page .tariffs-salary-summary-row {
   background: #fcfcfd;
 }

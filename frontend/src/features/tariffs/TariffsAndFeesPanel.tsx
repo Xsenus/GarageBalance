@@ -2589,12 +2589,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               const isSalaryFundGroupStart = isSalaryFundSummary && (
                 pageIndex === 0 || tariffPage.items[pageIndex - 1]?.category !== salaryFundCategory
               )
-              const showsPrimaryName = isSalaryFundSummary || Boolean(row.group) || pageIndex === 0
               const isRowDisabled = tariffsLoading || isSalaryFundSummary || row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const thresholdRowsForTariff = getElectricityThresholdRows(tariffRows, row)
               const canDeleteThreshold = Boolean(row.threshold && thresholdRowsForTariff.length > 2)
               const isLastThresholdRow = thresholdRowsForTariff.at(-1)?.id === row.id
               const showsElectricityRange = Boolean(row.threshold && row.backendTariffId && tieredTariffIds.has(row.backendTariffId))
+              const isThresholdGroupStart = showsElectricityRange && (
+                pageIndex === 0
+                || tariffPage.items[pageIndex - 1]?.backendTariffId !== row.backendTariffId
+                || !tariffPage.items[pageIndex - 1]?.threshold
+              )
+              const showsPrimaryName = !showsElectricityRange && (isSalaryFundSummary || Boolean(row.group) || pageIndex === 0)
               const electricityLowerBound = showsElectricityRange ? getElectricityTierLowerBound(tariffRows, row.id) : 0
               const showsServiceCalculationFlags = !isSalaryFundSummary && (row.serviceSettingKind === 'main' || Boolean(row.group))
               const showsOverdueGracePeriod = !isSalaryFundSummary && (row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase))
@@ -2626,18 +2631,32 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     <span className="tariffs-salary-group-heading" role="cell">Зарплатный фонд</span>
                   </div>
                 ) : null}
+                {isThresholdGroupStart ? (
+                  <div className="contractors-sheet-row tariffs-threshold-group-row" role="row">
+                    <span className="tariffs-threshold-group-heading" role="cell">
+                      <span className="tariffs-service-name">{row.group ?? row.category}</span>
+                    </span>
+                  </div>
+                ) : null}
                 <div
                   className={[
                     row.group && !isSalaryFundSummary ? 'contractors-sheet-row contractors-sheet-row--group' : 'contractors-sheet-row',
+                    showsElectricityRange ? 'tariffs-threshold-tier-row' : '',
                     isSalaryFundSummary ? 'tariffs-salary-summary-row' : '',
                     row.isDeleted ? 'contractors-sheet-row--deleted' : '',
                   ].filter(Boolean).join(' ')}
                   role="row"
                 >
-                  <span className={showsPrimaryName ? 'tariffs-service-name-cell' : undefined} role="cell">
+                  <span
+                    className={[
+                      showsPrimaryName ? 'tariffs-service-name-cell' : '',
+                      showsElectricityRange ? 'tariffs-threshold-tier-cell' : '',
+                    ].filter(Boolean).join(' ') || undefined}
+                    role="cell"
+                  >
                     {isSalaryFundSummary ? (
                       <span className="tariffs-service-name">{row.title}</span>
-                    ) : row.group || pageIndex === 0 ? (
+                    ) : showsPrimaryName ? (
                       <span className="tariffs-service-name">{row.group ?? row.category}</span>
                     ) : null}
                     {showsElectricityRange ? (
