@@ -1506,17 +1506,22 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return true
     } catch (caught) {
       if (caught instanceof DictionaryApiError && caught.code === 'concurrent_write_conflict') {
-        try {
-          const refreshController = new AbortController()
-          const [latestTariffs, latestSettings] = await Promise.all([
-            dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, refreshController.signal),
-            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, undefined, undefined, refreshController.signal),
-          ])
-          const latestSetting = latestSettings.find((setting) => setting.id === serviceSetting.id)
-          const latestTariff = latestSetting?.tariffId
-            ? latestTariffs.find((tariff) => tariff.id === latestSetting.tariffId)
-            : null
-          if (latestSetting && latestTariff) {
+        let retryError: unknown = caught
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const refreshController = new AbortController()
+            const [latestTariffs, latestSettings] = await Promise.all([
+              dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, refreshController.signal),
+              dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, undefined, undefined, refreshController.signal),
+            ])
+            const latestSetting = latestSettings.find((setting) => setting.id === serviceSetting.id)
+            const latestTariff = latestSetting?.tariffId
+              ? latestTariffs.find((tariff) => tariff.id === latestSetting.tariffId)
+              : null
+            if (!latestSetting || !latestTariff) {
+              break
+            }
+
             const latestCalculationBase = nextMetered
               ? resolveServiceMeterCalculationBase(latestSetting, latestTariff, row.calculationBase)
               : latestTariff.calculationBase === 'people'
@@ -1541,11 +1546,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               [...latestSettings.filter((setting) => setting.id !== saved.service.id), saved.service],
             )
             return true
+          } catch (currentRetryError) {
+            retryError = currentRetryError
+            if (!(currentRetryError instanceof DictionaryApiError) || currentRetryError.code !== 'concurrent_write_conflict') {
+              break
+            }
           }
-        } catch (retryError) {
-          setTariffPersistenceError(getErrorMessage(retryError, 'Не удалось обновить тариф и повторить смену режима.'))
-          return false
         }
+        setTariffPersistenceError(getErrorMessage(retryError, 'Не удалось обновить тариф и повторить смену режима.'))
+        return false
       }
       setTariffPersistenceError(getErrorMessage(caught, 'Не удалось сменить режим тарифа.'))
       return false

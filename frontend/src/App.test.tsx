@@ -6238,7 +6238,7 @@ describe('App', () => {
         if (updateRequests.length === 1) {
           return { service: regularService, tariff: regularTariff }
         }
-        if (updateRequests.length === 2) {
+        if (updateRequests.length === 2 || updateRequests.length === 3 || updateRequests.length >= 5) {
           throw new DictionaryApiError(
             'concurrent_write_conflict',
             'Запись уже была добавлена или изменена другим запросом. Обновите данные и повторите действие.',
@@ -6266,10 +6266,10 @@ describe('App', () => {
     await user.click(tieredControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
 
-    await waitFor(() => expect(updateRequests).toHaveLength(3))
-    expect(tariffLoadCount).toBe(2)
-    expect(serviceLoadCount).toBe(2)
-    expect(updateRequests[2]).toMatchObject({
+    await waitFor(() => expect(updateRequests).toHaveLength(4))
+    expect(tariffLoadCount).toBe(3)
+    expect(serviceLoadCount).toBe(3)
+    expect(updateRequests[3]).toMatchObject({
       tariffMode: 'metered_tiered',
       calculationBase: 'meter_water',
       tariffVersion: refreshedTariff.version,
@@ -6284,6 +6284,16 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Вода: по счетчику' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Вода: пороговая тарификация' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).getByRole('cell', { name: 'Вода: 0.00–100.00: единица' })).toHaveTextContent('м³')
+
+    const savedTieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Вода: пороговая тарификация' })
+    await user.click(savedTieredControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
+
+    await waitFor(() => expect(updateRequests).toHaveLength(8))
+    expect(tariffLoadCount).toBe(6)
+    expect(serviceLoadCount).toBe(6)
+    expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Запись уже была добавлена или изменена другим запросом.')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Вода: пороговая тарификация' })).toHaveTextContent('Да')
   })
 
   it('blocks service saving locally when its income type has no active fund', async () => {
