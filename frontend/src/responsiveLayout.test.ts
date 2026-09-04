@@ -71,6 +71,7 @@ describe('responsive layout styles', () => {
   it('collapses the main shell and data rows on tablet width', () => {
     expect(appCss).toContain('@media (max-width: 1100px)')
     expect(normalizedAppCss).toContain('.app-shell {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('grid-template-columns: 1fr;\n    align-content: start;')
     expect(normalizedAppCss).toContain('.operation-row {\n    grid-template-columns: 1fr;')
   })
 
@@ -324,6 +325,7 @@ describe('responsive layout styles', () => {
 
   it('keeps the yearly meter table inside the desktop workspace', () => {
     expect(normalizedAppCss).toContain('.workspace--meter-readings {\n  display: flex;\n  height: 100vh;')
+    expect(normalizedAppCss).toContain('.workspace--meter-readings {\n    height: calc(100dvh - 67px);')
     expect(normalizedAppCss).toContain('.meter-readings-page {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;')
     expect(normalizedAppCss).toContain('.meter-readings-table-shell {\n  min-height: 0;\n  flex: 1 1 0;\n  overflow: auto;\n  max-height: none;')
     expect(normalizedAppCss).toContain('.meter-readings-table {\n  width: 100%;\n  min-width: 1368px;')
