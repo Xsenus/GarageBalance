@@ -1389,6 +1389,8 @@ h1 {
 }
 
 .fee-campaign-table-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-x: auto;
 }
 
