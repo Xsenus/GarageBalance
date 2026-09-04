@@ -53,7 +53,8 @@ public sealed class UserGuideTests
         while (directory is not null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
-                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+                (Directory.Exists(Path.Combine(directory.FullName, ".git")) ||
+                 File.Exists(Path.Combine(directory.FullName, ".git"))))
             {
                 return directory.FullName;
             }

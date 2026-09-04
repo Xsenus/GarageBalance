@@ -17,21 +17,20 @@ public sealed class TestQualityGateTests
     [Fact]
     public void StagingWorkflowRunsCoverageGatesBeforePackagingAndDeployment()
     {
-        var workflow = File.ReadAllText(Path.Combine(FindRepositoryRoot(), ".github", "workflows", "deploy-staging.yml"));
+        var workflow = File
+            .ReadAllText(Path.Combine(FindRepositoryRoot(), ".github", "workflows", "deploy-staging.yml"))
+            .ReplaceLineEndings("\n");
 
         Assert.Contains("--collect:\"XPlat Code Coverage\"", workflow, StringComparison.Ordinal);
         Assert.Contains("--settings backend-coverage.runsettings", workflow, StringComparison.Ordinal);
         Assert.Contains("./infrastructure/scripts/verify-backend-coverage.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run test:coverage", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs:\n      - backend\n      - frontend\n      - backend-quality\n      - frontend-audit", workflow, StringComparison.Ordinal);
 
-        var backendGate = workflow.IndexOf("verify-backend-coverage.ps1", StringComparison.Ordinal);
-        var frontendGate = workflow.IndexOf("npm run test:coverage", StringComparison.Ordinal);
-        var packageStep = workflow.IndexOf("- name: Package release", StringComparison.Ordinal);
+        var deployJob = workflow.IndexOf("  deploy:\n", StringComparison.Ordinal);
         var deployStep = workflow.IndexOf("- name: Apply release on VPS", StringComparison.Ordinal);
 
-        Assert.True(backendGate >= 0 && backendGate < packageStep);
-        Assert.True(frontendGate >= 0 && frontendGate < packageStep);
-        Assert.True(packageStep < deployStep);
+        Assert.True(deployJob >= 0 && deployJob < deployStep);
     }
 
     [Fact]
@@ -72,7 +71,8 @@ public sealed class TestQualityGateTests
         while (directory is not null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
-                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+                (Directory.Exists(Path.Combine(directory.FullName, ".git")) ||
+                 File.Exists(Path.Combine(directory.FullName, ".git"))))
             {
                 return directory.FullName;
             }

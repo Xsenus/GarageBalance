@@ -17,6 +17,7 @@ frontend/src/App.shard-*.test.tsx
 .env
 .env.*
 !.env.example
+admin-credentials.txt
 appsettings.Local.json
 
 # Data and imports

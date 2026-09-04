@@ -37,6 +37,15 @@ foreach ($placeholder in @("__GARAGEBALANCE_VERSION__", "__GENERATE__")) {
         throw "Expected placeholder is missing from .env.example: $placeholder"
     }
 }
+foreach ($requiredSetting in @(
+    "INITIAL_ADMIN_ENABLED=true",
+    "INITIAL_ADMIN_EMAIL=admin@garagebalance.local",
+    "INITIAL_ADMIN_PASSWORD=__GENERATE__"
+)) {
+    if (-not $environmentTemplate.Contains($requiredSetting)) {
+        throw "Initial administrator setting is missing from .env.example: $requiredSetting"
+    }
+}
 if ($versionTemplate.Trim() -ne "__GARAGEBALANCE_VERSION__") {
     throw "release-version.txt must contain the release placeholder."
 }
@@ -61,6 +70,9 @@ foreach ($requiredFragment in @(
     "image: postgres:17-alpine",
     "image: garagebalance-api:",
     "image: garagebalance-frontend:",
+    "InitialAdministrator__Enabled:",
+    "InitialAdministrator__Email:",
+    "InitialAdministrator__Password:",
     "postgres-data:",
     "data-protection-keys:"
 )) {

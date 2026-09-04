@@ -6,15 +6,23 @@ public sealed class GitHubActionsDeploymentTests
     public void StagingWorkflowVerifiesBuildsPackagesAndDeploysThroughRestrictedServerScript()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "deploy-staging.yml"));
+        var workflow = File
+            .ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "deploy-staging.yml"))
+            .ReplaceLineEndings("\n");
 
         Assert.Contains("branches:", workflow, StringComparison.Ordinal);
         Assert.Contains("- master", workflow, StringComparison.Ordinal);
+        Assert.Contains("backend:\n", workflow, StringComparison.Ordinal);
+        Assert.Contains("frontend:\n", workflow, StringComparison.Ordinal);
+        Assert.Contains("backend-quality:\n", workflow, StringComparison.Ordinal);
+        Assert.Contains("frontend-audit:\n", workflow, StringComparison.Ordinal);
+        Assert.Contains("deploy:\n", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test GarageBalance.slnx --configuration Release --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format GarageBalance.slnx --verify-no-changes --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
         Assert.Contains("./infrastructure/scripts/verify-package-privacy.ps1", workflow, StringComparison.Ordinal);
-        Assert.Contains("npm audit --audit-level=high", workflow, StringComparison.Ordinal);
+        Assert.Contains("npm ci --prefer-offline --no-audit", workflow, StringComparison.Ordinal);
+        Assert.Contains("npm audit --package-lock-only --audit-level=high", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run test", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run lint", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run build", workflow, StringComparison.Ordinal);
@@ -24,6 +32,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("artifacts/api.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/frontend.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/operations.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("actions/download-artifact@v8", workflow, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging-backend-${{ github.sha }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging-frontend-${{ github.sha }}", workflow, StringComparison.Ordinal);
         Assert.Contains("infrastructure/scripts/audit-staging-database.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("secrets.VPS_SSH_KEY", workflow, StringComparison.Ordinal);
         Assert.Contains("Host garagebalance-staging", workflow, StringComparison.Ordinal);
@@ -36,6 +47,41 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("curl --http2 --compressed --fail", workflow, StringComparison.Ordinal);
         Assert.Contains("--connect-timeout 10 --max-time 20", workflow, StringComparison.Ordinal);
         Assert.Contains("https://sgk.blagodaty.ru${ENTRY_ASSET}?deployment=${GITHUB_SHA}-${ATTEMPT}", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StagingWorkflowRunsIndependentGatesInParallelAndCancelsOnlySupersededVerification()
+    {
+        var workflow = File
+            .ReadAllText(Path.Combine(FindRepositoryRoot(), ".github", "workflows", "deploy-staging.yml"))
+            .ReplaceLineEndings("\n");
+
+        foreach (var gate in new[] { "backend", "frontend", "backend-quality", "frontend-audit" })
+        {
+            Assert.Contains($"group: garagebalance-staging-${{{{ github.ref }}}}-{gate}", workflow, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(4, CountOccurrences(workflow, "cancel-in-progress: true"));
+        Assert.Contains("group: garagebalance-staging-deploy", workflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs:\n      - backend\n      - frontend\n      - backend-quality\n      - frontend-audit", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RepositoryAwareTestsSupportRegularCheckoutsAndGitWorktrees()
+    {
+        var testRoot = Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api.Tests");
+        var repositoryAwareSources = Directory
+            .EnumerateFiles(testRoot, "*.cs", SearchOption.AllDirectories)
+            .Select(path => new { Path = path, Source = File.ReadAllText(path) })
+            .Where(file => file.Source.Contains("FindRepositoryRoot", StringComparison.Ordinal) &&
+                           file.Source.Contains("\".git\"", StringComparison.Ordinal));
+
+        foreach (var file in repositoryAwareSources)
+        {
+            Assert.Contains("Directory.Exists", file.Source, StringComparison.Ordinal);
+            Assert.Contains("File.Exists", file.Source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -171,7 +217,14 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
         Assert.Contains("npm audit --prefix frontend --audit-level=high", workflow, StringComparison.Ordinal);
         Assert.Contains("needs:", workflow, StringComparison.Ordinal);
-        Assert.Contains("- verify", workflow, StringComparison.Ordinal);
+        Assert.Contains("- backend", workflow, StringComparison.Ordinal);
+        Assert.Contains("- frontend", workflow, StringComparison.Ordinal);
+        Assert.Contains("- distribution", workflow, StringComparison.Ordinal);
+        Assert.True(
+            workflow.IndexOf("backend:", StringComparison.Ordinal) < workflow.IndexOf("publish:", StringComparison.Ordinal) &&
+            workflow.IndexOf("frontend:", StringComparison.Ordinal) < workflow.IndexOf("publish:", StringComparison.Ordinal) &&
+            workflow.IndexOf("distribution:", StringComparison.Ordinal) < workflow.IndexOf("publish:", StringComparison.Ordinal),
+            "Every verification job must complete before Docker images are published.");
     }
 
     [Fact]
@@ -195,6 +248,8 @@ public sealed class GitHubActionsDeploymentTests
             Assert.DoesNotContain("actions/setup-node@v4", workflow, StringComparison.Ordinal);
             Assert.DoesNotContain("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
         }
+
+        Assert.Contains("actions/download-artifact@v8", workflows[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -213,7 +268,8 @@ public sealed class GitHubActionsDeploymentTests
         while (directory is not null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
-                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+                (Directory.Exists(Path.Combine(directory.FullName, ".git")) ||
+                 File.Exists(Path.Combine(directory.FullName, ".git"))))
             {
                 return directory.FullName;
             }

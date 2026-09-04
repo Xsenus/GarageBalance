@@ -17,9 +17,17 @@ try {
     Invoke-GarageBalanceCompose -Arguments @("config", "--quiet")
     Invoke-GarageBalanceCompose -Arguments @("up", "-d", "--remove-orphans")
     $applicationUrl = Wait-GarageBalanceHealth
+    if (Complete-GarageBalanceInitialAdministratorBootstrap) {
+        Write-GarageBalanceStep "Завершаем безопасную настройку администратора"
+        Invoke-GarageBalanceCompose -Arguments @("up", "-d", "--no-deps", "--force-recreate", "api")
+        $applicationUrl = Wait-GarageBalanceHealth
+    }
 
     Write-Host ""
     Write-Host "GarageBalance $version успешно запущен: $applicationUrl" -ForegroundColor Green
+    if (Test-Path -LiteralPath $script:GarageBalanceAdminCredentialsFile -PathType Leaf) {
+        Write-Host "Логин и пароль администратора: $script:GarageBalanceAdminCredentialsFile" -ForegroundColor Yellow
+    }
     if (-not $NoBrowser) {
         Start-Process $applicationUrl
     }
