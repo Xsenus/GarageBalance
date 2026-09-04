@@ -671,6 +671,22 @@ public sealed class FinanceController(
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("staff-payments/{operationId:guid}")]
+    [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FinancialOperationDto>> UpdateStaffPayment(
+        Guid operationId,
+        UpdateStaffPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.UpdateStaffPaymentAsync(operationId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("accruals/recalculation-preview")]
     [ProducesResponseType<RegularAccrualRecalculationPreviewDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -942,7 +958,8 @@ public sealed class FinanceController(
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "irregular_payment_not_found" or "supplier_not_found" or "expense_type_not_found" or "staff_member_not_found" or "tariff_not_found" or "operation_not_found" or "accrual_not_found" or "supplier_accrual_not_found" or "meter_reading_not_found" or "financial_report_target_not_found" or "staff_salary_adjustment_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "operation_duplicate" or "receipt_batch_conflict" or "operation_already_canceled" or "operation_not_canceled" or "operation_kind_mismatch" or "accrual_duplicate" or "accrual_already_canceled" or "accrual_not_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "supplier_accrual_not_canceled" or "meter_reading_duplicate" or "meter_reading_conflict" or "meter_device_conflict" or "meter_device_serial_duplicate" or "meter_device_replacement_reading_cancel_forbidden" or "meter_reading_accrual_paid" or "meter_reading_current_month_required" or "meter_reading_historical_month_required" or "historical_meter_reading_correction_disabled" or "meter_reading_already_canceled" or "meter_reading_not_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" or "salary_accruals_empty" or "staff_payment_amount_exceeds_available" or "staff_penalty_exceeds_available" or "bank_amount_insufficient" or "cash_amount_insufficient" or "staff_salary_adjustment_version_conflict" or "staff_salary_adjustment_canceled" or "staff_salary_adjustment_already_canceled" or "staff_salary_adjustment_not_canceled" or "staff_salary_adjustment_change_exceeds_available" or "staff_salary_adjustment_cancel_exceeds_available" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "operation_duplicate" or "receipt_batch_conflict" or "operation_already_canceled" or "operation_not_canceled" or "operation_kind_mismatch" or "operation_version_conflict" or "accrual_duplicate" or "accrual_already_canceled" or "accrual_not_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "supplier_accrual_not_canceled" or "meter_reading_duplicate" or "meter_reading_conflict" or "meter_device_conflict" or "meter_device_serial_duplicate" or "meter_device_replacement_reading_cancel_forbidden" or "meter_reading_accrual_paid" or "meter_reading_current_month_required" or "meter_reading_historical_month_required" or "historical_meter_reading_correction_disabled" or "meter_reading_already_canceled" or "meter_reading_not_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" or "salary_accruals_empty" or "staff_payment_amount_exceeds_available" or "staff_penalty_exceeds_available" or "bank_amount_insufficient" or "cash_amount_insufficient" or "staff_salary_adjustment_version_conflict" or "staff_salary_adjustment_canceled" or "staff_salary_adjustment_already_canceled" or "staff_salary_adjustment_not_canceled" or "staff_salary_adjustment_change_exceeds_available" or "staff_salary_adjustment_cancel_exceeds_available" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "payout_editing_disabled" or "payout_deletion_disabled" => StatusCode(StatusCodes.Status403Forbidden, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status403Forbidden)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

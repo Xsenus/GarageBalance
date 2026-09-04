@@ -169,6 +169,28 @@ public sealed class SettingsController(
             cancellationToken));
     }
 
+    [HttpGet("payments/payout-actions")]
+    [Authorize(Policy = SystemPermissions.PaymentsRead)]
+    [ProducesResponseType<PayoutMutationSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PayoutMutationSettingsDto>> GetPayoutMutationSettings(CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.GetPayoutMutationSettingsAsync(cancellationToken));
+    }
+
+    [HttpPut("payments/payout-actions")]
+    [RequireConcurrencyVersion("request.Version")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType<PayoutMutationSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PayoutMutationSettingsDto>> UpdatePayoutMutationSettings(
+        UpdatePayoutMutationSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.UpdatePayoutMutationSettingsAsync(
+            request,
+            GetActorUserId(),
+            cancellationToken));
+    }
+
     [HttpGet("meter-readings/historical-corrections")]
     [Authorize]
     [ProducesResponseType<HistoricalMeterReadingCorrectionSettingsDto>(StatusCodes.Status200OK)]

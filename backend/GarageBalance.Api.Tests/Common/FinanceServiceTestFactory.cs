@@ -12,7 +12,8 @@ internal static class FinanceServiceTestFactory
     public static FinanceService Create(
         GarageBalanceDbContext dbContext,
         TimeProvider? timeProvider = null,
-        IHistoricalMeterReadingCorrectionPolicy? historicalMeterReadingCorrectionPolicy = null) =>
+        IHistoricalMeterReadingCorrectionPolicy? historicalMeterReadingCorrectionPolicy = null,
+        IPayoutMutationPolicy? payoutMutationPolicy = null) =>
         new(
             new EfStaffMemberRepository(dbContext),
             new EfGarageRepository(dbContext, TestBusinessDateProvider.From(timeProvider)),
@@ -49,7 +50,8 @@ internal static class FinanceServiceTestFactory
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             timeProvider ?? TimeProvider.System,
-            TestBusinessDateProvider.From(timeProvider));
+            TestBusinessDateProvider.From(timeProvider),
+            payoutMutationPolicy);
 
     private sealed class EnabledHistoricalMeterReadingCorrectionPolicy : IHistoricalMeterReadingCorrectionPolicy
     {

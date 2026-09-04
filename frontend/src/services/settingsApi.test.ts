@@ -54,6 +54,28 @@ describe('settingsApi', () => {
     }))
   })
 
+  it('loads and updates the independently controlled payout actions', async () => {
+    const current = { editEnabled: true, deleteEnabled: false, version: 'payout-v1' }
+    const request = { editEnabled: false, deleteEnabled: true, version: 'payout-v1' }
+    const updated = { editEnabled: false, deleteEnabled: true, version: 'payout-v2' }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(current), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getPayoutMutationSettings('token')).resolves.toEqual(current)
+    await expect(settingsApi.updatePayoutMutationSettings('token', request)).resolves.toEqual(updated)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/payments/payout-actions', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/payments/payout-actions', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(request),
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
+
   it('loads and saves the authenticated tariff panel layout', async () => {
     const fetchMock = vi.fn()
     fetchMock
@@ -150,8 +172,9 @@ describe('settingsApi', () => {
       settingsApi.getPaymentDisplaySettings('token', controller.signal),
       settingsApi.getTariffPanelsLayout('token', controller.signal),
       settingsApi.getHistoricalMeterReadingCorrectionSettings('token', controller.signal),
+      settingsApi.getPayoutMutationSettings('token', controller.signal),
     ])
-    await vi.waitFor(() => expect(fetchSignals).toHaveLength(3))
+    await vi.waitFor(() => expect(fetchSignals).toHaveLength(4))
     controller.abort()
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' })
@@ -160,6 +183,7 @@ describe('settingsApi', () => {
       '/api/settings/payments/display',
       '/api/settings/tariffs/layout',
       '/api/settings/meter-readings/historical-corrections',
+      '/api/settings/payments/payout-actions',
     ])
   })
 

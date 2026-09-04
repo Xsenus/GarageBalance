@@ -95,6 +95,7 @@ builder.Services.AddDbContextPool<GarageBalanceDbContext>((services, options) =>
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
 builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();
 builder.Services.AddScoped<IHistoricalMeterReadingCorrectionPolicy, HistoricalMeterReadingCorrectionPolicy>();
+builder.Services.AddScoped<IPayoutMutationPolicy, PayoutMutationPolicy>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
 builder.Services.AddScoped<ActionCommentRequirementFilter>();
 builder.Services.AddScoped<ICashBankBalanceOperationRepository, EfCashBankBalanceOperationRepository>();
@@ -169,7 +170,8 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IApplicationUnitOfWork>(),
     services.GetRequiredService<IAuditEventWriter>(),
     services.GetRequiredService<TimeProvider>(),
-    services.GetRequiredService<IBusinessDateProvider>()));
+    services.GetRequiredService<IBusinessDateProvider>(),
+    services.GetRequiredService<IPayoutMutationPolicy>()));
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();
 builder.Services.AddScoped<IImportService, ImportService>();

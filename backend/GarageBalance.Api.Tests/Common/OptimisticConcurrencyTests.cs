@@ -38,6 +38,7 @@ public sealed class OptimisticConcurrencyTests
             typeof(Tariff),
             typeof(ChargeServiceSetting),
             typeof(Fund),
+            typeof(FinancialOperation),
             typeof(AppUser),
             typeof(ApplicationSetting)
         };
@@ -74,5 +75,36 @@ public sealed class OptimisticConcurrencyTests
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
         await using var verification = database.CreateContext();
         Assert.Equal(2, await verification.Garages.Where(item => item.Id == garage.Id).Select(item => item.PeopleCount).SingleAsync());
+    }
+
+    [PostgreSqlFact]
+    public async Task StaleFinancialOperationUpdate_IsRejectedAndKeepsFirstCommittedAmount()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var operation = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 9, 1),
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            Amount = 100m
+        };
+        await using (var setup = database.CreateContext())
+        {
+            setup.FinancialOperations.Add(operation);
+            await setup.SaveChangesAsync();
+        }
+
+        await using var first = database.CreateContext();
+        await using var second = database.CreateContext();
+        var firstCopy = await first.FinancialOperations.SingleAsync(item => item.Id == operation.Id);
+        var staleCopy = await second.FinancialOperations.SingleAsync(item => item.Id == operation.Id);
+
+        firstCopy.Amount = 125m;
+        await first.SaveChangesAsync();
+        staleCopy.Amount = 150m;
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
+        await using var verification = database.CreateContext();
+        Assert.Equal(125m, await verification.FinancialOperations.Where(item => item.Id == operation.Id).Select(item => item.Amount).SingleAsync());
     }
 }

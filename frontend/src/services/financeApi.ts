@@ -43,6 +43,7 @@ export type FinancialOperationDto = {
   staffMemberName: string | null
   staffDepartmentName: string | null
   createdAtUtc: string
+  version?: string
 }
 
 export type FinanceSummaryDto = {
@@ -469,6 +470,14 @@ export type ExpenseWorksheetRowDto = {
   balance: number
   collectedAmount: number | null
   difference: number | null
+  operationId?: string | null
+  operationDate?: string | null
+  accountingMonth?: string | null
+  expensePaymentType?: ExpensePaymentType | null
+  expensePaymentSource?: ExpensePaymentSource | null
+  documentNumber?: string | null
+  comment?: string | null
+  operationVersion?: string | null
 }
 
 export type ExpenseWorksheetDto = {
@@ -502,6 +511,10 @@ export type ExpenseWorksheetSupplierBreakdownEntryDto = {
   isCanceled?: boolean
   version?: string | null
   cancellationReason?: string | null
+  expensePaymentType?: ExpensePaymentType | null
+  expensePaymentSource?: ExpensePaymentSource | null
+  expenseFundId?: string | null
+  counterpartyName?: string | null
 }
 
 export type ExpenseWorksheetSupplierBreakdownDto = {
@@ -596,6 +609,7 @@ export type CreateExpenseOperationRequest = {
   amount: number
   documentNumber?: string
   comment?: string
+  expectedVersion?: string
 }
 
 export type CreateStaffPaymentRequest = {
@@ -607,8 +621,13 @@ export type CreateStaffPaymentRequest = {
   comment?: string
 }
 
+export type UpdateStaffPaymentRequest = CreateStaffPaymentRequest & {
+  expectedVersion: string
+}
+
 export type CancelFinanceEntryRequest = {
   reason: string
+  expectedVersion?: string
 }
 
 export type CreateAccrualRequest = {
@@ -820,6 +839,7 @@ export type FinanceClient = {
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
+  updateStaffPayment(accessToken: string, operationId: string, request: UpdateStaffPaymentRequest): Promise<FinancialOperationDto>
   createStaffSalaryAdjustment(accessToken: string, request: CreateStaffSalaryAdjustmentRequest): Promise<StaffSalaryAdjustmentDto>
   updateStaffSalaryAdjustment(accessToken: string, adjustmentId: string, request: UpdateStaffSalaryAdjustmentRequest): Promise<StaffSalaryAdjustmentDto>
   cancelStaffSalaryAdjustment(accessToken: string, adjustmentId: string, request: { reason: string; expectedVersion: string }): Promise<StaffSalaryAdjustmentDto>
@@ -1074,6 +1094,9 @@ export const financeApi: FinanceClient = {
   },
   createStaffPayment(accessToken, request) {
     return requestJson(accessToken, '/api/finance/staff-payments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateStaffPayment(accessToken, operationId, request) {
+    return requestJson(accessToken, `/api/finance/staff-payments/${operationId}`, { method: 'PUT', body: JSON.stringify(request) })
   },
   createStaffSalaryAdjustment(accessToken, request) {
     return requestJson(accessToken, '/api/finance/staff-salary-adjustments', { method: 'POST', body: JSON.stringify(request) })

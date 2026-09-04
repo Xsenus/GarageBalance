@@ -67,6 +67,8 @@ public sealed class ActionCommentRequirementFilterTests
             Task.FromResult(new ActionCommentSettingsDto(required));
 
         public Task<ActionCommentSettingsDto> UpdateActionCommentSettingsAsync(UpdateActionCommentSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<PayoutMutationSettingsDto> GetPayoutMutationSettingsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<PayoutMutationSettingsDto> UpdatePayoutMutationSettingsAsync(UpdatePayoutMutationSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<HistoricalMeterReadingCorrectionSettingsDto> UpdateHistoricalMeterReadingCorrectionSettingsAsync(UpdateHistoricalMeterReadingCorrectionSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

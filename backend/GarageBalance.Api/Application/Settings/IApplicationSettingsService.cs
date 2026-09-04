@@ -27,6 +27,11 @@ public interface IApplicationSettingsService
         UpdateActionCommentSettingsRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+    Task<PayoutMutationSettingsDto> GetPayoutMutationSettingsAsync(CancellationToken cancellationToken);
+    Task<PayoutMutationSettingsDto> UpdatePayoutMutationSettingsAsync(
+        UpdatePayoutMutationSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
     Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(CancellationToken cancellationToken);
     Task<HistoricalMeterReadingCorrectionSettingsDto> UpdateHistoricalMeterReadingCorrectionSettingsAsync(
         UpdateHistoricalMeterReadingCorrectionSettingsRequest request,

@@ -43,6 +43,70 @@ public sealed class ApplicationSettingsServiceTests
     }
 
     [Fact]
+    public async Task PayoutMutations_DefaultToEditEnabledAndDeleteDisabledWithoutPersistingNoise()
+    {
+        var repository = new FakeRepository();
+        var service = CreateService(repository, new CaptureAuditWriter());
+
+        var result = await service.GetPayoutMutationSettingsAsync(CancellationToken.None);
+
+        Assert.True(result.EditEnabled);
+        Assert.False(result.DeleteEnabled);
+        Assert.NotEqual(Guid.Empty, result.Version);
+        Assert.Null(repository.Setting);
+    }
+
+    [Fact]
+    public async Task PayoutMutations_UpdatePersistsIndependentFlagsAndAudit()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdatePayoutMutationSettingsAsync(
+            new UpdatePayoutMutationSettingsRequest(false, true),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.False(result.EditEnabled);
+        Assert.True(result.DeleteEnabled);
+        Assert.Equal(2, repository.Setting!.IntegerValue);
+        Assert.Equal(ApplicationSettingsService.PayoutMutationActionsKey, repository.Setting.Key);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        var audit = Assert.Single(auditWriter.Requests);
+        Assert.Equal("application_setting.payout_mutation_actions_updated", audit.Action);
+        Assert.Equal(true, audit.OldValues!["editEnabled"]);
+        Assert.Equal(false, audit.OldValues!["deleteEnabled"]);
+        Assert.Equal(false, audit.NewValues!["editEnabled"]);
+        Assert.Equal(true, audit.NewValues!["deleteEnabled"]);
+    }
+
+    [Fact]
+    public async Task PayoutMutations_RejectStaleVersionAndPolicyUsesStoredMask()
+    {
+        var setting = new ApplicationSetting
+        {
+            Key = ApplicationSettingsService.PayoutMutationActionsKey,
+            IntegerValue = 3
+        };
+        var repository = new FakeRepository { Setting = setting };
+        var service = CreateService(repository, new CaptureAuditWriter());
+
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() =>
+            service.UpdatePayoutMutationSettingsAsync(
+                new UpdatePayoutMutationSettingsRequest(false, false, Guid.NewGuid()),
+                Guid.NewGuid(),
+                CancellationToken.None));
+
+        var policy = new PayoutMutationPolicy(repository);
+        var policyResult = await policy.GetAsync(CancellationToken.None);
+        Assert.True(policyResult.EditEnabled);
+        Assert.True(policyResult.DeleteEnabled);
+        Assert.Equal(setting.Version, policyResult.Version);
+    }
+
+    [Fact]
     public async Task HistoricalMeterReadingCorrections_DefaultToDisabled()
     {
         var service = CreateService(new FakeRepository(), new CaptureAuditWriter());

@@ -1062,6 +1062,48 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task UpdateStaffPayment_PassesVersionAndActorUserIdToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var operationId = Guid.NewGuid();
+        var expectedVersion = Guid.NewGuid();
+        var request = new UpdateStaffPaymentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 26), new DateOnly(2026, 6, 1), 23000m, "PAY-1", "Исправлено", expectedVersion);
+        var service = new FakeFinanceService
+        {
+            UpdateStaffPaymentResult = FinanceResult<FinancialOperationDto>.Success(CreateOperation("expense", operationId, amount: 23000m))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.UpdateStaffPayment(operationId, request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(operationId, service.LastUpdatedOperationId);
+        Assert.Same(request, service.LastUpdatedStaffPaymentRequest);
+        Assert.Equal(expectedVersion, service.LastUpdatedStaffPaymentRequest!.ExpectedVersion);
+    }
+
+    [Fact]
+    public async Task UpdateStaffPayment_ReturnsForbiddenWhenAdministratorDisabledEditing()
+    {
+        var service = new FakeFinanceService
+        {
+            UpdateStaffPaymentResult = FinanceResult<FinancialOperationDto>.Failure(
+                "payout_editing_disabled",
+                "Редактирование выплат отключено администратором.")
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.UpdateStaffPayment(
+            Guid.NewGuid(),
+            new UpdateStaffPaymentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 26), new DateOnly(2026, 6, 1), 23000m, null, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        var forbidden = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateStaffSalaryAdjustment_ReturnsCreatedAndPassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -2456,6 +2498,7 @@ public sealed class FinanceControllerTests
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
         public CreateStaffPaymentRequest? LastStaffPaymentRequest { get; private set; }
+        public UpdateStaffPaymentRequest? LastUpdatedStaffPaymentRequest { get; private set; }
         public CreateStaffSalaryAdjustmentRequest? LastStaffSalaryAdjustmentRequest { get; private set; }
         public CreateCashBankTransferRequest? LastCashBankTransferRequest { get; private set; }
         public CreateDebtTransferRequest? LastDebtTransferRequest { get; private set; }
@@ -2499,6 +2542,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateStaffPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialOperationDto> UpdateStaffPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<StaffSalaryAdjustmentDto> CreateStaffSalaryAdjustmentResult { get; init; } = FinanceResult<StaffSalaryAdjustmentDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<StaffSalaryAdjustmentDto> UpdateStaffSalaryAdjustmentResult { get; init; } = FinanceResult<StaffSalaryAdjustmentDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<StaffSalaryAdjustmentDto> CancelStaffSalaryAdjustmentResult { get; init; } = FinanceResult<StaffSalaryAdjustmentDto>.Failure("not_configured", "Not configured.");
@@ -2727,6 +2771,14 @@ public sealed class FinanceControllerTests
             LastActorUserId = actorUserId;
             LastStaffPaymentRequest = request;
             return Task.FromResult(CreateStaffPaymentResult);
+        }
+
+        public Task<FinanceResult<FinancialOperationDto>> UpdateStaffPaymentAsync(Guid operationId, UpdateStaffPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastUpdatedOperationId = operationId;
+            LastUpdatedStaffPaymentRequest = request;
+            return Task.FromResult(UpdateStaffPaymentResult);
         }
 
         public Task<FinanceResult<StaffSalaryAdjustmentDto>> CreateStaffSalaryAdjustmentAsync(CreateStaffSalaryAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)

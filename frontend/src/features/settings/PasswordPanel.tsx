@@ -92,6 +92,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
   const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
+  const [payoutEditEnabled, setPayoutEditEnabled] = useState(true)
+  const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
+  const [payoutMutationSettingsVersion, setPayoutMutationSettingsVersion] = useState<string | null>(null)
+  const [payoutMutationSettingsSaving, setPayoutMutationSettingsSaving] = useState(false)
   const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false, fundName: false })
   const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
   const [tariffTableDisplaySettingsVersion, setTariffTableDisplaySettingsVersion] = useState<string | null>(null)
@@ -226,8 +230,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     Promise.all([
       settingsClient.getPaymentDisplaySettings(auth.accessToken, controller.signal),
       settingsClient.getHistoricalMeterReadingCorrectionSettings(auth.accessToken, controller.signal),
+      settingsClient.getPayoutMutationSettings(auth.accessToken, controller.signal),
     ])
-      .then(([settings, meterReadingSettings]) => {
+      .then(([settings, meterReadingSettings, payoutSettings]) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
           setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
@@ -241,6 +246,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
           setHistoricalMeterReadingCorrectionEnabled(meterReadingSettings.enabled)
           setHistoricalMeterReadingCorrectionSettingsVersion(meterReadingSettings.version)
+          setPayoutEditEnabled(payoutSettings.editEnabled)
+          setPayoutDeleteEnabled(payoutSettings.deleteEnabled)
+          setPayoutMutationSettingsVersion(payoutSettings.version)
         }
       })
       .catch((caught: unknown) => {
@@ -422,6 +430,35 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку показаний.')
     } finally {
       setHistoricalMeterReadingCorrectionSaving(false)
+    }
+  }
+
+  async function savePayoutMutationSettings(patch: { editEnabled?: boolean; deleteEnabled?: boolean }) {
+    const previousEditEnabled = payoutEditEnabled
+    const previousDeleteEnabled = payoutDeleteEnabled
+    const editEnabled = patch.editEnabled ?? payoutEditEnabled
+    const deleteEnabled = patch.deleteEnabled ?? payoutDeleteEnabled
+    setPayoutEditEnabled(editEnabled)
+    setPayoutDeleteEnabled(deleteEnabled)
+    setPayoutMutationSettingsSaving(true)
+    setPaymentDisplaySettingsMessage(null)
+    setPaymentDisplaySettingsError(null)
+    try {
+      const settings = await settingsClient.updatePayoutMutationSettings(auth.accessToken, {
+        editEnabled,
+        deleteEnabled,
+        version: payoutMutationSettingsVersion ?? '',
+      })
+      setPayoutEditEnabled(settings.editEnabled)
+      setPayoutDeleteEnabled(settings.deleteEnabled)
+      setPayoutMutationSettingsVersion(settings.version)
+      setPaymentDisplaySettingsMessage('Разрешения на исправление выплат сохранены.')
+    } catch (caught) {
+      setPayoutEditEnabled(previousEditEnabled)
+      setPayoutDeleteEnabled(previousDeleteEnabled)
+      setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить разрешения на исправление выплат.')
+    } finally {
+      setPayoutMutationSettingsSaving(false)
     }
   }
 
@@ -1185,6 +1222,22 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             }}
           />
           {actionCommentSettingsError ? <FormError>{actionCommentSettingsError}</FormError> : null}
+          <SettingsDisplaySwitch
+            title="Редактирование выплат"
+            label="Разрешить редактирование выплат по правой кнопке мыши"
+            help="Разрешает исправлять выплаты поставщикам и сотрудникам, эпизодические выплаты, премии и штрафы. Все изменения сохраняются в истории."
+            checked={payoutEditEnabled}
+            disabled={paymentDisplaySettingsLoading || payoutMutationSettingsSaving}
+            onChange={(checked) => { void savePayoutMutationSettings({ editEnabled: checked }) }}
+          />
+          <SettingsDisplaySwitch
+            title="Удаление выплат"
+            label="Разрешить удаление выплат по правой кнопке мыши"
+            help="Удаление выполняется как сторно: запись остаётся в истории, а суммы и остатки пересчитываются."
+            checked={payoutDeleteEnabled}
+            disabled={paymentDisplaySettingsLoading || payoutMutationSettingsSaving}
+            onChange={(checked) => { void savePayoutMutationSettings({ deleteEnabled: checked }) }}
+          />
           <SettingsDisplaySwitch
             title="Показывать общую ведомость платежей"
             label="Показывать общую ведомость платежей при открытии"

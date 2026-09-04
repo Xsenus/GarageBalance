@@ -37,6 +37,8 @@ public sealed class SettingsControllerTests
         var updateActionCommentsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateActionCommentSettings));
         var getHistoricalCorrectionAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetHistoricalMeterReadingCorrectionSettings));
         var updateHistoricalCorrectionAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateHistoricalMeterReadingCorrectionSettings));
+        var getPayoutMutationsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetPayoutMutationSettings));
+        var updatePayoutMutationsAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdatePayoutMutationSettings));
 
         Assert.Null(Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -58,6 +60,35 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Null(Assert.Single(getHistoricalCorrectionAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateHistoricalCorrectionAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getPayoutMutationsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updatePayoutMutationsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+    }
+
+    [Fact]
+    public async Task PayoutMutationSettings_ReturnValuesAndPassAuthenticatedActorOnUpdate()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeService();
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+
+        var current = Assert.IsType<PayoutMutationSettingsDto>(Assert.IsType<OkObjectResult>(
+            (await controller.GetPayoutMutationSettings(CancellationToken.None)).Result).Value);
+        Assert.True(current.EditEnabled);
+        Assert.False(current.DeleteEnabled);
+
+        var request = new UpdatePayoutMutationSettingsRequest(false, true, current.Version);
+        var updated = Assert.IsType<PayoutMutationSettingsDto>(Assert.IsType<OkObjectResult>(
+            (await controller.UpdatePayoutMutationSettings(request, CancellationToken.None)).Result).Value);
+        Assert.False(updated.EditEnabled);
+        Assert.True(updated.DeleteEnabled);
+        Assert.Equal(actorUserId, service.ReceivedActorUserId);
     }
 
     [Fact]
@@ -630,6 +661,15 @@ public sealed class SettingsControllerTests
         {
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(new ActionCommentSettingsDto(request.Required, request.Version ?? Guid.NewGuid()));
+        }
+
+        public Task<PayoutMutationSettingsDto> GetPayoutMutationSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new PayoutMutationSettingsDto(true, false));
+
+        public Task<PayoutMutationSettingsDto> UpdatePayoutMutationSettingsAsync(UpdatePayoutMutationSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(new PayoutMutationSettingsDto(request.EditEnabled, request.DeleteEnabled, request.Version ?? Guid.NewGuid()));
         }
 
         public Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(CancellationToken cancellationToken) =>

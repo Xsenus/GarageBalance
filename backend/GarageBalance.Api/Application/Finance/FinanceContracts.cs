@@ -47,7 +47,8 @@ public sealed record FinancialOperationDto(
     Guid? ExpenseFundId = null,
     string? ExpenseFundName = null,
     string? CounterpartyName = null,
-    bool NegativeFundBalanceConfirmed = false);
+    bool NegativeFundBalanceConfirmed = false,
+    Guid Version = default);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -121,7 +122,8 @@ public sealed record CreateExpenseOperationRequest(
     string? ExpensePaymentSource = null,
     Guid? ExpenseFundId = null,
     [MaxLength(200)] string? CounterpartyName = null,
-    bool ConfirmNegativeFundBalance = false);
+    bool ConfirmNegativeFundBalance = false,
+    Guid? ExpectedVersion = null);
 
 public sealed record CreateStaffPaymentRequest(
     Guid StaffMemberId,
@@ -130,6 +132,15 @@ public sealed record CreateStaffPaymentRequest(
     [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(120)] string? DocumentNumber,
     [MaxLength(1000)] string? Comment);
+
+public sealed record UpdateStaffPaymentRequest(
+    Guid StaffMemberId,
+    DateOnly OperationDate,
+    DateOnly AccountingMonth,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(120)] string? DocumentNumber,
+    [MaxLength(1000)] string? Comment,
+    Guid ExpectedVersion);
 
 public sealed record CreateStaffSalaryAdjustmentRequest(
     Guid StaffMemberId,
@@ -180,7 +191,8 @@ public sealed record CashBankTransferDto(
     DateTimeOffset CreatedAtUtc);
 
 public sealed record CancelFinanceEntryRequest(
-    [ActionComment, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason,
+    Guid? ExpectedVersion = null);
 
 public sealed record FinancialOperationListRequest(
     DateOnly? DateFrom,
@@ -659,7 +671,11 @@ public sealed record ExpenseWorksheetSupplierBreakdownEntryDto(
     string? Source,
     bool IsCanceled = false,
     Guid? Version = null,
-    string? CancellationReason = null);
+    string? CancellationReason = null,
+    string? ExpensePaymentType = null,
+    string? ExpensePaymentSource = null,
+    Guid? ExpenseFundId = null,
+    string? CounterpartyName = null);
 
 public sealed record ExpenseWorksheetSupplierBreakdownDto(
     Guid SupplierId,
@@ -750,6 +766,22 @@ public sealed record ExpenseWorksheetRowDto(
     public Guid? ExpenseFundId { get; init; }
 
     public string? ExpenseFundName { get; init; }
+
+    public Guid? OperationId { get; init; }
+
+    public DateOnly? OperationDate { get; init; }
+
+    public DateOnly? AccountingMonth { get; init; }
+
+    public string? ExpensePaymentType { get; init; }
+
+    public string? ExpensePaymentSource { get; init; }
+
+    public string? DocumentNumber { get; init; }
+
+    public string? Comment { get; init; }
+
+    public Guid? OperationVersion { get; init; }
 }
 
 public sealed record ExpenseWorksheetDto(

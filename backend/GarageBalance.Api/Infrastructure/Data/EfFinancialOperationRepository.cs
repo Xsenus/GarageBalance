@@ -117,6 +117,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 ExpenseTypeName = operation.ExpenseType == null ? null : operation.ExpenseType.Name,
                 operation.ExpenseFundId,
                 ExpenseFundName = operation.ExpenseFund == null ? null : operation.ExpenseFund.Name,
+                Version = (Guid?)operation.Version,
                 IsCanceled = (bool?)operation.IsCanceled,
                 CreatedAtUtc = (DateTimeOffset?)operation.CreatedAtUtc,
                 UpdatedAtUtc = (DateTimeOffset?)operation.UpdatedAtUtc,
@@ -159,6 +160,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 ExpenseTypeName = (string?)null,
                 ExpenseFundId = (Guid?)null,
                 ExpenseFundName = (string?)null,
+                Version = (Guid?)null,
                 IsCanceled = (bool?)null,
                 CreatedAtUtc = (DateTimeOffset?)null,
                 UpdatedAtUtc = (DateTimeOffset?)null,
@@ -246,6 +248,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                         Name = row.ExpenseFundName!,
                         NormalizedName = row.ExpenseFundName!
                     },
+                Version = row.Version!.Value,
                 IsCanceled = row.IsCanceled!.Value,
                 CreatedAtUtc = row.CreatedAtUtc!.Value,
                 UpdatedAtUtc = row.UpdatedAtUtc!.Value
@@ -523,6 +526,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.ExpenseType == null ? null : operation.ExpenseType.Name,
                 operation.ExpenseFundId,
                 operation.ExpenseFund == null ? null : operation.ExpenseFund.Name,
+                operation.Version,
                 operation.IsCanceled,
                 operation.CreatedAtUtc))
             .ToListAsync(cancellationToken);
@@ -605,6 +609,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                     Name = row.ExpenseFundName ?? string.Empty,
                     NormalizedName = row.ExpenseFundName ?? string.Empty
                 },
+            Version = row.Version,
             IsCanceled = row.IsCanceled,
             CreatedAtUtc = row.CreatedAtUtc
         };
@@ -654,6 +659,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         string? ExpenseTypeName,
         Guid? ExpenseFundId,
         string? ExpenseFundName,
+        Guid Version,
         bool IsCanceled,
         DateTimeOffset CreatedAtUtc);
 

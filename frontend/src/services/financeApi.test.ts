@@ -421,6 +421,38 @@ describe('financeApi', () => {
     }))
   })
 
+  it('updates a staff payout and deletes a financial payout with concurrency versions', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'payment-1' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const updateRequest = {
+      staffMemberId: 'staff-1',
+      operationDate: '2026-06-25',
+      accountingMonth: '2026-06-01',
+      amount: 12000,
+      documentNumber: 'PAY-1',
+      comment: 'Исправленная выплата',
+      expectedVersion: 'payment-version-1',
+    }
+
+    await financeApi.updateStaffPayment('token', 'payment-1', updateRequest)
+    await financeApi.cancelOperation('token', 'payment-1', {
+      reason: 'Ошибочно введённая выплата',
+      expectedVersion: 'payment-version-2',
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/staff-payments/payment-1', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(updateRequest),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/operations/payment-1/cancel', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Ошибочно введённая выплата', expectedVersion: 'payment-version-2' }),
+    }))
+  })
+
   it('posts a cash-to-bank transfer without a fund', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'transfer-1',

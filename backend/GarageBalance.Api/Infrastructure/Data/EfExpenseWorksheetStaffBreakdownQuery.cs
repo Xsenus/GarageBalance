@@ -110,7 +110,11 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
                 adjustment.CreatedAtUtc,
                 adjustment.IsCanceled,
                 Version = (Guid?)adjustment.Version,
-                adjustment.CancellationReason
+                adjustment.CancellationReason,
+                ExpensePaymentType = (string?)null,
+                ExpensePaymentSource = (string?)null,
+                ExpenseFundId = (Guid?)null,
+                CounterpartyName = (string?)null
             });
         var payments = dbContext.FinancialOperations
             .AsNoTracking()
@@ -132,8 +136,12 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
                 Source = operation.ExpensePaymentSource,
                 operation.CreatedAtUtc,
                 operation.IsCanceled,
-                Version = (Guid?)null,
-                CancellationReason = (string?)null
+                Version = (Guid?)operation.Version,
+                CancellationReason = (string?)null,
+                operation.ExpensePaymentType,
+                operation.ExpensePaymentSource,
+                operation.ExpenseFundId,
+                operation.CounterpartyName
             });
         var persistedEntries = adjustments.Concat(payments);
         var summaries = await persistedEntries
@@ -168,7 +176,11 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
             item.CreatedAtUtc,
             item.IsCanceled,
             item.Version,
-            item.CancellationReason));
+            item.CancellationReason,
+            item.ExpensePaymentType,
+            item.ExpensePaymentSource,
+            item.ExpenseFundId,
+            item.CounterpartyName));
         var items = salaryEntries
             .Concat(persistedItems)
             .OrderByDescending(item => item.AccountingMonth)

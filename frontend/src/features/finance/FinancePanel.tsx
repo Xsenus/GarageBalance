@@ -119,6 +119,47 @@ type PaymentPrototypeRow = {
   collected: number | string
   difference: number | string
   action: boolean
+  operationId?: string | null
+  operationDate?: string | null
+  accountingMonth?: string | null
+  expensePaymentType?: ExpensePaymentType | null
+  expensePaymentSource?: ExpensePaymentSource | null
+  documentNumber?: string | null
+  comment?: string | null
+  operationVersion?: string | null
+}
+
+type PayoutEditRecord = {
+  id: string
+  supplierId?: string | null
+  staffMemberId?: string | null
+  expenseTypeId: string
+  expensePaymentType?: ExpensePaymentType | null
+  expensePaymentSource: ExpensePaymentSource
+  expenseFundId?: string | null
+  counterpartyName?: string | null
+  operationDate: string
+  accountingMonth: string
+  amount: number
+  documentNumber?: string | null
+  comment?: string | null
+  version: string
+}
+
+type PayoutContextMenuState = {
+  row: PaymentPrototypeRow
+  item?: ExpenseWorksheetSupplierBreakdownEntryDto
+  x: number
+  y: number
+}
+
+type PayoutCancelState = {
+  id: string
+  version: string
+  label: string
+  accountingMonth: string
+  reason: string
+  error: string | null
 }
 
 type ExpenseSupplierBreakdownState = {
@@ -230,12 +271,14 @@ type ExpensePrototypeDialogPreset = {
   expenseTypeName?: string
   amount?: number
   rowIndex?: number
+  record?: PayoutEditRecord
 }
 
 type StaffPaymentPrototypeDialogPreset = {
   staffMemberName?: string
   amount?: number
   rowIndex?: number
+  record?: PayoutEditRecord
 }
 
 type StaffSalaryAdjustmentPrototypeDialogPreset = {
@@ -337,6 +380,14 @@ function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): Payment
     collected: row.collectedAmount ?? '',
     difference: row.difference ?? '',
     action: row.rowKind !== 'episodic',
+    operationId: row.operationId,
+    operationDate: row.operationDate,
+    accountingMonth: row.accountingMonth,
+    expensePaymentType: row.expensePaymentType,
+    expensePaymentSource: row.expensePaymentSource,
+    documentNumber: row.documentNumber,
+    comment: row.comment,
+    operationVersion: row.operationVersion,
   }))
 }
 
@@ -459,6 +510,8 @@ export function FinancePanel({
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
   const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
+  const [payoutEditEnabled, setPayoutEditEnabled] = useState(true)
+  const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -733,6 +786,13 @@ export function FinancePanel({
         if (!ignore) {
           setShowAllGarageOperations(settings.showAllGarageOperationsByDefault)
           setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
+          return settingsClient.getPayoutMutationSettings(auth.accessToken, controller.signal)
+        }
+      })
+      .then((payoutSettings) => {
+        if (!ignore && payoutSettings) {
+          setPayoutEditEnabled(payoutSettings.editEnabled)
+          setPayoutDeleteEnabled(payoutSettings.deleteEnabled)
           setPaymentDisplaySettingsError(null)
         }
       })
@@ -2252,6 +2312,8 @@ export function FinancePanel({
         auth={auth}
         canWritePayments={canWritePayments}
         accrualReasonDisplayMode={accrualReasonDisplayMode}
+        payoutEditEnabled={payoutEditEnabled}
+        payoutDeleteEnabled={payoutDeleteEnabled}
         dictionaryClient={dictionaryClient}
         expenseTypes={expenseTypes}
         financeClient={financeClient}
@@ -3006,6 +3068,8 @@ function PaymentsPrototypePanel({
   auth,
   canWritePayments,
   accrualReasonDisplayMode,
+  payoutEditEnabled,
+  payoutDeleteEnabled,
   dictionaryClient,
   expenseTypes,
   financeClient,
@@ -3024,6 +3088,8 @@ function PaymentsPrototypePanel({
   auth: AuthResponse
   canWritePayments: boolean
   accrualReasonDisplayMode: AccrualReasonDisplayMode
+  payoutEditEnabled: boolean
+  payoutDeleteEnabled: boolean
   dictionaryClient: DictionaryClient
   expenseTypes: AccountingTypeDto[]
   financeClient: FinanceClient
@@ -3107,14 +3173,20 @@ function PaymentsPrototypePanel({
   const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
   const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [expenseDialogPreset, setExpenseDialogPreset] = useState<ExpensePrototypeDialogPreset | null>(null)
-  const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const expenseTriggerRef = useRef<HTMLElement | null>(null)
   const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
-  const staffPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const staffPaymentTriggerRef = useRef<HTMLElement | null>(null)
   const [staffSalaryAdjustmentDialogPreset, setStaffSalaryAdjustmentDialogPreset] = useState<StaffSalaryAdjustmentPrototypeDialogPreset | null>(null)
-  const staffSalaryAdjustmentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const staffSalaryAdjustmentTriggerRef = useRef<HTMLElement | null>(null)
   const [staffSalaryAdjustmentCancel, setStaffSalaryAdjustmentCancel] = useState<StaffSalaryAdjustmentCancelState | null>(null)
-  const staffSalaryAdjustmentCancelTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const staffSalaryAdjustmentCancelTriggerRef = useRef<HTMLElement | null>(null)
   const [staffSalaryAdjustmentActionSaving, setStaffSalaryAdjustmentActionSaving] = useState(false)
+  const [payoutContextMenu, setPayoutContextMenu] = useState<PayoutContextMenuState | null>(null)
+  const payoutContextMenuTriggerRef = useRef<HTMLTableRowElement | null>(null)
+  const payoutContextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(payoutContextMenu))
+  const [payoutCancel, setPayoutCancel] = useState<PayoutCancelState | null>(null)
+  const payoutCancelTriggerRef = useRef<HTMLTableRowElement | null>(null)
+  const [payoutActionSaving, setPayoutActionSaving] = useState(false)
   const [historyEdit, setHistoryEdit] = useState<GaragePaymentHistoryEditState | null>(null)
   const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
@@ -3160,6 +3232,9 @@ function PaymentsPrototypePanel({
     incomePaymentWarningControllerRef.current?.abort()
     overdueDebtRefreshControllerRef.current?.abort()
   }, [incomeWorksheetRequests, paymentHistoryRequests])
+  useEscapeKey(Boolean(payoutContextMenu), () => setPayoutContextMenu(null))
+  useDismissOnWindowClick(Boolean(payoutContextMenu), setPayoutContextMenu)
+  useRestoreFocusOnClose(Boolean(payoutContextMenu))
   const selectedGarageBalance = selectedGarage
     ? getGarageBalancePresentation(selectedGarage.balance, selectedGarage.overdueDebt)
     : null
@@ -3319,6 +3394,8 @@ function PaymentsPrototypePanel({
   function refreshExpenseWorksheetAfterSave(accountingMonth: string) {
     const requestedMonth = accountingMonth.slice(0, 7)
     setExpenseWorksheetLoading(true)
+    setExpandedExpenseSupplierRows({})
+    setExpenseSupplierBreakdowns({})
     if (requestedMonth < expenseWorksheetMonthFrom || requestedMonth > expenseWorksheetMonthTo) {
       setExpenseWorksheetMonthFrom(requestedMonth)
       setExpenseWorksheetMonthTo(requestedMonth)
@@ -3528,7 +3605,7 @@ function PaymentsPrototypePanel({
   async function openStaffSalaryAdjustmentEdit(
     row: PaymentPrototypeRow,
     item: ExpenseWorksheetSupplierBreakdownEntryDto,
-    trigger: HTMLButtonElement,
+    trigger: HTMLElement,
   ) {
     if (!row.staffMemberId || !item.version || (item.entryKind !== 'bonus' && item.entryKind !== 'penalty')) {
       return
@@ -3559,7 +3636,7 @@ function PaymentsPrototypePanel({
   function openStaffSalaryAdjustmentCancel(
     row: PaymentPrototypeRow,
     item: ExpenseWorksheetSupplierBreakdownEntryDto,
-    trigger: HTMLButtonElement,
+    trigger: HTMLElement,
   ) {
     if (!row.staffMemberId || !item.version || (item.entryKind !== 'bonus' && item.entryKind !== 'penalty')) {
       return
@@ -3617,17 +3694,138 @@ function PaymentsPrototypePanel({
     }
   }
 
-  async function restoreStaffSalaryAdjustment(item: ExpenseWorksheetSupplierBreakdownEntryDto) {
-    if (!item.version) return
-    setStaffSalaryAdjustmentActionSaving(true)
+  function canOpenPayoutContextMenu(row: PaymentPrototypeRow, item?: ExpenseWorksheetSupplierBreakdownEntryDto) {
+    if (!canWritePayments || (!payoutEditEnabled && !payoutDeleteEnabled)) return false
+    if (item) return !item.isCanceled && Boolean(item.version) && (item.entryKind === 'payment' || item.entryKind === 'bonus' || item.entryKind === 'penalty')
+    return row.rowKind === 'episodic' && Boolean(row.operationId && row.operationVersion)
+  }
+
+  function openPayoutContextMenu(
+    event: MouseEvent<HTMLTableRowElement>,
+    row: PaymentPrototypeRow,
+    item?: ExpenseWorksheetSupplierBreakdownEntryDto,
+  ) {
+    if (!canOpenPayoutContextMenu(row, item)) return
+    event.preventDefault()
+    event.stopPropagation()
+    payoutContextMenuTriggerRef.current = event.currentTarget
+    setPayoutContextMenu({ row, item, x: event.clientX, y: event.clientY })
+  }
+
+  function openPayoutContextMenuFromKeyboard(
+    event: KeyboardEvent<HTMLTableRowElement>,
+    row: PaymentPrototypeRow,
+    item?: ExpenseWorksheetSupplierBreakdownEntryDto,
+  ) {
+    if ((event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) || !canOpenPayoutContextMenu(row, item)) return
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    payoutContextMenuTriggerRef.current = event.currentTarget
+    setPayoutContextMenu({ row, item, x: rect.left + Math.min(rect.width / 2, 180), y: rect.top + Math.min(rect.height, 32) })
+  }
+
+  function handlePayoutContextMenuKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'))
+    if (items.length === 0) return
+    event.preventDefault()
+    const currentIndex = items.findIndex((item) => item === document.activeElement)
+    if (event.key === 'Home') items[0].focus()
+    else if (event.key === 'End') items[items.length - 1].focus()
+    else if (event.key === 'ArrowDown') items[(currentIndex + 1) % items.length].focus()
+    else items[(currentIndex <= 0 ? items.length : currentIndex) - 1].focus()
+  }
+
+  function createPayoutEditRecord(row: PaymentPrototypeRow, item?: ExpenseWorksheetSupplierBreakdownEntryDto): PayoutEditRecord | null {
+    const id = item?.id ?? row.operationId
+    const expenseTypeId = row.expenseTypeId
+    const operationDate = item?.operationDate ?? row.operationDate
+    const accountingMonth = item?.accountingMonth ?? row.accountingMonth
+    const version = item?.version ?? row.operationVersion
+    if (!id || !expenseTypeId || !operationDate || !accountingMonth || !version) return null
+    return {
+      id,
+      supplierId: row.supplierId,
+      staffMemberId: row.staffMemberId,
+      expenseTypeId,
+      expensePaymentType: item?.expensePaymentType ?? row.expensePaymentType ?? 'with_receipt',
+      expensePaymentSource: item?.expensePaymentSource ?? row.expensePaymentSource ?? (row.staffMemberId ? 'cash' : 'bank'),
+      expenseFundId: item?.expenseFundId,
+      counterpartyName: item?.counterpartyName ?? row.counterparty,
+      operationDate,
+      accountingMonth,
+      amount: item?.amount ?? Number(row.paid),
+      documentNumber: item?.documentNumber ?? row.documentNumber,
+      comment: item?.comment ?? row.comment,
+      version,
+    }
+  }
+
+  async function editPayoutContextTarget() {
+    if (!payoutContextMenu || !payoutEditEnabled) return
+    const { row, item } = payoutContextMenu
+    const trigger = payoutContextMenuTriggerRef.current
+    setPayoutContextMenu(null)
+    if (!trigger) return
+    if (item?.entryKind === 'bonus' || item?.entryKind === 'penalty') {
+      await openStaffSalaryAdjustmentEdit(row, item, trigger)
+      return
+    }
+    const record = createPayoutEditRecord(row, item)
+    if (!record || !(await onEnsureReferences())) return
     setPaymentError(null)
+    if (row.staffMemberId) {
+      staffPaymentTriggerRef.current = trigger
+      setStaffPaymentDialogPreset({ record })
+    } else {
+      expenseTriggerRef.current = trigger
+      setExpenseDialogPreset({ expensePaymentSource: record.expensePaymentSource, record })
+    }
+  }
+
+  function deletePayoutContextTarget() {
+    if (!payoutContextMenu || !payoutDeleteEnabled) return
+    const { row, item } = payoutContextMenu
+    const trigger = payoutContextMenuTriggerRef.current
+    setPayoutContextMenu(null)
+    if (!trigger) return
+    if (item?.entryKind === 'bonus' || item?.entryKind === 'penalty') {
+      openStaffSalaryAdjustmentCancel(row, item, trigger)
+      return
+    }
+    const id = item?.id ?? row.operationId
+    const accountingMonth = item?.accountingMonth ?? row.accountingMonth
+    const version = item?.version ?? row.operationVersion
+    if (!id || !accountingMonth || !version) return
+    payoutCancelTriggerRef.current = trigger
+    setPayoutCancel({
+      id,
+      version,
+      label: row.rowKind === 'staff' ? `выплату сотруднику ${row.counterparty ?? ''}` : `выплату ${row.counterparty ?? row.item}`,
+      accountingMonth,
+      reason: '',
+      error: null,
+    })
+  }
+
+  async function confirmPayoutCancel() {
+    if (!payoutCancel) return
+    const reason = payoutCancel.reason.trim()
+    if (actionCommentsRequired && !reason) {
+      setPayoutCancel({ ...payoutCancel, error: 'Укажите причину удаления выплаты.' })
+      return
+    }
+    setPayoutActionSaving(true)
     try {
-      await financeClient.restoreStaffSalaryAdjustment(auth.accessToken, item.id, item.version)
-      refreshExpenseWorksheetAfterSave(item.accountingMonth)
+      await financeClient.cancelOperation(auth.accessToken, payoutCancel.id, { reason, expectedVersion: payoutCancel.version })
+      const accountingMonth = payoutCancel.accountingMonth
+      setPayoutCancel(null)
+      refreshExpenseWorksheetAfterSave(accountingMonth)
+      restoreFocusAfterClose(payoutCancelTriggerRef)
     } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : 'Не удалось восстановить корректировку зарплаты.')
+      setPayoutCancel((current) => current ? { ...current, error: error instanceof Error ? error.message : 'Не удалось удалить выплату.' } : current)
     } finally {
-      setStaffSalaryAdjustmentActionSaving(false)
+      setPayoutActionSaving(false)
     }
   }
 
@@ -4457,7 +4655,7 @@ function PaymentsPrototypePanel({
         return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
       }
     }
-    await financeClient.createExpense(auth.accessToken, {
+    const payload = {
       supplierId: supplier?.id,
       counterpartyName: request.expensePaymentSource === 'cash' ? request.counterpartyName.trim() || undefined : undefined,
       expenseTypeId: expenseType.id,
@@ -4470,7 +4668,13 @@ function PaymentsPrototypePanel({
       amount: request.amount,
       documentNumber: request.documentNumber.trim() || undefined,
       comment: request.comment.trim() || undefined,
-    })
+      expectedVersion: expenseDialogPreset?.record?.version,
+    }
+    if (expenseDialogPreset?.record) {
+      await financeClient.updateExpense(auth.accessToken, expenseDialogPreset.record.id, payload)
+    } else {
+      await financeClient.createExpense(auth.accessToken, payload)
+    }
 
     refreshExpenseWorksheetAfterSave(request.accountingMonth)
 
@@ -4483,14 +4687,22 @@ function PaymentsPrototypePanel({
       return 'Выберите сотрудника из справочника персонала.'
     }
 
-    await financeClient.createStaffPayment(auth.accessToken, {
+    const payload = {
       staffMemberId: staffMember.id,
       operationDate: request.operationDate,
       accountingMonth: request.accountingMonth,
       amount: request.amount,
       documentNumber: request.documentNumber.trim() || undefined,
       comment: request.comment.trim() || undefined,
-    })
+    }
+    if (staffPaymentDialogPreset?.record) {
+      await financeClient.updateStaffPayment(auth.accessToken, staffPaymentDialogPreset.record.id, {
+        ...payload,
+        expectedVersion: staffPaymentDialogPreset.record.version,
+      })
+    } else {
+      await financeClient.createStaffPayment(auth.accessToken, payload)
+    }
 
     refreshExpenseWorksheetAfterSave(request.accountingMonth)
 
@@ -5369,7 +5581,12 @@ function PaymentsPrototypePanel({
                     const breakdownId = breakdownKey ? `expense-breakdown-${breakdownKey.replace(/[^a-zA-Z0-9_-]/g, '-')}` : undefined
                     return (
                       <Fragment key={`${row.item}-${row.supplierId ?? row.staffMemberId ?? index}`}>
-                      <tr>
+                      <tr
+                        className={canOpenPayoutContextMenu(row) ? 'finance-table-row--interactive' : undefined}
+                        tabIndex={canOpenPayoutContextMenu(row) ? 0 : undefined}
+                        onContextMenu={canOpenPayoutContextMenu(row) ? (event) => openPayoutContextMenu(event, row) : undefined}
+                        onKeyDown={canOpenPayoutContextMenu(row) ? (event) => openPayoutContextMenuFromKeyboard(event, row) : undefined}
+                      >
                         <td>
                           {breakdownKey ? (
                             <div className="payments-prototype-supplier-cell">
@@ -5471,12 +5688,17 @@ function PaymentsPrototypePanel({
                                         <th scope="col">Основание</th>
                                         <th scope="col">Комментарий</th>
                                         <th scope="col">Сумма</th>
-                                        {'staffMemberId' in breakdownState.value ? <th scope="col">Действия</th> : null}
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {breakdownState.value.items.map((item) => (
-                                        <tr className={item.isCanceled ? 'is-canceled' : undefined} key={`${item.entryKind}-${item.id}`}>
+                                        <tr
+                                          className={item.isCanceled ? 'is-canceled' : canOpenPayoutContextMenu(row, item) ? 'finance-table-row--interactive' : undefined}
+                                          key={`${item.entryKind}-${item.id}`}
+                                          tabIndex={canOpenPayoutContextMenu(row, item) ? 0 : undefined}
+                                          onContextMenu={canOpenPayoutContextMenu(row, item) ? (event) => openPayoutContextMenu(event, row, item) : undefined}
+                                          onKeyDown={canOpenPayoutContextMenu(row, item) ? (event) => openPayoutContextMenuFromKeyboard(event, row, item) : undefined}
+                                        >
                                           <td>{getExpenseBreakdownEntryLabel(item.entryKind)}</td>
                                           <td>{formatMonth(item.accountingMonth)}</td>
                                           <td>{item.operationDate ? formatDateOnly(item.operationDate) : '—'}</td>
@@ -5486,28 +5708,6 @@ function PaymentsPrototypePanel({
                                             {item.isCanceled ? <small className="payments-prototype-cell-note">Отменено{item.cancellationReason ? `: ${item.cancellationReason}` : ''}</small> : null}
                                           </td>
                                           <td className={item.entryKind === 'payment' ? 'money-income' : item.entryKind === 'penalty' ? 'money-expense' : undefined}>{formatPaymentMoney(item.amount)}</td>
-                                          {breakdownState.value && 'staffMemberId' in breakdownState.value ? (
-                                            <td>
-                                              {(item.entryKind === 'bonus' || item.entryKind === 'penalty') && item.version ? (
-                                                <div className="table-actions">
-                                                  {!item.isCanceled ? (
-                                                    <>
-                                                      <button className="icon-button" type="button" aria-label={`Изменить: ${getExpenseBreakdownEntryLabel(item.entryKind)}`} title="Изменить" disabled={!canWritePayments || staffSalaryAdjustmentActionSaving} onClick={(event) => void openStaffSalaryAdjustmentEdit(row, item, event.currentTarget)}>
-                                                        <Pencil size={16} aria-hidden="true" />
-                                                      </button>
-                                                      <button className="icon-button danger-icon-button" type="button" aria-label={`Отменить: ${getExpenseBreakdownEntryLabel(item.entryKind)}`} title="Отменить" disabled={!canWritePayments || staffSalaryAdjustmentActionSaving} onClick={(event) => openStaffSalaryAdjustmentCancel(row, item, event.currentTarget)}>
-                                                        <Trash2 size={16} aria-hidden="true" />
-                                                      </button>
-                                                    </>
-                                                  ) : (
-                                                    <button className="icon-button" type="button" aria-label={`Восстановить: ${getExpenseBreakdownEntryLabel(item.entryKind)}`} title="Восстановить" disabled={!canWritePayments || staffSalaryAdjustmentActionSaving} onClick={() => void restoreStaffSalaryAdjustment(item)}>
-                                                      <RotateCcw size={16} aria-hidden="true" />
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              ) : null}
-                                            </td>
-                                          ) : null}
                                         </tr>
                                       ))}
                                     </tbody>
@@ -5576,6 +5776,31 @@ function PaymentsPrototypePanel({
           </div>
         </>
       )}
+      {payoutContextMenu ? (
+        <div
+          className="context-menu"
+          style={{ left: payoutContextMenu.x, top: payoutContextMenu.y }}
+          role="menu"
+          aria-label={`Действия выплаты ${payoutContextMenu.row.counterparty ?? payoutContextMenu.row.item}`}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={handlePayoutContextMenuKeyDown}
+        >
+          <div className="context-menu-group" role="group">
+            {payoutEditEnabled ? (
+              <button ref={payoutContextMenuFirstItemRef} type="button" role="menuitem" disabled={payoutActionSaving || staffSalaryAdjustmentActionSaving} onClick={() => void editPayoutContextTarget()}>
+                <Pencil size={15} aria-hidden="true" />
+                <span>Редактировать</span>
+              </button>
+            ) : null}
+            {payoutDeleteEnabled ? (
+              <button ref={!payoutEditEnabled ? payoutContextMenuFirstItemRef : undefined} className="context-menu-danger" type="button" role="menuitem" disabled={payoutActionSaving || staffSalaryAdjustmentActionSaving} onClick={deletePayoutContextTarget}>
+                <Trash2 size={15} aria-hidden="true" />
+                <span>Удалить</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {calculationDialogRow ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setCalculationDialogRow(null)}>
           <section
@@ -5702,7 +5927,10 @@ function PaymentsPrototypePanel({
       ) : null}
       {expenseDialogPreset ? (
         <NewExpensePrototypeDialog
-          availableAmounts={[expenseBankAmount, expenseCashAmount]}
+          availableAmounts={[
+            expenseBankAmount + (expenseDialogPreset.record?.expensePaymentSource === 'bank' ? expenseDialogPreset.record.amount : 0),
+            expenseCashAmount + (expenseDialogPreset.record?.expensePaymentSource === 'cash' ? expenseDialogPreset.record.amount : 0),
+          ]}
           expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
           preset={expenseDialogPreset}
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
@@ -5712,7 +5940,7 @@ function PaymentsPrototypePanel({
       ) : null}
       {staffPaymentDialogPreset ? (
         <StaffPaymentPrototypeDialog
-          availableCashAmount={expenseCashAmount}
+          availableCashAmount={expenseCashAmount + (staffPaymentDialogPreset.record?.amount ?? 0)}
           preset={staffPaymentDialogPreset}
           staffMembers={staffMembers.filter((staffMember) => !staffMember.isArchived)}
           onClose={closeStaffPaymentDialog}
@@ -5761,6 +5989,20 @@ function PaymentsPrototypePanel({
           onChange={(reason) => setStaffSalaryAdjustmentCancel((current) => current ? { ...current, reason, error: null } : current)}
           onClose={closeStaffSalaryAdjustmentCancel}
           onConfirm={confirmStaffSalaryAdjustmentCancel}
+        />
+      ) : null}
+      {payoutCancel ? (
+        <PayoutOperationCancelDialog
+          state={payoutCancel}
+          saving={payoutActionSaving}
+          required={actionCommentsRequired}
+          onChange={(reason) => setPayoutCancel((current) => current ? { ...current, reason, error: null } : current)}
+          onClose={() => {
+            if (payoutActionSaving) return
+            setPayoutCancel(null)
+            restoreFocusAfterClose(payoutCancelTriggerRef)
+          }}
+          onConfirm={() => void confirmPayoutCancel()}
         />
       ) : null}
       {penaltyAccrualDialogOpen ? (
@@ -6112,28 +6354,30 @@ function NewExpensePrototypeDialog({
   const presetExpenseType = preset.expenseTypeName
     ? expenseTypes.find((expenseType) => expenseType.name.trim().toLocaleLowerCase('ru-RU') === preset.expenseTypeName?.trim().toLocaleLowerCase('ru-RU'))
     : null
+  const editedRecord = preset.record
   const availableSuppliers = suppliers.filter((supplier) => Boolean(
     getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId,
   ))
-  const initialSupplier = availableSuppliers.find((supplier) => supplier.expenseTypeId === presetExpenseType?.id)
+  const initialSupplier = availableSuppliers.find((supplier) => supplier.id === editedRecord?.supplierId)
+    ?? availableSuppliers.find((supplier) => supplier.expenseTypeId === presetExpenseType?.id)
     ?? getFirstLinkedSupplier(availableSuppliers, expenseTypes)
-  const [expensePaymentSource, setExpensePaymentSource] = useState<ExpensePaymentSource>(preset.expensePaymentSource)
+  const [expensePaymentSource, setExpensePaymentSource] = useState<ExpensePaymentSource>(editedRecord?.expensePaymentSource ?? preset.expensePaymentSource)
   const isCashExpense = expensePaymentSource === 'cash'
-  const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
+  const [supplierId, setSupplierId] = useState(editedRecord?.supplierId ?? initialSupplier?.id ?? '')
   const [expenseTypeId, setExpenseTypeId] = useState(
-    preset.expensePaymentSource === 'cash'
-      ? (presetExpenseType ?? expenseTypes.find((expenseType) => !expenseType.isArchived))?.id ?? ''
-      : getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
+    (editedRecord?.expensePaymentSource ?? preset.expensePaymentSource) === 'cash'
+      ? editedRecord?.expenseTypeId ?? (presetExpenseType ?? expenseTypes.find((expenseType) => !expenseType.isArchived))?.id ?? ''
+      : editedRecord?.expenseTypeId ?? getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
   )
-  const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.expenseFundId ?? '')
-  const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
-  const [counterpartyName, setCounterpartyName] = useState('')
+  const [expenseFundId, setExpenseFundId] = useState(editedRecord?.expenseFundId ?? initialSupplier?.expenseFundId ?? '')
+  const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>(editedRecord?.expensePaymentType ?? 'with_receipt')
+  const [counterpartyName, setCounterpartyName] = useState(editedRecord?.counterpartyName ?? '')
   const [confirmNegativeFundBalance, setConfirmNegativeFundBalance] = useState(false)
-  const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
-  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '')
-  const [documentNumber, setDocumentNumber] = useState('')
-  const [comment, setComment] = useState('')
+  const [operationDate, setOperationDate] = useState(editedRecord?.operationDate ?? getLocalDateInputValue())
+  const [accountingMonth, setAccountingMonth] = useState((editedRecord?.accountingMonth ?? getLocalDateInputValue()).slice(0, 7))
+  const [amount, setAmount] = useState(editedRecord ? String(editedRecord.amount) : preset.amount ? String(preset.amount) : '')
+  const [documentNumber, setDocumentNumber] = useState(editedRecord?.documentNumber ?? '')
+  const [comment, setComment] = useState(editedRecord?.comment ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
@@ -6203,9 +6447,9 @@ function NewExpensePrototypeDialog({
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="new-expense-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
-            <h3 id="new-expense-title">Добавить выплату</h3>
+            <h3 id="new-expense-title">{editedRecord ? 'Редактировать выплату' : 'Добавить выплату'}</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть новую выплату" onClick={onClose} disabled={saving}>
+          <button className="icon-button" type="button" aria-label={editedRecord ? 'Закрыть редактирование выплаты' : 'Закрыть новую выплату'} onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -6338,7 +6582,7 @@ function NewExpensePrototypeDialog({
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : editedRecord ? 'Сохранить изменения' : 'Провести'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
@@ -6362,16 +6606,17 @@ function StaffPaymentPrototypeDialog({
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const editedRecord = preset.record
   const normalizedPresetName = preset.staffMemberName?.trim().toLocaleLowerCase('ru-RU') ?? ''
   const presetStaffMember = normalizedPresetName
     ? staffMembers.find((member) => member.fullName.trim().toLocaleLowerCase('ru-RU').includes(normalizedPresetName))
     : null
-  const [staffMemberId, setStaffMemberId] = useState(presetStaffMember?.id ?? staffMembers[0]?.id ?? '')
-  const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
-  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '')
-  const [documentNumber, setDocumentNumber] = useState('')
-  const [comment, setComment] = useState('')
+  const [staffMemberId, setStaffMemberId] = useState(editedRecord?.staffMemberId ?? presetStaffMember?.id ?? staffMembers[0]?.id ?? '')
+  const [operationDate, setOperationDate] = useState(editedRecord?.operationDate ?? getLocalDateInputValue())
+  const [accountingMonth, setAccountingMonth] = useState((editedRecord?.accountingMonth ?? getLocalDateInputValue()).slice(0, 7))
+  const [amount, setAmount] = useState(editedRecord ? String(editedRecord.amount) : preset.amount ? String(preset.amount) : '')
+  const [documentNumber, setDocumentNumber] = useState(editedRecord?.documentNumber ?? '')
+  const [comment, setComment] = useState(editedRecord?.comment ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEscapeKey(!saving, onClose)
@@ -6429,7 +6674,7 @@ function StaffPaymentPrototypeDialog({
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-payment-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
-            <h3 id="staff-payment-title">Выплата сотруднику</h3>
+            <h3 id="staff-payment-title">{editedRecord ? 'Редактировать выплату сотруднику' : 'Выплата сотруднику'}</h3>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть выплату сотруднику" onClick={onClose} disabled={saving}>
             <X size={18} />
@@ -6476,10 +6721,52 @@ function StaffPaymentPrototypeDialog({
             <textarea aria-label="Комментарий к выплате сотруднику" rows={4} value={comment} disabled={saving} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : editedRecord ? 'Сохранить изменения' : 'Провести'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
+      </section>
+    </div>
+  )
+}
+
+function PayoutOperationCancelDialog({
+  state,
+  saving,
+  required,
+  onChange,
+  onClose,
+  onConfirm,
+}: {
+  state: PayoutCancelState
+  saving: boolean
+  required: boolean
+  onChange: (reason: string) => void
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useEscapeKey(!saving, onClose)
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="payout-cancel-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="payout-cancel-title">Удалить выплату</h3>
+            <p>{state.label}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть удаление выплаты" onClick={onClose} disabled={saving}><X size={18} aria-hidden="true" /></button>
+        </div>
+        <p className="form-hint">Выплата будет сторнирована, а не удалена физически. Остатки пересчитаются, запись сохранится в истории.</p>
+        <FormField label="Причина удаления">
+          <textarea aria-label="Причина удаления выплаты" rows={4} value={state.reason} required={required} disabled={saving} onChange={(event) => onChange(event.target.value)} />
+        </FormField>
+        {state.error ? <FormError>{state.error}</FormError> : null}
+        <div className="detail-dialog-actions">
+          <button className="secondary-button danger" type="button" disabled={saving} onClick={onConfirm}>{saving ? 'Удаляем…' : 'Удалить выплату'}</button>
+          <button ref={cancelRef} className="secondary-button" type="button" disabled={saving} onClick={onClose}>Назад</button>
+        </div>
       </section>
     </div>
   )

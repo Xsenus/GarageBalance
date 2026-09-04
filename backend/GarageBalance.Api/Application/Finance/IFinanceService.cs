@@ -66,6 +66,8 @@ public interface IFinanceService
 
     Task<FinanceResult<FinancialOperationDto>> CreateStaffPaymentAsync(CreateStaffPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
+    Task<FinanceResult<FinancialOperationDto>> UpdateStaffPaymentAsync(Guid operationId, UpdateStaffPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+
     Task<FinanceResult<StaffSalaryAdjustmentDto>> CreateStaffSalaryAdjustmentAsync(CreateStaffSalaryAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FinanceResult<StaffSalaryAdjustmentDto>> UpdateStaffSalaryAdjustmentAsync(Guid adjustmentId, UpdateStaffSalaryAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken);

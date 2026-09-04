@@ -536,6 +536,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(operation => operation.Amount).HasPrecision(18, 2);
             entity.Property(operation => operation.DocumentNumber).HasMaxLength(120);
             entity.Property(operation => operation.Comment).HasMaxLength(1000);
+            entity.Property(operation => operation.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(operation => operation.OperationDate);
             entity.HasIndex(operation => operation.AccountingMonth);
             entity.HasIndex(operation => operation.OperationKind);

@@ -30,7 +30,6 @@ public sealed class EfExpenseWorksheetQuery(
     private const int SupplierFundCategory = 17;
     private const int SalaryConfigurationCategory = 18;
     private const int SupplierStartingBalanceCategory = 19;
-    private const int EpisodicExpenseCategory = 20;
     private const int StaffStateCategory = 21;
     private const int StaffSalaryRatePeriodCategory = 22;
     private const int StaffEmploymentPeriodStartCategory = 23;
@@ -659,39 +658,6 @@ public sealed class EfExpenseWorksheetQuery(
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
-        var episodicExpenses = dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth >= monthFrom && operation.AccountingMonth <= monthTo &&
-                operation.SupplierId == null &&
-                operation.StaffMemberId == null &&
-                operation.ExpenseTypeId != null)
-            .GroupBy(operation => new
-            {
-                operation.CounterpartyName,
-                ExpenseTypeId = operation.ExpenseTypeId!.Value,
-                ExpenseTypeName = operation.ExpenseType!.Name,
-                ExpenseTypeCode = operation.ExpenseType.Code
-            })
-            .Select(group => new
-            {
-                Category = EpisodicExpenseCategory,
-                SupplierId = (Guid?)null,
-                StaffMemberId = (Guid?)null,
-                CounterpartyName = group.Key.CounterpartyName,
-                TypeId = (Guid?)group.Key.ExpenseTypeId,
-                TypeName = (string?)group.Key.ExpenseTypeName,
-                TypeCode = group.Key.ExpenseTypeCode,
-                Amount = group.Sum(operation => operation.Amount),
-                IncomeTotal = 0m,
-                BankDepositTotal = 0m,
-                CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m,
-                HistoryStartMonth = (DateOnly?)null,
-                StaffCreatedAtUtc = (DateTimeOffset?)null
-            });
-
         var supplierStartingBalances = dbContext.Suppliers
             .AsNoTracking()
             .Where(supplier =>
@@ -741,7 +707,6 @@ public sealed class EfExpenseWorksheetQuery(
 
         var rows = await supplierAccruals
             .Concat(supplierExpenses)
-            .Concat(episodicExpenses)
             .Concat(staffMembers)
             .Concat(staffStates)
             .Concat(staffSalaryRatePeriods)
@@ -763,6 +728,33 @@ public sealed class EfExpenseWorksheetQuery(
             .Concat(supplierFunds)
             .Concat(salaryConfiguration)
             .Concat(supplierStartingBalances)
+            .ToListAsync(cancellationToken);
+
+        var episodicExpenseOperations = await dbContext.FinancialOperations
+            .AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.AccountingMonth >= monthFrom && operation.AccountingMonth <= monthTo &&
+                operation.SupplierId == null &&
+                operation.StaffMemberId == null &&
+                operation.ExpenseTypeId != null)
+            .OrderByDescending(operation => operation.OperationDate)
+            .ThenBy(operation => operation.Id)
+            .Select(operation => new ExpenseWorksheetEpisodicExpenseData(
+                operation.Id,
+                operation.CounterpartyName,
+                operation.ExpenseTypeId!.Value,
+                operation.ExpenseType!.Name,
+                operation.ExpenseType.Code,
+                operation.Amount,
+                operation.OperationDate,
+                operation.AccountingMonth,
+                operation.ExpensePaymentType,
+                operation.ExpensePaymentSource,
+                operation.DocumentNumber,
+                operation.Comment,
+                operation.Version))
             .ToListAsync(cancellationToken);
 
         var salaryAccrualMonthTo = monthTo;
@@ -892,14 +884,7 @@ public sealed class EfExpenseWorksheetQuery(
                 rows.Sum(row => row.CashExpenseTotal),
                 rows.Sum(row => row.BankExpenseTotal)))
         {
-            EpisodicExpenses = rows.Where(row => row.Category == EpisodicExpenseCategory)
-                .Select(row => new ExpenseWorksheetEpisodicExpenseData(
-                    row.CounterpartyName,
-                    row.TypeId!.Value,
-                    row.TypeName!,
-                    row.TypeCode,
-                    row.Amount))
-                .ToList(),
+            EpisodicExpenses = episodicExpenseOperations,
             SupplierOpeningAccruals = rows.Where(row => row.Category == SupplierOpeningAccrualCategory)
                 .Select(row => new ExpenseWorksheetSupplierData(
                     row.SupplierId!.Value,

@@ -1073,6 +1073,145 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateStaffPaymentAsync_ChangesPaymentWithAuditAndRejectsStaleVersion()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = department,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
+        database.Context.AddRange(department, staffMember, salaryType, OpeningCashBalance(50000m));
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            payoutMutationPolicy: new FixedPayoutMutationPolicy(true, true));
+        var created = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 10000m, "PAY-EDIT", "Первоначально"),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+        var originalVersion = created.Value!.Version;
+
+        var updated = await service.UpdateStaffPaymentAsync(
+            created.Value.Id,
+            new UpdateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 21), new DateOnly(2026, 6, 1), 12000m, "PAY-EDIT", "Исправлено", originalVersion),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var stale = await service.UpdateStaffPaymentAsync(
+            created.Value.Id,
+            new UpdateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 22), new DateOnly(2026, 6, 1), 13000m, "PAY-EDIT", null, originalVersion),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Equal(12000m, updated.Value!.Amount);
+        Assert.Equal(new DateOnly(2026, 6, 21), updated.Value.OperationDate);
+        Assert.NotEqual(originalVersion, updated.Value.Version);
+        Assert.False(stale.Succeeded);
+        Assert.Equal("operation_version_conflict", stale.ErrorCode);
+        Assert.Equal("finance.staff_payment_updated", Assert.Single(database.Context.AuditEvents).Action);
+        Assert.Equal(12000m, Assert.Single(database.Context.FinancialOperations.Where(item => item.StaffMemberId == staffMember.Id)).Amount);
+    }
+
+    [Fact]
+    public async Task PayoutMutationPolicy_BlocksExpenseEditAndDeleteOnBackend()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var enabledService = FinanceServiceTestFactory.Create(
+            database.Context,
+            payoutMutationPolicy: new FixedPayoutMutationPolicy(true, true));
+        var created = await enabledService.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 100m, "PAYOUT-POLICY", null),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+
+        var blockedService = FinanceServiceTestFactory.Create(
+            database.Context,
+            payoutMutationPolicy: new FixedPayoutMutationPolicy(false, false));
+        var edit = await blockedService.UpdateExpenseAsync(
+            created.Value!.Id,
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 90m, "PAYOUT-POLICY", null, ExpectedVersion: created.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var cancel = await blockedService.CancelOperationAsync(
+            created.Value.Id,
+            new CancelFinanceEntryRequest("Ошибка ввода", created.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(edit.Succeeded);
+        Assert.Equal("payout_editing_disabled", edit.ErrorCode);
+        Assert.False(cancel.Succeeded);
+        Assert.Equal("payout_deletion_disabled", cancel.ErrorCode);
+        Assert.False((await database.Context.FinancialOperations.FindAsync(created.Value.Id))!.IsCanceled);
+    }
+
+    [Fact]
+    public async Task PayoutMutationPolicy_BlocksStaffPaymentAndAdjustmentMutationsOnBackend()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Технический отдел" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Сотрудник для проверки запрета",
+            Department = department,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
+        database.Context.AddRange(department, staffMember, salaryType, OpeningCashBalance(50000m));
+        await database.Context.SaveChangesAsync();
+        var enabledService = FinanceServiceTestFactory.Create(
+            database.Context,
+            payoutMutationPolicy: new FixedPayoutMutationPolicy(true, true));
+        var payment = await enabledService.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 10000m, "PAY-POLICY", null),
+            null,
+            CancellationToken.None);
+        var adjustment = await enabledService.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, new DateOnly(2026, 6, 1), StaffSalaryAdjustmentTypes.Bonus, 1000m, "BONUS-POLICY", "Премия"),
+            null,
+            CancellationToken.None);
+        Assert.True(payment.Succeeded);
+        Assert.True(adjustment.Succeeded);
+
+        var blockedService = FinanceServiceTestFactory.Create(
+            database.Context,
+            payoutMutationPolicy: new FixedPayoutMutationPolicy(false, false));
+        var paymentEdit = await blockedService.UpdateStaffPaymentAsync(
+            payment.Value!.Id,
+            new UpdateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 9000m, "PAY-POLICY", null, payment.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var adjustmentEdit = await blockedService.UpdateStaffSalaryAdjustmentAsync(
+            adjustment.Value!.Id,
+            new UpdateStaffSalaryAdjustmentRequest(staffMember.Id, new DateOnly(2026, 6, 1), StaffSalaryAdjustmentTypes.Bonus, 900m, "BONUS-POLICY", "Исправление", adjustment.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var adjustmentCancel = await blockedService.CancelStaffSalaryAdjustmentAsync(
+            adjustment.Value.Id,
+            new CancelStaffSalaryAdjustmentRequest("Ошибочная премия", adjustment.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.Equal("payout_editing_disabled", paymentEdit.ErrorCode);
+        Assert.Equal("payout_editing_disabled", adjustmentEdit.ErrorCode);
+        Assert.Equal("payout_deletion_disabled", adjustmentCancel.ErrorCode);
+        Assert.Equal(10000m, (await database.Context.FinancialOperations.FindAsync(payment.Value.Id))!.Amount);
+        Assert.False((await database.Context.StaffSalaryAdjustments.FindAsync(adjustment.Value.Id))!.IsCanceled);
+    }
+
+    [Fact]
     public async Task UpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -12074,7 +12213,7 @@ public sealed class FinanceServiceTests
         var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(month, result.Value!.AccountingMonth);
         Assert.Equal(76075m, result.Value.AccrualTotal);
         Assert.Equal(25442m, result.Value.ExpenseTotal);
@@ -12132,23 +12271,20 @@ public sealed class FinanceServiceTests
         Assert.Null(staffRow.CollectedAmount);
         Assert.Null(staffRow.Difference);
 
-        var episodicRow = Assert.Single(result.Value.Rows, row => row.RowKind == "episodic");
-        Assert.Null(episodicRow.SupplierId);
-        Assert.Null(episodicRow.StaffMemberId);
-        Assert.Equal("TEST 1", episodicRow.CounterpartyName);
-        Assert.Equal(expenseOnlyType.Id, episodicRow.ExpenseTypeId);
-        Assert.Equal("Ремонт", episodicRow.ExpenseTypeName);
-        Assert.Equal(0m, episodicRow.AccrualAmount);
-        Assert.Equal(342m, episodicRow.ExpenseAmount);
-        Assert.Equal(0m, episodicRow.OpeningBalance);
-        Assert.Equal(0m, episodicRow.ClosingDebt);
-        Assert.Equal(0m, episodicRow.ClosingAdvance);
-        Assert.Null(episodicRow.CollectedAmount);
-        Assert.Null(episodicRow.Difference);
+        var episodicRows = result.Value.Rows.Where(row => row.RowKind == "episodic").ToList();
+        Assert.Equal(2, episodicRows.Count);
+        Assert.Equal([9m, 333m], episodicRows.Select(row => row.ExpenseAmount));
+        Assert.All(episodicRows, episodicRow =>
+        {
+            Assert.Null(episodicRow.SupplierId);
+            Assert.Null(episodicRow.StaffMemberId);
+            Assert.NotNull(episodicRow.OperationId);
+            Assert.NotNull(episodicRow.OperationVersion);
+        });
     }
 
     [Fact]
-    public async Task GetExpenseWorksheetAsync_AggregatesSelectedMonthRangeInOneSelect()
+    public async Task GetExpenseWorksheetAsync_AggregatesSelectedMonthRangeInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -12172,7 +12308,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(june, result.Value!.MonthFrom);
         Assert.Equal(july, result.Value.MonthTo);
         Assert.Equal(350m, Assert.Single(result.Value.Rows, row => row.SupplierId == fixtures.Supplier.Id).AccrualAmount);
@@ -12224,7 +12360,7 @@ public sealed class FinanceServiceTests
         var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         var row = Assert.Single(result.Value!.Rows, item => item.RowKind == "episodic");
         Assert.Equal("Получатель не указан", row.CounterpartyName);
         Assert.Equal(333m, row.ExpenseAmount);
@@ -12368,7 +12504,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(375m, result.Value!.OpeningBalanceTotal);
         Assert.Equal(385m, result.Value.OpeningDebtTotal);
         Assert.Equal(10m, result.Value.OpeningAdvanceTotal);
@@ -12454,7 +12590,7 @@ public sealed class FinanceServiceTests
         var repeatedApril = await service.GetExpenseWorksheetAsync(
             new ExpenseWorksheetRequest(new DateOnly(2026, 4, 1)), CancellationToken.None);
 
-        Assert.Equal(5, commandCounter.Count);
+        Assert.Equal(10, commandCounter.Count);
         AssertExpenseCarry(Assert.Single(january.Value!.Rows), 0m, 0m, 0m, 0m);
         AssertExpenseCarry(Assert.Single(february.Value!.Rows), 0m, 0m, 150m, 0m);
         AssertExpenseCarry(Assert.Single(march.Value!.Rows), 150m, 0m, 0m, 50m);
@@ -12546,7 +12682,7 @@ public sealed class FinanceServiceTests
         var augustWorksheet = await service.GetExpenseWorksheetAsync(
             new ExpenseWorksheetRequest(august), CancellationToken.None);
 
-        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(6, commandCounter.Count);
         var juneRow = Assert.Single(juneWorksheet.Value!.Rows);
         Assert.Null(juneRow.CollectedAmount);
         Assert.Null(juneRow.Difference);
@@ -12809,7 +12945,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task ExpenseWorksheetQuery_ReturnsEmptyDataInOneSelect()
+    public async Task ExpenseWorksheetQuery_ReturnsEmptyDataInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -12822,7 +12958,7 @@ public sealed class FinanceServiceTests
             ["Выплата без чека"],
             CancellationToken.None);
 
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Empty(result.SupplierAccruals);
         Assert.Empty(result.SupplierExpenses);
         Assert.Empty(result.StaffMembers);
@@ -13262,7 +13398,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetExpenseWorksheetAsync_ReturnsEmptyWorksheetInOneSelect()
+    public async Task GetExpenseWorksheetAsync_ReturnsEmptyWorksheetInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -13274,7 +13410,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(0m, result.Value!.AccrualTotal);
         Assert.Equal(0m, result.Value.ExpenseTotal);
         Assert.Equal(0m, result.Value.BankAmount);
@@ -13283,7 +13419,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetExpenseWorksheetAsync_IncludesOpeningAndAdjustmentOperationsInOneSelect()
+    public async Task GetExpenseWorksheetAsync_IncludesOpeningAndAdjustmentOperationsInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -13324,7 +13460,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(875m, result.Value!.CashAmount);
         Assert.Equal(5000m, result.Value.BankAmount);
     }
@@ -13988,5 +14124,11 @@ public sealed class FinanceServiceTests
     private sealed class DisabledHistoricalMeterReadingCorrectionPolicy : IHistoricalMeterReadingCorrectionPolicy
     {
         public Task<bool> IsEnabledAsync(CancellationToken cancellationToken) => Task.FromResult(false);
+    }
+
+    private sealed class FixedPayoutMutationPolicy(bool editEnabled, bool deleteEnabled) : IPayoutMutationPolicy
+    {
+        public Task<PayoutMutationSettingsDto> GetAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new PayoutMutationSettingsDto(editEnabled, deleteEnabled, Guid.NewGuid()));
     }
 }

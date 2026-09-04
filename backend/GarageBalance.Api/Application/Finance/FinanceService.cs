@@ -44,7 +44,8 @@ public sealed class FinanceService(
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     TimeProvider timeProvider,
-    IBusinessDateProvider businessDateProvider) : IFinanceService
+    IBusinessDateProvider businessDateProvider,
+    IPayoutMutationPolicy? payoutMutationPolicy = null) : IFinanceService
 {
     private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private const int MaxAutomaticFeeCampaigns = 500;
@@ -1271,7 +1272,17 @@ public sealed class FinanceService(
                 expenseAmount,
                 0m,
                 null,
-                null));
+                null)
+            {
+                OperationId = episodicExpense.OperationId,
+                OperationDate = episodicExpense.OperationDate,
+                AccountingMonth = episodicExpense.AccountingMonth,
+                ExpensePaymentType = episodicExpense.ExpensePaymentType,
+                ExpensePaymentSource = episodicExpense.ExpensePaymentSource,
+                DocumentNumber = episodicExpense.DocumentNumber,
+                Comment = episodicExpense.Comment,
+                OperationVersion = episodicExpense.Version
+            });
         }
 
         var staffExpenses = worksheetData.StaffExpenses
@@ -1435,7 +1446,11 @@ public sealed class FinanceService(
                     item.Source,
                     item.IsCanceled,
                     item.Version,
-                    item.CancellationReason)).ToList(),
+                    item.CancellationReason,
+                    item.ExpensePaymentType,
+                    item.ExpensePaymentSource,
+                    item.ExpenseFundId,
+                    item.CounterpartyName)).ToList(),
                 data.TotalCount,
                 offset,
                 limit));
@@ -1501,7 +1516,11 @@ public sealed class FinanceService(
                     item.Source,
                     item.IsCanceled,
                     item.Version,
-                    item.CancellationReason)).ToList(),
+                    item.CancellationReason,
+                    item.ExpensePaymentType,
+                    item.ExpensePaymentSource,
+                    item.ExpenseFundId,
+                    item.CounterpartyName)).ToList(),
                 data.TotalCount,
                 offset,
                 limit));
@@ -2856,6 +2875,132 @@ public sealed class FinanceService(
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
+    public async Task<FinanceResult<FinancialOperationDto>> UpdateStaffPaymentAsync(
+        Guid operationId,
+        UpdateStaffPaymentRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (payoutMutationPolicy is not null && !(await payoutMutationPolicy.GetAsync(cancellationToken)).EditEnabled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("payout_editing_disabled", "Редактирование выплат отключено администратором.");
+        }
+
+        var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
+        if (operation is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Выплата сотруднику не найдена.");
+        }
+        if (operation.OperationKind != FinancialOperationKinds.Expense || operation.StaffMemberId is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_kind_mismatch", "Эта операция не является выплатой сотруднику.");
+        }
+        if (operation.IsCanceled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную выплату нельзя изменить.");
+        }
+        if (operation.Version != request.ExpectedVersion)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_version_conflict", "Выплата уже изменена другим пользователем. Обновите данные и повторите действие.");
+        }
+
+        var staffMember = await staffMemberRepository.FindAsync(request.StaffMemberId, cancellationToken);
+        if (staffMember is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("staff_member_not_found", "Сотрудник для выплаты не найден.");
+        }
+        var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
+        if (salaryExpenseType is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системная услуга «Зарплата» не найдена.");
+        }
+
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        var salaryRate = await GetStaffSalaryRateAsync(staffMember, accountingMonth, cancellationToken);
+        if (!salaryRate.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("staff_payment_month_invalid", "Нельзя выплатить зарплату за месяц вне периода работы сотрудника.");
+        }
+        await using var staffLocks = await AcquireStaffSalaryLocksAsync(
+            [(operation.StaffMemberId.Value, operation.AccountingMonth), (staffMember.Id, accountingMonth)],
+            cancellationToken);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            FinanceBalanceAccounts.Cash,
+            cancellationToken);
+
+        if (await HasDocumentDuplicateAsync(
+            FinancialOperationKinds.Expense,
+            request.DocumentNumber,
+            request.OperationDate,
+            operation.Id,
+            cancellationToken))
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
+        }
+
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var adjustmentTotals = await staffSalaryAdjustmentRepository.GetTotalsAsync(staffMember.Id, accountingMonth, null, cancellationToken);
+        var paidForTarget = await financialOperationRepository.GetStaffExpenseTotalAsync(staffMember.Id, accountingMonth, cancellationToken);
+        if (operation.StaffMemberId == staffMember.Id && operation.AccountingMonth == accountingMonth)
+        {
+            paidForTarget = MoneyMath.RoundMoney(paidForTarget - operation.Amount);
+        }
+        var availableAmount = MoneyMath.RoundMoney(
+            salaryRate.Value + adjustmentTotals.BonusAmount - adjustmentTotals.PenaltyAmount - paidForTarget);
+        if (amount > availableAmount)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {MoneyFormatting.Format(availableAmount)}.");
+        }
+
+        var availableCashAmount = MoneyMath.RoundMoney(await CalculateAvailableCashAmountAsync(cancellationToken) + operation.Amount);
+        if (amount > availableCashAmount)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "cash_amount_insufficient",
+                $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
+        }
+
+        var previousSnapshot = FormatStaffPaymentSnapshot(operation);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = operation.OperationDate,
+            ["accountingMonth"] = operation.AccountingMonth,
+            ["amount"] = operation.Amount,
+            ["documentNumber"] = operation.DocumentNumber,
+            ["comment"] = operation.Comment,
+            ["staffMember"] = operation.StaffMember?.FullName
+        };
+        operation.OperationDate = request.OperationDate;
+        operation.AccountingMonth = accountingMonth;
+        operation.Amount = amount;
+        operation.DocumentNumber = NormalizeOptional(request.DocumentNumber);
+        operation.Comment = NormalizeOptional(request.Comment);
+        operation.StaffMemberId = staffMember.Id;
+        operation.StaffMember = staffMember;
+        operation.ExpenseTypeId = salaryExpenseType.Id;
+        operation.ExpenseType = salaryExpenseType;
+        operation.ExpensePaymentSource = ExpensePaymentSources.Cash;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var newValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = operation.OperationDate,
+            ["accountingMonth"] = operation.AccountingMonth,
+            ["amount"] = operation.Amount,
+            ["documentNumber"] = operation.DocumentNumber,
+            ["comment"] = operation.Comment,
+            ["staffMember"] = staffMember.FullName
+        };
+        AddAudit(
+            actorUserId,
+            "finance.staff_payment_updated",
+            operation,
+            $"Изменена выплата сотруднику: было {previousSnapshot}; стало {FormatStaffPaymentSnapshot(operation)}.",
+            oldValues,
+            newValues);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
     public async Task<FinanceResult<StaffSalaryAdjustmentDto>> CreateStaffSalaryAdjustmentAsync(
         CreateStaffSalaryAdjustmentRequest request,
         Guid? actorUserId,
@@ -2960,6 +3105,11 @@ public sealed class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        if (payoutMutationPolicy is not null && !(await payoutMutationPolicy.GetAsync(cancellationToken)).EditEnabled)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("payout_editing_disabled", "Редактирование выплат отключено администратором.");
+        }
+
         var adjustment = await staffSalaryAdjustmentRepository.FindForUpdateAsync(adjustmentId, cancellationToken);
         if (adjustment is null)
         {
@@ -3066,6 +3216,11 @@ public sealed class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        if (payoutMutationPolicy is not null && !(await payoutMutationPolicy.GetAsync(cancellationToken)).DeleteEnabled)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("payout_deletion_disabled", "Удаление выплат отключено администратором.");
+        }
+
         var adjustment = await staffSalaryAdjustmentRepository.FindForUpdateAsync(adjustmentId, cancellationToken);
         if (adjustment is null)
         {
@@ -3264,7 +3419,6 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
         }
-
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
@@ -3382,6 +3536,11 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> UpdateExpenseAsync(Guid operationId, CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (payoutMutationPolicy is not null && !(await payoutMutationPolicy.GetAsync(cancellationToken)).EditEnabled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("payout_editing_disabled", "Редактирование выплат отключено администратором.");
+        }
+
         var operation = await financialOperationRepository.FindForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
@@ -3401,6 +3560,10 @@ public sealed class FinanceService(
         if (operation.IsCanceled)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
+        }
+        if (request.ExpectedVersion.HasValue && operation.Version != request.ExpectedVersion.Value)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_version_conflict", "Выплата уже изменена другим пользователем. Обновите данные и повторите действие.");
         }
 
         if (!request.SupplierId.HasValue)
@@ -3669,6 +3832,12 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_not_found", "Финансовая операция не найдена.");
         }
+        if (operation.OperationKind == FinancialOperationKinds.Expense &&
+            payoutMutationPolicy is not null &&
+            !(await payoutMutationPolicy.GetAsync(cancellationToken)).DeleteEnabled)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("payout_deletion_disabled", "Удаление выплат отключено администратором.");
+        }
         if (linkedFeeCampaignIds.Count > 0 || operation.FeeCampaignId.HasValue)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
@@ -3679,6 +3848,10 @@ public sealed class FinanceService(
         if (operation.IsCanceled)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Финансовая операция уже отменена.");
+        }
+        if (request.ExpectedVersion.HasValue && operation.Version != request.ExpectedVersion.Value)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_version_conflict", "Выплата уже изменена другим пользователем. Обновите данные и повторите действие.");
         }
 
         var hasSupplierExpenseFund = operation.OperationKind == FinancialOperationKinds.Expense &&
@@ -4768,7 +4941,6 @@ public sealed class FinanceService(
                     $"Регулярные начисления {periodLabel} уже сформированы для всех активных гаражей ({activeGarageCount}).");
             }
         }
-
         var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
         await using var garageLocks = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             garages
@@ -8439,7 +8611,8 @@ public sealed class FinanceService(
             operation.ExpenseFundId,
             operation.ExpenseFund?.Name,
             operation.CounterpartyName,
-            operation.NegativeFundBalanceConfirmed);
+            operation.NegativeFundBalanceConfirmed,
+            operation.Version);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)

@@ -34,6 +34,12 @@ export type ActionCommentSettingsDto = {
   version: string
 }
 
+export type PayoutMutationSettingsDto = {
+  editEnabled: boolean
+  deleteEnabled: boolean
+  version: string
+}
+
 export type HistoricalMeterReadingCorrectionSettingsDto = {
   enabled: boolean
   version: string
@@ -124,6 +130,8 @@ export type DiagnosticLogStatusDto = {
 export type ApplicationSettingsClient = {
   getActionCommentSettings(accessToken: string, signal?: AbortSignal): Promise<ActionCommentSettingsDto>
   updateActionCommentSettings(accessToken: string, request: ActionCommentSettingsDto): Promise<ActionCommentSettingsDto>
+  getPayoutMutationSettings(accessToken: string, signal?: AbortSignal): Promise<PayoutMutationSettingsDto>
+  updatePayoutMutationSettings(accessToken: string, request: PayoutMutationSettingsDto): Promise<PayoutMutationSettingsDto>
   getHistoricalMeterReadingCorrectionSettings(accessToken: string, signal?: AbortSignal): Promise<HistoricalMeterReadingCorrectionSettingsDto>
   updateHistoricalMeterReadingCorrectionSettings(accessToken: string, request: HistoricalMeterReadingCorrectionSettingsDto): Promise<HistoricalMeterReadingCorrectionSettingsDto>
   getPaymentDisplaySettings(accessToken: string, signal?: AbortSignal): Promise<PaymentDisplaySettingsDto>
@@ -175,6 +183,12 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   updateActionCommentSettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/action-comments', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getPayoutMutationSettings(accessToken, signal) {
+    return requestJson(accessToken, '/api/settings/payments/payout-actions', { signal })
+  },
+  updatePayoutMutationSettings(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/payments/payout-actions', { method: 'PUT', body: JSON.stringify(request) })
   },
   getHistoricalMeterReadingCorrectionSettings(accessToken, signal) {
     return requestJson(accessToken, '/api/settings/meter-readings/historical-corrections', { signal })

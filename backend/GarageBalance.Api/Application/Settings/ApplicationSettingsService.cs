@@ -22,6 +22,7 @@ public sealed class ApplicationSettingsService(
     public const string SalaryAccrualDayKey = "finance.salary_accrual_day";
     public const int DefaultSalaryAccrualDay = 1;
     public const string ActionCommentsRequiredKey = "system.action_comments_required";
+    public const string PayoutMutationActionsKey = "finance.payout_mutation_actions";
     public const string HistoricalMeterReadingCorrectionEnabledKey = "meter_readings.historical_correction_enabled";
     public const string BusinessDateOverrideKey = "system.business_date_override";
 
@@ -373,6 +374,72 @@ public sealed class ApplicationSettingsService(
         return new ActionCommentSettingsDto(setting.BooleanValue, setting.Version);
     }
 
+    public async Task<PayoutMutationSettingsDto> GetPayoutMutationSettingsAsync(CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindAsync(PayoutMutationActionsKey, cancellationToken);
+        return CreatePayoutMutationSettings(setting?.IntegerValue, setting?.Version ?? Guid.NewGuid());
+    }
+
+    public async Task<PayoutMutationSettingsDto> UpdatePayoutMutationSettingsAsync(
+        UpdatePayoutMutationSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindForUpdateAsync(PayoutMutationActionsKey, cancellationToken);
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
+
+        var previous = CreatePayoutMutationSettings(setting?.IntegerValue, setting?.Version ?? request.Version ?? Guid.NewGuid());
+        var nextMask = (request.EditEnabled ? 1 : 0) | (request.DeleteEnabled ? 2 : 0);
+        if (setting is null && nextMask == 1)
+        {
+            return new PayoutMutationSettingsDto(true, false, request.Version ?? Guid.NewGuid());
+        }
+
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = PayoutMutationActionsKey };
+            repository.Add(setting);
+        }
+        else if (setting.IntegerValue == nextMask)
+        {
+            return CreatePayoutMutationSettings(nextMask, setting.Version);
+        }
+
+        setting.IntegerValue = nextMask;
+        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+        setting.UpdatedByUserId = actorUserId;
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "application_setting.payout_mutation_actions_updated",
+            "application_setting",
+            PayoutMutationActionsKey,
+            Summary: "Изменены разрешения на исправление выплат в ведомости.",
+            Section: "settings",
+            ActionKind: "update",
+            EntityDisplayName: "Исправление выплат",
+            OldValues: new Dictionary<string, object?>
+            {
+                ["editEnabled"] = previous.EditEnabled,
+                ["deleteEnabled"] = previous.DeleteEnabled
+            },
+            NewValues: new Dictionary<string, object?>
+            {
+                ["editEnabled"] = request.EditEnabled,
+                ["deleteEnabled"] = request.DeleteEnabled
+            },
+            FieldLabels: new Dictionary<string, string>
+            {
+                ["editEnabled"] = "Разрешить редактирование выплат",
+                ["deleteEnabled"] = "Разрешить удаление выплат"
+            }));
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return CreatePayoutMutationSettings(nextMask, setting.Version);
+    }
+
     public async Task<HistoricalMeterReadingCorrectionSettingsDto> GetHistoricalMeterReadingCorrectionSettingsAsync(
         CancellationToken cancellationToken)
     {
@@ -560,6 +627,12 @@ public sealed class ApplicationSettingsService(
 
     private static int NormalizeSalaryAccrualDay(int? value) =>
         value is >= 1 and <= 28 ? value.Value : DefaultSalaryAccrualDay;
+
+    private static PayoutMutationSettingsDto CreatePayoutMutationSettings(int? mask, Guid version)
+    {
+        var normalizedMask = mask ?? 1;
+        return new PayoutMutationSettingsDto((normalizedMask & 1) != 0, (normalizedMask & 2) != 0, version);
+    }
 
     private static TariffTableDisplaySettingsDto CreateTariffTableDisplaySettingsDto(int mask, Guid version) =>
         new((mask & 1) != 0, (mask & 2) != 0, version, (mask & 4) != 0);

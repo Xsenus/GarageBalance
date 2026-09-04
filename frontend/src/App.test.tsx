@@ -9,6 +9,8 @@ vi.mock('./services/settingsApi', () => ({
     updateActionCommentSettings: vi.fn(async (_accessToken: string, request: { required: boolean; version: string }) => request),
     getHistoricalMeterReadingCorrectionSettings: vi.fn(async () => ({ enabled: true, version: 'meter-correction-version' })),
     updateHistoricalMeterReadingCorrectionSettings: vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request),
+    getPayoutMutationSettings: vi.fn(async () => ({ editEnabled: true, deleteEnabled: false, version: 'payout-version' })),
+    updatePayoutMutationSettings: vi.fn(async (_accessToken: string, request: { editEnabled: boolean; deleteEnabled: boolean; version: string }) => request),
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request),
     getTariffPanelsLayout: vi.fn(async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' })),
@@ -12899,6 +12901,19 @@ describe('App', () => {
       cancellationReason: null,
       version: 'version-updated',
     }))
+    const updateStaffPayment = vi.fn(async (_token: string, operationId: string, request: Parameters<FinanceClient['updateStaffPayment']>[2]) => createFinancialOperation({
+      id: operationId,
+      operationKind: 'expense',
+      staffMemberId: request.staffMemberId,
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      documentNumber: request.documentNumber ?? null,
+      comment: request.comment ?? null,
+      expenseTypeId: 'expense-salary',
+      expensePaymentSource: 'cash',
+      version: 'version-payment-updated',
+    }))
     const cancelStaffSalaryAdjustment = vi.fn(async (_token: string, adjustmentId: string, request: Parameters<FinanceClient['cancelStaffSalaryAdjustment']>[2]) => {
       penaltyCanceled = true
       return {
@@ -12924,7 +12939,7 @@ describe('App', () => {
       accrualTotal: 48012,
       expenseTotal: 48002,
       items: [
-        { id: 'payment-1', entryKind: 'payment', accountingMonth: '2026-08-01', operationDate: '2026-08-25', amount: 48002, documentNumber: 'РКО-8', comment: 'Выплата зарплаты', source: 'cash' },
+        { id: 'payment-1', entryKind: 'payment', accountingMonth: '2026-08-01', operationDate: '2026-08-25', amount: 48002, documentNumber: 'РКО-8', comment: 'Выплата зарплаты', source: 'cash', expensePaymentType: 'with_receipt' as const, expensePaymentSource: 'cash' as const, version: 'version-payment' },
         { id: 'bonus-1', entryKind: 'bonus', accountingMonth: '2026-08-01', operationDate: null, amount: 5123, documentNumber: 'ПР-8', comment: 'За срочный ремонт ворот', source: null, isCanceled: false, version: 'version-bonus', cancellationReason: null },
         { id: 'penalty-1', entryKind: 'penalty', accountingMonth: '2026-08-01', operationDate: null, amount: 2111, documentNumber: 'ШТ-8', comment: 'Нарушение графика', source: null, isCanceled: penaltyCanceled, version: penaltyCanceled ? 'version-canceled' : 'version-penalty', cancellationReason: penaltyCanceled ? 'Ошибка начисления' : null },
         { id: 'salary-1', entryKind: 'salary', accountingMonth: '2026-08-01', operationDate: null, amount: 45000, documentNumber: null, comment: null, source: 'salary' },
@@ -12954,7 +12969,7 @@ describe('App', () => {
         difference: null,
       }],
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetStaffBreakdown, updateStaffSalaryAdjustment, cancelStaffSalaryAdjustment, restoreStaffSalaryAdjustment })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetStaffBreakdown, updateStaffPayment, updateStaffSalaryAdjustment, cancelStaffSalaryAdjustment, restoreStaffSalaryAdjustment })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPayoutMutationSettings: async () => ({ editEnabled: true, deleteEnabled: true, version: 'payout-version' }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -12974,7 +12989,22 @@ describe('App', () => {
     expect(within(detailsTable).getByText('Оклад по ставке')).toBeInTheDocument()
     expect(within(detailsTable).getAllByText('Премия')).toHaveLength(1)
     expect(within(detailsTable).getAllByText('Штраф')).toHaveLength(1)
-    await user.click(within(detailsTable).getByRole('button', { name: 'Изменить: Премия' }))
+    expect(within(detailsTable).queryByRole('columnheader', { name: 'Действия' })).not.toBeInTheDocument()
+    fireEvent.contextMenu(within(detailsTable).getByRole('row', { name: /Выплата.*РКО-8/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Редактировать' }))
+    const staffPaymentDialog = await screen.findByRole('dialog', { name: 'Редактировать выплату сотруднику' })
+    expect(within(staffPaymentDialog).getByLabelText('Сумма выплаты сотруднику')).toHaveValue('48 002.00')
+    await user.clear(within(staffPaymentDialog).getByLabelText('Сумма выплаты сотруднику'))
+    await user.type(within(staffPaymentDialog).getByLabelText('Сумма выплаты сотруднику'), '47000')
+    await user.click(within(staffPaymentDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await waitFor(() => expect(updateStaffPayment).toHaveBeenCalledWith('token', 'payment-1', expect.objectContaining({
+      amount: 47000,
+      expectedVersion: 'version-payment',
+    })))
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Петров Валентин Семенович, Зарплата' }))
+    const detailsAfterStaffPayment = await within(prototype).findByRole('table', { name: 'Операции: Петров Валентин Семенович, Зарплата' })
+    fireEvent.contextMenu(within(detailsAfterStaffPayment).getByRole('row', { name: /Премия.*ПР-8/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Редактировать' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить премию сотруднику' })
     expect(within(editDialog).getByLabelText('Сумма премии')).toHaveValue('5 123.00')
     await user.clear(within(editDialog).getByLabelText('Сумма премии'))
@@ -12992,7 +13022,8 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить премию сотруднику' })).not.toBeInTheDocument())
     await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Петров Валентин Семенович, Зарплата' }))
     const tableAfterUpdate = await within(prototype).findByRole('table', { name: 'Операции: Петров Валентин Семенович, Зарплата' })
-    await user.click(within(tableAfterUpdate).getByRole('button', { name: 'Отменить: Штраф' }))
+    fireEvent.contextMenu(within(tableAfterUpdate).getByRole('row', { name: /Штраф.*ШТ-8/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
     const cancelDialog = await screen.findByRole('dialog', { name: 'Отменить штраф' })
     await user.type(within(cancelDialog).getByLabelText('Причина отмены премии или штрафа'), 'Ошибка начисления')
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
@@ -13003,8 +13034,8 @@ describe('App', () => {
     await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Петров Валентин Семенович, Зарплата' }))
     const tableAfterCancel = await within(prototype).findByRole('table', { name: 'Операции: Петров Валентин Семенович, Зарплата' })
     expect(within(tableAfterCancel).getByText('Отменено: Ошибка начисления')).toBeInTheDocument()
-    await user.click(within(tableAfterCancel).getByRole('button', { name: 'Восстановить: Штраф' }))
-    await waitFor(() => expect(restoreStaffSalaryAdjustment).toHaveBeenCalledWith('token', 'penalty-1', 'version-canceled'))
+    expect(within(tableAfterCancel).queryByRole('button', { name: /Восстановить/ })).not.toBeInTheDocument()
+    expect(restoreStaffSalaryAdjustment).not.toHaveBeenCalled()
     expect(getExpenseWorksheetStaffBreakdown).toHaveBeenCalledWith('token', {
       staffMemberId: 'staff-member-1',
       expenseTypeId: 'expense-salary',
@@ -13013,6 +13044,116 @@ describe('App', () => {
       offset: 0,
       limit: 25,
     }, expect.any(AbortSignal))
+  })
+
+  it('edits an episodic cash payout from the row context menu with its concurrency version', async () => {
+    const user = userEvent.setup()
+    const updateExpense = vi.fn(async (_token: string, operationId: string, request: CreateExpenseOperationRequest) => createFinancialOperation({
+      id: operationId,
+      operationKind: 'expense',
+      amount: request.amount,
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      expenseTypeId: request.expenseTypeId,
+      expensePaymentType: request.expensePaymentType,
+      expensePaymentSource: request.expensePaymentSource,
+      counterpartyName: request.counterpartyName,
+      version: 'episodic-version-2',
+    }))
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      rows: [{
+        rowKind: 'episodic', supplierId: null, staffMemberId: null, counterpartyName: 'ИП Ромашка', expenseTypeId: 'expense-type-1', expenseTypeName: 'Электроэнергия',
+        openingBalance: 0, accrualAmount: 0, expenseAmount: 333, balance: 0, collectedAmount: null, difference: null,
+        operationId: 'episodic-1', operationDate: '2026-06-24', accountingMonth: '2026-06-01', expensePaymentType: 'with_receipt', expensePaymentSource: 'cash',
+        documentNumber: 'РКО-333', comment: 'Первоначальный комментарий', operationVersion: 'episodic-version-1',
+      }],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, updateExpense })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPayoutMutationSettings: async () => ({ editEnabled: true, deleteEnabled: false, version: 'payout-version' }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    const payoutRow = (await within(prototype).findByText('ИП Ромашка')).closest('tr')!
+
+    fireEvent.contextMenu(payoutRow)
+    const menu = await screen.findByRole('menu', { name: 'Действия выплаты ИП Ромашка' })
+    expect(within(menu).getByRole('menuitem', { name: 'Редактировать' })).toBeInTheDocument()
+    expect(within(menu).queryByRole('menuitem', { name: 'Удалить' })).not.toBeInTheDocument()
+    await user.click(within(menu).getByRole('menuitem', { name: 'Редактировать' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Редактировать выплату' })
+    expect(within(dialog).getByLabelText('Получатель эпизодической выплаты')).toHaveValue('ИП Ромашка')
+    expect(within(dialog).getByLabelText('Сумма выплаты')).toHaveValue('333.00')
+    expect(within(dialog).getByLabelText('Документ выплаты')).toHaveValue('РКО-333')
+    await user.clear(within(dialog).getByLabelText('Сумма выплаты'))
+    await user.type(within(dialog).getByLabelText('Сумма выплаты'), '350')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    await waitFor(() => expect(updateExpense).toHaveBeenCalledWith('token', 'episodic-1', expect.objectContaining({
+      amount: 350,
+      counterpartyName: 'ИП Ромашка',
+      expectedVersion: 'episodic-version-1',
+    })))
+  })
+
+  it('deletes an episodic payout from a delete-only context menu by creating a storno operation', async () => {
+    const user = userEvent.setup()
+    const cancelOperation = vi.fn(async () => undefined)
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      rows: [{
+        rowKind: 'episodic', supplierId: null, staffMemberId: null, counterpartyName: 'Получатель кассовой выплаты', expenseTypeId: 'expense-type-1', expenseTypeName: 'Банковские расходы',
+        openingBalance: 0, accrualAmount: 0, expenseAmount: 75, balance: 0, collectedAmount: null, difference: null,
+        operationId: 'episodic-delete', operationDate: '2026-06-25', accountingMonth: '2026-06-01', expensePaymentType: 'without_receipt', expensePaymentSource: 'cash',
+        documentNumber: 'РКО-75', comment: 'Эпизодическая выплата из кассы', operationVersion: 'episodic-delete-version',
+      }],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, cancelOperation })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPayoutMutationSettings: async () => ({ editEnabled: false, deleteEnabled: true, version: 'payout-version' }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    const payoutRow = (await within(prototype).findByText('Получатель кассовой выплаты')).closest('tr')!
+
+    fireEvent.contextMenu(payoutRow)
+    const menu = await screen.findByRole('menu', { name: 'Действия выплаты Получатель кассовой выплаты' })
+    expect(within(menu).queryByRole('menuitem', { name: 'Редактировать' })).not.toBeInTheDocument()
+    await user.click(within(menu).getByRole('menuitem', { name: 'Удалить' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Удалить выплату' })
+    expect(within(dialog).getByText(/Получатель кассовой выплаты/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('Причина удаления выплаты'), 'Ошибочно введённая выплата')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить выплату' }))
+
+    await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'episodic-delete', {
+      reason: 'Ошибочно введённая выплата',
+      expectedVersion: 'episodic-delete-version',
+    }))
+  })
+
+  it('does not open payout actions when both administrator switches are disabled', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({
+      getExpenseWorksheet: async () => createExpenseWorksheet({ rows: [{
+        rowKind: 'episodic', supplierId: null, staffMemberId: null, counterpartyName: 'Получатель без действий', expenseTypeId: 'expense-type-1', expenseTypeName: 'Электроэнергия',
+        openingBalance: 0, accrualAmount: 0, expenseAmount: 10, balance: 0, collectedAmount: null, difference: null,
+        operationId: 'episodic-disabled', operationDate: '2026-06-24', accountingMonth: '2026-06-01', expensePaymentType: 'with_receipt', expensePaymentSource: 'cash', operationVersion: 'disabled-version',
+      }] }),
+    })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPayoutMutationSettings: async () => ({ editEnabled: false, deleteEnabled: false, version: 'payout-version' }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    const payoutRow = (await within(prototype).findByText('Получатель без действий')).closest('tr')!
+
+    fireEvent.contextMenu(payoutRow)
+    expect(screen.queryByRole('menu', { name: /Действия выплаты/ })).not.toBeInTheDocument()
+    expect(payoutRow).not.toHaveAttribute('tabindex')
   })
 
   it('shows a foreground error and retries supplier breakdown loading', async () => {
@@ -14673,9 +14814,11 @@ describe('App', () => {
     const user = userEvent.setup()
     const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean; accrualReasonDisplayMode: string; accrualReasonDisplayVersion: string }) => request)
     const updateHistoricalMeterReadingCorrectionSettings = vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request)
+    const updatePayoutMutationSettings = vi.fn(async (_accessToken: string, request: { editEnabled: boolean; deleteEnabled: boolean; version: string }) => request)
     const settingsClient = createSettingsClient({
       getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: false, version: 'meter-correction-version' }),
       updateHistoricalMeterReadingCorrectionSettings,
+      updatePayoutMutationSettings,
       updatePaymentDisplaySettings,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
@@ -14693,8 +14836,12 @@ describe('App', () => {
     const fundNameToggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать фонд под наименованием услуги' })
     const historicalCorrectionToggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить изменение существующих показаний за другие месяцы' })
     const reasonMode = within(displayPanel).getByRole('combobox', { name: 'Показывать причины начислений' })
+    const payoutEditToggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить редактирование выплат по правой кнопке мыши' })
+    const payoutDeleteToggle = within(displayPanel).getByRole('checkbox', { name: 'Разрешить удаление выплат по правой кнопке мыши' })
     const settingHelp = [
       ['Причины действий', /причину удаления и комментарии/i],
+      ['Редактирование выплат', /исправлять выплаты поставщикам и сотрудникам/i],
+      ['Удаление выплат', /Удаление выполняется как сторно/i],
       ['Показывать общую ведомость платежей', /открывает «Платежи» общей ведомостью/i],
       ['Причины начислений', /строки платежей с пояснением «Причина»/i],
       ['Изменение показаний за другие месяцы', /Пустую ячейку можно заполнить всегда/i],
@@ -14715,6 +14862,14 @@ describe('App', () => {
     expect(fundNameToggle).not.toBeChecked()
     expect(historicalCorrectionToggle).not.toBeChecked()
     expect(reasonMode).toHaveTextContent('Только у штрафов')
+    expect(payoutEditToggle).toBeChecked()
+    expect(payoutDeleteToggle).not.toBeChecked()
+    await user.click(payoutDeleteToggle)
+    await waitFor(() => expect(updatePayoutMutationSettings).toHaveBeenCalledWith('token', {
+      editEnabled: true,
+      deleteEnabled: true,
+      version: 'payout-version',
+    }))
     await user.click(toggle)
     await user.click(periodicityToggle)
     await user.click(fundNameToggle)
@@ -24979,6 +25134,8 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
     updateActionCommentSettings: async (_accessToken, request) => request,
     getHistoricalMeterReadingCorrectionSettings: async () => ({ enabled: true, version: 'meter-correction-version' }),
     updateHistoricalMeterReadingCorrectionSettings: async (_accessToken, request) => request,
+    getPayoutMutationSettings: async () => ({ editEnabled: true, deleteEnabled: false, version: 'payout-version' }),
+    updatePayoutMutationSettings: async (_accessToken, request) => request,
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, accrualReasonDisplayMode: 'penalties_only', accrualReasonDisplayVersion: 'accrual-reason-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),

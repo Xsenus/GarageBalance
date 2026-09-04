@@ -60,6 +60,16 @@ public sealed record ActionCommentSettingsDto(bool Required, Guid Version = defa
 
 public sealed record UpdateActionCommentSettingsRequest(bool Required, Guid? Version = null);
 
+public sealed record PayoutMutationSettingsDto(
+    bool EditEnabled,
+    bool DeleteEnabled,
+    Guid Version = default);
+
+public sealed record UpdatePayoutMutationSettingsRequest(
+    bool EditEnabled,
+    bool DeleteEnabled,
+    Guid? Version = null);
+
 public sealed record HistoricalMeterReadingCorrectionSettingsDto(bool Enabled, Guid Version = default);
 
 public sealed record UpdateHistoricalMeterReadingCorrectionSettingsRequest(bool Enabled, Guid? Version = null);

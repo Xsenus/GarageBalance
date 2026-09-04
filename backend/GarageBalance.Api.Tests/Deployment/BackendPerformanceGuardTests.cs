@@ -638,7 +638,7 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void ExpenseWorksheetQuery_AggregatesAllSourcesBeforeSingleMaterialization()
+    public void ExpenseWorksheetQuery_UsesOneAggregateAndOneBoundedEpisodicMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfExpenseWorksheetQuery.cs");
         Assert.Contains("class EfExpenseWorksheetQuery", source, StringComparison.Ordinal);
@@ -649,7 +649,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("bankDeposits", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 4);
         Assert.True(CountOccurrences(source, ".Concat(") >= 6);
-        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(2, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]

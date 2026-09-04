@@ -48,7 +48,11 @@ public sealed record ExpenseWorksheetSupplierBreakdownEntryData(
     DateTimeOffset CreatedAtUtc,
     bool IsCanceled = false,
     Guid? Version = null,
-    string? CancellationReason = null);
+    string? CancellationReason = null,
+    string? ExpensePaymentType = null,
+    string? ExpensePaymentSource = null,
+    Guid? ExpenseFundId = null,
+    string? CounterpartyName = null);
 
 public sealed record ExpenseWorksheetStaffBreakdownData(
     IReadOnlyList<ExpenseWorksheetSupplierBreakdownEntryData> Items,
@@ -99,11 +103,19 @@ public sealed record ExpenseWorksheetSupplierData(
     decimal Amount);
 
 public sealed record ExpenseWorksheetEpisodicExpenseData(
+    Guid OperationId,
     string? CounterpartyName,
     Guid ExpenseTypeId,
     string ExpenseTypeName,
     string? ExpenseTypeCode,
-    decimal Amount);
+    decimal Amount,
+    DateOnly OperationDate,
+    DateOnly AccountingMonth,
+    string? ExpensePaymentType,
+    string? ExpensePaymentSource,
+    string? DocumentNumber,
+    string? Comment,
+    Guid Version);
 
 public sealed record ExpenseWorksheetStaffData(
     Guid StaffMemberId,

@@ -53,7 +53,12 @@ internal static class EfExpenseWorksheetSupplierBreakdownQuery
             accrual.DocumentNumber,
             accrual.Comment,
             Source = (string?)accrual.Source,
-            accrual.CreatedAtUtc
+            accrual.CreatedAtUtc,
+            ExpensePaymentType = (string?)null,
+            ExpensePaymentSource = (string?)null,
+            ExpenseFundId = (Guid?)null,
+            CounterpartyName = (string?)null,
+            Version = (Guid?)null
         });
         var expenseEntries = expenses.Select(operation => new
         {
@@ -65,7 +70,12 @@ internal static class EfExpenseWorksheetSupplierBreakdownQuery
             operation.DocumentNumber,
             operation.Comment,
             Source = operation.ExpensePaymentSource,
-            operation.CreatedAtUtc
+            operation.CreatedAtUtc,
+            operation.ExpensePaymentType,
+            operation.ExpensePaymentSource,
+            operation.ExpenseFundId,
+            operation.CounterpartyName,
+            Version = (Guid?)operation.Version
         });
         var rawItems = await accrualEntries
             .Concat(expenseEntries)
@@ -84,7 +94,12 @@ internal static class EfExpenseWorksheetSupplierBreakdownQuery
             item.DocumentNumber,
             item.Comment,
             item.Source,
-            item.CreatedAtUtc)).ToList();
+            item.CreatedAtUtc,
+            ExpensePaymentType: item.ExpensePaymentType,
+            ExpensePaymentSource: item.ExpensePaymentSource,
+            ExpenseFundId: item.ExpenseFundId,
+            CounterpartyName: item.CounterpartyName,
+            Version: item.Version)).ToList();
 
         return new ExpenseWorksheetSupplierBreakdownData(
             items,

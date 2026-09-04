@@ -1,8 +1,9 @@
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Common;
 
 namespace GarageBalance.Api.Domain.Finance;
 
-public sealed class FinancialOperation
+public sealed class FinancialOperation : IOptimisticConcurrencyEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string OperationKind { get; set; }
@@ -35,4 +36,5 @@ public sealed class FinancialOperation
     public bool IsCanceled { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid Version { get; set; } = Guid.NewGuid();
 }
