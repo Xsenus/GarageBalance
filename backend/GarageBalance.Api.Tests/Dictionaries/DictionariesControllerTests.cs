@@ -1670,7 +1670,9 @@ public sealed class DictionariesControllerTests
         };
         var controller = CreateController(service, actorUserId);
 
-        var result = await controller.UpdateStaffMember(staffId, new UpsertStaffMemberRequest("Петрова Ольга", departmentId, 41000), CancellationToken.None);
+        var hiredOn = new DateOnly(2026, 2, 17);
+        var dismissedOn = new DateOnly(2026, 8, 20);
+        var result = await controller.UpdateStaffMember(staffId, new UpsertStaffMemberRequest("Петрова Ольга", departmentId, 41000, hiredOn, dismissedOn), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var dto = Assert.IsType<StaffMemberDto>(ok.Value);
@@ -1678,6 +1680,8 @@ public sealed class DictionariesControllerTests
         Assert.Equal(41000, dto.Rate);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(staffId, service.LastStaffMemberId);
+        Assert.Equal(hiredOn, service.LastStaffMemberRequest?.EmploymentStartDate);
+        Assert.Equal(dismissedOn, service.LastStaffMemberRequest?.EmploymentEndDate);
     }
 
     [Fact]
@@ -1955,6 +1959,7 @@ public sealed class DictionariesControllerTests
         public Guid? LastSupplierContactId { get; private set; }
         public Guid? LastStaffDepartmentId { get; private set; }
         public Guid? LastStaffMemberId { get; private set; }
+        public UpsertStaffMemberRequest? LastStaffMemberRequest { get; private set; }
         public DictionaryResult<OwnerDto> CreateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<OwnerDto> UpdateOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("owner_not_found", "Not found.");
         public DictionaryResult<OwnerDto> ArchiveOwnerResult { get; init; } = DictionaryResult<OwnerDto>.Failure("not_configured", "Not configured.");
@@ -2277,6 +2282,7 @@ public sealed class DictionariesControllerTests
         public Task<DictionaryResult<StaffMemberDto>> CreateStaffMemberAsync(UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;
+            LastStaffMemberRequest = request;
             return Task.FromResult(CreateStaffMemberResult);
         }
 
@@ -2284,6 +2290,7 @@ public sealed class DictionariesControllerTests
         {
             LastActorUserId = actorUserId;
             LastStaffMemberId = id;
+            LastStaffMemberRequest = request;
             return Task.FromResult(UpdateStaffMemberResult);
         }
 

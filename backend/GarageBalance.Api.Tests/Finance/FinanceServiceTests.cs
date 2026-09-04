@@ -2638,8 +2638,8 @@ public sealed class FinanceServiceTests
             salaryType,
             new StaffSalaryRatePeriod { StaffMember = staffMember, EffectiveFrom = new DateOnly(2026, 1, 1), Rate = 100m },
             new StaffSalaryRatePeriod { StaffMember = staffMember, EffectiveFrom = new DateOnly(2026, 3, 1), Rate = 200m },
-            new StaffEmploymentPeriod { StaffMember = staffMember, EffectiveFrom = new DateOnly(2026, 1, 1), EffectiveTo = new DateOnly(2026, 2, 1) },
-            new StaffEmploymentPeriod { StaffMember = staffMember, EffectiveFrom = new DateOnly(2026, 4, 1) });
+            new StaffEmploymentPeriod { StaffMember = staffMember, EffectiveFrom = new DateOnly(2026, 1, 10), EffectiveTo = new DateOnly(2026, 2, 20) },
+            new StaffEmploymentPeriod { StaffMember = staffMember, EffectiveFrom = new DateOnly(2026, 5, 15) });
         await database.Context.SaveChangesAsync();
         var query = new EfExpenseWorksheetQuery(
             database.Context,
@@ -2663,10 +2663,10 @@ public sealed class FinanceServiceTests
             25,
             CancellationToken.None);
 
-        Assert.Equal(400m, staffRow.BaseAccrualAmount);
+        Assert.Equal(200m, staffRow.BaseAccrualAmount);
         Assert.Equal(200m, staffRow.OpeningBaseAccrualAmount);
-        Assert.Equal(600m, breakdown.BaseAccrualTotal);
-        Assert.Equal([200m, 200m, 100m, 100m], breakdown.Items.Select(item => item.Amount).ToArray());
+        Assert.Equal(400m, breakdown.BaseAccrualTotal);
+        Assert.Equal([200m, 100m, 100m], breakdown.Items.Select(item => item.Amount).ToArray());
     }
 
     [Fact]

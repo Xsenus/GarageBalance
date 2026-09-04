@@ -61,7 +61,7 @@ internal static class EfExpenseWorksheetStaffBreakdownQuery
             .OrderBy(period => period.EffectiveFrom)
             .ToListAsync(cancellationToken);
         var employmentPeriods = await dbContext.StaffEmploymentPeriods.AsNoTracking()
-            .Where(period => period.StaffMemberId == staffMemberId && period.EffectiveFrom <= salaryMonthTo)
+            .Where(period => period.StaffMemberId == staffMemberId && period.EffectiveFrom < salaryMonthTo.AddMonths(1))
             .OrderBy(period => period.EffectiveFrom)
             .ToListAsync(cancellationToken);
         var staffUpdatedMonth = MonthPeriod.Normalize(DateOnly.FromDateTime(

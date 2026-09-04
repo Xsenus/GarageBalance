@@ -1895,6 +1895,107 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task StaffMemberEmploymentDates_AreSavedReturnedAndAudited()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Охрана"), actorUserId, CancellationToken.None);
+        var hiredOn = new DateOnly(2026, 2, 17);
+        var dismissedOn = new DateOnly(2026, 5, 6);
+
+        var created = await service.CreateStaffMemberAsync(
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value!.Id, 45000m, hiredOn, dismissedOn),
+            actorUserId,
+            CancellationToken.None);
+        var listed = Assert.Single(await service.GetStaffMembersAsync(department.Value.Id, null, CancellationToken.None));
+        var pageItem = Assert.Single((await service.GetStaffMembersPageAsync(null, null, 0, 25, "fullName", "asc", CancellationToken.None)).Items);
+        var updatedStart = new DateOnly(2026, 1, 12);
+
+        var updated = await service.UpdateStaffMemberAsync(
+            created.Value!.Id,
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value.Id, 45000m, updatedStart, null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal(hiredOn, created.Value.EmploymentStartDate);
+        Assert.Equal(dismissedOn, created.Value.EmploymentEndDate);
+        Assert.Equal(hiredOn, listed.EmploymentStartDate);
+        Assert.Equal(dismissedOn, listed.EmploymentEndDate);
+        Assert.Equal(hiredOn, pageItem.EmploymentStartDate);
+        Assert.Equal(dismissedOn, pageItem.EmploymentEndDate);
+        Assert.True(updated.Succeeded);
+        Assert.Equal(updatedStart, updated.Value!.EmploymentStartDate);
+        Assert.Null(updated.Value.EmploymentEndDate);
+        var employmentPeriod = Assert.Single(database.Context.StaffEmploymentPeriods);
+        Assert.Equal(updatedStart, employmentPeriod.EffectiveFrom);
+        Assert.Null(employmentPeriod.EffectiveTo);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.staff_member_updated");
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();
+        Assert.Contains("Дата принятия", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Дата увольнения", changedFields, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_LegacyRequestWithoutEmploymentDates_PreservesExistingPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Охрана"), null, CancellationToken.None);
+        var hiredOn = new DateOnly(2026, 2, 17);
+        var dismissedOn = new DateOnly(2026, 5, 6);
+        var created = await service.CreateStaffMemberAsync(
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value!.Id, 45000m, hiredOn, dismissedOn),
+            null,
+            CancellationToken.None);
+
+        var updated = await service.UpdateStaffMemberAsync(
+            created.Value!.Id,
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value.Id, 46000m),
+            null,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Equal(hiredOn, updated.Value!.EmploymentStartDate);
+        Assert.Equal(dismissedOn, updated.Value.EmploymentEndDate);
+        var employmentPeriod = Assert.Single(database.Context.StaffEmploymentPeriods);
+        Assert.Equal(hiredOn, employmentPeriod.EffectiveFrom);
+        Assert.Equal(dismissedOn, employmentPeriod.EffectiveTo);
+    }
+
+    [Fact]
+    public async Task StaffMemberEmploymentDates_RejectEndBeforeStartWithoutChangingHistory()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Охрана"), null, CancellationToken.None);
+        var invalidCreate = await service.CreateStaffMemberAsync(
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value!.Id, 45000m, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 9)),
+            null,
+            CancellationToken.None);
+
+        var valid = await service.CreateStaffMemberAsync(
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value.Id, 45000m, new DateOnly(2026, 6, 10), null),
+            null,
+            CancellationToken.None);
+        var invalidUpdate = await service.UpdateStaffMemberAsync(
+            valid.Value!.Id,
+            new UpsertStaffMemberRequest("Смирнов Алексей", department.Value.Id, 45000m, new DateOnly(2026, 7, 10), new DateOnly(2026, 7, 9)),
+            null,
+            CancellationToken.None);
+
+        Assert.False(invalidCreate.Succeeded);
+        Assert.Equal("staff_employment_period_invalid", invalidCreate.ErrorCode);
+        Assert.False(invalidUpdate.Succeeded);
+        Assert.Equal("staff_employment_period_invalid", invalidUpdate.ErrorCode);
+        var period = Assert.Single(database.Context.StaffEmploymentPeriods);
+        Assert.Equal(new DateOnly(2026, 6, 10), period.EffectiveFrom);
+        Assert.Null(period.EffectiveTo);
+    }
+
+    [Fact]
     public async Task GetStaffMembersPageAsync_AppliesFiltersAndReturnsRequestedPage()
     {
         await using var database = await TestDatabase.CreateAsync();

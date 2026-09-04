@@ -70,6 +70,8 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
                 IsArchived = null,
                 DepartmentId = null,
                 DepartmentName = null,
+                EmploymentStartDate = null,
+                EmploymentEndDate = null,
                 TotalCount = query.Count()
             });
         var rows = await ApplyPostgresSortingByCategory(
@@ -85,7 +87,7 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         return new StaffMemberPageData(items, totalCount);
     }
 
-    private static IQueryable<StaffMemberListRow> ProjectListRows(IQueryable<StaffMember> query) =>
+    private IQueryable<StaffMemberListRow> ProjectListRows(IQueryable<StaffMember> query) =>
         query.Select(member => new StaffMemberListRow
         {
             Category = 1,
@@ -95,6 +97,16 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
             IsArchived = member.IsArchived,
             DepartmentId = member.DepartmentId,
             DepartmentName = member.Department.Name,
+            EmploymentStartDate = dbContext.StaffEmploymentPeriods
+                .Where(period => period.StaffMemberId == member.Id)
+                .OrderByDescending(period => period.EffectiveFrom)
+                .Select(period => (DateOnly?)period.EffectiveFrom)
+                .FirstOrDefault(),
+            EmploymentEndDate = dbContext.StaffEmploymentPeriods
+                .Where(period => period.StaffMemberId == member.Id)
+                .OrderByDescending(period => period.EffectiveFrom)
+                .Select(period => period.EffectiveTo)
+                .FirstOrDefault(),
             TotalCount = 0
         });
 
@@ -109,7 +121,10 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         {
             Id = row.DepartmentId.Value,
             Name = row.DepartmentName!
-        }
+        },
+        EmploymentPeriods = row.EmploymentStartDate.HasValue
+            ? [new StaffEmploymentPeriod { EffectiveFrom = row.EmploymentStartDate.Value, EffectiveTo = row.EmploymentEndDate }]
+            : []
     };
 
     private static IOrderedQueryable<StaffMemberListRow> ApplyPostgresSorting(
@@ -147,15 +162,15 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
     }
 
     public Task<StaffMember?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.StaffMembers.Include(member => member.Department)
+        dbContext.StaffMembers.Include(member => member.Department).Include(member => member.EmploymentPeriods)
             .SingleOrDefaultAsync(member => member.Id == id && !member.IsArchived, cancellationToken);
 
     public Task<StaffMember?> FindAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.StaffMembers.Include(member => member.Department)
+        dbContext.StaffMembers.Include(member => member.Department).Include(member => member.EmploymentPeriods)
             .SingleOrDefaultAsync(member => member.Id == id, cancellationToken);
 
     public Task<StaffMember?> FindArchivedAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.StaffMembers.Include(member => member.Department)
+        dbContext.StaffMembers.Include(member => member.Department).Include(member => member.EmploymentPeriods)
             .SingleOrDefaultAsync(member => member.Id == id && member.IsArchived, cancellationToken);
 
     public Task<StaffSalaryRatePeriod?> FindSalaryRatePeriodAsync(Guid staffMemberId, DateOnly effectiveFrom, CancellationToken cancellationToken) =>
@@ -188,7 +203,7 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
                 dbContext.StaffEmploymentPeriods.Any(period => period.StaffMemberId == member.Id),
                 dbContext.StaffEmploymentPeriods.Any(period =>
                     period.StaffMemberId == member.Id &&
-                    period.EffectiveFrom <= month &&
+                    period.EffectiveFrom < month.AddMonths(1) &&
                     (period.EffectiveTo == null || period.EffectiveTo >= month))))
             .SingleOrDefaultAsync(cancellationToken);
     }
@@ -229,7 +244,7 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
     }
 
     private static IQueryable<StaffMember> IncludeDepartment(IQueryable<StaffMember> query) =>
-        query.Include(member => member.Department);
+        query.Include(member => member.Department).Include(member => member.EmploymentPeriods);
 
     private static IOrderedQueryable<StaffMember> ApplyPageSorting(IQueryable<StaffMember> query, string sortBy, bool descending)
     {
@@ -259,6 +274,8 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         public bool? IsArchived { get; init; }
         public Guid? DepartmentId { get; init; }
         public string? DepartmentName { get; init; }
+        public DateOnly? EmploymentStartDate { get; init; }
+        public DateOnly? EmploymentEndDate { get; init; }
         public int TotalCount { get; init; }
     }
 }

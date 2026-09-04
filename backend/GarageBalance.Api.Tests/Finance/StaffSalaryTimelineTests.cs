@@ -48,4 +48,26 @@ public sealed class StaffSalaryTimelineTests
 
         Assert.Equal(300m, result);
     }
+
+    [Fact]
+    public void CalculateBaseAccrual_IncludesWholeHireAndDismissalMonthsForExactDates()
+    {
+        var staffMemberId = Guid.NewGuid();
+        var result = StaffSalaryTimeline.CalculateBaseAccrual(
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2026, 6, 1),
+            100m,
+            new DateOnly(2026, 1, 1),
+            false,
+            new DateOnly(2026, 6, 1),
+            [],
+            [new StaffEmploymentPeriod
+            {
+                StaffMemberId = staffMemberId,
+                EffectiveFrom = new DateOnly(2026, 2, 17),
+                EffectiveTo = new DateOnly(2026, 5, 6)
+            }]);
+
+        Assert.Equal(400m, result);
+    }
 }

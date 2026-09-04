@@ -105,6 +105,8 @@ export type StaffMemberDto = {
   departmentName: string
   rate: number
   isArchived: boolean
+  employmentStartDate?: string | null
+  employmentEndDate?: string | null
 }
 
 export type AccountingTypeDto = {
@@ -287,6 +289,8 @@ export type UpsertStaffMemberRequest = {
   fullName: string
   departmentId: string
   rate: number
+  employmentStartDate: string
+  employmentEndDate: string | null
 }
 
 export type UpsertAccountingTypeRequest = {

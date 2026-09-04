@@ -3634,6 +3634,16 @@ describe('App', () => {
     await user.click(addEmployeeButton)
     employeeDialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
     expect(employeeDialog).toHaveClass('contractors-dialog--staff')
+    const employmentStartInput = within(employeeDialog).getByLabelText('Дата принятия сотрудника')
+    const employmentEndInput = within(employeeDialog).getByLabelText('Дата увольнения сотрудника')
+    expect(employmentStartInput).toHaveValue('30.06.2026')
+    expect(employmentStartInput.closest('.form-field')?.nextElementSibling).toContainElement(employmentEndInput)
+    expect(employmentStartInput.closest('.form-field')?.nextElementSibling?.nextElementSibling).toContainElement(within(employeeDialog).getByLabelText('Отдел сотрудника'))
+    expect(employmentEndInput.closest('.form-field')?.nextElementSibling?.nextElementSibling).toContainElement(within(employeeDialog).getByLabelText('Ставка сотрудника'))
+    await user.type(employmentEndInput, '29.06.2026')
+    await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
+    expect(within(employeeDialog).getByRole('alert')).toHaveTextContent('Дата увольнения не может быть раньше даты принятия.')
+    await user.clear(employmentEndInput)
     expect(within(employeeDialog).getByLabelText('Отдел сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
     expect(within(employeeDialog).getByRole('combobox', { name: 'Отдел сотрудника' })).toHaveClass('select-control__trigger')
     expect(within(employeeDialog).getByLabelText('Ставка сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
@@ -4498,6 +4508,8 @@ describe('App', () => {
         departmentId: department.id,
         departmentName: department.name,
         rate: request.rate,
+        employmentStartDate: request.employmentStartDate,
+        employmentEndDate: request.employmentEndDate,
       })
       return staffMember
     })
@@ -4536,6 +4548,12 @@ describe('App', () => {
     await user.click(editButton)
     staffDialog = await screen.findByRole('dialog', { name: 'Петрова Ольга' })
     expect(within(staffDialog).getByLabelText('Ставка сотрудника')).toHaveValue('40 000.00')
+    const startDateInput = within(staffDialog).getByLabelText('Дата принятия сотрудника')
+    const endDateInput = within(staffDialog).getByLabelText('Дата увольнения сотрудника')
+    expect(startDateInput).toHaveValue('01.06.2026')
+    await user.clear(startDateInput)
+    await user.type(startDateInput, '15.05.2026')
+    await user.type(endDateInput, '20.08.2026')
     await user.click(within(staffDialog).getByRole('combobox', { name: 'Отдел сотрудника' }))
     await user.click(within(staffDialog).getByRole('option', { name: nextDepartment.name }))
     await user.clear(within(staffDialog).getByLabelText('Ставка сотрудника'))
@@ -4549,6 +4567,10 @@ describe('App', () => {
     expect(confirmationDialog).toHaveTextContent('Бухгалтерия -> Охрана')
     expect(confirmationDialog).toHaveTextContent('Ставка')
     expect(confirmationDialog).toHaveTextContent(/40\s000\.00\s*->\s*45\s000\.00/)
+    expect(confirmationDialog).toHaveTextContent('Дата принятия')
+    expect(confirmationDialog).toHaveTextContent('01.06.2026 -> 15.05.2026')
+    expect(confirmationDialog).toHaveTextContent('Дата увольнения')
+    expect(confirmationDialog).toHaveTextContent('20.08.2026')
     expect(updateStaffMember).not.toHaveBeenCalled()
     await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
@@ -4563,6 +4585,8 @@ describe('App', () => {
     await waitFor(() => expect(updateStaffMember).toHaveBeenCalledWith('token', staffMember.id, expect.objectContaining({
       departmentId: nextDepartment.id,
       rate: 45000,
+      employmentStartDate: '2026-05-15',
+      employmentEndDate: '2026-08-20',
     })))
     const updatedStaffRow = within(staffTable).getByText('Петрова Ольга').closest('[role="row"]')
     if (!updatedStaffRow) {
@@ -26983,6 +27007,8 @@ function createStatefulDictionaryClient(): DictionaryClient {
         departmentId: department.id,
         departmentName: department.name,
         rate: request.rate,
+        employmentStartDate: request.employmentStartDate,
+        employmentEndDate: request.employmentEndDate,
       })
       staffMembers = [member, ...staffMembers]
       return member
@@ -26995,6 +27021,8 @@ function createStatefulDictionaryClient(): DictionaryClient {
         departmentId: department.id,
         departmentName: department.name,
         rate: request.rate,
+        employmentStartDate: request.employmentStartDate,
+        employmentEndDate: request.employmentEndDate,
       })
       staffMembers = staffMembers.map((item) => (item.id === id ? member : item))
       return member
@@ -27306,6 +27334,8 @@ function createStaffMember(overrides: Partial<StaffMemberDto>): StaffMemberDto {
     departmentName: 'Отдел',
     rate: 0,
     isArchived: false,
+    employmentStartDate: '2026-06-01',
+    employmentEndDate: null,
     ...overrides,
   }
 }

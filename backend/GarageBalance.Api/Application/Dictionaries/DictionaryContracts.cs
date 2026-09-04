@@ -157,12 +157,16 @@ public sealed record StaffMemberDto(
     Guid DepartmentId,
     string DepartmentName,
     decimal Rate,
-    bool IsArchived);
+    bool IsArchived,
+    DateOnly? EmploymentStartDate = null,
+    DateOnly? EmploymentEndDate = null);
 
 public sealed record UpsertStaffMemberRequest(
     [Required, MaxLength(200)] string FullName,
     Guid DepartmentId,
-    [Range(0, 999999999)] decimal Rate);
+    [Range(0, 999999999)] decimal Rate,
+    DateOnly? EmploymentStartDate = null,
+    DateOnly? EmploymentEndDate = null);
 
 public sealed record AccountingTypeDto(
     Guid Id,

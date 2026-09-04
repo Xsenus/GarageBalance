@@ -64,6 +64,8 @@ public sealed class DictionaryService(
         ["position"] = "Должность",
         ["status"] = "Статус",
         ["department"] = "Отдел",
+        ["employmentStartDate"] = "Дата принятия",
+        ["employmentEndDate"] = "Дата увольнения",
         ["code"] = "Код",
         ["calculationBase"] = "База расчета",
         ["rate"] = "Ставка",
@@ -1295,6 +1297,12 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<StaffMemberDto>> CreateStaffMemberAsync(UpsertStaffMemberRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        var employmentStartDate = request.EmploymentStartDate ?? MonthPeriod.Normalize(businessDateProvider.Today);
+        if (request.EmploymentEndDate < employmentStartDate)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_employment_period_invalid", "Дата увольнения не может быть раньше даты принятия.");
+        }
+
         var department = await staffDepartmentRepository.FindActiveAsync(request.DepartmentId, cancellationToken);
         if (department is null)
         {
@@ -1310,7 +1318,7 @@ public sealed class DictionaryService(
         };
 
         staffMemberRepository.Add(member);
-        var currentMonth = MonthPeriod.Normalize(businessDateProvider.Today);
+        var currentMonth = MonthPeriod.Normalize(employmentStartDate);
         staffMemberRepository.AddSalaryRatePeriod(new StaffSalaryRatePeriod
         {
             StaffMember = member,
@@ -1320,7 +1328,8 @@ public sealed class DictionaryService(
         staffMemberRepository.AddEmploymentPeriod(new StaffEmploymentPeriod
         {
             StaffMember = member,
-            EffectiveFrom = currentMonth
+            EffectiveFrom = employmentStartDate,
+            EffectiveTo = request.EmploymentEndDate
         });
         AddAudit(actorUserId, "dictionary.staff_member_created", "staff_member", member.Id, $"Создан сотрудник {member.FullName}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1343,7 +1352,17 @@ public sealed class DictionaryService(
 
         var fullName = request.FullName.Trim();
         var rate = MoneyMath.RoundMoney(request.Rate);
-        if (StringEquals(member.FullName, fullName) && member.DepartmentId == department.Id && member.Rate == rate)
+        var employmentPeriod = member.EmploymentPeriods.OrderByDescending(period => period.EffectiveFrom).FirstOrDefault();
+        var employmentDatesSupplied = request.EmploymentStartDate.HasValue;
+        var employmentStartDate = request.EmploymentStartDate ?? employmentPeriod?.EffectiveFrom ?? businessDateProvider.ToBusinessDate(member.CreatedAtUtc);
+        var employmentEndDate = employmentDatesSupplied ? request.EmploymentEndDate : employmentPeriod?.EffectiveTo;
+        if (employmentEndDate < employmentStartDate)
+        {
+            return DictionaryResult<StaffMemberDto>.Failure("staff_employment_period_invalid", "Дата увольнения не может быть раньше даты принятия.");
+        }
+
+        if (StringEquals(member.FullName, fullName) && member.DepartmentId == department.Id && member.Rate == rate &&
+            employmentPeriod?.EffectiveFrom == employmentStartDate && employmentPeriod?.EffectiveTo == employmentEndDate)
         {
             return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
         }
@@ -1352,13 +1371,17 @@ public sealed class DictionaryService(
         {
             ["fullName"] = member.FullName,
             ["department"] = member.Department.Name,
-            ["rate"] = member.Rate
+            ["rate"] = member.Rate,
+            ["employmentStartDate"] = employmentPeriod?.EffectiveFrom,
+            ["employmentEndDate"] = employmentPeriod?.EffectiveTo
         };
         var newValues = new Dictionary<string, object?>
         {
             ["fullName"] = fullName,
             ["department"] = department.Name,
-            ["rate"] = rate
+            ["rate"] = rate,
+            ["employmentStartDate"] = employmentStartDate,
+            ["employmentEndDate"] = employmentEndDate
         };
 
         var rateChanged = member.Rate != rate;
@@ -1367,6 +1390,22 @@ public sealed class DictionaryService(
         member.Department = department;
         member.Rate = rate;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        if (employmentPeriod is null)
+        {
+            employmentPeriod = new StaffEmploymentPeriod
+            {
+                StaffMemberId = member.Id,
+                EffectiveFrom = employmentStartDate,
+                EffectiveTo = employmentEndDate
+            };
+            staffMemberRepository.AddEmploymentPeriod(employmentPeriod);
+        }
+        else
+        {
+            employmentPeriod.EffectiveFrom = employmentStartDate;
+            employmentPeriod.EffectiveTo = employmentEndDate;
+        }
 
         if (rateChanged)
         {
@@ -1417,7 +1456,8 @@ public sealed class DictionaryService(
             };
             staffMemberRepository.AddEmploymentPeriod(employmentPeriod);
         }
-        employmentPeriod.EffectiveTo = MonthPeriod.Normalize(businessDateProvider.Today);
+        var archiveDate = businessDateProvider.Today;
+        employmentPeriod.EffectiveTo = archiveDate < employmentPeriod.EffectiveFrom ? employmentPeriod.EffectiveFrom : archiveDate;
         AddAudit(actorUserId, "dictionary.staff_member_archived", "staff_member", member.Id, $"Архивирован сотрудник {member.FullName}.", archiveReason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<StaffMemberDto>.Success(ToStaffMemberDto(member));
@@ -1438,9 +1478,10 @@ public sealed class DictionaryService(
 
         member.IsArchived = false;
         member.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        var restoreMonth = MonthPeriod.Normalize(businessDateProvider.Today);
+        var restoreDate = businessDateProvider.Today;
         var latestEmploymentPeriod = await staffMemberRepository.FindLatestEmploymentPeriodAsync(member.Id, cancellationToken);
-        if (latestEmploymentPeriod is not null && latestEmploymentPeriod.EffectiveTo == restoreMonth)
+        if (latestEmploymentPeriod?.EffectiveTo is not null &&
+            MonthPeriod.Normalize(latestEmploymentPeriod.EffectiveTo.Value) == MonthPeriod.Normalize(restoreDate))
         {
             latestEmploymentPeriod.EffectiveTo = null;
         }
@@ -1453,7 +1494,7 @@ public sealed class DictionaryService(
             staffMemberRepository.AddEmploymentPeriod(new StaffEmploymentPeriod
             {
                 StaffMemberId = member.Id,
-                EffectiveFrom = restoreMonth
+                EffectiveFrom = restoreDate
             });
         }
         AddAudit(actorUserId, "dictionary.staff_member_restored", "staff_member", member.Id, $"Восстановлен сотрудник {member.FullName}.");
@@ -5045,13 +5086,16 @@ public sealed class DictionaryService(
 
     private static StaffMemberDto ToStaffMemberDto(StaffMember member)
     {
+        var employmentPeriod = member.EmploymentPeriods.OrderByDescending(period => period.EffectiveFrom).FirstOrDefault();
         return new StaffMemberDto(
             member.Id,
             member.FullName,
             member.DepartmentId,
             member.Department.Name,
             member.Rate,
-            member.IsArchived);
+            member.IsArchived,
+            employmentPeriod?.EffectiveFrom,
+            employmentPeriod?.EffectiveTo);
     }
 
     private static ChargeServiceSettingDto ToChargeServiceSettingDto(ChargeServiceSetting setting)

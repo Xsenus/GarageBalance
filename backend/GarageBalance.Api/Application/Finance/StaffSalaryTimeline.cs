@@ -54,7 +54,7 @@ public static class StaffSalaryTimeline
         }
 
         return employmentPeriods.Any(period =>
-            period.EffectiveFrom <= month &&
-            (!period.EffectiveTo.HasValue || period.EffectiveTo.Value >= month));
+            MonthPeriod.Normalize(period.EffectiveFrom) <= month &&
+            (!period.EffectiveTo.HasValue || MonthPeriod.Normalize(period.EffectiveTo.Value) >= month));
     }
 }

@@ -56,7 +56,13 @@ public sealed class PostgreSqlStaffMemberListProjectionIntegrationTests
                 firstMember,
                 secondMember,
                 excludedByLimitMember,
-                archivedMember);
+                archivedMember,
+                new StaffEmploymentPeriod
+                {
+                    StaffMember = firstMember,
+                    EffectiveFrom = new DateOnly(2026, 2, 17),
+                    EffectiveTo = new DateOnly(2026, 8, 20)
+                });
             await setupContext.SaveChangesAsync();
         }
 
@@ -77,6 +83,9 @@ public sealed class PostgreSqlStaffMemberListProjectionIntegrationTests
         Assert.False(actual.IsArchived);
         Assert.Equal(firstDepartment.Id, actual.DepartmentId);
         Assert.Equal("Администрация 88422", actual.Department.Name);
+        var employmentPeriod = Assert.Single(actual.EmploymentPeriods);
+        Assert.Equal(new DateOnly(2026, 2, 17), employmentPeriod.EffectiveFrom);
+        Assert.Equal(new DateOnly(2026, 8, 20), employmentPeriod.EffectiveTo);
         Assert.Empty(queryContext.ChangeTracker.Entries());
 
         var command = Assert.Single(capture.TakeCommandsAndClear());
@@ -121,6 +130,40 @@ public sealed class PostgreSqlStaffMemberListProjectionIntegrationTests
 
         Assert.Empty(capture.TakeCommandsAndClear());
         Assert.Empty(queryContext.ChangeTracker.Entries());
+    }
+
+    [PostgreSqlFact]
+    public async Task GetPageAsync_ReturnsEmploymentDatesInCombinedPageProjection()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid staffMemberId;
+        await using (var setupContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = "Отдел дат персонала" };
+            var setupMember = new StaffMember { Department = department, FullName = "Петров Валентин Семенович", Rate = 45000m };
+            staffMemberId = setupMember.Id;
+            setupContext.AddRange(
+                department,
+                setupMember,
+                new StaffEmploymentPeriod
+                {
+                    StaffMember = setupMember,
+                    EffectiveFrom = new DateOnly(2026, 2, 17),
+                    EffectiveTo = new DateOnly(2026, 8, 20)
+                });
+            await setupContext.SaveChangesAsync();
+        }
+
+        await using var queryContext = database.CreateContext();
+        var page = await new EfStaffMemberRepository(queryContext).GetPageAsync(
+            null, null, false, 0, 25, "fullName", false, CancellationToken.None);
+
+        Assert.Equal(1, page.TotalCount);
+        var resultMember = Assert.Single(page.Items);
+        Assert.Equal(staffMemberId, resultMember.Id);
+        var employmentPeriod = Assert.Single(resultMember.EmploymentPeriods);
+        Assert.Equal(new DateOnly(2026, 2, 17), employmentPeriod.EffectiveFrom);
+        Assert.Equal(new DateOnly(2026, 8, 20), employmentPeriod.EffectiveTo);
     }
 
     private sealed class SelectCommandCapture : DbCommandInterceptor

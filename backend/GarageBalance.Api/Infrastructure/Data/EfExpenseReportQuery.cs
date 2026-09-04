@@ -333,7 +333,7 @@ public sealed class EfExpenseReportQuery(
                 .OrderBy(period => period.EffectiveFrom)
                 .ToListAsync(cancellationToken);
             var staffEmploymentPeriods = await dbContext.StaffEmploymentPeriods.AsNoTracking()
-                .Where(period => staffAccrualIds.Contains(period.StaffMemberId) && period.EffectiveFrom <= normalizedMonthTo)
+                .Where(period => staffAccrualIds.Contains(period.StaffMemberId) && period.EffectiveFrom < normalizedMonthTo.AddMonths(1))
                 .OrderBy(period => period.EffectiveFrom)
                 .ToListAsync(cancellationToken);
             var staffRatePeriodsByMember = staffRatePeriods.ToLookup(period => period.StaffMemberId);

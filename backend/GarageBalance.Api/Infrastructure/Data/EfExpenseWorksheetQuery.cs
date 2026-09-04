@@ -227,7 +227,7 @@ public sealed class EfExpenseWorksheetQuery(
             });
 
         var staffEmploymentPeriodStarts = dbContext.StaffEmploymentPeriods.AsNoTracking()
-            .Where(period => period.EffectiveFrom <= monthTo)
+            .Where(period => period.EffectiveFrom < monthTo.AddMonths(1))
             .Select(period => new
             {
                 Category = StaffEmploymentPeriodStartCategory,
@@ -247,7 +247,7 @@ public sealed class EfExpenseWorksheetQuery(
             });
 
         var staffEmploymentPeriodEnds = dbContext.StaffEmploymentPeriods.AsNoTracking()
-            .Where(period => period.EffectiveFrom <= monthTo && period.EffectiveTo != null)
+            .Where(period => period.EffectiveFrom < monthTo.AddMonths(1) && period.EffectiveTo != null)
             .Select(period => new
             {
                 Category = StaffEmploymentPeriodEndCategory,

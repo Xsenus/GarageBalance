@@ -13,7 +13,7 @@ import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
-import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
+import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -164,6 +164,8 @@ type ContractorStaffRow = {
   fullName: string
   department: string
   rate: string
+  employmentStartDate: string
+  employmentEndDate: string
   isDeleted: boolean
 }
 
@@ -607,6 +609,8 @@ function createStaffRowFromDto(member: StaffMemberDto): ContractorStaffRow {
     fullName: member.fullName,
     department: member.departmentName,
     rate: formatStaffRate(member.rate),
+    employmentStartDate: member.employmentStartDate ?? '',
+    employmentEndDate: member.employmentEndDate ?? '',
     isDeleted: member.isArchived,
   }
 }
@@ -668,6 +672,8 @@ function createStaffMemberRequestFromRow(row: ContractorStaffRow, departmentId: 
     fullName: row.fullName.trim(),
     departmentId,
     rate: parsePrototypeMoney(row.rate),
+    employmentStartDate: row.employmentStartDate,
+    employmentEndDate: row.employmentEndDate || null,
   }
 }
 
@@ -3195,6 +3201,8 @@ function createEmptyEmployeePrototype(department: string): ContractorStaffRow {
     fullName: '',
     department,
     rate: '',
+    employmentStartDate: getLocalDateInputValue(),
+    employmentEndDate: '',
     isDeleted: false,
   }
 }
@@ -3250,6 +3258,8 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
 function getEmployeePrototypeChanges(previous: ContractorStaffRow, next: ContractorStaffRow) {
   return compactPrototypeChanges([
     createPrototypeChangeEntry('ФИО', previous.fullName, next.fullName),
+    createPrototypeChangeEntry('Дата принятия', formatDateOnly(previous.employmentStartDate), formatDateOnly(next.employmentStartDate)),
+    createPrototypeChangeEntry('Дата увольнения', formatDateOnly(previous.employmentEndDate), formatDateOnly(next.employmentEndDate)),
     createPrototypeChangeEntry('Отдел', previous.department, next.department),
     createPrototypeChangeEntry('Ставка', previous.rate, next.rate),
   ])
@@ -4124,6 +4134,11 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    if (form.employmentEndDate && form.employmentEndDate < form.employmentStartDate) {
+      setSaveError('Дата увольнения не может быть раньше даты принятия.')
+      return
+    }
+
     if (!item) {
       void saveAndClose()
       return
@@ -4152,6 +4167,12 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
             {saveError ? <FormError>{saveError}</FormError> : null}
             <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
             <div className="contractors-staff-fields">
+              <FormField label="Дата принятия">
+                <LocalizedDatePicker ariaLabel="Дата принятия сотрудника" mode="date" placement="above" value={form.employmentStartDate} required onChange={(employmentStartDate) => { setForm({ ...form, employmentStartDate }); setSaveError(null) }} />
+              </FormField>
+              <FormField label="Дата увольнения">
+                <LocalizedDatePicker ariaLabel="Дата увольнения сотрудника" mode="date" placement="above" value={form.employmentEndDate} onChange={(employmentEndDate) => { setForm({ ...form, employmentEndDate }); setSaveError(null) }} />
+              </FormField>
               <FormField label="Отдел">
                 <SelectControl
                   aria-label="Отдел сотрудника"
