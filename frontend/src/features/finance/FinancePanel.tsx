@@ -44,6 +44,7 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 
 const FinancialJournalPanel = lazy(() => import('./FinancialJournalPanel').then((module) => ({ default: module.FinancialJournalPanel })))
+const advancedFinanceToolsVisible = false
 
 const regularAccrualRecalculationActionLabels: Record<RegularAccrualRecalculationPreviewDto['rows'][number]['action'], string> = {
   update: 'Изменить сумму и снимок',
@@ -2306,14 +2307,14 @@ export function FinancePanel({
         </div>
       </div>
 
-      <div className="finance-toolbar-actions">
+      {advancedFinanceToolsVisible ? <div className="finance-toolbar-actions">
         <button className="secondary-button" type="button" aria-expanded={journalOpen} onClick={() => setJournalOpen((value) => !value)}>
           <History size={16} aria-hidden="true" />
           <span>{journalOpen ? 'Скрыть единый журнал' : 'Единый журнал операций'}</span>
         </button>
         {canWritePayments ? <button className="secondary-button" type="button" onClick={() => void openRecalculation()}><RotateCcw size={16} aria-hidden="true" /><span>Перерасчёт неоплаченных начислений</span></button> : null}
-      </div>
-      {journalOpen ? (
+      </div> : null}
+      {advancedFinanceToolsVisible && journalOpen ? (
         <Suspense fallback={<TableLoadingState label="Загружаем единый журнал" />}>
           <FinancialJournalPanel
             auth={auth}
@@ -2325,7 +2326,7 @@ export function FinancePanel({
         </Suspense>
       ) : null}
 
-      {recalculationOpen ? (
+      {advancedFinanceToolsVisible && recalculationOpen ? (
         <div className="modal-backdrop" role="presentation">
           <section ref={recalculationDialogRef} className="detail-dialog detail-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="regular-recalculation-title">
             <div className="detail-dialog-header">
