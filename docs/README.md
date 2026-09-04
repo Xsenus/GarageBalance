@@ -43,7 +43,6 @@
 - [Активный roadmap очистки справочников и форм](roadmaps/dictionary-and-form-cleanup-2026-08-12-roadmap.md) — безопасное удаление пользовательских дублей и устаревших связей без потери финансовой истории.
 - [Активный roadmap Docker-дистрибутива](roadmaps/docker-user-distribution-roadmap.md) — подготовка сценария «Docker Desktop + один ZIP» и оставшаяся приемка на чистом Windows-компьютере.
 - [Активный roadmap полной оптимизации](roadmaps/full-performance-optimization-2026-07-29-roadmap.md) — системная проверка и ускорение запросов, интерфейса, PostgreSQL и VPS.
-- [Активный roadmap полной интеграции](roadmaps/full-repository-integration-2026-09-05-roadmap.md) — объединение рабочих веток, полная локальная приёмка, публикация и проверка VPS.
 - [Завершённый roadmap полного поведенческого аудита](roadmaps/full-project-behavior-audit-2026-08-03-roadmap.md) — проверка назначения, логики, форм, запросов, безопасности, тестов и эксплуатации всего проекта.
 - [Активный roadmap полного исправления проекта](roadmaps/full-project-remediation-2026-08-04-roadmap.md) — устранение подтвержденных аудитом дефектов целостности, производительности, безопасности и интерфейса.
 - [Активный roadmap проверки поступлений и начислений](roadmaps/income-accrual-integrity-2026-09-04-roadmap.md) — просрочка, годовые услуги, сборы, новые гаражи и распределение по фондам.
