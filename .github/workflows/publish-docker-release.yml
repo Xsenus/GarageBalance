@@ -50,8 +50,8 @@ jobs:
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
-  verify:
-    name: Verify release sources
+  backend:
+    name: Backend tests and migrations
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -78,29 +78,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Restore tools and dependencies
         run: |
           dotnet restore GarageBalance.slnx
           dotnet tool restore
-          npm ci --prefix frontend
 
-      - name: Audit dependencies
-        run: |
-          dotnet list GarageBalance.slnx package --vulnerable --include-transitive
-          npm audit --prefix frontend --audit-level=high
-
-      - name: Check privacy and distribution contracts
-        shell: pwsh
-        run: |
-          ./infrastructure/scripts/verify-package-privacy.ps1
-          ./infrastructure/scripts/check-docker-distribution.ps1
+      - name: Audit .NET dependencies
+        run: dotnet list GarageBalance.slnx package --vulnerable --include-transitive
 
       - name: Test backend
         shell: pwsh
@@ -115,14 +99,6 @@ jobs:
       - name: Check backend formatting
         run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
 
-      - name: Test and build frontend
-        working-directory: frontend
-        run: |
-          npm run test:coverage
-          npm run lint
-          npm run build
-          npm run check:bundle
-
       - name: Generate idempotent migration SQL
         run: |
           mkdir -p artifacts
@@ -132,11 +108,58 @@ jobs:
             --output artifacts/deploy-migrations.sql
           test -s artifacts/deploy-migrations.sql
 
+  frontend:
+    name: Frontend tests and build
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix frontend --prefer-offline --no-audit
+
+      - name: Audit npm dependencies
+        run: npm audit --prefix frontend --audit-level=high --fetch-retries=2 --fetch-timeout=60000
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          npm run test:coverage
+          npm run lint
+          npm run build
+          npm run check:bundle
+
+  distribution:
+    name: Privacy and Docker contracts
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check privacy and distribution contracts
+        shell: pwsh
+        run: |
+          ./infrastructure/scripts/verify-package-privacy.ps1
+          ./infrastructure/scripts/check-docker-distribution.ps1 -RequireDocker
+
   publish:
     name: Build images and installation ZIP
     needs:
       - prepare
-      - verify
+      - backend
+      - frontend
+      - distribution
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:

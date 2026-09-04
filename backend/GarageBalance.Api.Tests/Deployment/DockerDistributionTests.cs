@@ -29,6 +29,9 @@ public sealed class DockerDistributionTests
         var stop = File.ReadAllText(Path.Combine(distribution, "stop.ps1"));
 
         Assert.Contains("RandomNumberGenerator", common, StringComparison.Ordinal);
+        Assert.Contains("INITIAL_ADMIN_PASSWORD", common, StringComparison.Ordinal);
+        Assert.Contains("admin-credentials.txt", common, StringComparison.Ordinal);
+        Assert.Contains("Complete-GarageBalanceInitialAdministratorBootstrap", common, StringComparison.Ordinal);
         Assert.Contains("WaitForExit($TimeoutSeconds * 1000)", common, StringComparison.Ordinal);
         Assert.Contains("$process.Kill()", common, StringComparison.Ordinal);
         Assert.Contains("docker", common, StringComparison.OrdinalIgnoreCase);
@@ -44,6 +47,81 @@ public sealed class DockerDistributionTests
         Assert.Contains("Invoke-GarageBalanceComposeQuiet", File.ReadAllText(Path.Combine(distribution, "backup.ps1")), StringComparison.Ordinal);
         Assert.Contains("готовый backup-файл не найден или пуст", File.ReadAllText(Path.Combine(distribution, "backup.ps1")), StringComparison.Ordinal);
         Assert.DoesNotContain("-v", stop, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EnvironmentInitializationGeneratesAndThenRemovesPlainAdminBootstrapPassword()
+    {
+        var source = DistributionDirectory();
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"garagebalance_distribution_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temporaryDirectory);
+
+        try
+        {
+            File.Copy(Path.Combine(source, ".env.example"), Path.Combine(temporaryDirectory, ".env.example"));
+            File.Copy(Path.Combine(source, "GarageBalance.Common.ps1"), Path.Combine(temporaryDirectory, "GarageBalance.Common.ps1"));
+            var testScript = Path.Combine(temporaryDirectory, "verify.ps1");
+            await File.WriteAllTextAsync(
+                testScript,
+                """
+                param([Parameter(Mandatory = $true)][string]$Root)
+                $ErrorActionPreference = "Stop"
+                . (Join-Path $Root "GarageBalance.Common.ps1")
+                Initialize-GarageBalanceEnvironment
+                $before = Get-GarageBalanceEnvironment
+                $password = $before["INITIAL_ADMIN_PASSWORD"]
+                $credentialsPath = Join-Path $Root "admin-credentials.txt"
+                $credentials = [System.IO.File]::ReadAllText($credentialsPath)
+                if ($before["INITIAL_ADMIN_ENABLED"] -ne "true" -or
+                    $password -eq "__GENERATE__" -or
+                    $password.Length -lt 20 -or
+                    -not $credentials.Contains($password) -or
+                    -not $credentials.Contains("admin@garagebalance.local")) {
+                    throw "Initial administrator credentials were not generated correctly."
+                }
+                Complete-GarageBalanceInitialAdministratorBootstrap
+                $after = Get-GarageBalanceEnvironment
+                if ($after["INITIAL_ADMIN_ENABLED"] -ne "false" -or
+                    $after["INITIAL_ADMIN_PASSWORD"] -ne "__CREATED__" -or
+                    -not ([System.IO.File]::ReadAllText($credentialsPath)).Contains($password)) {
+                    throw "Initial administrator bootstrap was not finalized safely."
+                }
+                Write-Output "initial-admin-bootstrap=ok"
+                """,
+                new System.Text.UTF8Encoding(false));
+
+            var executable = OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
+            var startInfo = new System.Diagnostics.ProcessStartInfo(executable)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-File");
+            startInfo.ArgumentList.Add(testScript);
+            startInfo.ArgumentList.Add("-Root");
+            startInfo.ArgumentList.Add(temporaryDirectory);
+
+            using var process = System.Diagnostics.Process.Start(startInfo)
+                ?? throw new InvalidOperationException("PowerShell was not started.");
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await process.WaitForExitAsync(timeout.Token);
+            var output = await outputTask;
+            var error = await errorTask;
+
+            Assert.True(process.ExitCode == 0, error);
+            Assert.Contains("initial-admin-bootstrap=ok", output, StringComparison.Ordinal);
+            Assert.DoesNotContain("Пароль:", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(temporaryDirectory, recursive: true);
+        }
     }
 
     [Fact]
@@ -87,8 +165,32 @@ public sealed class DockerDistributionTests
         Assert.False(File.Exists(Path.Combine(distribution, ".env")));
         Assert.Contains("POSTGRES_PASSWORD=__GENERATE__", environment, StringComparison.Ordinal);
         Assert.Contains("JWT_SIGNING_KEY=__GENERATE__", environment, StringComparison.Ordinal);
+        Assert.Contains("INITIAL_ADMIN_ENABLED=true", environment, StringComparison.Ordinal);
+        Assert.Contains("INITIAL_ADMIN_EMAIL=admin@garagebalance.local", environment, StringComparison.Ordinal);
+        Assert.Contains("INITIAL_ADMIN_PASSWORD=__GENERATE__", environment, StringComparison.Ordinal);
         Assert.Contains("GARAGEBALANCE_VERSION=__GARAGEBALANCE_VERSION__", environment, StringComparison.Ordinal);
         Assert.Equal("__GARAGEBALANCE_VERSION__", File.ReadAllText(Path.Combine(distribution, "release-version.txt")).Trim());
+    }
+
+    [Fact]
+    public void ReleaseComposeCreatesInitialAdministratorWithoutExposingItsPasswordInDiagnostics()
+    {
+        var distribution = DistributionDirectory();
+        var compose = File.ReadAllText(Path.Combine(distribution, "docker-compose.yml"));
+        var start = File.ReadAllText(Path.Combine(distribution, "start.ps1"));
+        var common = File.ReadAllText(Path.Combine(distribution, "GarageBalance.Common.ps1"));
+        var diagnostics = File.ReadAllText(Path.Combine(distribution, "diagnostics.ps1"));
+
+        Assert.Contains("InitialAdministrator__Enabled: ${INITIAL_ADMIN_ENABLED:-false}", compose, StringComparison.Ordinal);
+        Assert.Contains("InitialAdministrator__Email: ${INITIAL_ADMIN_EMAIL:-}", compose, StringComparison.Ordinal);
+        Assert.Contains("InitialAdministrator__DisplayName: ${INITIAL_ADMIN_DISPLAY_NAME:-}", compose, StringComparison.Ordinal);
+        Assert.Contains("InitialAdministrator__Password: ${INITIAL_ADMIN_PASSWORD:-}", compose, StringComparison.Ordinal);
+        Assert.Contains("Complete-GarageBalanceInitialAdministratorBootstrap", start, StringComparison.Ordinal);
+        Assert.Contains("--force-recreate\", \"api", start, StringComparison.Ordinal);
+        Assert.Contains("INITIAL_ADMIN_ENABLED\" -Value \"false", common, StringComparison.Ordinal);
+        Assert.Contains("INITIAL_ADMIN_PASSWORD\" -Value \"__CREATED__", common, StringComparison.Ordinal);
+        Assert.DoesNotContain("admin-credentials.txt", diagnostics, StringComparison.Ordinal);
+        Assert.DoesNotContain("INITIAL_ADMIN_PASSWORD", diagnostics, StringComparison.Ordinal);
     }
 
     [Fact]

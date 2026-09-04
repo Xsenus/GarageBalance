@@ -217,7 +217,14 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
         Assert.Contains("npm audit --prefix frontend --audit-level=high", workflow, StringComparison.Ordinal);
         Assert.Contains("needs:", workflow, StringComparison.Ordinal);
-        Assert.Contains("- verify", workflow, StringComparison.Ordinal);
+        Assert.Contains("- backend", workflow, StringComparison.Ordinal);
+        Assert.Contains("- frontend", workflow, StringComparison.Ordinal);
+        Assert.Contains("- distribution", workflow, StringComparison.Ordinal);
+        Assert.True(
+            workflow.IndexOf("backend:", StringComparison.Ordinal) < workflow.IndexOf("publish:", StringComparison.Ordinal) &&
+            workflow.IndexOf("frontend:", StringComparison.Ordinal) < workflow.IndexOf("publish:", StringComparison.Ordinal) &&
+            workflow.IndexOf("distribution:", StringComparison.Ordinal) < workflow.IndexOf("publish:", StringComparison.Ordinal),
+            "Every verification job must complete before Docker images are published.");
     }
 
     [Fact]

@@ -1,9 +1,10 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 
 $script:GarageBalanceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:GarageBalanceComposeFile = Join-Path $script:GarageBalanceRoot "docker-compose.yml"
 $script:GarageBalanceEnvFile = Join-Path $script:GarageBalanceRoot ".env"
 $script:GarageBalanceVersionFile = Join-Path $script:GarageBalanceRoot "release-version.txt"
+$script:GarageBalanceAdminCredentialsFile = Join-Path $script:GarageBalanceRoot "admin-credentials.txt"
 $script:GarageBalanceUtf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Write-GarageBalanceStep {
@@ -128,6 +129,23 @@ function New-GarageBalanceSecret {
     return [Convert]::ToBase64String($bytes)
 }
 
+function Write-GarageBalanceInitialAdminCredentials {
+    param(
+        [Parameter(Mandatory = $true)][string]$Email,
+        [Parameter(Mandatory = $true)][string]$Password
+    )
+
+    $lines = @(
+        "GarageBalance — первоначальный администратор",
+        "",
+        "Логин: $Email",
+        "Пароль: $Password",
+        "",
+        "Сохраните эти данные в защищенном месте и удалите файл после первого успешного входа."
+    )
+    [System.IO.File]::WriteAllLines($script:GarageBalanceAdminCredentialsFile, $lines, $script:GarageBalanceUtf8)
+}
+
 function Get-GarageBalanceEnvironment {
     if (-not (Test-Path -LiteralPath $script:GarageBalanceEnvFile -PathType Leaf)) {
         throw "Файл .env не найден. Сначала запустите start.cmd."
@@ -188,11 +206,20 @@ function Initialize-GarageBalanceEnvironment {
         [System.IO.File]::Copy($template, $script:GarageBalanceEnvFile)
         Set-GarageBalanceEnvironmentValue -Name "POSTGRES_PASSWORD" -Value (New-GarageBalanceSecret)
         Set-GarageBalanceEnvironmentValue -Name "JWT_SIGNING_KEY" -Value (New-GarageBalanceSecret)
+        $initialAdminPassword = New-GarageBalanceSecret -ByteCount 18
+        Set-GarageBalanceEnvironmentValue -Name "INITIAL_ADMIN_PASSWORD" -Value $initialAdminPassword
+        $settings = Get-GarageBalanceEnvironment
+        Write-GarageBalanceInitialAdminCredentials `
+            -Email $settings["INITIAL_ADMIN_EMAIL"] `
+            -Password $initialAdminPassword
         Write-Host "Создана защищенная локальная конфигурация .env." -ForegroundColor Green
+        Write-Host "Данные первоначального администратора сохранены в admin-credentials.txt." -ForegroundColor Green
     }
 
     $settings = Get-GarageBalanceEnvironment
-    if ($settings["POSTGRES_PASSWORD"] -eq "__GENERATE__" -or $settings["JWT_SIGNING_KEY"] -eq "__GENERATE__") {
+    if ($settings["POSTGRES_PASSWORD"] -eq "__GENERATE__" -or
+        $settings["JWT_SIGNING_KEY"] -eq "__GENERATE__" -or
+        ($settings["INITIAL_ADMIN_ENABLED"] -eq "true" -and $settings["INITIAL_ADMIN_PASSWORD"] -eq "__GENERATE__")) {
         throw "Секреты GarageBalance не были сгенерированы. Удалите незаполненный .env и повторите start.cmd."
     }
 
@@ -200,6 +227,17 @@ function Initialize-GarageBalanceEnvironment {
         $directory = Join-Path $script:GarageBalanceRoot $directoryName
         [System.IO.Directory]::CreateDirectory($directory) | Out-Null
     }
+}
+
+function Complete-GarageBalanceInitialAdministratorBootstrap {
+    $settings = Get-GarageBalanceEnvironment
+    if ($settings["INITIAL_ADMIN_ENABLED"] -ne "true") {
+        return $false
+    }
+
+    Set-GarageBalanceEnvironmentValue -Name "INITIAL_ADMIN_ENABLED" -Value "false"
+    Set-GarageBalanceEnvironmentValue -Name "INITIAL_ADMIN_PASSWORD" -Value "__CREATED__"
+    return $true
 }
 
 function Set-GarageBalanceBundleVersion {
