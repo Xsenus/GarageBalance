@@ -15,6 +15,12 @@ npm run test:dev:related -- src/features/example/Example.tsx
 dotnet test .\GarageBalance.slnx --no-restore --filter "FullyQualifiedName~TestClassName"
 ```
 
+Отдельные ветки можно проверять в обычном checkout и в `git worktree`: тесты, читающие
+файлы репозитория, распознают оба варианта Git metadata. PostgreSQL-интеграции создают
+изолированную базу для каждого сценария, но полную актуальную схему получают клонированием
+одного мигрированного шаблона. Тесты самих миграций по-прежнему поднимают требуемую
+историческую схему и проходят цепочку миграций без шаблона.
+
 ## Полная локальная проверка
 
 Backend:
@@ -64,4 +70,9 @@ git diff --check
 
 ## GitHub Actions
 
-Workflow `Deploy staging` выполняет полный backend/frontend gate до упаковки релиза. Деплой не начинается, если падают тесты, форматирование, lint, build, privacy check или генерация SQL миграций.
+Workflow `Deploy staging` параллельно выполняет четыре независимых gate: backend с
+PostgreSQL и упаковкой API, frontend с coverage и production build, backend quality
+с форматированием/privacy/NuGet audit и отдельный npm audit. Деплой получает уже готовые
+артефакты и начинается только после успеха всех четырёх jobs. При новом push устаревшие
+jobs проверки отменяются, но уже начавшееся применение релиза на VPS никогда не
+прерывается: deploy сериализован отдельной concurrency-группой.
