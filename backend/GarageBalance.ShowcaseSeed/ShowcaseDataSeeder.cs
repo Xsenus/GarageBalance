@@ -3,8 +3,10 @@ using System.Text;
 using System.Text.Json;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Maintenance;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +17,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
 {
     public const string Marker = "showcase_seed_v1";
     public static readonly DateOnly AccountingMonth = new(2026, 8, 1);
+    public static readonly DateOnly BusinessDate = AccountingMonth.AddMonths(1).AddDays(-1);
     private static readonly DateTimeOffset CreatedAtUtc = new(2026, 8, 14, 4, 0, 0, TimeSpan.Zero);
     private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] GarageNumbers =
@@ -39,6 +42,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             cancellationToken);
 
         await ClearBusinessDataAsync(cancellationToken);
+        await PinBusinessDateAsync(cancellationToken);
         var services = await LoadServicesAsync(cancellationToken);
         await EnsureRepresentativeTariffsAsync(services, cancellationToken);
         ConfigureRepresentativeTariffs(services);
@@ -100,6 +104,10 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var suppliers = await context.Suppliers.CountAsync(item => item.Comment == Marker, cancellationToken);
         var fundOperations = await context.FundOperations.CountAsync(item => item.Reason.Contains(Marker), cancellationToken);
         var users = await context.Users.CountAsync(cancellationToken);
+        var businessDateIsPinned = await context.ApplicationSettings.AnyAsync(
+            item => item.Key == ApplicationSettingsService.BusinessDateOverrideKey
+                && item.DateValue == BusinessDate,
+            cancellationToken);
         var hasValidElectricityTiers = await HasValidElectricityTiersAsync(cancellationToken);
         var newGarageId = DeterministicGuid("garage-10");
         var overdueGarageId = DeterministicGuid("garage-9");
@@ -149,7 +157,8 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             && newGarageHasNoCalculatedHistory
             && campaignsHaveLockedParticipants
             && annualAccrualsAreUnique
-            && overdueScenarioIsCorrect;
+            && overdueScenarioIsCorrect
+            && businessDateIsPinned;
 
         return new ShowcaseSeedResult(
             isReady,
@@ -166,7 +175,24 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             newGarageHasNoCalculatedHistory,
             campaignsHaveLockedParticipants,
             annualAccrualsAreUnique,
-            overdueScenarioIsCorrect);
+            overdueScenarioIsCorrect,
+            businessDateIsPinned);
+    }
+
+    private async Task PinBusinessDateAsync(CancellationToken cancellationToken)
+    {
+        var setting = await context.ApplicationSettings.SingleOrDefaultAsync(
+            item => item.Key == ApplicationSettingsService.BusinessDateOverrideKey,
+            cancellationToken);
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = ApplicationSettingsService.BusinessDateOverrideKey };
+            context.ApplicationSettings.Add(setting);
+        }
+
+        setting.DateValue = BusinessDate;
+        setting.UpdatedAtUtc = CreatedAtUtc;
+        setting.UpdatedByUserId = null;
     }
 
     private async Task ClearBusinessDataAsync(CancellationToken cancellationToken)
@@ -978,4 +1004,5 @@ public sealed record ShowcaseSeedResult(
     bool NewGarageHasNoCalculatedHistory,
     bool CampaignsHaveLockedParticipants,
     bool AnnualAccrualsAreUnique,
-    bool OverdueScenarioIsCorrect);
+    bool OverdueScenarioIsCorrect,
+    bool BusinessDateIsPinned);
