@@ -13,6 +13,7 @@ describe('production chunking', () => {
 
   it('keeps independently loaded workspace sections in separate chunks', () => {
     expect(getManualChunkName('C:\\project\\src\\features\\finance\\FinancePanel.tsx')).toBe('financial-operations')
+    expect(getManualChunkName('/project/src/features/meterReadings/MeterReadingsPanel.tsx')).toBe('financial-operations')
     expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('funds')
     expect(getManualChunkName('C:\\project\\src\\features\\contractors\\ContractorsPanel.tsx')).toBe('contractors')
     expect(getManualChunkName('/project/src/features/tariffs/TariffsAndFeesPanel.tsx')).toBe('tariffs')

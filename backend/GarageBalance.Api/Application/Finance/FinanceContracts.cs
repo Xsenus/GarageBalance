@@ -304,7 +304,7 @@ public sealed record ApplyRegularAccrualRecalculationRequest(
     Guid TariffId,
     DateOnly AccountingMonth,
     [Required, MaxLength(128)] string ExpectedPreviewFingerprint,
-    [Required, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string? Reason);
 
 public sealed record RegularAccrualRecalculationRowDto(
     Guid AccrualId,

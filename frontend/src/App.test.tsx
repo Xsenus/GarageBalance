@@ -9507,7 +9507,7 @@ describe('App', () => {
 
     const addAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление' })
     await user.click(addAccrualButton)
-    const accrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
+    const accrualDialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
     const accrualSupplier = within(accrualDialog).getByRole('combobox', { name: 'Поставщик начисления' })
     expect(accrualSupplier).toHaveClass('select-control__trigger')
     expect(accrualSupplier).toHaveTextContent('Водоканал')
@@ -9533,11 +9533,11 @@ describe('App', () => {
     await user.type(within(accrualDialog).getByLabelText('Сумма начисления поставщику'), '850')
     await user.type(within(accrualDialog).getByLabelText('Документ начисления поставщику'), 'ACT-prototype')
     await user.type(within(accrualDialog).getByLabelText('Комментарий начисления поставщику'), 'Начисление из формы выплат')
-    await user.click(within(accrualDialog).getByRole('button', { name: 'Ок' }))
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(supplierAccrualAttemptCount).toBe(1))
     expect(within(accrualDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
     expect(within(accrualDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
-    expect(within(accrualDialog).getByRole('button', { name: 'Закрыть новое начисление' })).toBeDisabled()
+    expect(within(accrualDialog).getByRole('button', { name: 'Закрыть начисление поставщику' })).toBeDisabled()
     expect(accrualSupplier).toBeDisabled()
     expect(accrualMonth).toBeDisabled()
     expect(within(accrualDialog).getByLabelText('Сумма начисления поставщику')).toBeDisabled()
@@ -9553,7 +9553,7 @@ describe('App', () => {
     expect(within(accrualDialog).getByLabelText('Сумма начисления поставщику')).toHaveValue('850.00')
     expect(within(accrualDialog).getByLabelText('Документ начисления поставщику')).toHaveValue('ACT-prototype')
     expect(within(accrualDialog).getByLabelText('Комментарий начисления поставщику')).toHaveValue('Начисление из формы выплат')
-    await user.click(within(accrualDialog).getByRole('button', { name: 'Ок' }))
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(savedSupplierAccrualRequests).toHaveLength(1))
     expect(savedSupplierAccrualRequests[0]).toMatchObject({
       supplierId: 'supplier-1',
@@ -9564,7 +9564,7 @@ describe('App', () => {
       documentNumber: 'ACT-prototype',
       comment: 'Начисление из формы выплат',
     })
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
     await waitFor(() => expect(addAccrualButton).toHaveFocus())
 
     expect(within(prototype).queryByRole('button', { name: 'Начислить зарплату' })).not.toBeInTheDocument()
@@ -12883,6 +12883,97 @@ describe('App', () => {
 
     await user.click(within(prototype).getByRole('button', { name: 'Скрыть состав суммы: 312, Вода' }))
     expect(within(prototype).queryByRole('table', { name: 'Операции: 312, Вода' })).not.toBeInTheDocument()
+  })
+
+  it('edits a supplier accrual from the payout breakdown context menu', async () => {
+    const user = userEvent.setup()
+    const updateSupplierAccrual = vi.fn(async (_token: string, id: string, request: CreateSupplierAccrualRequest) => createSupplierAccrual({
+      id,
+      supplierId: request.supplierId,
+      expenseTypeId: request.expenseTypeId,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: request.source,
+      documentNumber: request.documentNumber ?? null,
+      comment: request.comment ?? null,
+    }))
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accountingMonth: '2026-09-01',
+      accrualTotal: 15000,
+      expenseTotal: 0,
+      rows: [{
+        rowKind: 'supplier',
+        supplierId: 'supplier-1',
+        staffMemberId: null,
+        counterpartyName: 'Водоканал',
+        expenseTypeId: 'expense-type-1',
+        expenseTypeName: 'Электроэнергия',
+        accrualAmount: 15000,
+        expenseAmount: 0,
+        balance: 15000,
+        collectedAmount: 0,
+        difference: 0,
+      }],
+    }))
+    const getExpenseWorksheetSupplierBreakdown = vi.fn(async () => ({
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      monthFrom: '2026-09-01',
+      monthTo: '2026-09-01',
+      accrualTotal: 15000,
+      expenseTotal: 0,
+      items: [{
+        id: 'supplier-accrual-15',
+        entryKind: 'accrual',
+        accountingMonth: '2026-09-01',
+        operationDate: null,
+        amount: 15000,
+        documentNumber: 'СЧЕТ-15',
+        comment: 'Первоначальная сумма',
+        source: 'manual',
+        version: null,
+      }],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+    const financeClient = createFinanceClient({
+      getExpenseWorksheet,
+      getExpenseWorksheetSupplierBreakdown,
+      updateSupplierAccrual,
+    })
+    const settingsClient = createSettingsClient({
+      getActionCommentSettings: async () => ({ required: false, version: 'optional-comments' }),
+      getPayoutMutationSettings: async () => ({ editEnabled: true, deleteEnabled: true, version: 'payout-actions' }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Водоканал, Электроэнергия' }))
+    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: Водоканал, Электроэнергия' })
+    fireEvent.contextMenu(within(detailsTable).getByText('СЧЕТ-15').closest('tr')!)
+    const contextMenu = await screen.findByRole('menu', { name: 'Действия начисления Водоканал' })
+    await user.click(within(contextMenu).getByRole('menuitem', { name: 'Редактировать' }))
+
+    const editDialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
+    expect(within(editDialog).getByLabelText('Сумма начисления поставщику')).toHaveValue('15 000.00')
+    await user.clear(within(editDialog).getByLabelText('Сумма начисления поставщику'))
+    await user.type(within(editDialog).getByLabelText('Сумма начисления поставщику'), '14500')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateSupplierAccrual).toHaveBeenCalledWith('token', 'supplier-accrual-15', {
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      accountingMonth: '2026-09-01',
+      amount: 14500,
+      source: 'manual',
+      documentNumber: 'СЧЕТ-15',
+      comment: 'Первоначальная сумма',
+    }))
+
   })
 
   it('expands an employee total into salary bonus penalty and payment details', async () => {

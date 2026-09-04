@@ -861,7 +861,7 @@ export type FinanceClient = {
   generateRegularAccruals(accessToken: string, request: GenerateRegularAccrualsRequest): Promise<RegularAccrualGenerationResultDto>
   generateRegularCatalogAccruals(accessToken: string, request: GenerateRegularCatalogAccrualsRequest): Promise<RegularCatalogAccrualGenerationResultDto>
   previewRegularAccrualRecalculation?(accessToken: string, request: { incomeTypeId: string; tariffId: string; accountingMonth: string }, signal?: AbortSignal): Promise<RegularAccrualRecalculationPreviewDto>
-  applyRegularAccrualRecalculation?(accessToken: string, request: { incomeTypeId: string; tariffId: string; accountingMonth: string; expectedPreviewFingerprint: string; reason: string }): Promise<RegularAccrualRecalculationPreviewDto>
+  applyRegularAccrualRecalculation?(accessToken: string, request: { incomeTypeId: string; tariffId: string; accountingMonth: string; expectedPreviewFingerprint: string; reason?: string }): Promise<RegularAccrualRecalculationPreviewDto>
   generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
   generateFeeCampaignAccruals(accessToken: string, request: GenerateFeeCampaignAccrualsRequest): Promise<FeeCampaignAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>

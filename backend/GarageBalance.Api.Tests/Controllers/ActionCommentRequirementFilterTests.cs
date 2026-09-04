@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Settings;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -47,7 +48,29 @@ public sealed class ActionCommentRequirementFilterTests
         Assert.False(executed);
     }
 
-    private static ActionExecutingContext CreateContext(CommentRequest request)
+    [Fact]
+    public async Task OptionalSettingAllowsBlankReasonOnRegularAccrualRecalculationContract()
+    {
+        var filter = new ActionCommentRequirementFilter(new FakeSettingsService(false));
+        var context = CreateContext(new ApplyRegularAccrualRecalculationRequest(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new DateOnly(2026, 9, 1),
+            "preview-fingerprint",
+            null));
+        var executed = false;
+
+        await filter.OnActionExecutionAsync(context, () =>
+        {
+            executed = true;
+            return Task.FromResult(new ActionExecutedContext(context, [], context.Controller));
+        });
+
+        Assert.True(executed);
+        Assert.Null(context.Result);
+    }
+
+    private static ActionExecutingContext CreateContext(object request)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = HttpMethods.Post;

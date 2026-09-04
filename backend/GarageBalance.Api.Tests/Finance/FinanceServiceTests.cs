@@ -6094,6 +6094,49 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task ApplyRegularAccrualRecalculation_AllowsMissingReasonWhenCommentsAreOptional()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff
+        {
+            Name = "Тариф перерасчёта без комментария",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 9, 1);
+        Assert.True((await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, month, null),
+            null,
+            CancellationToken.None)).Succeeded);
+        tariff.Rate = 400m;
+        await database.Context.SaveChangesAsync();
+        var preview = await service.PreviewRegularAccrualRecalculationAsync(
+            new PreviewRegularAccrualRecalculationRequest(fixtures.IncomeType.Id, tariff.Id, month),
+            CancellationToken.None);
+        Assert.True(preview.Succeeded);
+
+        using var scope = ActionCommentRequirementContext.Push(false);
+        var result = await service.ApplyRegularAccrualRecalculationAsync(
+            new ApplyRegularAccrualRecalculationRequest(
+                fixtures.IncomeType.Id,
+                tariff.Id,
+                month,
+                preview.Value!.PreviewFingerprint,
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(result.Value!.Applied);
+        Assert.Equal(400m, await database.Context.Accruals.Select(accrual => accrual.Amount).SingleAsync());
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_SkipsGarageCreatedAfterAccountingMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

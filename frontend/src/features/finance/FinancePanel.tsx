@@ -354,8 +354,14 @@ type SupplierAccrualPrototypeSubmitRequest = {
   expenseTypeId: string
   accountingMonth: string
   amount: number
+  source: 'manual' | 'regular'
   documentNumber: string
   comment: string
+}
+
+type SupplierAccrualPrototypeDialogPreset = {
+  item?: ExpenseWorksheetSupplierBreakdownEntryDto
+  row?: PaymentPrototypeRow
 }
 
 function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): PaymentPrototypeRow[] {
@@ -1783,7 +1789,7 @@ export function FinancePanel({
 
   async function applyRecalculation() {
     if (!financeClient.applyRegularAccrualRecalculation || !recalculationPreview) return
-    if (!recalculationForm.reason.trim()) {
+    if (actionCommentsRequired && !recalculationForm.reason.trim()) {
       setRecalculationError('Укажите основание перерасчёта.')
       return
     }
@@ -2412,7 +2418,7 @@ export function FinancePanel({
                   <div><span>Станет</span><strong>{formatMoney(recalculationPreview.proposedTotal)}</strong></div>
                 </div>
                 <div className="dictionary-table-scroll"><table className="dictionary-table" aria-label="Строки безопасного перерасчёта"><thead><tr><th>Гараж</th><th>Было</th><th>Станет</th><th>Действие</th><th>Пояснение</th></tr></thead><tbody>{recalculationPreview.rows.map((row) => <tr key={row.accrualId}><td>{row.garageNumber}</td><td>{formatMoney(row.currentAmount)}</td><td>{row.proposedAmount === null ? '—' : formatMoney(row.proposedAmount)}</td><td>{regularAccrualRecalculationActionLabels[row.action]}</td><td>{row.explanation}</td></tr>)}</tbody></table></div>
-                {!recalculationPreview.applied ? <FormField label="Основание перерасчёта"><textarea aria-label="Основание перерасчёта начислений" value={recalculationForm.reason} onChange={(event) => setRecalculationForm((current) => ({ ...current, reason: event.target.value }))} /></FormField> : <StatusMessage>Перерасчёт применён. Оплаченные строки сохранены без изменений.</StatusMessage>}
+                {!recalculationPreview.applied ? <FormField label="Основание перерасчёта"><textarea aria-label="Основание перерасчёта начислений" required={actionCommentsRequired} value={recalculationForm.reason} onChange={(event) => setRecalculationForm((current) => ({ ...current, reason: event.target.value }))} /></FormField> : <StatusMessage>Перерасчёт применён. Оплаченные строки сохранены без изменений.</StatusMessage>}
               </section>
             ) : null}
             <div className="detail-dialog-actions">
@@ -3170,8 +3176,8 @@ function PaymentsPrototypePanel({
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [penaltyAccrualDialogOpen, setPenaltyAccrualDialogOpen] = useState(false)
   const penaltyAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
-  const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [supplierAccrualDialogPreset, setSupplierAccrualDialogPreset] = useState<SupplierAccrualPrototypeDialogPreset | null>(null)
+  const supplierAccrualTriggerRef = useRef<HTMLElement | null>(null)
   const [expenseDialogPreset, setExpenseDialogPreset] = useState<ExpensePrototypeDialogPreset | null>(null)
   const expenseTriggerRef = useRef<HTMLElement | null>(null)
   const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
@@ -3477,12 +3483,12 @@ function PaymentsPrototypePanel({
     supplierAccrualTriggerRef.current = event.currentTarget
     setPaymentError(null)
     if (await onEnsureReferences()) {
-      setSupplierAccrualDialogOpen(true)
+      setSupplierAccrualDialogPreset({})
     }
   }
 
   function closeSupplierAccrualDialog() {
-    setSupplierAccrualDialogOpen(false)
+    setSupplierAccrualDialogPreset(null)
     restoreFocusAfterClose(supplierAccrualTriggerRef)
   }
 
@@ -3696,6 +3702,7 @@ function PaymentsPrototypePanel({
 
   function canOpenPayoutContextMenu(row: PaymentPrototypeRow, item?: ExpenseWorksheetSupplierBreakdownEntryDto) {
     if (!canWritePayments || (!payoutEditEnabled && !payoutDeleteEnabled)) return false
+    if (item?.entryKind === 'accrual') return payoutEditEnabled && !item.isCanceled && Boolean(row.supplierId && row.expenseTypeId)
     if (item) return !item.isCanceled && Boolean(item.version) && (item.entryKind === 'payment' || item.entryKind === 'bonus' || item.entryKind === 'penalty')
     return row.rowKind === 'episodic' && Boolean(row.operationId && row.operationVersion)
   }
@@ -3769,6 +3776,17 @@ function PaymentsPrototypePanel({
     if (!trigger) return
     if (item?.entryKind === 'bonus' || item?.entryKind === 'penalty') {
       await openStaffSalaryAdjustmentEdit(row, item, trigger)
+      return
+    }
+    if (item?.entryKind === 'accrual' && row.supplierId && row.expenseTypeId) {
+      supplierAccrualTriggerRef.current = trigger
+      setPaymentError(null)
+      if (await onEnsureReferences()) {
+        setSupplierAccrualDialogPreset({
+          item,
+          row,
+        })
+      }
       return
     }
     const record = createPayoutEditRecord(row, item)
@@ -4752,15 +4770,24 @@ function PaymentsPrototypePanel({
       return 'Услуга начисления не соответствует выбранному поставщику.'
     }
 
-    const accrual = await financeClient.createSupplierAccrual(auth.accessToken, {
+    const payload: CreateSupplierAccrualRequest = {
       supplierId: supplier.id,
       expenseTypeId: expenseType.id,
       accountingMonth: request.accountingMonth,
       amount: request.amount,
-      source: 'manual',
+      source: request.source,
       documentNumber: request.documentNumber.trim() || undefined,
       comment: request.comment.trim() || undefined,
-    })
+    }
+    const editedItem = supplierAccrualDialogPreset?.item
+    const accrual = editedItem
+      ? await financeClient.updateSupplierAccrual(auth.accessToken, editedItem.id, payload)
+      : await financeClient.createSupplierAccrual(auth.accessToken, payload)
+
+    if (editedItem) {
+      refreshExpenseWorksheetAfterSave(request.accountingMonth)
+      return null
+    }
 
     setExpenseRows((currentRows) => {
       let updated = false
@@ -5781,7 +5808,7 @@ function PaymentsPrototypePanel({
           className="context-menu"
           style={{ left: payoutContextMenu.x, top: payoutContextMenu.y }}
           role="menu"
-          aria-label={`Действия выплаты ${payoutContextMenu.row.counterparty ?? payoutContextMenu.row.item}`}
+          aria-label={`${payoutContextMenu.item?.entryKind === 'accrual' ? 'Действия начисления' : 'Действия выплаты'} ${payoutContextMenu.row.counterparty ?? payoutContextMenu.row.item}`}
           onClick={(event) => event.stopPropagation()}
           onKeyDown={handlePayoutContextMenuKeyDown}
         >
@@ -5792,7 +5819,7 @@ function PaymentsPrototypePanel({
                 <span>Редактировать</span>
               </button>
             ) : null}
-            {payoutDeleteEnabled ? (
+            {payoutDeleteEnabled && payoutContextMenu.item?.entryKind !== 'accrual' ? (
               <button ref={!payoutEditEnabled ? payoutContextMenuFirstItemRef : undefined} className="context-menu-danger" type="button" role="menuitem" disabled={payoutActionSaving || staffSalaryAdjustmentActionSaving} onClick={deletePayoutContextTarget}>
                 <Trash2 size={15} aria-hidden="true" />
                 <span>Удалить</span>
@@ -5947,9 +5974,10 @@ function PaymentsPrototypePanel({
           onSubmit={commitStaffPayment}
         />
       ) : null}
-      {supplierAccrualDialogOpen ? (
+      {supplierAccrualDialogPreset ? (
         <NewAccrualPrototypeDialog
           expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
+          preset={supplierAccrualDialogPreset}
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
           onClose={closeSupplierAccrualDialog}
           onSubmit={commitSupplierAccrual}
@@ -6948,24 +6976,29 @@ function StaffSalaryAdjustmentPrototypeDialog({
 
 function NewAccrualPrototypeDialog({
   expenseTypes,
+  preset,
   suppliers,
   onClose,
   onSubmit,
 }: {
   expenseTypes: AccountingTypeDto[]
+  preset: SupplierAccrualPrototypeDialogPreset
   suppliers: SupplierDto[]
   onClose: () => void
   onSubmit: (request: SupplierAccrualPrototypeSubmitRequest) => Promise<string | null>
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const initialSupplier = getFirstLinkedSupplier(suppliers, expenseTypes) ?? suppliers[0]
-  const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
-  const [expenseTypeId, setExpenseTypeId] = useState(getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '')
-  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const [amount, setAmount] = useState('')
-  const [documentNumber, setDocumentNumber] = useState('')
-  const [comment, setComment] = useState('')
+  const editedItem = preset.item
+  const initialSupplier = suppliers.find((supplier) => supplier.id === preset.row?.supplierId)
+    ?? getFirstLinkedSupplier(suppliers, expenseTypes)
+    ?? suppliers[0]
+  const [supplierId, setSupplierId] = useState(preset.row?.supplierId ?? initialSupplier?.id ?? '')
+  const [expenseTypeId, setExpenseTypeId] = useState(preset.row?.expenseTypeId ?? getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '')
+  const [accountingMonth, setAccountingMonth] = useState((editedItem?.accountingMonth ?? getLocalDateInputValue()).slice(0, 7))
+  const [amount, setAmount] = useState(editedItem ? String(editedItem.amount) : '')
+  const [documentNumber, setDocumentNumber] = useState(editedItem?.documentNumber ?? '')
+  const [comment, setComment] = useState(editedItem?.comment ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
@@ -7003,6 +7036,7 @@ function NewAccrualPrototypeDialog({
         expenseTypeId,
         accountingMonth: `${accountingMonth}-01`,
         amount: parsedAmount,
+        source: editedItem?.source === 'regular' ? 'regular' : 'manual',
         documentNumber,
         comment,
       })
@@ -7023,9 +7057,9 @@ function NewAccrualPrototypeDialog({
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="new-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
-            <h3 id="new-accrual-title">Новое начисление</h3>
+            <h3 id="new-accrual-title">Начисление поставщику</h3>
           </div>
-          <button className="icon-button" type="button" aria-label="Закрыть новое начисление" onClick={onClose} disabled={saving}>
+          <button className="icon-button" type="button" aria-label="Закрыть начисление поставщику" onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
         </div>
@@ -7085,7 +7119,7 @@ function NewAccrualPrototypeDialog({
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Сохранить'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
