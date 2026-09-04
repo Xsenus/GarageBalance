@@ -8865,10 +8865,7 @@ button.operation-row:focus-visible {
   }
 
   .workspace--meter-readings {
-    display: block;
-    height: auto;
-    min-height: 0;
-    overflow: visible;
+    height: calc(100dvh - 67px);
   }
 
   .payments-prototype-search-results {
@@ -8893,6 +8890,7 @@ button.operation-row:focus-visible {
 
   .app-shell {
     grid-template-columns: 1fr;
+    align-content: start;
   }
 
   .sidebar {
