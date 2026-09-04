@@ -1,10 +1,13 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Users;
+using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.ShowcaseSeed;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GarageBalance.Api.Tests.Deployment;
 
@@ -92,6 +95,13 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         Assert.True(second.StaffScenariosAreComplete);
         Assert.True(second.SupplierScenariosAreComplete);
         Assert.True(second.FundBalancesReconcile);
+        Assert.True(second.BusinessDateIsPinned);
+        Assert.Equal(
+            ShowcaseDataSeeder.BusinessDate,
+            await context.ApplicationSettings
+                .Where(item => item.Key == ApplicationSettingsService.BusinessDateOverrideKey)
+                .Select(item => item.DateValue)
+                .SingleAsync());
         Assert.Single(await context.Users.AsNoTracking().ToListAsync());
         Assert.DoesNotContain(await context.Owners.AsNoTracking().ToListAsync(), item => item.LastName == "Old");
         Assert.Equal(2, await context.FundOperations.CountAsync(item => item.Reason.Contains(ShowcaseDataSeeder.Marker)));
@@ -192,6 +202,47 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
             .SumAsync(item => item.Amount));
     }
 
+    [PostgreSqlFact]
+    public async Task Prepare_PinsBusinessDateSoStartupAutomationKeepsControlScenariosStable()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var seeder = new ShowcaseDataSeeder(context);
+        var prepared = await seeder.PrepareAsync(CancellationToken.None);
+        Assert.True(prepared.IsReady);
+
+        var pinnedDate = await context.ApplicationSettings
+            .Where(item => item.Key == ApplicationSettingsService.BusinessDateOverrideKey)
+            .Select(item => item.DateValue)
+            .SingleAsync();
+        Assert.Equal(ShowcaseDataSeeder.BusinessDate, pinnedDate);
+
+        var businessDateProvider = new TestBusinessDateProvider(new DateOnly(2026, 9, 4));
+        businessDateProvider.SetOverride(pinnedDate);
+        var startupAutomation = new RegularAccrualAutomationRunner(
+            FinanceServiceTestFactory.Create(
+                context,
+                new FixedTimeProvider(new DateTimeOffset(2026, 9, 4, 4, 0, 0, TimeSpan.Zero))),
+            businessDateProvider,
+            new EfRegularAccrualAutomationLock(context),
+            NullLogger<RegularAccrualAutomationRunner>.Instance);
+
+        var automationResult = await startupAutomation.RunCurrentMonthAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+        var audit = await seeder.AuditAsync(CancellationToken.None);
+
+        Assert.True(automationResult.Succeeded, automationResult.Message);
+        Assert.Equal(0, automationResult.CreatedCount);
+        Assert.True(audit.IsReady);
+        Assert.True(audit.HasNoDebt);
+        Assert.True(audit.NewGarageHasNoCalculatedHistory);
+        Assert.True(audit.BusinessDateIsPinned);
+        Assert.Equal(67, await context.Accruals.CountAsync(item => item.Comment == ShowcaseDataSeeder.Marker));
+        Assert.DoesNotContain(
+            await context.Accruals.AsNoTracking().ToListAsync(),
+            item => item.AccountingMonth > ShowcaseDataSeeder.AccountingMonth);
+    }
+
     private static void AssertTier(ShowcaseElectricityTier tier, decimal? upperBound, decimal rate)
     {
         Assert.NotEqual(Guid.Empty, tier.Id);
@@ -207,4 +258,9 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         decimal? UpperBound,
         decimal Rate,
         bool IsCustom);
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 }

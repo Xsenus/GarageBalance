@@ -52,7 +52,7 @@ try
         $"newGarageClean={result.NewGarageHasNoCalculatedHistory}; campaignParticipantsLocked={result.CampaignsHaveLockedParticipants}; " +
         $"annualAccrualsUnique={result.AnnualAccrualsAreUnique}; overdueScenarioCorrect={result.OverdueScenarioIsCorrect}; " +
         $"staffScenariosComplete={result.StaffScenariosAreComplete}; supplierScenariosComplete={result.SupplierScenariosAreComplete}; " +
-        $"fundBalancesReconcile={result.FundBalancesReconcile}");
+        $"fundBalancesReconcile={result.FundBalancesReconcile}; businessDatePinned={result.BusinessDateIsPinned}");
     return result.IsReady ? 0 : 3;
 }
 catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)

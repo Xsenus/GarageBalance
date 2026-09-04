@@ -69,6 +69,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
     public Task<FeeCampaign?> FindActiveForAccrualGenerationAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.FeeCampaigns
             .Include(item => item.IncomeType)
+                .ThenInclude(item => item.DestinationFund)
             .Include(item => item.ParticipantGarages)
                 .ThenInclude(item => item.Garage)
                     .ThenInclude(garage => garage.Owner)

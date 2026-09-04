@@ -31,6 +31,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/dictionary-and-form-cleanup-2026-08-12-roadmap.md",
         "roadmaps/docker-user-distribution-roadmap.md",
         "roadmaps/full-branch-integration-2026-09-04-roadmap.md",
+        "roadmaps/full-clean-database-acceptance-2026-09-04-roadmap.md",
         "roadmaps/full-performance-optimization-2026-07-29-roadmap.md",
         "roadmaps/full-project-behavior-audit-2026-08-03-roadmap.md",
         "roadmaps/full-project-remediation-2026-08-04-roadmap.md",

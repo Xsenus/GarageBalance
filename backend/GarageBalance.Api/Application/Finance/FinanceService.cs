@@ -5533,8 +5533,8 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_closed", "Сбор закрыт: новые начисления создавать нельзя.");
         }
 
-        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
-        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
+        var incomeType = await ResolveFeeCampaignIncomeDestinationAsync(campaign, cancellationToken);
+        if (incomeType is null)
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure(
                 "other_income_destination_not_configured",
@@ -8713,16 +8713,6 @@ public sealed class FinanceService(
             return candidates;
         }
 
-        var stableIncomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(
-            OtherIncomeIncomeTypeCode,
-            cancellationToken);
-        if (stableIncomeType is null ||
-            !stableIncomeType.IsSystem ||
-            !stableIncomeType.DestinationFundId.HasValue)
-        {
-            return candidates;
-        }
-
         var campaignIds = candidates
             .Select(option => option.Campaign.Id)
             .Distinct()
@@ -8733,6 +8723,20 @@ public sealed class FinanceService(
             await using var campaignLock = await feeCampaignRepository.AcquirePaymentLockAsync(
                 campaignId,
                 cancellationToken);
+            var campaign = await feeCampaignRepository.FindActiveForAccrualGenerationAsync(
+                campaignId,
+                cancellationToken);
+            if (campaign is null || campaign.ClosedAtUtc.HasValue)
+            {
+                continue;
+            }
+            var stableIncomeType = await ResolveFeeCampaignIncomeDestinationAsync(
+                campaign,
+                cancellationToken);
+            if (stableIncomeType is null)
+            {
+                continue;
+            }
             var campaignAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
                 campaignId,
                 cancellationToken);
@@ -8855,6 +8859,33 @@ public sealed class FinanceService(
             monthFrom,
             monthTo,
             cancellationToken);
+    }
+
+    private async Task<IncomeType?> ResolveFeeCampaignIncomeDestinationAsync(
+        FeeCampaign campaign,
+        CancellationToken cancellationToken)
+    {
+        if (campaign.IncomeType is
+            {
+                IsArchived: false,
+                DestinationFundId: not null,
+                DestinationFund.IsArchived: false
+            } configuredDestination)
+        {
+            return configuredDestination;
+        }
+
+        var legacyDestination = await incomeTypeRepository.FindFirstActiveByCodeAsync(
+            OtherIncomeIncomeTypeCode,
+            cancellationToken);
+        return legacyDestination is
+        {
+            IsSystem: true,
+            IsArchived: false,
+            DestinationFundId: not null
+        }
+            ? legacyDestination
+            : null;
     }
 
     private bool NormalizeFeeCampaignIncomeDestination(
