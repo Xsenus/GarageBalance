@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Tests.Common;
@@ -74,11 +75,12 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         Assert.True(first.IsReady);
         Assert.True(second.IsReady);
         Assert.Equal(10, second.GarageCount);
-        Assert.Equal(65, second.AccrualCount);
-        Assert.Equal(8, second.FinancialOperationCount);
+        Assert.Equal(67, second.AccrualCount);
+        Assert.Equal(11, second.FinancialOperationCount);
         Assert.Equal(36, second.MeterReadingCount);
-        Assert.Equal(2, second.FeeCampaignCount);
-        Assert.Equal(1, second.SupplierCount);
+        Assert.Equal(3, second.FeeCampaignCount);
+        Assert.Equal(3, second.SupplierCount);
+        Assert.Equal(3, second.StaffMemberCount);
         Assert.Equal(1, second.PreservedUserCount);
         Assert.True(second.HasNoDebt);
         Assert.True(second.HasDebt);
@@ -87,6 +89,9 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         Assert.True(second.CampaignsHaveLockedParticipants);
         Assert.True(second.AnnualAccrualsAreUnique);
         Assert.True(second.OverdueScenarioIsCorrect);
+        Assert.True(second.StaffScenariosAreComplete);
+        Assert.True(second.SupplierScenariosAreComplete);
+        Assert.True(second.FundBalancesReconcile);
         Assert.Single(await context.Users.AsNoTracking().ToListAsync());
         Assert.DoesNotContain(await context.Owners.AsNoTracking().ToListAsync(), item => item.LastName == "Old");
         Assert.Equal(2, await context.FundOperations.CountAsync(item => item.Reason.Contains(ShowcaseDataSeeder.Marker)));
@@ -127,9 +132,57 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         var newGarage = await context.Garages.SingleAsync(item => item.Number == "110-НОВЫЙ");
         Assert.Empty(await context.Accruals.Where(item => item.GarageId == newGarage.Id).ToListAsync());
         Assert.Empty(await context.FeeCampaignGarages.Where(item => item.GarageId == newGarage.Id).ToListAsync());
+        var seededCampaigns = await context.FeeCampaigns
+            .Where(item => item.Goal != null && item.Goal.Contains(ShowcaseDataSeeder.Marker))
+            .OrderBy(item => item.Name)
+            .ToListAsync();
+        Assert.Equal(2, seededCampaigns.Count(item => item.AppliesToAllGarages));
         Assert.All(
-            await context.FeeCampaigns.Where(item => item.Goal != null && item.Goal.Contains(ShowcaseDataSeeder.Marker)).ToListAsync(),
+            seededCampaigns.Where(item => item.AppliesToAllGarages),
             campaign => Assert.Equal(9, context.FeeCampaignGarages.Count(item => item.FeeCampaignId == campaign.Id)));
+        var selectedCampaign = Assert.Single(seededCampaigns, item => !item.AppliesToAllGarages);
+        Assert.Equal(2, context.FeeCampaignGarages.Count(item => item.FeeCampaignId == selectedCampaign.Id));
+        Assert.Equal(3, await context.StaffMembers.CountAsync(item => item.FullName.Contains("Демонстрационный сотрудник")));
+        Assert.Equal(2, await context.StaffSalaryAdjustments.CountAsync(item => !item.IsCanceled));
+        Assert.Single(await context.FinancialOperations
+            .Where(item => item.StaffMemberId != null && !item.IsCanceled)
+            .ToListAsync());
+        var expenseWorksheet = await FinanceServiceTestFactory.Create(context).GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(ShowcaseDataSeeder.AccountingMonth),
+            CancellationToken.None);
+        Assert.True(expenseWorksheet.Succeeded, expenseWorksheet.ErrorMessage);
+        var activeStaff = Assert.Single(
+            expenseWorksheet.Value!.Rows,
+            item => item.CounterpartyName == "Демонстрационный сотрудник — полный месяц");
+        Assert.Equal(45000m, activeStaff.BaseAccrualAmount);
+        Assert.Equal(5000m, activeStaff.BonusAmount);
+        Assert.Equal(2000m, activeStaff.PenaltyAmount);
+        Assert.Equal(48000m, activeStaff.AccrualAmount);
+        Assert.Equal(30000m, activeStaff.ExpenseAmount);
+        Assert.Contains(
+            expenseWorksheet.Value.Rows,
+            item => item.CounterpartyName == "Демонстрационный сотрудник — принят в августе"
+                && item.BaseAccrualAmount == 30000m);
+        var dismissedStaff = Assert.Single(
+            expenseWorksheet.Value.Rows,
+            item => item.CounterpartyName == "Демонстрационный сотрудник — уволен");
+        Assert.Equal(0m, dismissedStaff.BaseAccrualAmount);
+        Assert.Equal(0m, dismissedStaff.AccrualAmount);
+        Assert.Equal(0m, dismissedStaff.ExpenseAmount);
+        var supplierRows = expenseWorksheet.Value.Rows.Where(item => item.SupplierId.HasValue).ToArray();
+        Assert.Equal(3, supplierRows.Length);
+        Assert.Contains(supplierRows, item =>
+            item.CounterpartyName == "ДЕМО Энергосбыт — задолженность"
+            && item.ClosingDebt == 8000m
+            && item.ClosingAdvance == 0m);
+        Assert.Contains(supplierRows, item =>
+            item.CounterpartyName == "ДЕМО Вывоз — расчёт закрыт"
+            && item.ClosingDebt == 0m
+            && item.ClosingAdvance == 0m);
+        Assert.Contains(supplierRows, item =>
+            item.CounterpartyName == "ДЕМО Водоканал — аванс"
+            && item.ClosingDebt == 0m
+            && item.ClosingAdvance == 2000m);
         var overdueGarage = await context.Garages.SingleAsync(item => item.Number == "109-ПРОСРОЧКА");
         var overdueAccrual = await context.Accruals.SingleAsync(item =>
             item.GarageId == overdueGarage.Id && item.Basis == "Частично оплаченная просрочка");

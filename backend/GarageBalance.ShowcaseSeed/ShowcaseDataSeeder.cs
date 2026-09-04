@@ -75,6 +75,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         context.AddRange(irregularData.Allocations);
 
         await CreateSupplierAndExpenseExampleAsync(services, cancellationToken);
+        await CreateStaffExamplesAsync(cancellationToken);
         await CreateCashAndBankExamplesAsync(cancellationToken);
         await CreateFundMovementExamplesAsync(cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -98,6 +99,9 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var readings = await context.MeterReadings.CountAsync(item => item.Comment == Marker, cancellationToken);
         var campaigns = await context.FeeCampaigns.CountAsync(item => item.Goal != null && item.Goal.Contains(Marker), cancellationToken);
         var suppliers = await context.Suppliers.CountAsync(item => item.Comment == Marker, cancellationToken);
+        var staffMembers = await context.StaffMembers.CountAsync(
+            item => item.FullName.Contains("Демонстрационный сотрудник"),
+            cancellationToken);
         var fundOperations = await context.FundOperations.CountAsync(item => item.Reason.Contains(Marker), cancellationToken);
         var users = await context.Users.CountAsync(cancellationToken);
         var hasValidElectricityTiers = await HasValidElectricityTiersAsync(cancellationToken);
@@ -127,20 +131,19 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             && !await context.FinancialOperations.AnyAsync(
                 item => item.GarageId == newGarageId,
                 cancellationToken);
-        var campaignsHaveLockedParticipants = await context.FeeCampaigns
-            .Where(item => item.Goal != null && item.Goal.Contains(Marker))
-            .AllAsync(item =>
-                item.ParticipantGarages.Count == GarageNumbers.Length - 1
-                && item.ParticipantGarages.All(participant => participant.GarageId != newGarageId),
-                cancellationToken);
+        var campaignsHaveLockedParticipants = await HaveExpectedCampaignParticipantsAsync(newGarageId, cancellationToken);
         var annualAccrualsAreUnique = await HasUniqueAnnualAccrualsAsync(newGarageId, cancellationToken);
         var overdueScenarioIsCorrect = await HasExpectedOverdueScenarioAsync(overdueGarageId, cancellationToken);
+        var staffScenariosAreComplete = await HaveExpectedStaffScenariosAsync(cancellationToken);
+        var supplierScenariosAreComplete = await HaveExpectedSupplierScenariosAsync(cancellationToken);
+        var fundBalancesReconcile = await FundBalancesReconcileAsync(cancellationToken);
         var isReady = garages == GarageNumbers.Length
-            && accruals == 65
-            && payments == 8
+            && accruals == 67
+            && payments == 11
             && readings == (GarageNumbers.Length - 1) * 4
-            && campaigns == 2
-            && suppliers == 1
+            && campaigns == 3
+            && suppliers == 3
+            && staffMembers == 3
             && fundOperations == 2
             && hasNoDebt
             && hasDebt
@@ -149,7 +152,10 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             && newGarageHasNoCalculatedHistory
             && campaignsHaveLockedParticipants
             && annualAccrualsAreUnique
-            && overdueScenarioIsCorrect;
+            && overdueScenarioIsCorrect
+            && staffScenariosAreComplete
+            && supplierScenariosAreComplete
+            && fundBalancesReconcile;
 
         return new ShowcaseSeedResult(
             isReady,
@@ -159,6 +165,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             readings,
             campaigns,
             suppliers,
+            staffMembers,
             users,
             hasNoDebt,
             hasDebt,
@@ -166,7 +173,93 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             newGarageHasNoCalculatedHistory,
             campaignsHaveLockedParticipants,
             annualAccrualsAreUnique,
-            overdueScenarioIsCorrect);
+            overdueScenarioIsCorrect,
+            staffScenariosAreComplete,
+            supplierScenariosAreComplete,
+            fundBalancesReconcile);
+    }
+
+    private async Task<bool> HaveExpectedCampaignParticipantsAsync(
+        Guid newGarageId,
+        CancellationToken cancellationToken)
+    {
+        var campaigns = await context.FeeCampaigns
+            .AsNoTracking()
+            .Where(item => item.Goal != null && item.Goal.Contains(Marker))
+            .Select(item => new
+            {
+                item.Name,
+                item.AppliesToAllGarages,
+                GarageIds = item.ParticipantGarages.Select(participant => participant.GarageId).ToArray()
+            })
+            .ToListAsync(cancellationToken);
+        var allGarageCampaignsAreLocked = campaigns
+            .Where(item => item.AppliesToAllGarages)
+            .All(item => item.GarageIds.Length == GarageNumbers.Length - 1
+                && !item.GarageIds.Contains(newGarageId));
+        var selected = campaigns.SingleOrDefault(item => !item.AppliesToAllGarages);
+        return campaigns.Count == 3
+            && allGarageCampaignsAreLocked
+            && selected is not null
+            && selected.GarageIds.Order().SequenceEqual(
+                new[] { DeterministicGuid("garage-2"), DeterministicGuid("garage-5") }.Order());
+    }
+
+    private async Task<bool> HaveExpectedStaffScenariosAsync(CancellationToken cancellationToken)
+    {
+        var staff = await context.StaffMembers
+            .AsNoTracking()
+            .Include(item => item.EmploymentPeriods)
+            .Include(item => item.SalaryRatePeriods)
+            .Where(item => item.FullName.Contains("Демонстрационный сотрудник"))
+            .OrderBy(item => item.FullName)
+            .ToListAsync(cancellationToken);
+        return staff.Count == 3
+            && staff.All(item => item.EmploymentPeriods.Count == 1 && item.SalaryRatePeriods.Count == 1)
+            && staff.Any(item => item.IsArchived && item.EmploymentPeriods.Single().EffectiveTo.HasValue)
+            && staff.Any(item => !item.IsArchived && item.EmploymentPeriods.Single().EffectiveFrom.Day > 1)
+            && await context.StaffSalaryAdjustments.CountAsync(
+                item => staff.Select(member => member.Id).Contains(item.StaffMemberId) && !item.IsCanceled,
+                cancellationToken) == 2
+            && await context.FinancialOperations.CountAsync(
+                item => item.StaffMemberId != null && item.Comment == Marker && !item.IsCanceled,
+                cancellationToken) == 1;
+    }
+
+    private async Task<bool> FundBalancesReconcileAsync(CancellationToken cancellationToken)
+    {
+        var stored = await context.Funds.SumAsync(item => item.Balance, cancellationToken);
+        var deposits = await context.FundOperations
+            .Where(item => !item.IsCanceled && item.OperationKind == FundOperationKinds.Deposit)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        var withdrawals = await context.FundOperations
+            .Where(item => !item.IsCanceled && item.OperationKind == FundOperationKinds.Withdraw)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        return stored == deposits - withdrawals;
+    }
+
+    private async Task<bool> HaveExpectedSupplierScenariosAsync(CancellationToken cancellationToken)
+    {
+        var balances = await context.Suppliers
+            .AsNoTracking()
+            .Where(item => item.Comment == Marker)
+            .Select(item => new
+            {
+                Balance = item.StartingBalance
+                    + (context.SupplierAccruals
+                        .Where(accrual => accrual.SupplierId == item.Id && !accrual.IsCanceled)
+                        .Sum(accrual => (decimal?)accrual.Amount) ?? 0m)
+                    - (context.FinancialOperations
+                        .Where(operation => operation.SupplierId == item.Id
+                            && operation.OperationKind == FinancialOperationKinds.Expense
+                            && !operation.IsCanceled)
+                        .Sum(operation => (decimal?)operation.Amount) ?? 0m)
+            })
+            .ToListAsync(cancellationToken);
+        return balances.Count == 3
+            && balances.Any(item => item.Balance > 0m)
+            && balances.Any(item => item.Balance == 0m)
+            && balances.Any(item => item.Balance < 0m);
     }
 
     private async Task ClearBusinessDataAsync(CancellationToken cancellationToken)
@@ -684,6 +777,21 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             CreatedAtUtc = CreatedAtUtc,
             UpdatedAtUtc = CreatedAtUtc
         };
+        var selected = new FeeCampaign
+        {
+            Id = DeterministicGuid("campaign-selected"),
+            Name = "Освещение выбранного ряда",
+            IncomeTypeId = income.Id,
+            Goal = $"Сбор только для выбранных гаражей; {Marker}",
+            ContributionAmount = 750m,
+            TargetAmount = 1500m,
+            StartsOn = AccountingMonth,
+            EndsOn = new DateOnly(2026, 10, 31),
+            AppliesToAllGarages = false,
+            OverdueGraceDays = 15,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        };
         var participantGarages = garages
             .Where(garage => garage.CreatedAtUtc <= active.CreatedAtUtc && !garage.IsArchived)
             .ToArray();
@@ -693,7 +801,11 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         closed.ParticipantGarages = participantGarages
             .Select(garage => new FeeCampaignGarage { FeeCampaign = closed, GarageId = garage.Id })
             .ToList();
-        context.FeeCampaigns.AddRange(active, closed);
+        var selectedGarages = new[] { garages[1], garages[4] };
+        selected.ParticipantGarages = selectedGarages
+            .Select(garage => new FeeCampaignGarage { FeeCampaign = selected, GarageId = garage.Id })
+            .ToList();
+        context.FeeCampaigns.AddRange(active, closed, selected);
 
         var accruals = participantGarages.Select((garage, index) => new Accrual
         {
@@ -705,6 +817,21 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             DueDate = new DateOnly(2026, 9, 20),
             OverdueFromDate = new DateOnly(2026, 10, 20),
             Amount = 1000m,
+            Source = AccrualSources.FeeCampaign,
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        }).ToArray();
+        var selectedAccruals = selectedGarages.Select(garage => new Accrual
+        {
+            Id = DeterministicGuid($"selected-campaign-accrual-{garage.Number}"),
+            GarageId = garage.Id,
+            IncomeTypeId = income.Id,
+            FeeCampaign = selected,
+            AccountingMonth = AccountingMonth,
+            DueDate = new DateOnly(2026, 9, 20),
+            OverdueFromDate = new DateOnly(2026, 10, 6),
+            Amount = selected.ContributionAmount,
             Source = AccrualSources.FeeCampaign,
             Comment = Marker,
             CreatedAtUtc = CreatedAtUtc,
@@ -754,7 +881,33 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             Amount = 1000m,
             CreatedAtUtc = CreatedAtUtc
         };
-        return new CampaignData(accruals, [operation, noDebtOperation], [allocation, noDebtAllocation]);
+        var selectedPayment = new FinancialOperation
+        {
+            Id = DeterministicGuid("selected-campaign-payment"),
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 8, 14),
+            AccountingMonth = AccountingMonth,
+            Amount = 300m,
+            GarageId = garages[4].Id,
+            IncomeTypeId = income.Id,
+            FeeCampaign = selected,
+            DocumentNumber = "ДЕМО-СБОР-ВЫБОР",
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        };
+        var selectedAllocation = new AccrualPaymentAllocation
+        {
+            Id = DeterministicGuid("selected-campaign-allocation"),
+            FinancialOperation = selectedPayment,
+            AccrualId = selectedAccruals[1].Id,
+            Amount = selectedPayment.Amount,
+            CreatedAtUtc = CreatedAtUtc
+        };
+        return new CampaignData(
+            [.. accruals, .. selectedAccruals],
+            [operation, noDebtOperation, selectedPayment],
+            [allocation, noDebtAllocation, selectedAllocation]);
     }
 
     private async Task<CampaignData> CreateIrregularExamplesAsync(
@@ -815,24 +968,52 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         CancellationToken cancellationToken)
     {
         var expense = await context.ExpenseTypes.SingleAsync(item => item.Code == "electricity", cancellationToken);
+        var trashExpense = await context.ExpenseTypes.SingleAsync(item => item.Code == "trash_removal", cancellationToken);
+        var waterExpense = await context.ExpenseTypes.SingleAsync(item => item.Code == "water_supply", cancellationToken);
         var fund = await context.Funds.OrderBy(item => item.SortOrder).FirstAsync(cancellationToken);
         var group = new SupplierGroup { Id = DeterministicGuid("supplier-group"), Name = "Коммунальные поставщики" };
         var supplier = new Supplier
         {
             Id = DeterministicGuid("supplier"),
-            Name = "ДЕМО Энергосбыт",
+            Name = "ДЕМО Энергосбыт — задолженность",
             Group = group,
             ChargeServiceSettingId = services["electricity"].Id,
             ExpenseTypeId = expense.Id,
             ExpenseFundId = fund.Id,
-            StartingBalance = -5000m,
+            StartingBalance = 3000m,
             Comment = Marker,
             CreatedAtUtc = CreatedAtUtc,
             UpdatedAtUtc = CreatedAtUtc,
             Version = DeterministicGuid("supplier-version")
         };
-        context.AddRange(group, supplier);
-        context.SupplierAccruals.Add(new SupplierAccrual
+        var paidSupplier = new Supplier
+        {
+            Id = DeterministicGuid("supplier-paid"),
+            Name = "ДЕМО Вывоз — расчёт закрыт",
+            Group = group,
+            ChargeServiceSettingId = services["trash"].Id,
+            ExpenseTypeId = trashExpense.Id,
+            StartingBalance = 0m,
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc,
+            Version = DeterministicGuid("supplier-paid-version")
+        };
+        var advanceSupplier = new Supplier
+        {
+            Id = DeterministicGuid("supplier-advance"),
+            Name = "ДЕМО Водоканал — аванс",
+            Group = group,
+            ChargeServiceSettingId = services["water"].Id,
+            ExpenseTypeId = waterExpense.Id,
+            StartingBalance = -2000m,
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc,
+            Version = DeterministicGuid("supplier-advance-version")
+        };
+        context.AddRange(group, supplier, paidSupplier, advanceSupplier);
+        context.SupplierAccruals.AddRange(new SupplierAccrual
         {
             Id = DeterministicGuid("supplier-accrual"),
             Supplier = supplier,
@@ -845,8 +1026,20 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             Comment = Marker,
             CreatedAtUtc = CreatedAtUtc,
             UpdatedAtUtc = CreatedAtUtc
+        }, new SupplierAccrual
+        {
+            Id = DeterministicGuid("supplier-paid-accrual"),
+            Supplier = paidSupplier,
+            ExpenseTypeId = trashExpense.Id,
+            AccountingMonth = AccountingMonth,
+            Amount = 5000m,
+            Source = AccrualSources.Manual,
+            DocumentNumber = "ДЕМО-СЧЕТ-002",
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
         });
-        context.FinancialOperations.Add(new FinancialOperation
+        context.FinancialOperations.AddRange(new FinancialOperation
         {
             Id = DeterministicGuid("supplier-payment"),
             OperationKind = FinancialOperationKinds.Expense,
@@ -862,7 +1055,147 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             Comment = Marker,
             CreatedAtUtc = CreatedAtUtc,
             UpdatedAtUtc = CreatedAtUtc
+        }, new FinancialOperation
+        {
+            Id = DeterministicGuid("supplier-paid-payment"),
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 8, 14),
+            AccountingMonth = AccountingMonth,
+            Amount = 5000m,
+            Supplier = paidSupplier,
+            ExpenseTypeId = trashExpense.Id,
+            ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt,
+            ExpensePaymentSource = ExpensePaymentSources.Cash,
+            DocumentNumber = "ДЕМО-РКО-002",
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
         });
+    }
+
+    private async Task CreateStaffExamplesAsync(CancellationToken cancellationToken)
+    {
+        var salaryExpenseType = await context.ExpenseTypes.SingleAsync(
+            item => item.Code == "salary",
+            cancellationToken);
+        var administration = new StaffDepartment
+        {
+            Id = DeterministicGuid("staff-department-administration"),
+            Name = "Администрация",
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        };
+        var maintenance = new StaffDepartment
+        {
+            Id = DeterministicGuid("staff-department-maintenance"),
+            Name = "Техническое обслуживание",
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        };
+        var active = Staff(
+            "staff-active",
+            "Демонстрационный сотрудник — полный месяц",
+            administration,
+            45000m,
+            new DateOnly(2026, 1, 15));
+        var hired = Staff(
+            "staff-hired",
+            "Демонстрационный сотрудник — принят в августе",
+            maintenance,
+            30000m,
+            new DateOnly(2026, 8, 15));
+        var dismissed = Staff(
+            "staff-dismissed",
+            "Демонстрационный сотрудник — уволен",
+            maintenance,
+            25000m,
+            new DateOnly(2026, 2, 10),
+            new DateOnly(2026, 7, 20),
+            isArchived: true);
+
+        context.AddRange(administration, maintenance, active, hired, dismissed);
+        context.StaffSalaryAdjustments.AddRange(
+            new StaffSalaryAdjustment
+            {
+                Id = DeterministicGuid("staff-active-bonus"),
+                StaffMember = active,
+                AccountingMonth = AccountingMonth,
+                AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                Amount = 5000m,
+                DocumentNumber = "ДЕМО-ПРЕМИЯ",
+                Reason = "Демонстрационный сценарий премии",
+                Version = DeterministicGuid("staff-active-bonus-version"),
+                CreatedAtUtc = CreatedAtUtc,
+                UpdatedAtUtc = CreatedAtUtc
+            },
+            new StaffSalaryAdjustment
+            {
+                Id = DeterministicGuid("staff-active-penalty"),
+                StaffMember = active,
+                AccountingMonth = AccountingMonth,
+                AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                Amount = 2000m,
+                DocumentNumber = "ДЕМО-ШТРАФ",
+                Reason = "Демонстрационный сценарий штрафа",
+                Version = DeterministicGuid("staff-active-penalty-version"),
+                CreatedAtUtc = CreatedAtUtc,
+                UpdatedAtUtc = CreatedAtUtc
+            });
+        context.FinancialOperations.Add(new FinancialOperation
+        {
+            Id = DeterministicGuid("staff-active-payment"),
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 8, 14),
+            AccountingMonth = AccountingMonth,
+            Amount = 30000m,
+            StaffMember = active,
+            ExpenseTypeId = salaryExpenseType.Id,
+            ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt,
+            ExpensePaymentSource = ExpensePaymentSources.Cash,
+            DocumentNumber = "ДЕМО-ЗП-001",
+            Comment = Marker,
+            Version = DeterministicGuid("staff-active-payment-version"),
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        });
+
+        static StaffMember Staff(
+            string key,
+            string fullName,
+            StaffDepartment department,
+            decimal rate,
+            DateOnly employedFrom,
+            DateOnly? employedTo = null,
+            bool isArchived = false)
+        {
+            var member = new StaffMember
+            {
+                Id = DeterministicGuid(key),
+                FullName = fullName,
+                Department = department,
+                Rate = rate,
+                IsArchived = isArchived,
+                CreatedAtUtc = CreatedAtUtc,
+                UpdatedAtUtc = CreatedAtUtc
+            };
+            member.EmploymentPeriods.Add(new StaffEmploymentPeriod
+            {
+                Id = DeterministicGuid($"{key}-employment"),
+                StaffMember = member,
+                EffectiveFrom = employedFrom,
+                EffectiveTo = employedTo,
+                CreatedAtUtc = CreatedAtUtc
+            });
+            member.SalaryRatePeriods.Add(new StaffSalaryRatePeriod
+            {
+                Id = DeterministicGuid($"{key}-salary"),
+                StaffMember = member,
+                EffectiveFrom = employedFrom,
+                Rate = rate,
+                CreatedAtUtc = CreatedAtUtc
+            });
+            return member;
+        }
     }
 
     private Task CreateCashAndBankExamplesAsync(CancellationToken cancellationToken)
@@ -971,6 +1304,7 @@ public sealed record ShowcaseSeedResult(
     int MeterReadingCount,
     int FeeCampaignCount,
     int SupplierCount,
+    int StaffMemberCount,
     int PreservedUserCount,
     bool HasNoDebt,
     bool HasDebt,
@@ -978,4 +1312,7 @@ public sealed record ShowcaseSeedResult(
     bool NewGarageHasNoCalculatedHistory,
     bool CampaignsHaveLockedParticipants,
     bool AnnualAccrualsAreUnique,
-    bool OverdueScenarioIsCorrect);
+    bool OverdueScenarioIsCorrect,
+    bool StaffScenariosAreComplete,
+    bool SupplierScenariosAreComplete,
+    bool FundBalancesReconcile);
