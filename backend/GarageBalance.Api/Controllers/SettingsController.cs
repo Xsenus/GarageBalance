@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Maintenance;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Contracts.Settings;
 using GarageBalance.Api.Domain.Security;
@@ -14,7 +15,8 @@ namespace GarageBalance.Api.Controllers;
 public sealed class SettingsController(
     IApplicationSettingsService applicationSettingsService,
     ICashBankBalanceSettingsService cashBankBalanceSettingsService,
-    IDatabaseBackupService databaseBackupService) : ControllerBase
+    IDatabaseBackupService databaseBackupService,
+    IStagingDatabaseResetService stagingDatabaseResetService) : ControllerBase
 {
     [HttpGet("payments/display")]
     [Authorize]
@@ -390,6 +392,34 @@ public sealed class SettingsController(
         return result.Succeeded
             ? Ok(result.Value)
             : ToDatabaseBackupProblem(result.ErrorCode, result.ErrorMessage);
+    }
+
+    [HttpPost("database-reset")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<StagingDatabaseResetDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<StagingDatabaseResetDto>> ResetDatabase(
+        ResetDatabaseRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await stagingDatabaseResetService.ResetAsync(
+            new StagingDatabaseResetRequest(request.Password, request.Confirmation, request.Reason),
+            GetActorUserId(),
+            cancellationToken);
+        if (result.Succeeded)
+        {
+            return Ok(result.Value);
+        }
+
+        var statusCode = result.ErrorCode switch
+        {
+            "database_reset_in_progress" => StatusCodes.Status409Conflict,
+            "database_reset_disabled" or "database_reset_wrong_target" or "database_reset_backup_failed" or "database_reset_failed" => StatusCodes.Status503ServiceUnavailable,
+            _ => StatusCodes.Status400BadRequest
+        };
+        return Problem(statusCode: statusCode, title: result.ErrorCode, detail: result.ErrorMessage);
     }
 
     private Guid? GetActorUserId()

@@ -1,0 +1,89 @@
+name: Reset staging working data
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RESET GARAGEBALANCE STAGING
+        required: true
+        type: string
+
+concurrency:
+  group: garagebalance-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reset:
+    name: Back up, reset and verify staging database
+    if: ${{ inputs.confirmation == 'RESET GARAGEBALANCE STAGING' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore GarageBalance.slnx
+
+      - name: Verify reset safety tests
+        run: >-
+          dotnet test backend/GarageBalance.Api.Tests/GarageBalance.Api.Tests.csproj
+          --configuration Release --no-restore
+          --filter "FullyQualifiedName~ShowcaseDatabaseGuardTests"
+
+      - name: Publish reset runner
+        run: |
+          dotnet publish backend/GarageBalance.ShowcaseSeed/GarageBalance.ShowcaseSeed.csproj \
+            --configuration Release \
+            --runtime linux-x64 \
+            --self-contained true \
+            --output artifacts/reset
+          test -x artifacts/reset/GarageBalance.ShowcaseSeed
+          tar -czf artifacts/reset.tar.gz -C artifacts/reset .
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/garagebalance_staging
+          chmod 600 ~/.ssh/garagebalance_staging
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host garagebalance-staging
+            HostName ${{ secrets.VPS_HOST }}
+            User ${{ secrets.VPS_DEPLOY_USER }}
+            IdentityFile ~/.ssh/garagebalance_staging
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Upload runner and reset staging
+        env:
+          RUN_ID: ${{ github.run_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          remote_archive="/home/${{ secrets.VPS_DEPLOY_USER }}/reset-${RUN_ID}.tar.gz"
+          scp artifacts/reset.tar.gz "garagebalance-staging:${remote_archive}"
+          ssh garagebalance-staging \
+            "sudo /usr/local/bin/garagebalance-deploy-apply reset-working-data '${remote_archive}' '${CONFIRMATION}'"
+          ssh garagebalance-staging "rm -f '${remote_archive}'"
+
+      - name: Verify public staging
+        run: |
+          curl --http2 --compressed --fail --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            https://sgk.blagodaty.ru/health/ready
+          curl --http2 --compressed --fail --silent --show-error \
+            --connect-timeout 10 --max-time 20 \
+            https://sgk.blagodaty.ru/ --output /dev/null

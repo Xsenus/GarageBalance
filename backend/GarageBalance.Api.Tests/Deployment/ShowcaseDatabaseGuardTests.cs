@@ -36,4 +36,20 @@ public sealed class ShowcaseDatabaseGuardTests
             "Host=localhost;Database=garagebalance_staging;Username=demo;Password=secret",
             "prepare"));
     }
+
+    [Fact]
+    public void ValidateReset_AllowsOnlyExactStagingDatabaseAndResetConfirmation()
+    {
+        var validated = ShowcaseDatabaseGuard.ValidateReset(
+            "Host=localhost;Database=garagebalance_staging;Username=demo;Password=secret",
+            ShowcaseDatabaseGuard.RequiredResetConfirmation);
+
+        Assert.Contains("Database=garagebalance_staging", validated, StringComparison.OrdinalIgnoreCase);
+        Assert.Throws<InvalidOperationException>(() => ShowcaseDatabaseGuard.ValidateReset(
+            "Host=localhost;Database=garagebalance;Username=demo;Password=secret",
+            ShowcaseDatabaseGuard.RequiredResetConfirmation));
+        Assert.Throws<InvalidOperationException>(() => ShowcaseDatabaseGuard.ValidateReset(
+            "Host=localhost;Database=garagebalance_staging;Username=demo;Password=secret",
+            ShowcaseDatabaseGuard.RequiredConfirmation));
+    }
 }

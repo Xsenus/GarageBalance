@@ -15,6 +15,7 @@ using GarageBalance.Api.Application.Releases;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Application.Security;
 using GarageBalance.Api.Application.Settings;
+using GarageBalance.Api.Application.Maintenance;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
@@ -24,6 +25,7 @@ using GarageBalance.Api.Infrastructure.Compression;
 using GarageBalance.Api.Infrastructure.Diagnostics;
 using GarageBalance.Api.Infrastructure.Import;
 using GarageBalance.Api.Infrastructure.Integrations;
+using GarageBalance.Api.Infrastructure.Maintenance;
 using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -283,6 +285,8 @@ builder.Services
 builder.Services.AddSingleton<IBackupCommandRunner, BackupCommandRunner>();
 builder.Services.AddSingleton<IBackupToolLocator, BackupToolLocator>();
 builder.Services.AddScoped<IDatabaseBackupService, PostgresDatabaseBackupService>();
+builder.Services.Configure<StagingDatabaseResetOptions>(builder.Configuration.GetSection(StagingDatabaseResetOptions.SectionName));
+builder.Services.AddScoped<IStagingDatabaseResetService, StagingDatabaseResetService>();
 builder.Services.AddScoped<DatabaseBackupAutomationRunner>();
 builder.Services
     .AddOptions<RegularAccrualAutomationOptions>()

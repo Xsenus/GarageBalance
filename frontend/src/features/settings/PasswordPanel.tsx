@@ -117,6 +117,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [backupDeleteConfirmation, setBackupDeleteConfirmation] = useState<{ backup: DatabaseBackupFileDto; reason: string; error: string | null } | null>(null)
   const [backupDownloadingFileName, setBackupDownloadingFileName] = useState<string | null>(null)
   const [backupDeleting, setBackupDeleting] = useState(false)
+  const [databaseResetConfirmation, setDatabaseResetConfirmation] = useState<{ password: string; error: string | null } | null>(null)
   const [diagnosticStatus, setDiagnosticStatus] = useState<DiagnosticLogStatusDto | null>(null)
   const [diagnosticLoading, setDiagnosticLoading] = useState(false)
   const [diagnosticExporting, setDiagnosticExporting] = useState(false)
@@ -408,6 +409,27 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить.')
     } finally {
       setPaymentDisplaySettingsSaving(false)
+    }
+  }
+
+  async function resetDatabase() {
+    if (!databaseResetConfirmation) return
+    const password = databaseResetConfirmation.password
+    setBackupCreating(true)
+    setBackupMessage(null)
+    try {
+      await settingsClient.resetDatabase(auth.accessToken, { password, confirmation: 'ОЧИСТИТЬ БАЗУ', reason: 'Сброс' })
+      setDatabaseResetConfirmation(null)
+      setBackupMessage('База очищена.')
+      setBackupReloadToken((value) => value + 1)
+    } catch (caught) {
+      setDatabaseResetConfirmation((current) => current ? {
+        ...current,
+        password: '',
+        error: caught instanceof Error ? caught.message : 'Не удалось очистить базу данных.',
+      } : current)
+    } finally {
+      setBackupCreating(false)
     }
   }
 
@@ -1397,6 +1419,19 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 </tbody>
               </table>
             </div>
+            {canManageBusinessDate ? <div className="settings-form-actions">
+              <button
+                className="secondary-button danger-button"
+                type="button"
+                disabled={!backupStatus.enabled || backupStatus.isRunning || backupCreating}
+                onClick={() => {
+                  setDatabaseResetConfirmation({ password: '', error: null })
+                }}
+              >
+                <FileWarning size={17} aria-hidden="true" />
+                Очистить рабочие данные
+              </button>
+            </div> : null}
           </>
         ) : null}
         </div>
@@ -1698,6 +1733,17 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           onSubmit={() => void deleteDatabaseBackup()}
         />
       ) : null}
+      {databaseResetConfirmation ? (
+        <BackupReasonDialog
+          reason={databaseResetConfirmation.password}
+          error={databaseResetConfirmation.error}
+          busy={backupCreating}
+          databaseReset
+          onReasonChange={(password) => setDatabaseResetConfirmation({ password, error: null })}
+          onCancel={() => setDatabaseResetConfirmation(null)}
+          onSubmit={() => void resetDatabase()}
+        />
+      ) : null}
       <ToastViewport toast={toast} onDismiss={dismissToast} />
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
@@ -1773,58 +1819,49 @@ function getOneCFreshSyncConfirmationTitle(mode: 'preview' | 'start' | 'retry') 
     : 'Запустить синхронизацию 1C Fresh?'
 }
 
-function BackupReasonDialog({ fileName, reason, error, busy, onReasonChange, onCancel, onSubmit }: {
+function BackupReasonDialog({ fileName, reason, error, busy, databaseReset = false, onReasonChange, onCancel, onSubmit }: {
   fileName?: string
   reason: string
   error: string | null
   busy: boolean
+  databaseReset?: boolean
   onReasonChange: (reason: string) => void
   onCancel: () => void
   onSubmit: () => void
 }) {
+  const resetting = databaseReset
   const deleting = Boolean(fileName)
+  const action = deleting ? 'удаления' : 'создания'
+  const titleId = resetting ? 'database-reset-title' : `database-backup-${deleting ? 'delete-' : ''}title`
+  const submitLabel = resetting ? 'Создать копию и очистить' : deleting ? 'Удалить копию' : 'Создать копию'
+  const busyLabel = resetting ? 'Очистка…' : deleting ? 'Удаляем...' : 'Создаем и проверяем...'
   useRestoreFocusOnClose(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(!busy, onCancel)
 
-  const action = deleting ? 'удаления' : 'создания'
-  const titleId = `database-backup-${deleting ? 'delete-' : ''}title`
-  const descriptionId = `database-backup-${deleting ? 'delete-' : ''}description`
-
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={() => !busy && onCancel()}>
-      <section ref={dialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
-          <div>
-            <p className="eyebrow">{deleting ? 'Удаление резервной копии' : 'Резервные копии'}</p>
-            <h3 id={titleId}>{deleting ? 'Удалить выбранную копию?' : 'Создать резервную копию базы?'}</h3>
-          </div>
-          <button className="icon-button" type="button" aria-label={`Закрыть ${action} резервной копии`} onClick={onCancel} disabled={busy}>
-            <X size={18} aria-hidden="true" />
-          </button>
+          <div><p className="eyebrow">{deleting ? 'Удаление резервной копии' : 'Резервные копии'}</p><h3 id={titleId}>{resetting ? 'Очистить рабочие данные?' : deleting ? 'Удалить выбранную копию?' : 'Создать резервную копию базы?'}</h3></div>
         </div>
-        <p className="confirmation-text" id={descriptionId}>
-          {deleting
-            ? <>Файл <strong>{fileName}</strong> будет удален без возможности восстановления. Остальные копии не изменятся.</>
-            : 'Система создаст PostgreSQL backup в отдельной папке, проверит его через pg_restore и запишет действие в историю изменений.'}
-        </p>
-        <FormField label={`Причина ${action}`}>
+        <FormField label={resetting ? 'Пароль очистки' : `Причина ${action}`}>
+          {resetting ? <input aria-label="Пароль очистки базы данных" type="password" autoComplete="new-password" value={reason} onChange={(event) => onReasonChange(event.target.value)} disabled={busy} /> :
           <textarea
             aria-label={`Причина ${action} резервной копии`}
             rows={3}
             value={reason}
             onChange={(event) => onReasonChange(event.target.value)}
-            placeholder={deleting ? 'Например: копия больше не нужна после успешного обновления' : 'Например: перед обновлением программы'}
             disabled={busy}
-          />
+          />}
         </FormField>
         {error ? <FormError>{error}</FormError> : null}
         <div className="detail-dialog-actions">
           <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel} disabled={busy}>Отмена</button>
-          <button className={deleting ? 'danger-button' : 'secondary-button'} type="button" onClick={onSubmit} disabled={busy}>
+          <button className={resetting || deleting ? 'secondary-button danger-button' : 'secondary-button'} type="button" onClick={onSubmit} disabled={busy || (resetting && !reason)}>
             {deleting ? <X size={16} aria-hidden="true" /> : <DatabaseBackup size={16} aria-hidden="true" />}
-            <span>{busy ? (deleting ? 'Удаляем...' : 'Создаем и проверяем...') : (deleting ? 'Удалить копию' : 'Создать копию')}</span>
+            {busy ? busyLabel : submitLabel}
           </button>
         </div>
       </section>

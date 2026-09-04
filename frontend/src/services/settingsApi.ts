@@ -116,6 +116,17 @@ export type DatabaseBackupStatusDto = {
   backups: DatabaseBackupFileDto[]
 }
 
+export type StagingDatabaseResetDto = {
+  backupFileName: string
+  clearedRowCount: number
+  preservedUsers: number
+  preservedTariffs: number
+  preservedIrregularPayments: number
+  preservedFunds: number
+  fundBalance: number
+  generalPoolBalance: number
+}
+
 export type DiagnosticLogStatusDto = {
   enabled: boolean
   retentionDays: number
@@ -150,6 +161,7 @@ export type ApplicationSettingsClient = {
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
   downloadDatabaseBackup(accessToken: string, fileName: string): Promise<Blob>
   deleteDatabaseBackup(accessToken: string, fileName: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
+  resetDatabase(accessToken: string, request: { password: string; confirmation: string; reason: string }): Promise<StagingDatabaseResetDto>
   getDiagnosticLogStatus(accessToken: string, signal?: AbortSignal): Promise<DiagnosticLogStatusDto>
   createDiagnosticPackage(accessToken: string): Promise<Blob>
 }
@@ -248,6 +260,9 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   deleteDatabaseBackup(accessToken, fileName, request) {
     return requestJson(accessToken, `/api/settings/backups/${encodeURIComponent(fileName)}`, { method: 'DELETE', body: JSON.stringify(request) })
+  },
+  resetDatabase(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/database-reset', { method: 'POST', body: JSON.stringify(request) })
   },
   getDiagnosticLogStatus(accessToken, signal) {
     return requestJson(accessToken, '/api/diagnostics/status', { signal })

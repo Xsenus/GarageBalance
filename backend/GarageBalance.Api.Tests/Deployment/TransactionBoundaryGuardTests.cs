@@ -2,6 +2,11 @@ namespace GarageBalance.Api.Tests.Deployment;
 
 public sealed class TransactionBoundaryGuardTests
 {
+    private static readonly string[] ApprovedExplicitTransactions =
+    [
+        $"Infrastructure{Path.DirectorySeparatorChar}Maintenance{Path.DirectorySeparatorChar}WorkingDataResetExecutor.cs: BeginTransactionAsync("
+    ];
+
     private static readonly string[] ExplicitTransactionMarkers =
     [
         "BeginTransaction(",
@@ -24,9 +29,7 @@ public sealed class TransactionBoundaryGuardTests
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
 
-        Assert.True(
-            violations.Length == 0,
-            $"Явные транзакции требуют отдельной проверки границ: {string.Join(", ", violations)}");
+        Assert.Equal(ApprovedExplicitTransactions.OrderBy(value => value, StringComparer.Ordinal), violations);
     }
 
     private static string FindRepositoryRoot()

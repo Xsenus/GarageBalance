@@ -26,11 +26,14 @@ Jwt__Issuer=GarageBalance
 Jwt__Audience=GarageBalance
 Jwt__SigningKey=REPLACE_WITH_AT_LEAST_32_UTF8_BYTES_SECRET
 DataProtection__KeysPath=/var/lib/garagebalance-staging/data-protection-keys
+StagingDatabaseReset__Enabled=true
+StagingDatabaseReset__Password=REPLACE_WITH_SEPARATE_RESET_SECRET
 ```
 
 - Параметры `DatabasePerformance` по умолчанию ограничивают Npgsql-пул 32 соединениями, держат 2 тёплых соединения и очищают простаивающие соединения через 300 секунд с интервалом 10 секунд. Для PostgreSQL на том же VPS `KeepAliveSeconds=0`: прикладной ping не нужен. Менять эти значения следует только после измерения ожиданий пула и числа соединений.
 - [ ] Не использовать примерный `change-this`/`development` JWT secret вне Development.
 - [ ] Не хранить `/etc/garagebalance-staging.env` в рабочем каталоге проекта.
+- [ ] Хранить отдельный пароль очистки только в `/etc/garagebalance-staging.env`; не использовать пароль учётной записи администратора или PostgreSQL.
 - [ ] Проверить, что database user имеет права только на базу `garagebalance_staging`.
 - [ ] Не удалять Data Protection keys при deploy/rollback: без прежних ключей защищенные настройки интеграций нельзя расшифровать.
 

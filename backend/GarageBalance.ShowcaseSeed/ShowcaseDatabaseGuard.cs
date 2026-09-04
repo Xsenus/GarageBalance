@@ -6,11 +6,25 @@ public static class ShowcaseDatabaseGuard
 {
     public const string ExpectedDatabase = "garagebalance_staging";
     public const string RequiredConfirmation = "PREPARE GARAGEBALANCE STAGING";
+    public const string RequiredResetConfirmation = "RESET GARAGEBALANCE STAGING";
 
     public static string Validate(
         string connectionString,
         string confirmation,
         bool allowIntegrationDatabase = false)
+        => Validate(connectionString, confirmation, RequiredConfirmation, allowIntegrationDatabase);
+
+    public static string ValidateReset(
+        string connectionString,
+        string confirmation,
+        bool allowIntegrationDatabase = false)
+        => Validate(connectionString, confirmation, RequiredResetConfirmation, allowIntegrationDatabase);
+
+    private static string Validate(
+        string connectionString,
+        string confirmation,
+        string requiredConfirmation,
+        bool allowIntegrationDatabase)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
         {
@@ -27,9 +41,9 @@ public static class ShowcaseDatabaseGuard
                 $"Refusing to prepare database '{database}'. Expected '{ExpectedDatabase}'.");
         }
 
-        if (!string.Equals(confirmation, RequiredConfirmation, StringComparison.Ordinal))
+        if (!string.Equals(confirmation, requiredConfirmation, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("The exact showcase preparation confirmation was not supplied.");
+            throw new InvalidOperationException("The exact staging database confirmation was not supplied.");
         }
 
         builder.Pooling = false;

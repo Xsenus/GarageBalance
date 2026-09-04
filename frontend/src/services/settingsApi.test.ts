@@ -315,6 +315,33 @@ describe('settingsApi', () => {
     }))
   })
 
+  it('sends the protected database reset request only to the admin endpoint', async () => {
+    const response = {
+      backupFileName: 'garagebalance_pre_update_20260904_120000_000.pgdump',
+      clearedRowCount: 42,
+      preservedUsers: 2,
+      preservedTariffs: 10,
+      preservedIrregularPayments: 6,
+      preservedFunds: 5,
+      fundBalance: 0,
+      generalPoolBalance: 0,
+    }
+    const request = { password: 'reset-password', confirmation: 'ОЧИСТИТЬ БАЗУ', reason: 'Подготовка чистой базы' }
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.resetDatabase('token', request)).resolves.toEqual(response)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/settings/database-reset', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(request),
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
+
   it('loads balances, updates opening values, and creates an adjustment', async () => {
     const balances = {
       cashOpeningBalance: 1000,

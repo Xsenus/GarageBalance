@@ -47,6 +47,8 @@ services:
       DatabaseBackup__AutomaticWindowEndHour: ${DATABASE_BACKUP_WINDOW_END_HOUR:-5}
       DatabaseBackup__AutomaticWindowTimeZoneId: ${DATABASE_BACKUP_TIME_ZONE_ID:-Europe/Moscow}
       DatabaseBackup__RetentionCount: ${DATABASE_BACKUP_RETENTION_COUNT:-30}
+      StagingDatabaseReset__Enabled: ${STAGING_DATABASE_RESET_ENABLED:-false}
+      StagingDatabaseReset__Password: ${STAGING_DATABASE_RESET_PASSWORD:-}
       DatabaseBackup__PgDumpPath: pg_dump
       DatabaseBackup__PgRestorePath: pg_restore
       ImportProcessing__Capacity: ${IMPORT_PROCESSING_CAPACITY:-4}

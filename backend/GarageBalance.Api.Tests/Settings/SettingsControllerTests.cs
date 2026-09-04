@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Claims;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Maintenance;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Contracts.Settings;
 using GarageBalance.Api.Controllers;
@@ -25,6 +26,7 @@ public sealed class SettingsControllerTests
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
         var backupDownloadAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DownloadDatabaseBackup));
         var backupDeleteAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DeleteDatabaseBackup));
+        var databaseResetAction = typeof(SettingsController).GetMethod(nameof(SettingsController.ResetDatabase));
         var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
         var previewBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.PreviewBusinessDateChange));
         var updateBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateBusinessDateSettings));
@@ -48,6 +50,7 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupDownloadAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupDeleteAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(databaseResetAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(previewBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
@@ -509,6 +512,55 @@ public sealed class SettingsControllerTests
     }
 
     [Fact]
+    public async Task ResetDatabase_PassesCredentialsReasonAndActorToProtectedService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var resetService = new FakeStagingDatabaseResetService();
+        var controller = CreateController(resetService: resetService);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())],
+                    "Test"))
+            }
+        };
+        var request = new ResetDatabaseRequest("reset-password", "ОЧИСТИТЬ БАЗУ", "Подготовка чистой базы");
+
+        var result = await controller.ResetDatabase(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(resetService.Value, ok.Value);
+        Assert.Equal(actorUserId, resetService.ReceivedActorUserId);
+        Assert.Equal(request.Password, resetService.ReceivedRequest?.Password);
+        Assert.Equal(request.Confirmation, resetService.ReceivedRequest?.Confirmation);
+        Assert.Equal(request.Reason, resetService.ReceivedRequest?.Reason);
+    }
+
+    [Theory]
+    [InlineData("database_reset_password_invalid", StatusCodes.Status400BadRequest)]
+    [InlineData("database_reset_in_progress", StatusCodes.Status409Conflict)]
+    [InlineData("database_reset_disabled", StatusCodes.Status503ServiceUnavailable)]
+    [InlineData("database_reset_backup_failed", StatusCodes.Status503ServiceUnavailable)]
+    public async Task ResetDatabase_MapsProtectedServiceFailures(string errorCode, int expectedStatus)
+    {
+        var resetService = new FakeStagingDatabaseResetService
+        {
+            Result = StagingDatabaseResetResult.Failure(errorCode, "Безопасное сообщение.")
+        };
+        var controller = CreateController(resetService: resetService);
+
+        var result = await controller.ResetDatabase(
+            new ResetDatabaseRequest("reset-password", "ОЧИСТИТЬ БАЗУ", "Причина"),
+            CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(expectedStatus, problem.StatusCode);
+        Assert.Equal(errorCode, Assert.IsType<ProblemDetails>(problem.Value).Title);
+    }
+
+    [Fact]
     public async Task CreateCashBankBalanceAdjustment_PassesActorAndReturnsCreatedValue()
     {
         var actorUserId = Guid.NewGuid();
@@ -571,11 +623,13 @@ public sealed class SettingsControllerTests
     private static SettingsController CreateController(
         FakeService? service = null,
         FakeCashBankBalanceService? balanceService = null,
-        FakeBackupService? backupService = null) =>
+        FakeBackupService? backupService = null,
+        FakeStagingDatabaseResetService? resetService = null) =>
         new(
             service ?? new FakeService(),
             balanceService ?? new FakeCashBankBalanceService(),
-            backupService ?? new FakeBackupService());
+            backupService ?? new FakeBackupService(),
+            resetService ?? new FakeStagingDatabaseResetService());
 
     private sealed class FakeService : IApplicationSettingsService
     {
@@ -763,6 +817,32 @@ public sealed class SettingsControllerTests
             ReceivedReason = reason;
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(FileResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
+        }
+    }
+
+    private sealed class FakeStagingDatabaseResetService : IStagingDatabaseResetService
+    {
+        public StagingDatabaseResetDto Value { get; } = new(
+            "garagebalance_pre_update_20260904_120000_000.pgdump",
+            42,
+            2,
+            10,
+            6,
+            5,
+            0m,
+            0m);
+        public StagingDatabaseResetResult? Result { get; set; }
+        public StagingDatabaseResetRequest? ReceivedRequest { get; private set; }
+        public Guid? ReceivedActorUserId { get; private set; }
+
+        public Task<StagingDatabaseResetResult> ResetAsync(
+            StagingDatabaseResetRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            ReceivedRequest = request;
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(Result ?? StagingDatabaseResetResult.Success(Value));
         }
     }
 

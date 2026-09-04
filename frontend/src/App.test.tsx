@@ -15187,6 +15187,92 @@ describe('App', () => {
     expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
   })
 
+  it('resets working data from backups settings only after password and exact confirmation', async () => {
+    const user = userEvent.setup()
+    const resetDatabase = vi.fn(async () => ({
+      backupFileName: 'garagebalance_pre_update_20260904_120000_000.pgdump',
+      clearedRowCount: 73,
+      preservedUsers: 2,
+      preservedTariffs: 11,
+      preservedIrregularPayments: 6,
+      preservedFunds: 5,
+      fundBalance: 0,
+      generalPoolBalance: 0,
+    }))
+    const settingsClient = createSettingsClient({ resetDatabase })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+    const resetButton = within(backupsPanel).getByRole('button', { name: 'Очистить рабочие данные' })
+
+    await user.click(resetButton)
+    let dialog = await screen.findByRole('dialog', { name: 'Очистить рабочие данные?' })
+    expect(within(dialog).getByRole('button', { name: 'Создать копию и очистить' })).toBeDisabled()
+    expect(resetDatabase).not.toHaveBeenCalled()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(resetButton).toHaveFocus())
+
+    await user.click(resetButton)
+    dialog = await screen.findByRole('dialog', { name: 'Очистить рабочие данные?' })
+    await user.type(within(dialog).getByLabelText('Пароль очистки базы данных'), 'reset-password')
+    await user.click(within(dialog).getByRole('button', { name: 'Создать копию и очистить' }))
+
+    await waitFor(() => expect(resetDatabase).toHaveBeenCalledWith('token', {
+      password: 'reset-password',
+      confirmation: 'ОЧИСТИТЬ БАЗУ',
+      reason: 'Сброс',
+    }))
+    expect(screen.queryByRole('dialog', { name: 'Очистить рабочие данные?' })).not.toBeInTheDocument()
+    const successMessage = await within(backupsPanel).findByText('База очищена.')
+    expect(successMessage).toHaveAttribute('role', 'status')
+  })
+
+  it('keeps the reset dialog open after a server rejection and clears the password field', async () => {
+    const user = userEvent.setup()
+    const resetDatabase = vi.fn(async () => { throw new Error('Неверный пароль очистки базы данных.') })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ resetDatabase })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+    await user.click(within(backupsPanel).getByRole('button', { name: 'Очистить рабочие данные' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Очистить рабочие данные?' })
+    await user.type(within(dialog).getByLabelText('Пароль очистки базы данных'), 'wrong-password')
+    await user.click(within(dialog).getByRole('button', { name: 'Создать копию и очистить' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Неверный пароль очистки базы данных.')
+    expect(within(dialog).getByLabelText('Пароль очистки базы данных')).toHaveValue('')
+  })
+
+  it('does not show the working-data reset action to a non-administrator', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({
+      user: {
+        roles: ['accountant'],
+      },
+    })
+    const resetDatabase = vi.fn()
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ resetDatabase })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+
+    expect(within(backupsPanel).queryByRole('button', { name: 'Очистить рабочие данные' })).not.toBeInTheDocument()
+    expect(resetDatabase).not.toHaveBeenCalled()
+  })
+
   it('cancels the backup list refresh after creation when leaving settings', async () => {
     const user = userEvent.setup()
     const createdBackup = {
@@ -25222,6 +25308,16 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       sizeBytes: 1024,
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',
+    }),
+    resetDatabase: async () => ({
+      backupFileName: 'garagebalance_pre_update_20260904_120000_000.pgdump',
+      clearedRowCount: 0,
+      preservedUsers: 1,
+      preservedTariffs: 0,
+      preservedIrregularPayments: 0,
+      preservedFunds: 0,
+      fundBalance: 0,
+      generalPoolBalance: 0,
     }),
     getDiagnosticLogStatus: async () => ({
       enabled: true,

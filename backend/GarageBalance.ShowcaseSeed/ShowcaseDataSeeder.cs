@@ -6,6 +6,7 @@ using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
+using GarageBalance.Api.Infrastructure.Maintenance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.ShowcaseSeed;
@@ -85,6 +86,9 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         context.ChangeTracker.Clear();
         return await AuditAsync(cancellationToken);
     }
+
+    public async Task<WorkingDataResetResult> ResetWorkingDataAsync(CancellationToken cancellationToken)
+        => await new WorkingDataResetExecutor(context).ResetAsync(cancellationToken);
 
     public async Task<ShowcaseSeedResult> AuditAsync(CancellationToken cancellationToken)
     {
@@ -166,48 +170,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
     }
 
     private async Task ClearBusinessDataAsync(CancellationToken cancellationToken)
-    {
-        const string sql = """
-            TRUNCATE TABLE
-                access_import_created_records,
-                access_import_quarantine_items,
-                access_import_row_fingerprints,
-                access_import_run_log_entries,
-                access_import_runs,
-                garage_report_quick_list_garages,
-                garage_report_quick_lists,
-                accrual_payment_allocations,
-                fund_operations,
-                financial_operations,
-                supplier_accruals,
-                staff_salary_adjustments,
-                accruals,
-                meter_readings,
-                meter_devices,
-                cash_bank_transfers,
-                cash_bank_balance_operations,
-                opening_balance_adjustments,
-                fee_campaign_garages,
-                fee_campaigns,
-                supplier_contacts,
-                suppliers,
-                supplier_groups,
-                staff_members,
-                staff_departments,
-                garages,
-                owners
-            CASCADE;
-            TRUNCATE TABLE audit_events;
-            """;
-        await context.Database.ExecuteSqlRawAsync(sql, cancellationToken);
-        await context.Funds.ExecuteUpdateAsync(
-            setters => setters
-                .SetProperty(item => item.Balance, 0m)
-                .SetProperty(item => item.UpdatedAtUtc, CreatedAtUtc)
-                .SetProperty(item => item.Version, Guid.NewGuid()),
-            cancellationToken);
-        context.ChangeTracker.Clear();
-    }
+        => await new WorkingDataResetExecutor(context).ClearAsync(cancellationToken);
 
     private async Task<IReadOnlyDictionary<string, ChargeServiceSetting>> LoadServicesAsync(
         CancellationToken cancellationToken)

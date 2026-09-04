@@ -21,6 +21,14 @@ if [[ "${1:-}" == "prepare-showcase" ]]; then
   exec /usr/local/bin/garagebalance-showcase-prepare "$2" "$3"
 fi
 
+if [[ "${1:-}" == "reset-working-data" ]]; then
+  [[ "$#" == "3" ]] || {
+    echo "usage: $0 reset-working-data <archive-path> <confirmation>"
+    exit 64
+  }
+  exec /usr/local/bin/garagebalance-reset-working-data "$2" "$3"
+fi
+
 if [[ "${1:-}" == "cleanup-codex-records" ]]; then
   [[ "$#" == "2" ]] || {
     echo "usage: $0 cleanup-codex-records <confirmation>"
@@ -221,6 +229,7 @@ ensure_env_setting "DatabaseBackup__AutomaticEnabled" "true"
 ensure_env_setting "DatabaseBackup__Directory" "$BACKUP_DIR"
 ensure_env_setting "DatabaseBackup__IntervalHours" "24"
 ensure_env_setting "DatabaseBackup__RetentionCount" "30"
+ensure_env_setting "StagingDatabaseReset__Enabled" "true"
 
 connection_string="$(
   grep -E '^(ConnectionStrings__DefaultConnection|ConnectionStrings__Postgres)=' "$ENV_FILE" \
@@ -261,6 +270,8 @@ tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
   fail "VPS release script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" ]] ||
   fail "staging showcase preparation script was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/reset-staging-working-data.sh" ]] ||
+  fail "staging working-data reset script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" ]] ||
   fail "staging Codex cleanup script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" ]] ||
@@ -271,6 +282,7 @@ bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-performance-check.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/reset-staging-working-data.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh"
 
@@ -379,6 +391,9 @@ install -o root -g root -m 0750 \
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" \
   /usr/local/bin/garagebalance-showcase-prepare
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/reset-staging-working-data.sh" \
+  /usr/local/bin/garagebalance-reset-working-data
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" \
   /usr/local/bin/garagebalance-cleanup-codex-records
