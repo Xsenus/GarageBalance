@@ -30,6 +30,7 @@ public interface IChargeServiceSettingRepository
     Task<ChargeServiceSetting?> FindActiveAsync(Guid id, CancellationToken cancellationToken);
     Task<ChargeServiceSetting?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
+    Task<Tariff?> FindLinkedTariffAsync(Guid serviceId, Guid tariffId, CancellationToken cancellationToken);
     Task<Tariff?> FindTariffVersionAsync(Guid serviceId, DateOnly effectiveFrom, CancellationToken cancellationToken);
     Task<ChargeServiceTariffVersion?> FindApplicableTariffPeriodAsync(Guid serviceId, DateOnly businessDate, CancellationToken cancellationToken);
     Task<bool> HasOtherTariffPeriodAsync(Guid serviceId, Guid tariffId, DateOnly effectiveFrom, CancellationToken cancellationToken);

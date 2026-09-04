@@ -5501,6 +5501,96 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_UsesDisplayedScheduleTariffWhenStoredPointerIsStale()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Вода", 10);
+        var incomeType = new IncomeType { Name = "Вода", Code = "water", DestinationFundId = fund.Id };
+        var storedTariff = new Tariff
+        {
+            Name = "Вода — закрытый период",
+            CalculationBase = "meter_electricity",
+            Rate = 105m,
+            EffectiveFrom = new DateOnly(2026, 8, 26)
+        };
+        var displayedTariff = new Tariff
+        {
+            Name = "Вода — действующий период",
+            CalculationBase = "meter_electricity",
+            Rate = 103m,
+            EffectiveFrom = new DateOnly(2026, 9, 2)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = storedTariff.Id,
+            IsMetered = true,
+            HasTieredTariff = false,
+            UnitName = "м³",
+            MeterKind = "water"
+        };
+        database.Context.AddRange(fund, incomeType, storedTariff, displayedTariff, setting);
+        database.Context.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = storedTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 8, 26),
+                EffectiveTo = new DateOnly(2026, 9, 1)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = displayedTariff.Id,
+                EffectiveFrom = new DateOnly(2026, 9, 2)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context, new DateOnly(2026, 9, 4))
+            .UpdateChargeServiceWithTariffAsync(
+                setting.Id,
+                new UpdateChargeServiceWithTariffRequest(
+                    new UpsertChargeServiceSettingRequest(
+                        setting.Name,
+                        true,
+                        1,
+                        1,
+                        20,
+                        null,
+                        30,
+                        true,
+                        true,
+                        "м³",
+                        incomeType.Id,
+                        displayedTariff.Id,
+                        setting.Version),
+                    103m,
+                    "metered_tiered",
+                    new DateOnly(2026, 9, 4),
+                    [
+                        new(null, "До 100", 100m, 103m),
+                        new(null, "Свыше 100", null, 120m)
+                    ],
+                    "Включение порогов воды",
+                    "meter_water",
+                    displayedTariff.Version),
+                Guid.NewGuid(),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(result.Value!.Service.HasTieredTariff);
+        Assert.Equal("meter_water", result.Value.Tariff.CalculationBase);
+        Assert.Equal(103m, result.Value.Tariff.Rate);
+        Assert.Equal(3, database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
+    }
+
+    [Fact]
     public async Task UpdateChargeServiceWithTariffAsync_RejectsMissingFundAndInvalidRateWithoutChanges()
     {
         await using var database = await TestDatabase.CreateAsync();

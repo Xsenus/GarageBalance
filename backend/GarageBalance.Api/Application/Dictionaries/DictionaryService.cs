@@ -2987,10 +2987,20 @@ public sealed class DictionaryService(
                 "Укажите дату начала действия новой версии тарифа.");
         }
 
-        var sourceTariffId = setting.TariffId ?? request.Service.TariffId;
-        var sourceTariff = sourceTariffId.HasValue
-            ? await tariffRepository.FindActiveAsync(sourceTariffId.Value, cancellationToken)
-            : null;
+        Tariff? sourceTariff = null;
+        if (request.Service.TariffId.HasValue)
+        {
+            sourceTariff = request.Service.TariffId == setting.TariffId
+                ? await tariffRepository.FindActiveAsync(request.Service.TariffId.Value, cancellationToken)
+                : await chargeServiceSettingRepository.FindLinkedTariffAsync(
+                    setting.Id,
+                    request.Service.TariffId.Value,
+                    cancellationToken);
+        }
+        if (sourceTariff is null && setting.TariffId.HasValue)
+        {
+            sourceTariff = await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
+        }
         if (sourceTariff is null)
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(

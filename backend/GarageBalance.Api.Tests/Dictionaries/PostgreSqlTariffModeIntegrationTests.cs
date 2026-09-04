@@ -211,6 +211,109 @@ public sealed class PostgreSqlTariffModeIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task TieredWaterModeChange_UsesCurrentScheduleTariffWhenStoredPointerIsClosedOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid incomeTypeId;
+        Guid serviceId;
+        Guid serviceVersion;
+        Guid currentTariffId;
+        Guid currentTariffVersion;
+        await using (var setupContext = database.CreateContext())
+        {
+            incomeTypeId = await setupContext.IncomeTypes
+                .Where(item => item.Code == "water" && !item.IsArchived)
+                .Select(item => item.Id)
+                .SingleAsync();
+            var closedTariff = new Tariff
+            {
+                Name = "Вода — закрытый указатель PostgreSQL",
+                CalculationBase = "meter_electricity",
+                Rate = 105m,
+                EffectiveFrom = new DateOnly(2026, 8, 26)
+            };
+            var currentTariff = new Tariff
+            {
+                Name = "Вода — действующий период PostgreSQL",
+                CalculationBase = "meter_electricity",
+                Rate = 103m,
+                EffectiveFrom = new DateOnly(2026, 9, 2)
+            };
+            var setting = new ChargeServiceSetting
+            {
+                Name = "Вода — закрытый указатель PostgreSQL",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                PaymentDueDay = 20,
+                OverdueGraceDays = 30,
+                IncomeTypeId = incomeTypeId,
+                TariffId = closedTariff.Id,
+                IsMetered = true,
+                UnitName = "м³",
+                MeterKind = "water"
+            };
+            setupContext.AddRange(closedTariff, currentTariff, setting);
+            setupContext.ChargeServiceTariffVersions.AddRange(
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = setting.Id,
+                    TariffId = closedTariff.Id,
+                    EffectiveFrom = new DateOnly(2026, 8, 26),
+                    EffectiveTo = new DateOnly(2026, 9, 1)
+                },
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = setting.Id,
+                    TariffId = currentTariff.Id,
+                    EffectiveFrom = new DateOnly(2026, 9, 2)
+                });
+            await setupContext.SaveChangesAsync();
+            serviceId = setting.Id;
+            serviceVersion = setting.Version;
+            currentTariffId = currentTariff.Id;
+            currentTariffVersion = currentTariff.Version;
+        }
+
+        await using var commandContext = database.CreateContext();
+        var result = await DictionaryServiceTestFactory.Create(commandContext, new DateOnly(2026, 9, 4))
+            .UpdateChargeServiceWithTariffAsync(
+                serviceId,
+                new UpdateChargeServiceWithTariffRequest(
+                    new UpsertChargeServiceSettingRequest(
+                        "Вода — закрытый указатель PostgreSQL",
+                        true,
+                        1,
+                        1,
+                        20,
+                        null,
+                        30,
+                        true,
+                        true,
+                        "м³",
+                        incomeTypeId,
+                        currentTariffId,
+                        serviceVersion),
+                    103m,
+                    "metered_tiered",
+                    new DateOnly(2026, 9, 4),
+                    [
+                        new(null, "До 100", 100m, 103m),
+                        new(null, "Свыше 100", null, 120m)
+                    ],
+                    "Включение порогов воды",
+                    "meter_water",
+                    currentTariffVersion),
+                Guid.NewGuid(),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(result.Value!.Service.HasTieredTariff);
+        Assert.Equal("meter_water", result.Value.Tariff.CalculationBase);
+        Assert.Equal(3, await commandContext.ChargeServiceTariffVersions.CountAsync(item => item.ChargeServiceSettingId == serviceId));
+    }
+
+    [PostgreSqlFact]
     public async Task ConsecutiveWaterModeChanges_OnSameDateUseReturnedVersionsOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

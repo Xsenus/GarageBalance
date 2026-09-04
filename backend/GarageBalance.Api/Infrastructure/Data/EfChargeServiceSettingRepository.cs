@@ -441,6 +441,19 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             item => !item.IsArchived && item.Name == name && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
 
+    public Task<Tariff?> FindLinkedTariffAsync(
+        Guid serviceId,
+        Guid tariffId,
+        CancellationToken cancellationToken) =>
+        dbContext.ChargeServiceTariffVersions
+            .Where(item =>
+                item.ChargeServiceSettingId == serviceId &&
+                item.TariffId == tariffId &&
+                !item.IsArchived &&
+                !item.Tariff.IsArchived)
+            .Select(item => item.Tariff)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task<Tariff?> FindTariffVersionAsync(
         Guid serviceId,
         DateOnly effectiveFrom,
