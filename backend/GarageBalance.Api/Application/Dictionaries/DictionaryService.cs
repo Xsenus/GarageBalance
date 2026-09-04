@@ -3480,7 +3480,7 @@ public sealed class DictionaryService(
                 "Для выбранного назначения поступления должен быть настроен действующий фонд.");
         }
 
-        var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
+        var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken, campaign);
         if (!participants.Succeeded)
         {
             return DictionaryResult<FeeCampaignDto>.Failure(participants.ErrorCode!, participants.ErrorMessage!);
@@ -4606,11 +4606,24 @@ public sealed class DictionaryService(
         return null;
     }
 
-    private async Task<DictionaryResult<IReadOnlyList<Garage>>> ResolveFeeCampaignParticipantsAsync(UpsertFeeCampaignRequest request, CancellationToken cancellationToken)
+    private async Task<DictionaryResult<IReadOnlyList<Garage>>> ResolveFeeCampaignParticipantsAsync(
+        UpsertFeeCampaignRequest request,
+        CancellationToken cancellationToken,
+        FeeCampaign? currentCampaign = null)
     {
         if (request.AppliesToAllGarages)
         {
-            return DictionaryResult<IReadOnlyList<Garage>>.Success([]);
+            if (currentCampaign?.AppliesToAllGarages == true)
+            {
+                return DictionaryResult<IReadOnlyList<Garage>>.Success(
+                    currentCampaign.ParticipantGarages
+                        .Select(participant => participant.Garage)
+                        .OrderBy(garage => garage.Number)
+                        .ToArray());
+            }
+
+            return DictionaryResult<IReadOnlyList<Garage>>.Success(
+                await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken));
         }
 
         var participantIds = request.ParticipantGarageIds ?? [];
@@ -4629,9 +4642,7 @@ public sealed class DictionaryService(
         IReadOnlyList<Garage> participants,
         CancellationToken cancellationToken)
     {
-        var participantCount = request.AppliesToAllGarages
-            ? await garageRepository.CountActiveAsync(cancellationToken)
-            : participants.Count;
+        var participantCount = participants.Count;
 
         if (request.AmountCalculationMode == FeeCampaignAmountCalculationModes.Target)
         {

@@ -4150,10 +4150,10 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
         Assert.True(incomeType.Succeeded);
-        database.Context.Garages.AddRange(
-            new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 },
-            new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 },
-            new Garage { Number = "3", PeopleCount = 1, FloorCount = 1, IsArchived = true });
+        var firstGarage = new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 };
+        var secondGarage = new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 };
+        var archivedGarage = new Garage { Number = "3", PeopleCount = 1, FloorCount = 1, IsArchived = true };
+        database.Context.Garages.AddRange(firstGarage, secondGarage, archivedGarage);
         await database.Context.SaveChangesAsync();
 
         var created = await service.CreateFeeCampaignAsync(
@@ -4163,6 +4163,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(otherIncome.Id, created.Value!.IncomeTypeId);
         var activeCampaigns = await service.GetFeeCampaignsAsync("gate", CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+        var lateGarage = new Garage { Number = "4", PeopleCount = 1, FloorCount = 1 };
+        database.Context.Garages.Add(lateGarage);
         await database.Context.SaveChangesAsync();
 
         var updated = await service.UpdateFeeCampaignAsync(
@@ -4191,10 +4194,16 @@ public sealed class DictionaryServiceTests
         Assert.Equal(otherIncome.Id, created.Value.IncomeTypeId);
         Assert.Equal("Прочие доходы", created.Value.IncomeTypeName);
         Assert.Equal(1000m, created.Value.TargetAmount);
+        Assert.Equal(
+            new[] { firstGarage.Id, secondGarage.Id }.Order().ToArray(),
+            created.Value.ParticipantGarageIds.Order().ToArray());
+        Assert.DoesNotContain(archivedGarage.Id, created.Value.ParticipantGarageIds);
+        Assert.DoesNotContain(lateGarage.Id, updated.Value!.ParticipantGarageIds);
         Assert.Single(activeCampaigns);
         Assert.True(updated.Succeeded);
         Assert.Equal(600m, updated.Value!.ContributionAmount);
         Assert.Equal(1200m, updated.Value.TargetAmount);
+        Assert.Equal(created.Value.ParticipantGarageIds, updated.Value.ParticipantGarageIds);
         Assert.True(noOp.Succeeded);
         Assert.False(emptyReason.Succeeded);
         Assert.Equal("dictionary_archive_reason_required", emptyReason.ErrorCode);

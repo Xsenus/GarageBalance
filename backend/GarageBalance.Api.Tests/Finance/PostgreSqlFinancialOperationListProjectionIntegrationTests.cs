@@ -167,7 +167,7 @@ public sealed class PostgreSqlFinancialOperationListProjectionIntegrationTests
         Assert.DoesNotContain("Rate", command, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
         Assert.DoesNotContain("SortOrder", command, StringComparison.Ordinal);
-        Assert.DoesNotContain("Version", command, StringComparison.Ordinal);
+        Assert.Contains("\"Version\"", command, StringComparison.Ordinal);
     }
 
     [PostgreSqlFact]

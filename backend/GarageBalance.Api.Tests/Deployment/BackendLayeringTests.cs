@@ -995,7 +995,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery", service, StringComparison.Ordinal);
         Assert.Contains("garageBalanceHistoryQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Contains("garageIncomeWorksheetQuery.GetAsync", service, StringComparison.Ordinal);
-        Assert.Equal(2, service.Split("garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, service.Split("garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)", StringSplitOptions.None).Length - 1);
         Assert.Equal(2, service.Split("garageRepository.GetStartingBalanceAsync(garageId, cancellationToken)", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("dbContext.Garages", service, StringComparison.Ordinal);
         Assert.Contains("IMissingMeterReadingQuery missingMeterReadingQuery", service, StringComparison.Ordinal);

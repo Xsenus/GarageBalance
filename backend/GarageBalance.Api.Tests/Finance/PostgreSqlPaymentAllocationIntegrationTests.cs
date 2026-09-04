@@ -667,6 +667,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         Guid legacyAllocationId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var payment = new FinancialOperation
             {
                 OperationKind = FinancialOperationKinds.Income,
@@ -693,6 +694,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 

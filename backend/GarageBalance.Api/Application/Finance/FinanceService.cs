@@ -5559,13 +5559,11 @@ public sealed class FinanceService(
 
         var dueDates = AccrualDueDates.ForFeeCampaign(month, campaign.EndsOn, campaign.OverdueGraceDays);
 
-        IReadOnlyList<Garage> garages = campaign.AppliesToAllGarages
-            ? await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)
-            : campaign.ParticipantGarages
-                .Select(participant => participant.Garage)
-                .Where(garage => !garage.IsArchived)
-                .OrderBy(garage => garage.Number)
-                .ToList();
+        IReadOnlyList<Garage> garages = campaign.ParticipantGarages
+            .Select(participant => participant.Garage)
+            .Where(garage => !garage.IsArchived)
+            .OrderBy(garage => garage.Number)
+            .ToList();
         if (garages.Count == 0)
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");

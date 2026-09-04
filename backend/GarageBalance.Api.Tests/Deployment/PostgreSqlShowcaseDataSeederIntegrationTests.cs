@@ -73,16 +73,20 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
 
         Assert.True(first.IsReady);
         Assert.True(second.IsReady);
-        Assert.Equal(8, second.GarageCount);
-        Assert.Equal(57, second.AccrualCount);
-        Assert.Equal(7, second.FinancialOperationCount);
-        Assert.Equal(32, second.MeterReadingCount);
+        Assert.Equal(10, second.GarageCount);
+        Assert.Equal(65, second.AccrualCount);
+        Assert.Equal(8, second.FinancialOperationCount);
+        Assert.Equal(36, second.MeterReadingCount);
         Assert.Equal(2, second.FeeCampaignCount);
         Assert.Equal(1, second.SupplierCount);
         Assert.Equal(1, second.PreservedUserCount);
         Assert.True(second.HasNoDebt);
         Assert.True(second.HasDebt);
         Assert.True(second.HasAdvance);
+        Assert.True(second.NewGarageHasNoCalculatedHistory);
+        Assert.True(second.CampaignsHaveLockedParticipants);
+        Assert.True(second.AnnualAccrualsAreUnique);
+        Assert.True(second.OverdueScenarioIsCorrect);
         Assert.Single(await context.Users.AsNoTracking().ToListAsync());
         Assert.DoesNotContain(await context.Owners.AsNoTracking().ToListAsync(), item => item.LastName == "Old");
         Assert.Equal(2, await context.FundOperations.CountAsync(item => item.Reason.Contains(ShowcaseDataSeeder.Marker)));
@@ -120,6 +124,19 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         Assert.All(
             await context.Accruals.Where(item => item.Source == "regular").ToListAsync(),
             item => Assert.False(string.IsNullOrWhiteSpace(item.CalculationDetailsJson)));
+        var newGarage = await context.Garages.SingleAsync(item => item.Number == "110-НОВЫЙ");
+        Assert.Empty(await context.Accruals.Where(item => item.GarageId == newGarage.Id).ToListAsync());
+        Assert.Empty(await context.FeeCampaignGarages.Where(item => item.GarageId == newGarage.Id).ToListAsync());
+        Assert.All(
+            await context.FeeCampaigns.Where(item => item.Goal != null && item.Goal.Contains(ShowcaseDataSeeder.Marker)).ToListAsync(),
+            campaign => Assert.Equal(9, context.FeeCampaignGarages.Count(item => item.FeeCampaignId == campaign.Id)));
+        var overdueGarage = await context.Garages.SingleAsync(item => item.Number == "109-ПРОСРОЧКА");
+        var overdueAccrual = await context.Accruals.SingleAsync(item =>
+            item.GarageId == overdueGarage.Id && item.Basis == "Частично оплаченная просрочка");
+        Assert.Equal(new DateOnly(2026, 8, 21), overdueAccrual.OverdueFromDate);
+        Assert.Equal(400m, await context.AccrualPaymentAllocations
+            .Where(item => item.AccrualId == overdueAccrual.Id)
+            .SumAsync(item => item.Amount));
     }
 
     private static void AssertTier(ShowcaseElectricityTier tier, decimal? upperBound, decimal rate)

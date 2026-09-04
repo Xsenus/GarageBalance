@@ -50,7 +50,8 @@ public sealed class EfFinancialJournalQuery(GarageBalanceDbContext dbContext) : 
         FinancialJournalRequest request,
         string? counterparty,
         string? status,
-        string? document)
+        string? document,
+        bool usePostgresUnicodeSearch)
     {
         if (request.DateFrom.HasValue)
         {
@@ -64,7 +65,18 @@ public sealed class EfFinancialJournalQuery(GarageBalanceDbContext dbContext) : 
 
         if (counterparty is not null)
         {
-            query = query.Where(row => row.Counterparty.ToLower().Contains(counterparty));
+            if (usePostgresUnicodeSearch)
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(counterparty);
+                query = query.Where(row => EF.Functions.ILike(
+                    row.Counterparty,
+                    EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation),
+                    @"\"));
+            }
+            else
+            {
+                query = query.Where(row => row.Counterparty.ToLower().Contains(counterparty));
+            }
         }
 
         if (status is "active")
@@ -78,7 +90,18 @@ public sealed class EfFinancialJournalQuery(GarageBalanceDbContext dbContext) : 
 
         if (document is not null)
         {
-            query = query.Where(row => row.DocumentNumber != null && row.DocumentNumber.ToLower().Contains(document));
+            if (usePostgresUnicodeSearch)
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(document);
+                query = query.Where(row => row.DocumentNumber != null && EF.Functions.ILike(
+                    row.DocumentNumber,
+                    EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation),
+                    @"\"));
+            }
+            else
+            {
+                query = query.Where(row => row.DocumentNumber != null && row.DocumentNumber.ToLower().Contains(document));
+            }
         }
 
         return query;
@@ -100,7 +123,7 @@ public sealed class EfFinancialJournalQuery(GarageBalanceDbContext dbContext) : 
             return new FinancialJournalSegment(0, []);
         }
 
-        var query = ApplyFilters(source, request, counterparty, status, document);
+        var query = ApplyFilters(source, request, counterparty, status, document, dbContext.Database.IsNpgsql());
         var count = await query.CountAsync(cancellationToken);
         var ordered = query.OrderByDescending(row => row.OperationDate);
         var pageQuery = IsSqliteProvider()

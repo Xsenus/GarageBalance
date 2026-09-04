@@ -116,7 +116,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             .Where(item =>
                 !item.IsArchived &&
                 item.StartsOn <= periodEnd &&
-                (item.AppliesToAllGarages || item.ParticipantGarages.Any(link => link.GarageId == garageId)))
+                item.ParticipantGarages.Any(link => link.GarageId == garageId))
             .OrderBy(item => item.StartsOn)
             .ThenBy(item => item.Id);
         var rows = await BuildPaymentOptionRows(campaigns, garageId).ToListAsync(cancellationToken);
@@ -143,7 +143,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
                 item.Id == id &&
                 !item.IsArchived &&
                 item.StartsOn <= periodEnd &&
-                (item.AppliesToAllGarages || item.ParticipantGarages.Any(link => link.GarageId == garageId)));
+                item.ParticipantGarages.Any(link => link.GarageId == garageId));
         var row = await BuildPaymentOptionRows(campaigns, garageId).SingleOrDefaultAsync(cancellationToken);
         return row is null
             ? null

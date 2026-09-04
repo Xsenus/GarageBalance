@@ -20,6 +20,7 @@ internal static class PostgreSqlLegacyModelCompatibility
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"IrregularPaymentId\" uuid NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"IrregularPaymentId\""),
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"CounterpartyName\" character varying(200) NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"CounterpartyName\""),
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"NegativeFundBalanceConfirmed\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"NegativeFundBalanceConfirmed\""),
+        ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"MeterKind\" character varying(40) NULL", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"MeterKind\"")
     ];
 
@@ -38,4 +39,12 @@ internal static class PostgreSqlLegacyModelCompatibility
             await context.Database.ExecuteSqlRawAsync(statement.Remove);
         }
     }
+
+    public static Task AddFinancialOperationVersionAsync(GarageBalanceDbContext context) =>
+        context.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()");
+
+    public static Task RemoveFinancialOperationVersionAsync(GarageBalanceDbContext context) =>
+        context.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"Version\"");
 }

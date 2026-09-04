@@ -655,6 +655,7 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(campaign, fixtures.Garage);
         database.Context.FeeCampaigns.Add(campaign);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -7888,6 +7889,7 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = false,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(allGaragesCampaign, fixtures.Garage, secondGarage);
         selectedCampaign.ParticipantGarages.Add(new FeeCampaignGarage
         {
             FeeCampaign = selectedCampaign,
@@ -7993,6 +7995,7 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(dueCampaign, fixtures.Garage);
         database.Context.FeeCampaigns.AddRange(
             dueCampaign,
             new FeeCampaign
@@ -8188,6 +8191,7 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(campaign, fixtures.Garage, secondGarage);
         database.Context.AddRange(secondOwner, secondGarage, archivedGarage, campaign);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -8285,6 +8289,7 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(campaign, fixtures.Garage, secondGarage);
         database.Context.AddRange(secondGarage, campaign);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -8425,6 +8430,8 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(settledCampaign, fixtures.Garage);
+        AddCampaignParticipants(restorableCampaign, fixtures.Garage);
         database.Context.AddRange(settledCampaign, restorableCampaign);
         await database.Context.SaveChangesAsync();
         Assert.True((await service.GenerateFeeCampaignAccrualsAsync(
@@ -8567,6 +8574,8 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(firstCampaign, fixtures.Garage);
+        AddCampaignParticipants(secondCampaign, fixtures.Garage);
         database.Context.AddRange(firstCampaign, secondCampaign);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -8634,17 +8643,21 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        var participantGarages = new List<Garage> { fixtures.Garage };
         for (var index = 1; index < 200; index++)
         {
-            database.Context.Garages.Add(new Garage
+            var participantGarage = new Garage
             {
                 Number = $"F-{index:D3}",
                 PeopleCount = 1,
                 FloorCount = 1,
                 Owner = fixtures.Garage.Owner
-            });
+            };
+            participantGarages.Add(participantGarage);
+            database.Context.Garages.Add(participantGarage);
         }
 
+        AddCampaignParticipants(campaign, participantGarages.ToArray());
         database.Context.FeeCampaigns.Add(campaign);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -8685,6 +8698,7 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+        AddCampaignParticipants(campaign, fixtures.Garage);
         database.Context.Add(campaign);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -13892,6 +13906,18 @@ public sealed class FinanceServiceTests
         };
         context.AddRange(fund, incomeType);
         return incomeType;
+    }
+
+    private static void AddCampaignParticipants(FeeCampaign campaign, params Garage[] garages)
+    {
+        foreach (var garage in garages)
+        {
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage
+            {
+                FeeCampaign = campaign,
+                Garage = garage
+            });
+        }
     }
 
     private sealed class TestDatabase : IAsyncDisposable

@@ -204,9 +204,11 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         var result = await new EfExpenseWorksheetQuery(context)
             .GetAsync(month, ["no_receipt"], ["Выплата без чека"], CancellationToken.None);
 
-        var row = Assert.Single(result.EpisodicExpenses, item => item.ExpenseTypeId == expenseTypeId);
-        Assert.Equal(recipient, row.CounterpartyName);
-        Assert.Equal(342m, row.Amount);
+        var rows = result.EpisodicExpenses.Where(item => item.ExpenseTypeId == expenseTypeId).ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.All(rows, row => Assert.Equal(recipient, row.CounterpartyName));
+        Assert.All(rows, row => Assert.NotEqual(Guid.Empty, row.Version));
+        Assert.Equal(342m, rows.Sum(row => row.Amount));
     }
 
     [PostgreSqlFact]

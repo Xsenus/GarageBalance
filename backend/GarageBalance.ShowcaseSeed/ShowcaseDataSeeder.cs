@@ -25,7 +25,9 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         "105-ПОРОГ-1",
         "106-ПОРОГ-2",
         "107-ПОРОГ-3",
-        "108-СБОР"
+        "108-СБОР",
+        "109-ПРОСРОЧКА",
+        "110-НОВЫЙ"
     ];
 
     public async Task<ShowcaseSeedResult> PrepareAsync(CancellationToken cancellationToken)
@@ -55,6 +57,11 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var payments = CreatePaymentsAndAllocations(garages, accruals);
         context.AddRange(payments.Operations);
         context.AddRange(payments.Allocations);
+
+        var overdueData = await CreateOverdueExampleAsync(garages, cancellationToken);
+        context.AddRange(overdueData.Accruals);
+        context.AddRange(overdueData.Operations);
+        context.AddRange(overdueData.Allocations);
 
         var campaignData = await CreateFeeCampaignsAsync(garages, cancellationToken);
         context.AddRange(campaignData.Accruals);
@@ -90,6 +97,8 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var fundOperations = await context.FundOperations.CountAsync(item => item.Reason.Contains(Marker), cancellationToken);
         var users = await context.Users.CountAsync(cancellationToken);
         var hasValidElectricityTiers = await HasValidElectricityTiersAsync(cancellationToken);
+        var newGarageId = DeterministicGuid("garage-10");
+        var overdueGarageId = DeterministicGuid("garage-9");
 
         var debtRows = await (
                 from garage in context.Garages
@@ -108,17 +117,35 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var hasNoDebt = debtRows.Any(item => item.Balance == 0m);
         var hasDebt = debtRows.Any(item => item.Balance < 0m);
         var hasAdvance = debtRows.Any(item => item.Balance > 0m);
+        var newGarageHasNoCalculatedHistory = !await context.Accruals.AnyAsync(
+                item => item.GarageId == newGarageId,
+                cancellationToken)
+            && !await context.FinancialOperations.AnyAsync(
+                item => item.GarageId == newGarageId,
+                cancellationToken);
+        var campaignsHaveLockedParticipants = await context.FeeCampaigns
+            .Where(item => item.Goal != null && item.Goal.Contains(Marker))
+            .AllAsync(item =>
+                item.ParticipantGarages.Count == GarageNumbers.Length - 1
+                && item.ParticipantGarages.All(participant => participant.GarageId != newGarageId),
+                cancellationToken);
+        var annualAccrualsAreUnique = await HasUniqueAnnualAccrualsAsync(newGarageId, cancellationToken);
+        var overdueScenarioIsCorrect = await HasExpectedOverdueScenarioAsync(overdueGarageId, cancellationToken);
         var isReady = garages == GarageNumbers.Length
-            && accruals >= 48
-            && payments >= 4
-            && readings == GarageNumbers.Length * 4
+            && accruals == 65
+            && payments == 8
+            && readings == (GarageNumbers.Length - 1) * 4
             && campaigns == 2
             && suppliers == 1
             && fundOperations == 2
             && hasNoDebt
             && hasDebt
             && hasAdvance
-            && hasValidElectricityTiers;
+            && hasValidElectricityTiers
+            && newGarageHasNoCalculatedHistory
+            && campaignsHaveLockedParticipants
+            && annualAccrualsAreUnique
+            && overdueScenarioIsCorrect;
 
         return new ShowcaseSeedResult(
             isReady,
@@ -131,7 +158,11 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             users,
             hasNoDebt,
             hasDebt,
-            hasAdvance);
+            hasAdvance,
+            newGarageHasNoCalculatedHistory,
+            campaignsHaveLockedParticipants,
+            annualAccrualsAreUnique,
+            overdueScenarioIsCorrect);
     }
 
     private async Task ClearBusinessDataAsync(CancellationToken cancellationToken)
@@ -265,6 +296,41 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         {
             return false;
         }
+    }
+
+    private async Task<bool> HasUniqueAnnualAccrualsAsync(Guid newGarageId, CancellationToken cancellationToken)
+    {
+        string[] annualCodes = ["membership", "target", "outdoor_lighting"];
+        var annualRows = await context.Accruals
+            .Where(item =>
+                item.Comment == Marker
+                && !item.IsCanceled
+                && item.IncomeType.Code != null
+                && annualCodes.Contains(item.IncomeType.Code))
+            .GroupBy(item => new { item.GarageId, item.IncomeTypeId, item.AccountingYear })
+            .Select(group => new { group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        return annualRows.Count == (GarageNumbers.Length - 1) * annualCodes.Length
+            && annualRows.All(item => item.Key.GarageId != newGarageId && item.Key.AccountingYear == 2026 && item.Count == 1);
+    }
+
+    private async Task<bool> HasExpectedOverdueScenarioAsync(Guid overdueGarageId, CancellationToken cancellationToken)
+    {
+        var row = await context.Accruals
+            .Where(item => item.GarageId == overdueGarageId && item.Basis == "Частично оплаченная просрочка" && !item.IsCanceled)
+            .Select(item => new
+            {
+                item.Amount,
+                item.OverdueFromDate,
+                Paid = context.AccrualPaymentAllocations
+                    .Where(allocation => allocation.AccrualId == item.Id && !allocation.FinancialOperation.IsCanceled)
+                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return row is { Amount: 1000m, OverdueFromDate: var overdueFromDate, Paid: 400m }
+            && overdueFromDate == new DateOnly(2026, 8, 21);
     }
 
     private async Task EnsureRepresentativeTariffsAsync(
@@ -410,8 +476,12 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
                 CreatedAtUtc = CreatedAtUtc,
                 UpdatedAtUtc = CreatedAtUtc
             },
-            CreatedAtUtc = CreatedAtUtc,
-            UpdatedAtUtc = CreatedAtUtc,
+            CreatedAtUtc = index == GarageNumbers.Length - 1
+                ? new DateTimeOffset(2026, 9, 1, 4, 0, 0, TimeSpan.Zero)
+                : CreatedAtUtc,
+            UpdatedAtUtc = index == GarageNumbers.Length - 1
+                ? new DateTimeOffset(2026, 9, 1, 4, 0, 0, TimeSpan.Zero)
+                : CreatedAtUtc,
             Version = DeterministicGuid($"garage-version-{index + 1}")
         })
         .ToArray();
@@ -422,6 +492,11 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         for (var index = 0; index < garages.Count; index++)
         {
             var garage = garages[index];
+            if (garage.CreatedAtUtc > new DateTimeOffset(2026, 8, 31, 23, 59, 59, TimeSpan.Zero))
+            {
+                continue;
+            }
+
             var waterStart = garage.InitialWaterMeterValue!.Value;
             var electricityStart = garage.InitialElectricityMeterValue!.Value;
             result.Add(Reading(garage, MeterKinds.Water, new DateOnly(2026, 7, 1), waterStart, waterStart + 5 + index, index));
@@ -465,6 +540,12 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var result = new List<Accrual>();
         foreach (var garage in garages)
         {
+            var registeredOn = DateOnly.FromDateTime(garage.CreatedAtUtc.UtcDateTime);
+            if (new DateOnly(registeredOn.Year, registeredOn.Month, 1) > AccountingMonth)
+            {
+                continue;
+            }
+
             foreach (var (code, setting) in services.OrderBy(item => item.Key, StringComparer.Ordinal))
             {
                 var tariff = setting.Tariff!;
@@ -491,6 +572,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
                     throw new InvalidOperationException($"Calculation failed for {garage.Number}/{code}: {calculation.ErrorMessage}");
                 }
 
+                var dueDates = AccrualDueDates.ForGarage(AccountingMonth, code, setting, registeredOn);
                 result.Add(new Accrual
                 {
                     Id = DeterministicGuid($"accrual-{garage.Number}-{code}"),
@@ -498,8 +580,9 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
                     IncomeTypeId = setting.IncomeTypeId!.Value,
                     TariffId = tariff.Id,
                     AccountingMonth = AccountingMonth,
-                    DueDate = AccountingMonth.AddMonths(1).AddDays(19),
-                    OverdueFromDate = AccountingMonth.AddMonths(2).AddDays(18),
+                    AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(code, AccountingMonth, setting.PeriodicityMonths),
+                    DueDate = dueDates.DueDate,
+                    OverdueFromDate = dueDates.OverdueFromDate,
                     Amount = calculation.Amount,
                     RequiresMeterReading = setting.IsMetered,
                     CalculationMeterKind = setting.MeterKind,
@@ -555,6 +638,53 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         }
     }
 
+    private async Task<CampaignData> CreateOverdueExampleAsync(
+        IReadOnlyList<Garage> garages,
+        CancellationToken cancellationToken)
+    {
+        var water = await context.IncomeTypes.SingleAsync(item => item.Code == "water", cancellationToken);
+        var garage = garages[8];
+        var accrual = new Accrual
+        {
+            Id = DeterministicGuid("overdue-accrual"),
+            GarageId = garage.Id,
+            IncomeTypeId = water.Id,
+            Basis = "Частично оплаченная просрочка",
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            DueDate = new DateOnly(2026, 7, 20),
+            OverdueFromDate = new DateOnly(2026, 8, 21),
+            Amount = 1000m,
+            Source = AccrualSources.Manual,
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        };
+        var operation = new FinancialOperation
+        {
+            Id = DeterministicGuid("overdue-payment"),
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 7, 20),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 400m,
+            GarageId = garage.Id,
+            IncomeTypeId = water.Id,
+            DocumentNumber = "ДЕМО-ПРОСРОЧКА",
+            Comment = Marker,
+            CreatedAtUtc = CreatedAtUtc,
+            UpdatedAtUtc = CreatedAtUtc
+        };
+        var allocation = new AccrualPaymentAllocation
+        {
+            Id = DeterministicGuid("overdue-allocation"),
+            FinancialOperation = operation,
+            Accrual = accrual,
+            Amount = 400m,
+            CreatedAtUtc = CreatedAtUtc
+        };
+
+        return new CampaignData([accrual], [operation], [allocation]);
+    }
+
     private async Task<CampaignData> CreateFeeCampaignsAsync(
         IReadOnlyList<Garage> garages,
         CancellationToken cancellationToken)
@@ -591,9 +721,18 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             CreatedAtUtc = CreatedAtUtc,
             UpdatedAtUtc = CreatedAtUtc
         };
+        var participantGarages = garages
+            .Where(garage => garage.CreatedAtUtc <= active.CreatedAtUtc && !garage.IsArchived)
+            .ToArray();
+        active.ParticipantGarages = participantGarages
+            .Select(garage => new FeeCampaignGarage { FeeCampaign = active, GarageId = garage.Id })
+            .ToList();
+        closed.ParticipantGarages = participantGarages
+            .Select(garage => new FeeCampaignGarage { FeeCampaign = closed, GarageId = garage.Id })
+            .ToList();
         context.FeeCampaigns.AddRange(active, closed);
 
-        var accruals = garages.Select((garage, index) => new Accrual
+        var accruals = participantGarages.Select((garage, index) => new Accrual
         {
             Id = DeterministicGuid($"campaign-accrual-{garage.Number}"),
             GarageId = garage.Id,
@@ -872,4 +1011,8 @@ public sealed record ShowcaseSeedResult(
     int PreservedUserCount,
     bool HasNoDebt,
     bool HasDebt,
-    bool HasAdvance);
+    bool HasAdvance,
+    bool NewGarageHasNoCalculatedHistory,
+    bool CampaignsHaveLockedParticipants,
+    bool AnnualAccrualsAreUnique,
+    bool OverdueScenarioIsCorrect);

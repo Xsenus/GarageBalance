@@ -19,6 +19,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         var firstGarage = new Garage { Number = "FEE-ALL-1", PeopleCount = 1, FloorCount = 1, Owner = owner };
         var secondGarage = new Garage { Number = "FEE-ALL-2", PeopleCount = 1, FloorCount = 1, Owner = owner };
         var thirdGarage = new Garage { Number = "FEE-ALL-3", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var lateGarage = new Garage { Number = "FEE-LATE", PeopleCount = 1, FloorCount = 1, Owner = owner };
         var archivedGarage = new Garage { Number = "FEE-ARCHIVED", PeopleCount = 1, FloorCount = 1, Owner = owner, IsArchived = true };
         Guid otherIncomeId;
         Guid allCampaignId;
@@ -43,6 +44,9 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 CancellationToken.None);
             Assert.True(allCampaign.Succeeded, allCampaign.ErrorMessage);
             Assert.True(selectedCampaign.Succeeded, selectedCampaign.ErrorMessage);
+            Assert.Equal(
+                new[] { firstGarage.Id, secondGarage.Id, thirdGarage.Id }.Order().ToArray(),
+                allCampaign.Value!.ParticipantGarageIds.Order().ToArray());
             allCampaignId = allCampaign.Value!.Id;
             selectedCampaignId = selectedCampaign.Value!.Id;
 
@@ -53,6 +57,9 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 CancellationToken.None);
             Assert.True(changedBeforeGeneration.Succeeded, changedBeforeGeneration.ErrorMessage);
             Assert.Equal([firstGarage.Id, secondGarage.Id], changedBeforeGeneration.Value!.ParticipantGarageIds);
+
+            setupContext.Garages.Add(lateGarage);
+            await setupContext.SaveChangesAsync();
         }
 
         await using (var generationContext = database.CreateContext())
@@ -70,11 +77,21 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             Assert.True(allResult.Succeeded, allResult.ErrorMessage);
             Assert.Equal(3, allResult.Value!.CreatedCount);
             Assert.DoesNotContain(allResult.Value.CreatedAccruals, item => item.GarageId == archivedGarage.Id);
+            Assert.DoesNotContain(allResult.Value.CreatedAccruals, item => item.GarageId == lateGarage.Id);
             Assert.True(selectedResult.Succeeded, selectedResult.ErrorMessage);
             Assert.Equal(2, selectedResult.Value!.CreatedCount);
             Assert.Equal(
                 new[] { firstGarage.Id, secondGarage.Id }.Order().ToArray(),
                 selectedResult.Value.CreatedAccruals.Select(item => item.GarageId).Order().ToArray());
+
+            var lateWorksheet = await finance.GetGarageIncomeWorksheetAsync(
+                lateGarage.Id,
+                new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+                CancellationToken.None);
+            Assert.True(lateWorksheet.Succeeded, lateWorksheet.ErrorMessage);
+            Assert.DoesNotContain(lateWorksheet.Value!.Rows, row => row.FeeCampaignId == allCampaignId);
+            Assert.False(await generationContext.Accruals.AnyAsync(item =>
+                item.FeeCampaignId == allCampaignId && item.GarageId == lateGarage.Id));
         }
 
         await using (var updateContext = database.CreateContext())
@@ -109,6 +126,8 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         var legacyIncomeType = new IncomeType { Name = "Старое назначение сбора", Code = "legacy_fee" };
         var firstCampaign = CreateCampaign("Сбор на ворота", legacyIncomeType, 500m);
         var secondCampaign = CreateCampaign("Сбор на камеры", legacyIncomeType, 700m);
+        firstCampaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = firstCampaign, Garage = garage });
+        secondCampaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = secondCampaign, Garage = garage });
         Guid firstPaymentId;
 
         Guid destinationId;
@@ -221,6 +240,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         decimal stableFundBalanceBefore;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var stableIncomeType = await legacyContext.IncomeTypes
                 .Include(item => item.DestinationFund)
                 .SingleAsync(item => item.Code == "other_income");
@@ -285,6 +305,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -360,6 +381,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid legacyPaymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var stableIncomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var legacyFund = new Fund
             {
@@ -406,6 +428,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -469,6 +492,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid legacyPaymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var stableIncomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var legacyFund = new Fund
             {
@@ -541,6 +565,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -649,6 +674,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             var garage = new Garage { Number = "FEE-SAME-ROUTE-SPLIT", PeopleCount = 1, FloorCount = 1, Owner = owner };
             var campaign = CreateCampaign("Same route legacy campaign", incomeType, 500m);
             campaign.TargetAmount = 5000m;
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = garage });
             var campaignPrincipal = CreateCampaignAccrual(
                 garage,
                 incomeType,
@@ -764,6 +790,8 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             dueCampaign.EndsOn = new DateOnly(2026, 8, 31);
             var futureCampaign = CreateCampaign("Будущий сбор PostgreSQL", destination, 700m);
             futureCampaign.StartsOn = new DateOnly(2026, 9, 1);
+            dueCampaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = dueCampaign, Garage = garage });
+            futureCampaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = futureCampaign, Garage = garage });
             setupContext.AddRange(garage, dueCampaign, futureCampaign);
             await setupContext.SaveChangesAsync();
             dueCampaignId = dueCampaign.Id;
@@ -1489,6 +1517,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 Owner = owner
             };
             var campaign = CreateCampaign("Concurrent legacy earmark", incomeType, 500m);
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = garage });
             var legacyPayment = CreateUntaggedIncome(
                 garage,
                 incomeType,
@@ -1576,6 +1605,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             var owner = new Owner { LastName = "Restore", FirstName = "Duplicate" };
             var garage = new Garage { Number = "FEE-RESTORE-DUP", PeopleCount = 1, FloorCount = 1, Owner = owner };
             var campaign = CreateCampaign("Restore duplicate campaign", incomeType, 500m);
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = garage });
             var canceledPrincipal = CreateCampaignAccrual(
                 garage,
                 incomeType,
@@ -1624,6 +1654,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Campaign" };
             var garage = new Garage { Number = "FEE-LEGACY-PG", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1667,6 +1698,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -1728,6 +1760,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Partial" };
             var garage = new Garage { Number = "FEE-OPEN-PARTIAL", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1752,6 +1785,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -1800,6 +1834,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid legacyPaymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Reviewed principal" };
             var garage = new Garage { Number = "FEE-OPEN-REVIEW", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1820,6 +1855,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -1886,6 +1922,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Closed" };
             var garage = new Garage { Number = "FEE-CLOSED-LEGACY", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1929,6 +1966,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -1979,6 +2017,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid paymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Canceled principal" };
             var garage = new Garage { Number = "FEE-CLOSED-CANCELED", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -1999,6 +2038,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -2036,6 +2076,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid paymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Duplicate over-allocation" };
             var garage = new Garage { Number = "FEE-CLOSED-OVERALLOCATED", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -2075,6 +2116,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -2112,6 +2154,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid paymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var stableIncomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var legacyFund = new Fund { Name = "Legacy closed fund", NormalizedName = "legacy closed fund" };
             var legacyIncomeType = new IncomeType
@@ -2136,6 +2179,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -2165,6 +2209,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid paymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Open canceled principal" };
             var garage = new Garage { Number = "FEE-OPEN-CANCELED", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -2183,6 +2228,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -2224,6 +2270,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid paymentId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Mixed principal" };
             var garage = new Garage { Number = "FEE-CLOSED-MIXED", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -2245,6 +2292,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 
@@ -2276,6 +2324,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Guid principalId;
         await using (var legacyContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
             var incomeType = await legacyContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
             var owner = new Owner { LastName = "Legacy", FirstName = "Unpaid canceled principal" };
             var garage = new Garage { Number = "FEE-OPEN-UNPAID-CANCELED", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -2293,6 +2342,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 
         await using (var migrationContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
             var migratedPrincipal = await migrationContext.Accruals
                 .AsNoTracking()

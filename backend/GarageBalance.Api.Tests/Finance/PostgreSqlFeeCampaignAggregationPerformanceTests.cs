@@ -45,6 +45,11 @@ public sealed class PostgreSqlFeeCampaignAggregationPerformanceTests
             FeeCampaign = firstCampaign,
             Garage = garage
         });
+        secondCampaign.ParticipantGarages.Add(new FeeCampaignGarage
+        {
+            FeeCampaign = secondCampaign,
+            Garage = garage
+        });
         var firstAccrual = CreateAccrual(garage, incomeType, firstCampaign, 500m);
         var secondAccrual = CreateAccrual(garage, incomeType, secondCampaign, 700m);
         var taggedFirst = CreateIncome(garage, incomeType, 100m, firstCampaign);
