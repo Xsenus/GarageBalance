@@ -12,6 +12,174 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task SelectedDestination_RemainsConfiguredWhenWorksheetCreatesCampaignAccrual()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var owner = new Owner { LastName = "Ведомость", FirstName = "Целевая" };
+        var garage = new Garage { Number = "FEE-WORKSHEET-DESTINATION", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        Guid campaignId;
+        Guid targetIncomeTypeId;
+
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.AddRange(owner, garage);
+            await setupContext.SaveChangesAsync();
+            targetIncomeTypeId = await setupContext.IncomeTypes
+                .Where(item => item.Code == "target")
+                .Select(item => item.Id)
+                .SingleAsync();
+            var created = await DictionaryServiceTestFactory.Create(setupContext).CreateFeeCampaignAsync(
+                new UpsertFeeCampaignRequest(
+                    "Целевой сбор из ведомости",
+                    targetIncomeTypeId,
+                    null,
+                    275m,
+                    275m,
+                    new DateOnly(2026, 9, 1),
+                    new DateOnly(2026, 9, 30),
+                    false,
+                    0,
+                    [garage.Id],
+                    FeeCampaignAmountCalculationModes.Contribution),
+                null,
+                CancellationToken.None);
+            Assert.True(created.Succeeded, created.ErrorMessage);
+            campaignId = created.Value!.Id;
+        }
+
+        await using (var worksheetContext = database.CreateContext())
+        {
+            var worksheet = await FinanceServiceTestFactory.Create(worksheetContext).GetGarageIncomeWorksheetAsync(
+                garage.Id,
+                new GarageIncomeWorksheetRequest(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 1)),
+                CancellationToken.None);
+
+            Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+            var row = Assert.Single(worksheet.Value!.Rows, item => item.FeeCampaignId == campaignId);
+            Assert.Equal(targetIncomeTypeId, row.IncomeTypeId);
+            Assert.Equal(275m, row.AccrualAmount);
+        }
+
+        await using var verificationContext = database.CreateContext();
+        Assert.Equal(
+            targetIncomeTypeId,
+            await verificationContext.FeeCampaigns
+                .Where(item => item.Id == campaignId)
+                .Select(item => item.IncomeTypeId)
+                .SingleAsync());
+        Assert.Equal(
+            targetIncomeTypeId,
+            await verificationContext.Accruals
+                .Where(item => item.FeeCampaignId == campaignId)
+                .Select(item => item.IncomeTypeId)
+                .SingleAsync());
+    }
+
+    [PostgreSqlFact]
+    public async Task SelectedDestination_RemainsConfiguredDuringGenerationPaymentAndFundDistribution()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var owner = new Owner { LastName = "Маршрут", FirstName = "Целевой" };
+        var garage = new Garage { Number = "FEE-SELECTED-DESTINATION", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        Guid campaignId;
+        Guid targetIncomeTypeId;
+        Guid targetFundId;
+
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.AddRange(owner, garage);
+            await setupContext.SaveChangesAsync();
+            var targetIncomeType = await setupContext.IncomeTypes
+                .Include(item => item.DestinationFund)
+                .SingleAsync(item => item.Code == "target");
+            targetIncomeTypeId = targetIncomeType.Id;
+            targetFundId = targetIncomeType.DestinationFundId!.Value;
+
+            var created = await DictionaryServiceTestFactory.Create(setupContext).CreateFeeCampaignAsync(
+                new UpsertFeeCampaignRequest(
+                    "Целевой сбор",
+                    targetIncomeTypeId,
+                    "Проверка выбранного назначения",
+                    500m,
+                    500m,
+                    new DateOnly(2026, 9, 1),
+                    new DateOnly(2026, 9, 30),
+                    false,
+                    5,
+                    [garage.Id],
+                    FeeCampaignAmountCalculationModes.Contribution),
+                null,
+                CancellationToken.None);
+
+            Assert.True(created.Succeeded, created.ErrorMessage);
+            Assert.Equal(targetIncomeTypeId, created.Value!.IncomeTypeId);
+            campaignId = created.Value.Id;
+        }
+
+        await using (var generationContext = database.CreateContext())
+        {
+            var generated = await FinanceServiceTestFactory.Create(generationContext).GenerateFeeCampaignAccrualsAsync(
+                new GenerateFeeCampaignAccrualsRequest(campaignId, new DateOnly(2026, 9, 1), null),
+                null,
+                CancellationToken.None);
+
+            Assert.True(generated.Succeeded, generated.ErrorMessage);
+            Assert.Equal(targetIncomeTypeId, generated.Value!.IncomeTypeId);
+            Assert.Equal(targetIncomeTypeId, Assert.Single(generated.Value.CreatedAccruals).IncomeTypeId);
+        }
+
+        await using (var paymentContext = database.CreateContext())
+        {
+            Assert.Equal(
+                targetIncomeTypeId,
+                await paymentContext.FeeCampaigns
+                    .Where(item => item.Id == campaignId)
+                    .Select(item => item.IncomeTypeId)
+                    .SingleAsync());
+            Assert.Equal(
+                targetIncomeTypeId,
+                await paymentContext.Accruals
+                    .Where(item => item.FeeCampaignId == campaignId)
+                    .Select(item => item.IncomeTypeId)
+                    .SingleAsync());
+
+            var payment = await FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    garage.Id,
+                    targetIncomeTypeId,
+                    new DateOnly(2026, 9, 4),
+                    new DateOnly(2026, 9, 1),
+                    500m,
+                    "FEE-SELECTED-DESTINATION",
+                    null,
+                    FeeCampaignId: campaignId),
+                null,
+                CancellationToken.None);
+
+            Assert.True(payment.Succeeded, payment.ErrorMessage);
+        }
+
+        await using var verificationContext = database.CreateContext();
+        Assert.Equal(
+            500m,
+            await verificationContext.Funds
+                .Where(item => item.Id == targetFundId)
+                .Select(item => item.Balance)
+                .SingleAsync());
+        Assert.Equal(
+            500m,
+            await verificationContext.FundOperations
+                .Where(item => item.FundId == targetFundId)
+                .SumAsync(item => item.Amount));
+        Assert.Equal(
+            targetIncomeTypeId,
+            await verificationContext.FeeCampaigns
+                .Where(item => item.Id == campaignId)
+                .Select(item => item.IncomeTypeId)
+                .SingleAsync());
+    }
+
+    [PostgreSqlFact]
     public async Task Campaigns_GenerateForAllOrUpdatedSelectionAndLockHistoricalParticipants()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
