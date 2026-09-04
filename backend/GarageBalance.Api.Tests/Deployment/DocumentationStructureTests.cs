@@ -30,8 +30,8 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/customer-comments-2026-09-02-roadmap.md",
         "roadmaps/dictionary-and-form-cleanup-2026-08-12-roadmap.md",
         "roadmaps/docker-user-distribution-roadmap.md",
-        "roadmaps/full-clean-database-acceptance-2026-09-04-roadmap.md",
         "roadmaps/full-performance-optimization-2026-07-29-roadmap.md",
+        "roadmaps/full-repository-integration-2026-09-05-roadmap.md",
         "roadmaps/full-project-behavior-audit-2026-08-03-roadmap.md",
         "roadmaps/full-project-remediation-2026-08-04-roadmap.md",
         "roadmaps/income-accrual-integrity-2026-09-04-roadmap.md",
@@ -142,7 +142,8 @@ public sealed partial class DocumentationStructureTests
         while (directory is not null)
         {
             if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")) &&
-                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+                (Directory.Exists(Path.Combine(directory.FullName, ".git")) ||
+                 File.Exists(Path.Combine(directory.FullName, ".git"))))
             {
                 return directory.FullName;
             }

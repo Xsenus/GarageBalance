@@ -123,6 +123,25 @@ public sealed class ControllerThinnessTests
     }
 
     [Fact]
+    public void ConfigurableActionComments_AreNotUnconditionallyRequiredByDataAnnotations()
+    {
+        var apiTypes = typeof(AuthController).Assembly.GetTypes();
+        var propertyOffenders = apiTypes
+            .SelectMany(type => type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            .Where(property => property.GetCustomAttribute<ActionCommentAttribute>() is not null)
+            .Where(property => property.GetCustomAttribute<RequiredAttribute>() is not null)
+            .Select(property => $"{property.DeclaringType!.Name}.{property.Name}");
+        var parameterOffenders = apiTypes
+            .SelectMany(type => type.GetConstructors(BindingFlags.Instance | BindingFlags.Public))
+            .SelectMany(constructor => constructor.GetParameters())
+            .Where(parameter => parameter.GetCustomAttribute<ActionCommentAttribute>() is not null)
+            .Where(parameter => parameter.GetCustomAttribute<RequiredAttribute>() is not null)
+            .Select(parameter => $"{parameter.Member.DeclaringType!.Name}.{parameter.Name}");
+
+        Assert.Empty(propertyOffenders.Concat(parameterOffenders).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void DangerousControllerActions_DoNotUseSafeHttpMethods()
     {
         var safeHttpMethods = new[] { "GET", "HEAD", "OPTIONS", "TRACE" };

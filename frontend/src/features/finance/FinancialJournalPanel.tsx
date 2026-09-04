@@ -11,6 +11,7 @@ import { formatDateOnly, formatMoney, formatMonth } from '../../shared/formatter
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
+import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset } from '../../shared/workspaceNavigation'
 import { focusAfterDomUpdate, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 
@@ -73,6 +74,7 @@ export function FinancialJournalPanel({
   onEdit: (entry: FinancialJournalEntryDto) => void
   onOpenAudit?: (preset: AuditPanelPreset) => void
 }) {
+  const [actionCommentsRequired] = useActionCommentSettings()
   const canWrite = hasPermission(auth, permissions.paymentsWrite)
   const canReadAudit = hasPermission(auth, permissions.auditRead)
   const [draft, setDraft] = useState<JournalFilter>(emptyFilter)
@@ -200,7 +202,7 @@ export function FinancialJournalPanel({
 
   async function confirmCancel() {
     if (!cancelTarget) return
-    if (!cancelReason.trim()) {
+    if (actionCommentsRequired && !cancelReason.trim()) {
       setActionError('Укажите причину отмены.')
       return
     }
@@ -303,7 +305,7 @@ export function FinancialJournalPanel({
         <div className="modal-backdrop" role="presentation">
           <section ref={cancelDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="journal-cancel-title">
             <div className="detail-dialog-header"><div><p className="eyebrow">Единый журнал</p><h3 id="journal-cancel-title">Отменить запись?</h3><p>{cancelTarget.counterparty} · {formatMoney(cancelTarget.amount)}</p></div></div>
-            <label>Причина отмены<textarea ref={cancelReasonRef} aria-label="Причина отмены записи журнала" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label>
+            <label>Причина отмены<textarea ref={cancelReasonRef} aria-label="Причина отмены записи журнала" value={cancelReason} required={actionCommentsRequired} onChange={(event) => setCancelReason(event.target.value)} /></label>
             {actionError ? <FormError>{actionError}</FormError> : null}
             <div className="detail-dialog-actions">
               <button className="ghost-button" type="button" disabled={actionPending} onClick={() => { setCancelTarget(null); setActionError(null); menuTriggerRef.current?.focus() }}>Оставить запись</button>

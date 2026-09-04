@@ -105,6 +105,11 @@ builder.Services.AddScoped<ICashBankBalanceSettingsService, CashBankBalanceSetti
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserSecurityMutationLock, UserSecurityMutationLock>();
+builder.Services
+    .AddOptions<InitialAdministratorOptions>()
+    .Bind(builder.Configuration.GetSection(InitialAdministratorOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<InitialAdministratorOptions>, InitialAdministratorOptionsValidator>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
 builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
 builder.Services.AddScoped<IGarageRepository, EfGarageRepository>();
@@ -299,6 +304,7 @@ builder.Services
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IBusinessDateProvider, BusinessDateProvider>();
 builder.Services.AddHostedService<DatabaseStartupHostedService>();
+builder.Services.AddHostedService<InitialAdministratorHostedService>();
 builder.Services.AddHostedService<BusinessDateSettingsInitializer>();
 builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
 builder.Services.AddHostedService<ImportDryRunWorker>();

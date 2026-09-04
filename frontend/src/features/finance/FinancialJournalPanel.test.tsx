@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AuthResponse } from '../../services/authApi'
 import type { FinanceClient, FinancialJournalEntryDto } from '../../services/financeApi'
 import type { FundsClient } from '../../services/fundsApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
+import { ActionCommentSettingsProvider } from '../../shared/ActionCommentSettings'
 import { FinancialJournalPanel } from './FinancialJournalPanel'
 
 const writableAuth: AuthResponse = {
@@ -98,6 +100,29 @@ describe('FinancialJournalPanel', () => {
 
     await waitFor(() => expect(client.cancelOperation).toHaveBeenCalledWith('journal-token', 'operation-1', { reason: 'Исправление документа' }))
     await waitFor(() => expect(row).toHaveFocus())
+  })
+
+  it('allows cancellation without a reason when operation comments are optional', async () => {
+    const client = clients()
+    const settings = {
+      getActionCommentSettings: vi.fn(async () => ({ required: false, version: 'optional-comments' })),
+      updateActionCommentSettings: vi.fn(),
+    } as unknown as ApplicationSettingsClient
+    const user = userEvent.setup()
+    render(
+      <ActionCommentSettingsProvider accessToken={writableAuth.accessToken} client={settings}>
+        <FinancialJournalPanel auth={writableAuth} financeClient={client.finance} fundsClient={client.funds} onEdit={vi.fn()} />
+      </ActionCommentSettingsProvider>,
+    )
+
+    const row = (await screen.findByText('ПКО-7')).closest('tr') as HTMLTableRowElement
+    fireEvent.contextMenu(row)
+    await user.click(screen.getByRole('menuitem', { name: 'Отменить' }))
+    const dialog = screen.getByRole('dialog', { name: 'Отменить запись?' })
+    expect(within(dialog).getByLabelText('Причина отмены записи журнала')).not.toBeRequired()
+    await user.click(within(dialog).getByRole('button', { name: 'Отменить запись' }))
+
+    await waitFor(() => expect(client.cancelOperation).toHaveBeenCalledWith('journal-token', 'operation-1', { reason: '' }))
   })
 
   it('shows protected rows without mutation actions and reports loading failures', async () => {

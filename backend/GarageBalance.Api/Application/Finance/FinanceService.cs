@@ -5199,7 +5199,7 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var reason = NormalizeOptional(request.Reason);
-        if (reason is null)
+        if (ActionCommentRequirementContext.IsRequired && reason is null)
         {
             return FinanceResult<RegularAccrualRecalculationPreviewDto>.Failure(
                 "regular_accrual_recalculation_reason_required",

@@ -6,19 +6,24 @@ on:
       - master
   workflow_dispatch:
 
-concurrency:
-  group: garagebalance-staging
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  FRONTEND_DIR: frontend
+  API_PROJECT: backend/GarageBalance.Api/GarageBalance.Api.csproj
+  RELEASE_ID: ${{ github.sha }}-${{ github.run_number }}
+
 jobs:
-  verify-build-deploy:
-    name: Verify, build and deploy staging
+  backend:
+    name: Backend tests and package
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    environment: staging
+    timeout-minutes: 30
+    concurrency:
+      group: garagebalance-staging-${{ github.ref }}-backend
+      cancel-in-progress: true
 
     services:
       postgres:
@@ -36,11 +41,6 @@ jobs:
           --health-retries 10
 
     env:
-      DOTNET_NOLOGO: true
-      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-      FRONTEND_DIR: frontend
-      API_PROJECT: backend/GarageBalance.Api/GarageBalance.Api.csproj
-      RELEASE_ID: ${{ github.sha }}-${{ github.run_number }}
       GARAGEBALANCE_POSTGRES_TEST_CONNECTION: Host=127.0.0.1;Port=5432;Database=garagebalance_test;Username=garagebalance_test;Password=garagebalance_test_password
 
     steps:
@@ -52,24 +52,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Restore backend
         run: |
           dotnet restore GarageBalance.slnx
           dotnet tool restore
-
-      - name: Audit backend dependencies
-        run: dotnet list GarageBalance.slnx package --vulnerable --include-transitive
-
-      - name: Check repository privacy
-        shell: pwsh
-        run: ./infrastructure/scripts/verify-package-privacy.ps1
 
       - name: Test backend
         shell: pwsh
@@ -80,31 +66,6 @@ jobs:
             --results-directory artifacts/coverage-backend
           ./infrastructure/scripts/verify-backend-coverage.ps1 `
             -ResultsDirectory artifacts/coverage-backend
-
-      - name: Check backend formatting
-        run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
-
-      - name: Install frontend dependencies
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: npm ci
-
-      - name: Audit frontend dependencies
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: npm audit --audit-level=high
-
-      - name: Test frontend
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: npm run test:coverage
-
-      - name: Lint frontend
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: npm run lint
-
-      - name: Build frontend
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: |
-          npm run build
-          npm run check:bundle
 
       - name: Generate idempotent migration SQL
         run: |
@@ -124,10 +85,9 @@ jobs:
             --output artifacts/api
           test -x artifacts/api/GarageBalance.Api
 
-      - name: Package release
+      - name: Package backend release
         run: |
           tar -czf artifacts/api.tar.gz -C artifacts/api .
-          tar -czf artifacts/frontend.tar.gz -C frontend/dist .
           tar -czf artifacts/operations.tar.gz \
             infrastructure/deployment \
             infrastructure/scripts/garagebalance-healthcheck.sh \
@@ -139,10 +99,159 @@ jobs:
             infrastructure/scripts/install-vps-performance-configuration.sh \
             infrastructure/scripts/vps-apply-release.sh
           test -s artifacts/api.tar.gz
-          test -s artifacts/frontend.tar.gz
           test -s artifacts/operations.tar.gz
 
-      - name: Upload release artifacts
+      - name: Upload backend release
+        uses: actions/upload-artifact@v6
+        with:
+          name: garagebalance-staging-backend-${{ github.sha }}
+          path: |
+            artifacts/api.tar.gz
+            artifacts/deploy-migrations.sql
+            artifacts/operations.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  frontend:
+    name: Frontend tests and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: garagebalance-staging-${{ github.ref }}-frontend
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Test frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run test:coverage
+
+      - name: Lint frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          npm run build
+          npm run check:bundle
+
+      - name: Package frontend release
+        run: |
+          mkdir -p artifacts
+          tar -czf artifacts/frontend.tar.gz -C frontend/dist .
+          test -s artifacts/frontend.tar.gz
+
+      - name: Upload frontend release
+        uses: actions/upload-artifact@v6
+        with:
+          name: garagebalance-staging-frontend-${{ github.sha }}
+          path: artifacts/frontend.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  backend-quality:
+    name: Backend audit, privacy and formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: garagebalance-staging-${{ github.ref }}-backend-quality
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore backend
+        run: dotnet restore GarageBalance.slnx
+
+      - name: Audit backend dependencies
+        run: dotnet list GarageBalance.slnx package --vulnerable --include-transitive
+
+      - name: Check repository privacy
+        shell: pwsh
+        run: ./infrastructure/scripts/verify-package-privacy.ps1
+
+      - name: Check backend formatting
+        run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
+
+  frontend-audit:
+    name: Frontend dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: garagebalance-staging-${{ github.ref }}-frontend-audit
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Audit frontend dependencies
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: >-
+          npm audit --package-lock-only --audit-level=high
+          --fetch-retries=2 --fetch-timeout=60000
+          --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=10000
+
+  deploy:
+    name: Deploy verified staging release
+    needs:
+      - backend
+      - frontend
+      - backend-quality
+      - frontend-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    concurrency:
+      group: garagebalance-staging-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Download backend release
+        uses: actions/download-artifact@v8
+        with:
+          name: garagebalance-staging-backend-${{ github.sha }}
+          path: artifacts
+
+      - name: Download frontend release
+        uses: actions/download-artifact@v8
+        with:
+          name: garagebalance-staging-frontend-${{ github.sha }}
+          path: artifacts
+
+      - name: Verify release artifacts
+        run: |
+          test -s artifacts/api.tar.gz
+          test -s artifacts/frontend.tar.gz
+          test -s artifacts/deploy-migrations.sql
+          test -s artifacts/operations.tar.gz
+
+      - name: Upload combined release artifact
         uses: actions/upload-artifact@v6
         with:
           name: garagebalance-staging-${{ github.sha }}
@@ -152,6 +261,7 @@ jobs:
             artifacts/deploy-migrations.sql
             artifacts/operations.tar.gz
           retention-days: 30
+          compression-level: 0
 
       - name: Prepare SSH
         run: |
@@ -190,7 +300,7 @@ jobs:
           ssh garagebalance-staging \
             "sudo /usr/local/bin/garagebalance-deploy-apply '${RELEASE_ID}'"
           ssh -O exit garagebalance-staging || true
-          ENTRY_ASSET="$(grep -oE '"/assets/[^"]+"' frontend/dist/index.html | head -n 1 | tr -d '"')"
+          ENTRY_ASSET="$(tar -xOf artifacts/frontend.tar.gz ./index.html | grep -oE '"/assets/[^"]+"' | head -n 1 | tr -d '"')"
           test -n "${ENTRY_ASSET}"
           for ATTEMPT in 1 2 3; do
             curl --http2 --compressed --fail --silent --show-error \

@@ -4391,6 +4391,7 @@ h1 {
 }
 
 .payments-prototype-table-scroll {
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -4405,6 +4406,7 @@ h1 {
 
 .payments-prototype-table--garage {
   min-width: 1260px;
+  table-layout: fixed;
 }
 
 .payments-prototype-table--garage th:nth-child(2) {

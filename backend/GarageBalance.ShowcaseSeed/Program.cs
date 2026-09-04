@@ -47,10 +47,12 @@ try
         $"showcaseStatus={(result.IsReady ? "ready" : "incomplete")}; mode={mode}; " +
         $"garages={result.GarageCount}; accruals={result.AccrualCount}; operations={result.FinancialOperationCount}; " +
         $"readings={result.MeterReadingCount}; campaigns={result.FeeCampaignCount}; suppliers={result.SupplierCount}; " +
+        $"staff={result.StaffMemberCount}; " +
         $"preservedUsers={result.PreservedUserCount}; noDebt={result.HasNoDebt}; debt={result.HasDebt}; advance={result.HasAdvance}; " +
         $"newGarageClean={result.NewGarageHasNoCalculatedHistory}; campaignParticipantsLocked={result.CampaignsHaveLockedParticipants}; " +
         $"annualAccrualsUnique={result.AnnualAccrualsAreUnique}; overdueScenarioCorrect={result.OverdueScenarioIsCorrect}; " +
-        $"businessDatePinned={result.BusinessDateIsPinned}");
+        $"staffScenariosComplete={result.StaffScenariosAreComplete}; supplierScenariosComplete={result.SupplierScenariosAreComplete}; " +
+        $"fundBalancesReconcile={result.FundBalancesReconcile}; businessDatePinned={result.BusinessDateIsPinned}");
     return result.IsReady ? 0 : 3;
 }
 catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
