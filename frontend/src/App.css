@@ -2585,11 +2585,6 @@ h1 {
   padding: 6px;
 }
 
-.suggestion-options--above {
-  top: auto;
-  bottom: calc(100% + 6px);
-}
-
 .suggestion-option {
   display: grid;
   width: 100%;

@@ -176,7 +176,8 @@ describe('responsive layout styles', () => {
   it('opens address suggestions upward and limits the visible rows', () => {
     expect(normalizedAppCss).toContain('.suggestion-options {\n  position: absolute;')
     expect(normalizedAppCss).toContain('max-height: 284px;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  scrollbar-gutter: stable;')
-    expect(normalizedAppCss).toContain('.suggestion-options--above {\n  top: auto;\n  bottom: calc(100% + 6px);')
+    expect(normalizedAppCss).toContain('.suggestion-options {\n  position: absolute;\n  z-index: 8;\n  top: calc(100% + 6px);')
+    expect(normalizedAppCss).not.toContain('.suggestion-options--above')
     expect(normalizedAppCss).toContain('.suggestion-option {\n  display: grid;\n  width: 100%;\n  height: 54px;\n  min-height: 54px;')
     expect(normalizedAppCss).toContain('@media (max-width: 720px) {\n  .suggestion-options {\n    max-height: 176px;')
   })

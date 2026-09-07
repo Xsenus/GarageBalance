@@ -3475,7 +3475,7 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
           }}
         />
         {searchEnabled && suggestionsOpen ? (
-          <div className="suggestion-options suggestion-options--above" id={suggestionsId} role="listbox" aria-label={listboxLabel}>
+          <div className="suggestion-options" id={suggestionsId} role="listbox" aria-label={listboxLabel}>
             {suggestions.map((suggestion) => (
               <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" title={suggestion.unrestrictedValue || suggestion.value} key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectSuggestion(suggestion)}>
                 <strong>{suggestion.value}</strong>
