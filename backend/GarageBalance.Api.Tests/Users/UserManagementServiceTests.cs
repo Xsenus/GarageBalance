@@ -1,17 +1,104 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Auth;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Security;
 using GarageBalance.Api.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 using TestDatabase = GarageBalance.Api.Tests.Common.SqliteTestDatabase;
 
 namespace GarageBalance.Api.Tests.Users;
 
 public sealed class UserManagementServiceTests
 {
+    [PostgreSqlFact]
+    public async Task RoleVersionMigration_PreservesExistingPermissionsAndCreatesDistinctVersions()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync("20260905223050_AddExpensePaymentBatches");
+        await using var context = database.CreateContext();
+        foreach (var code in new[] { "migration-role-a", "migration-role-b" })
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO app_roles ("Id", "Code", "Name", "Permissions", "CreatedAtUtc")
+                VALUES ({Guid.NewGuid()}, {code}, {code}, {"[\"dictionaries.read\",\"reports.read\"]"}, {DateTimeOffset.UtcNow})
+                """);
+        }
+        await context.Database.MigrateAsync();
+        var roles = await context.Roles.Where(role => role.Code.StartsWith("migration-role-")).ToListAsync();
+        Assert.Equal(2, roles.Count);
+        Assert.Equal(2, roles.Select(role => role.Version).Distinct().Count());
+        Assert.All(roles, role =>
+        {
+            Assert.NotEqual(Guid.Empty, role.Version);
+            Assert.Equal([SystemPermissions.DictionariesRead, SystemPermissions.ReportsRead], role.Permissions);
+        });
+    }
+
+    [PostgreSqlFact]
+    public async Task RolePermissions_ConcurrentSaveRollsBackPermissionsSessionsAndAudit()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        ManagedRoleDto original;
+        long initialSession;
+        int initialAuditCount;
+        await using (var setup = database.CreateContext())
+        {
+            var service = CreateService(setup);
+            original = Assert.Single(await service.GetRolesAsync(CancellationToken.None), role => role.Code == SystemRoles.ReportsViewer);
+            var created = await service.CreateUserAsync(new CreateManagedUserRequest(
+                "concurrency@example.test", "Проверка конфликта", "StrongPass123", [original.Code]), null, CancellationToken.None);
+            Assert.True(created.Succeeded);
+            initialSession = await setup.Users.Select(user => user.SessionVersion).SingleAsync();
+            initialAuditCount = await setup.AuditEvents.CountAsync();
+        }
+
+        await using var first = database.CreateContext();
+        await using var second = database.CreateContext();
+        await new EfUserManagementRepository(second).FindRoleForUpdateAsync(original.Code, CancellationToken.None);
+        var saved = await CreateService(first).UpdateRolePermissionsAsync(original.Code,
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead], original.Version), null, CancellationToken.None);
+        Assert.True(saved.Succeeded);
+        Assert.NotEqual(original.Version, saved.Value!.Version);
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => CreateService(second).UpdateRolePermissionsAsync(original.Code,
+            new UpdateRolePermissionsRequest([.. original.Permissions, SystemPermissions.DictionariesWrite], original.Version), null, CancellationToken.None));
+
+        await using var verification = database.CreateContext();
+        var current = await verification.Roles.SingleAsync(role => role.Code == original.Code);
+        Assert.Equal([SystemPermissions.DictionariesRead], current.Permissions);
+        Assert.Equal(saved.Value.Version, current.Version);
+        Assert.Equal(initialSession + 1, await verification.Users.Select(user => user.SessionVersion).SingleAsync());
+        Assert.Equal(initialAuditCount + 1, await verification.AuditEvents.CountAsync());
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => CreateService(verification).UpdateRolePermissionsAsync(original.Code,
+            new UpdateRolePermissionsRequest(original.Permissions, original.Version), null, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateRolePermissionsAsync_RejectsStaleEditorWithoutRestoringRevokedPermissions(bool unchanged)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var original = Assert.Single(await service.GetRolesAsync(CancellationToken.None), role => role.Code == SystemRoles.ReportsViewer);
+        var first = await service.UpdateRolePermissionsAsync(original.Code,
+            new UpdateRolePermissionsRequest([SystemPermissions.DictionariesRead], original.Version), null, CancellationToken.None);
+        Assert.True(first.Succeeded);
+        Assert.NotEqual(original.Version, first.Value!.Version);
+        var auditCount = database.Context.AuditEvents.Count();
+
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => service.UpdateRolePermissionsAsync(original.Code,
+            new UpdateRolePermissionsRequest(unchanged ? [SystemPermissions.DictionariesRead] : original.Permissions, original.Version),
+            null, CancellationToken.None));
+
+        Assert.Equal(auditCount, database.Context.AuditEvents.Count());
+        var current = Assert.Single(await service.GetRolesAsync(CancellationToken.None), role => role.Code == original.Code);
+        Assert.Equal([SystemPermissions.DictionariesRead], current.Permissions);
+        Assert.Equal(first.Value.Version, current.Version);
+    }
+
     [Fact]
     public async Task GetRolesAsync_ReturnsSystemRolesWithPermissions()
     {

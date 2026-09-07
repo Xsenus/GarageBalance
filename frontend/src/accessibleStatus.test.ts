@@ -268,6 +268,8 @@ describe('accessible dynamic messages', () => {
     expect(normalizedAppCss).toContain('.contractors-check-row:hover,\n.dictionary-archive-toggle:hover')
     expect(appCss).toContain(".contractors-check-row:has(input[type='checkbox']:disabled)")
     expect(appCss).toContain(".dictionary-archive-toggle:has(input[type='checkbox']:disabled)")
+    expect(appCss).toMatch(/\.contractors-check-row input\[type='checkbox'\]:disabled:not\(:checked\),\s*\.dictionary-archive-toggle input\[type='checkbox'\]:disabled:not\(:checked\)\s*\{\s*background: #f2f4f7;/)
+    expect(appCss).not.toMatch(/input\[type='checkbox'\]:disabled\s*\{[^}]*background:/)
 
     for (const selector of checkboxStyleContainers) {
       expect(appCss).toContain(selector)

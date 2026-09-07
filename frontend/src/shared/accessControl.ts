@@ -50,9 +50,11 @@ export function isPermissionRequiredBySelection(permission: string, selectedPerm
 
 export const rolePermissionGroups: ReadonlyArray<{ label: string; permission: Permission }> = [
   { label: 'Пользователи', permission: permissions.usersManage },
-  { label: 'Справочники', permission: permissions.dictionariesWrite },
+  { label: 'Чтение справочников', permission: permissions.dictionariesRead },
+  { label: 'Изменение справочников', permission: permissions.dictionariesWrite },
   { label: 'Тарифы и сборы', permission: permissions.tariffsManage },
-  { label: 'Платежи', permission: permissions.paymentsWrite },
+  { label: 'Чтение платежей', permission: permissions.paymentsRead },
+  { label: 'Изменение платежей', permission: permissions.paymentsWrite },
   { label: 'Показания вне текущего месяца', permission: permissions.historicalMeterReadingsCorrect },
   { label: 'Корректировка начальных данных', permission: permissions.openingDataAdjust },
   { label: 'Отчеты', permission: permissions.reportsRead },

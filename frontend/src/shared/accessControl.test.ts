@@ -63,9 +63,11 @@ describe('accessControl', () => {
   it('keeps role permission matrix labels tied to known permissions', () => {
     expect(rolePermissionGroups).toEqual([
       { label: 'Пользователи', permission: permissions.usersManage },
-      { label: 'Справочники', permission: permissions.dictionariesWrite },
+      { label: 'Чтение справочников', permission: permissions.dictionariesRead },
+      { label: 'Изменение справочников', permission: permissions.dictionariesWrite },
       { label: 'Тарифы и сборы', permission: permissions.tariffsManage },
-      { label: 'Платежи', permission: permissions.paymentsWrite },
+      { label: 'Чтение платежей', permission: permissions.paymentsRead },
+      { label: 'Изменение платежей', permission: permissions.paymentsWrite },
       { label: 'Показания вне текущего месяца', permission: permissions.historicalMeterReadingsCorrect },
       { label: 'Корректировка начальных данных', permission: permissions.openingDataAdjust },
       { label: 'Отчеты', permission: permissions.reportsRead },
@@ -73,5 +75,6 @@ describe('accessControl', () => {
       { label: 'История изменений', permission: permissions.auditRead },
       { label: 'Что нового', permission: permissions.appReleasesManage },
     ])
+    expect(rolePermissionGroups.map((group) => group.permission).sort()).toEqual(Object.values(permissions).sort())
   })
 })

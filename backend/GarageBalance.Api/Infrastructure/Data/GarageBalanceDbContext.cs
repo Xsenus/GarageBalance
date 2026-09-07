@@ -127,6 +127,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
         {
             entity.ToTable("app_roles");
             entity.HasKey(role => role.Id);
+            entity.Property(role => role.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.Property(role => role.Code).HasMaxLength(100).IsRequired();
             entity.Property(role => role.Name).HasMaxLength(200).IsRequired();
             entity.Property(role => role.Permissions)

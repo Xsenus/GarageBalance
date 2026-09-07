@@ -78,9 +78,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     usersPageControllerRef.current = null
   }, [])
 
-  const getRolesOnce = useCallback(() => {
+  const getRolesOnce = useCallback((force = false) => {
     const cached = rolesRequestRef.current
-    if (cached?.accessToken === auth.accessToken && cached.client === userClient) {
+    if (!force && cached?.accessToken === auth.accessToken && cached.client === userClient) {
       return cached.promise
     }
 
@@ -448,7 +448,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setSaving('role')
     setError(null)
     try {
-      const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleEditor.role.code, { permissions: roleEditor.permissions })
+      const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleEditor.role.code, { permissions: roleEditor.permissions, version: roleEditor.role.version })
+      const cachedRoles = rolesRequestRef.current
+      if (cachedRoles) {
+        cachedRoles.promise = cachedRoles.promise.then((loadedRoles) => loadedRoles.map((role) => role.code === updatedRole.code ? updatedRole : role))
+      }
       setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
       closeRoleEditor()
       refreshUsersAfterMutation()
@@ -458,6 +462,31 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       setError(message)
     } finally {
       setSaving(null)
+    }
+  }
+
+  async function reloadRolePermissions() {
+    if (!roleEditor) return
+    setSaving('role')
+    let controller: AbortController | undefined
+    try {
+      const request = getRolesOnce(true)
+      controller = rolesRequestRef.current?.controller
+      const loadedRoles = await request
+      if (controller?.signal.aborted) return
+      setRoles(loadedRoles)
+      const currentRole = loadedRoles.find((role) => role.code === roleEditor.role.code)
+      if (currentRole) {
+        openRoleEditor(currentRole)
+      } else {
+        setError('Роль больше не существует. Закройте редактор и выберите другую роль.')
+      }
+    } catch (caught) {
+      if (!controller?.signal.aborted) {
+        setError(caught instanceof Error ? caught.message : 'Не удалось загрузить права роли.')
+      }
+    } finally {
+      if (!controller?.signal.aborted) setSaving(null)
     }
   }
 
@@ -790,6 +819,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               </div>
               {rolePermissionError ? <FormError>{rolePermissionError}</FormError> : null}
               {dialogErrorMessage}
+              {error ? <button className="ghost-button" type="button" onClick={() => void reloadRolePermissions()} disabled={saving === 'role'}>Отбросить черновик и загрузить актуальные права</button> : null}
               <p className="form-hint">Права применяются к пользователям с этой ролью после обновления их сессии. Изменение будет записано в историю.</p>
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeRoleEditor} disabled={saving === 'role'}>Отмена</button>

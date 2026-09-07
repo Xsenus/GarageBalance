@@ -19,6 +19,8 @@ public sealed class UsersController(IUserManagementService userManagementService
     }
 
     [HttpPut("roles/{code}/permissions")]
+    [RequireConcurrencyVersion("request.Version")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ManagedRoleDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

@@ -3,7 +3,7 @@ using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Users;
 
-public sealed record ManagedRoleDto(string Code, string Name, IReadOnlyList<string> Permissions);
+public sealed record ManagedRoleDto(string Code, string Name, IReadOnlyList<string> Permissions, Guid Version = default);
 
 public sealed record ManagedUserDto(
     Guid Id,
@@ -38,4 +38,4 @@ public sealed record UpdateManagedUserRequest(
     Guid? Version = null);
 
 public sealed record UpdateRolePermissionsRequest(
-    [Required] IReadOnlyList<string> Permissions);
+    [Required] IReadOnlyList<string> Permissions, Guid? Version = null);

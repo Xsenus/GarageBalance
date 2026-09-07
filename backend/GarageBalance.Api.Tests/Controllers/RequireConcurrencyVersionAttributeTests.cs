@@ -14,6 +14,29 @@ public sealed class RequireConcurrencyVersionAttributeTests
     [InlineData(null)]
     [InlineData("00000000-0000-0000-0000-000000000000")]
     [InlineData("981fbaed-e292-4a4b-ae1b-5529d47c9460")]
+    public void RolePermissions_RequiresNonemptyVersionAtHttpBoundary(string? version)
+    {
+        var attribute = Assert.Single(typeof(UsersController).GetMethod(nameof(UsersController.UpdateRolePermissions))!
+            .GetCustomAttributes(typeof(RequireConcurrencyVersionAttribute), true).Cast<RequireConcurrencyVersionAttribute>());
+        var request = new GarageBalance.Api.Application.Users.UpdateRolePermissionsRequest(
+            ["reports.read"], version is null ? null : Guid.Parse(version));
+        var context = CreateContext(request);
+        attribute.OnActionExecuting(context);
+        if (request.Version is null || request.Version == Guid.Empty)
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(context.Result);
+            Assert.Equal("concurrency_version_required", Assert.IsType<ValidationProblemDetails>(result.Value).Title);
+        }
+        else
+        {
+            Assert.Null(context.Result);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("981fbaed-e292-4a4b-ae1b-5529d47c9460")]
     public void FundDeletion_RequiresNonemptyVersionAtHttpBoundary(string? version)
     {
         var attribute = Assert.Single(typeof(FundsController).GetMethod(nameof(FundsController.DeleteFund))!

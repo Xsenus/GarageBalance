@@ -167,7 +167,7 @@ describe('core API clients', () => {
     await usersApi.createUser('token', createRequest)
     await usersApi.updateUser('token', 'user/1', updateRequest)
     await usersApi.restoreUser('token', 'user/1')
-    await usersApi.updateRolePermissions('token', 'reports viewer', { permissions: ['reports.read'] })
+    await usersApi.updateRolePermissions('token', 'reports viewer', { permissions: ['reports.read'], version: 'role-version' })
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/users/roles',
@@ -180,7 +180,7 @@ describe('core API clients', () => {
     ])
     expect(fetchMock.mock.calls[3][1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify(createRequest) }))
     expect(fetchMock.mock.calls[4][1]).toEqual(expect.objectContaining({ method: 'PUT', body: JSON.stringify(updateRequest) }))
-    expect(fetchMock.mock.calls[6][1]).toEqual(expect.objectContaining({ method: 'PUT', body: JSON.stringify({ permissions: ['reports.read'] }) }))
+    expect(fetchMock.mock.calls[6][1]).toEqual(expect.objectContaining({ method: 'PUT', body: JSON.stringify({ permissions: ['reports.read'], version: 'role-version' }) }))
   })
 
   it('maps user-management failures without exposing invalid response bodies', async () => {

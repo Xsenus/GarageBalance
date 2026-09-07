@@ -40,6 +40,7 @@ public sealed class OptimisticConcurrencyTests
             typeof(Fund),
             typeof(FinancialOperation),
             typeof(AppUser),
+            typeof(AppRole),
             typeof(ApplicationSetting)
         };
 

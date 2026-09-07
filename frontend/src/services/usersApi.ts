@@ -4,6 +4,7 @@ export type ManagedRoleDto = {
   code: string
   name: string
   permissions: string[]
+  version: string
 }
 
 export type ManagedUserDto = {
@@ -44,6 +45,7 @@ export type UpdateManagedUserRequest = {
 
 export type UpdateRolePermissionsRequest = {
   permissions: string[]
+  version: string
 }
 
 export type UserManagementClient = {

@@ -2861,6 +2861,10 @@ h1 {
 .contractors-check-row input[type='checkbox']:disabled,
 .dictionary-archive-toggle input[type='checkbox']:disabled {
   cursor: not-allowed;
+}
+
+.contractors-check-row input[type='checkbox']:disabled:not(:checked),
+.dictionary-archive-toggle input[type='checkbox']:disabled:not(:checked) {
   background: #f2f4f7;
 }
 

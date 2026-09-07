@@ -310,7 +310,7 @@ describe('App', () => {
     const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
     const accessTable = within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })
     expect(accessTable).toBeInTheDocument()
-    expect(within(accessTable).getAllByRole('columnheader')).toHaveLength(12)
+    expect(within(accessTable).getAllByRole('columnheader')).toHaveLength(14)
     expect(within(accessTable).getAllByRole('row')).toHaveLength(5)
     expect(within(roleMatrix).getByRole('region', { name: 'Прокручиваемая матрица ролей и прав' })).toHaveAttribute('tabindex', '0')
     expect(within(roleMatrix).getByText('Администратор')).toBeInTheDocument()
@@ -447,6 +447,161 @@ describe('App', () => {
     expect((await screen.findByText('Права роли изменены.')).closest('[role="status"]')).toBeInTheDocument()
     expect(within(usersPanel).getByRole('table', { name: 'Список пользователей' })).toBeInTheDocument()
     await act(async () => releaseRoleRefresh())
+  })
+
+  it('shows and revokes payment read access after removing write access from a role', async () => {
+    const user = userEvent.setup()
+    let roles = createRoles()
+    const updateRolePermissions = vi.fn(async (_token: string, code: string, request: { permissions: string[] }) => {
+      const updated = { ...roles.find((role) => role.code === code)!, permissions: request.permissions }
+      roles = roles.map((role) => role.code === code ? updated : role)
+      return updated
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getRoles: async () => roles, updateRolePermissions })} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const matrix = await screen.findByRole('region', { name: 'Матрица ролей' })
+    const openEditor = async () => {
+      await user.click(await within(matrix).findByRole('button', { name: 'Изменить права роли Просмотр отчетов' }))
+      return screen.findByRole('dialog', { name: 'Изменить права роли' })
+    }
+    const save = async (dialog: HTMLElement) => {
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить права роли' })).not.toBeInTheDocument())
+    }
+    let dialog = await openEditor()
+    const paymentReadName = 'Просмотр отчетов: Чтение платежей'
+    const paymentWriteName = 'Просмотр отчетов: Изменение платежей'
+    expect(within(dialog).getByRole('checkbox', { name: paymentReadName })).not.toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Просмотр отчетов: Чтение справочников' })).toBeDisabled()
+    await user.click(within(dialog).getByRole('checkbox', { name: paymentWriteName }))
+    expect(within(dialog).getByRole('checkbox', { name: paymentReadName })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: paymentReadName })).toBeDisabled()
+    await save(dialog)
+    expect(roles.find((role) => role.code === 'reports_viewer')?.permissions).toEqual(['dictionaries.read', 'payments.read', 'payments.write', 'reports.read'])
+
+    dialog = await openEditor()
+    await user.click(within(dialog).getByRole('checkbox', { name: paymentWriteName }))
+    expect(within(dialog).getByRole('checkbox', { name: paymentReadName })).toBeEnabled()
+    await save(dialog)
+    expect(within(matrix).getByRole('cell', { name: 'Просмотр отчетов: Чтение платежей - разрешено' })).toHaveTextContent('Да')
+    expect(within(matrix).getByRole('cell', { name: 'Просмотр отчетов: Изменение платежей - нет доступа' })).toHaveTextContent('Нет')
+
+    dialog = await openEditor()
+    const readCheckbox = within(dialog).getByRole('checkbox', { name: paymentReadName })
+    readCheckbox.focus()
+    await user.keyboard(' ')
+    expect(readCheckbox).not.toBeChecked()
+    await save(dialog)
+    expect(updateRolePermissions).toHaveBeenCalledTimes(3)
+    expect(roles.find((role) => role.code === 'reports_viewer')?.permissions).toEqual(['dictionaries.read', 'reports.read'])
+    expect(within(matrix).getByRole('cell', { name: 'Просмотр отчетов: Чтение платежей - нет доступа' })).toHaveTextContent('Нет')
+    dialog = await openEditor()
+    expect(within(dialog).getByRole('checkbox', { name: paymentReadName })).not.toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: paymentWriteName })).not.toBeChecked()
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Просмотр отчетов: Отчеты' }))
+    const dictionaryRead = within(dialog).getByRole('checkbox', { name: 'Просмотр отчетов: Чтение справочников' })
+    expect(dictionaryRead).toBeEnabled()
+    await user.click(dictionaryRead)
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Выберите хотя бы одно право для роли.')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    expect(updateRolePermissions).toHaveBeenCalledTimes(3)
+  })
+
+  it('preserves a conflicting role draft until explicit reload and saves with the new version', async () => {
+    const user = userEvent.setup()
+    let roles = createRoles()
+    let reloadAttempt = 0
+    const getRoles = vi.fn(async () => {
+      reloadAttempt += 1
+      if (reloadAttempt === 2) throw new Error('Не удалось перечитать роль.')
+      if (reloadAttempt === 3) return []
+      return roles
+    })
+    const updateRolePermissions = vi.fn(async (_token: string, code: string, request: { permissions: string[]; version: string }) => {
+      if (request.version === 'role-version') {
+        roles = roles.map((role) => role.code === code ? { ...role, permissions: ['dictionaries.read'], version: 'new-role-version' } : role)
+        throw new Error('Данные изменены другим пользователем. Обновите карточку.')
+      }
+      const updated = { ...roles.find((role) => role.code === code)!, permissions: request.permissions, version: 'saved-role-version' }
+      roles = roles.map((role) => role.code === code ? updated : role)
+      return updated
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getRoles, updateRolePermissions })} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    await user.click(await screen.findByRole('button', { name: 'Изменить права роли Просмотр отчетов' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить права роли' })
+    const auditName = 'Просмотр отчетов: История изменений'
+    const reportsName = 'Просмотр отчетов: Отчеты'
+    await user.click(within(dialog).getByRole('checkbox', { name: auditName }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Данные изменены другим пользователем.')
+    expect(within(dialog).getByRole('checkbox', { name: auditName })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: reportsName })).toBeChecked()
+    const reload = within(dialog).getByRole('button', { name: 'Отбросить черновик и загрузить актуальные права' })
+    await user.click(reload)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Не удалось перечитать роль.')
+    expect(within(dialog).getByRole('checkbox', { name: auditName })).toBeChecked()
+    await user.click(reload)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Роль больше не существует.')
+    await user.click(reload)
+    await waitFor(() => expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument())
+    expect(within(dialog).getByRole('checkbox', { name: reportsName })).not.toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: auditName })).not.toBeChecked()
+    await user.click(within(dialog).getByRole('checkbox', { name: auditName }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить права роли' })).not.toBeInTheDocument())
+    expect(updateRolePermissions).toHaveBeenLastCalledWith('token', 'reports_viewer', {
+      permissions: ['audit.read', 'dictionaries.read'], version: 'new-role-version',
+    })
+    expect(roles.find((role) => role.code === 'reports_viewer')?.permissions).not.toContain('reports.read')
+    await user.type(screen.getByRole('textbox', { name: 'Поиск пользователей' }), 'Просмотр')
+    await user.click(screen.getByRole('button', { name: 'Найти', exact: true }))
+    const matrix = screen.getByRole('region', { name: 'Матрица ролей' })
+    expect(await within(matrix).findByRole('cell', { name: 'Просмотр отчетов: История изменений - разрешено' })).toHaveTextContent('Да')
+    await user.click(within(matrix).getByRole('button', { name: 'Изменить права роли Просмотр отчетов' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Изменить права роли' })
+    expect(within(reopened).getByRole('checkbox', { name: auditName })).toBeChecked()
+    await user.click(within(reopened).getByRole('checkbox', { name: reportsName }))
+    await user.click(within(reopened).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateRolePermissions).toHaveBeenLastCalledWith('token', 'reports_viewer', {
+      permissions: ['audit.read', 'dictionaries.read', 'reports.read'], version: 'saved-role-version',
+    }))
+  })
+
+  it('aborts role reload when user management unmounts and ignores its late result', async () => {
+    const user = userEvent.setup()
+    let resolveReload!: (roles: ManagedRoleDto[]) => void
+    let reloadSignal: AbortSignal | undefined
+    let calls = 0
+    const client = createUserClient({
+      getRoles: async (_token, signal) => {
+        calls += 1
+        if (calls === 1) return createRoles()
+        reloadSignal = signal
+        return new Promise<ManagedRoleDto[]>((resolve) => { resolveReload = resolve })
+      },
+      updateRolePermissions: async () => { throw new Error('Конфликт прав.') },
+    })
+    const rendered = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={client} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    await user.click(await screen.findByRole('button', { name: 'Изменить права роли Просмотр отчетов' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить права роли' })
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Просмотр отчетов: История изменений' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await user.click(await within(dialog).findByRole('button', { name: 'Отбросить черновик и загрузить актуальные права' }))
+    expect(within(dialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    rendered.unmount()
+    expect(reloadSignal?.aborted).toBe(true)
+    await act(async () => resolveReload(createRoles()))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('cancels a pending role request when leaving user management', async () => {
@@ -28199,10 +28354,10 @@ function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
 
 function createRoles(): ManagedRoleDto[] {
   return [
-    { code: 'administrator', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
-    { code: 'operator', name: 'Оператор', permissions: ['dictionaries.read', 'payments.read', 'payments.write'] },
-    { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'opening_data.adjust', 'reports.read', 'import.run'] },
-    { code: 'reports_viewer', name: 'Просмотр отчетов', permissions: ['dictionaries.read', 'reports.read'] },
+    { code: 'administrator', version: 'role-version', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
+    { code: 'operator', version: 'role-version', name: 'Оператор', permissions: ['dictionaries.read', 'payments.read', 'payments.write'] },
+    { code: 'accountant', version: 'role-version', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'opening_data.adjust', 'reports.read', 'import.run'] },
+    { code: 'reports_viewer', version: 'role-version', name: 'Просмотр отчетов', permissions: ['dictionaries.read', 'reports.read'] },
   ]
 }
 

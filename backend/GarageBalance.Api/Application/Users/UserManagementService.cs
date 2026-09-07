@@ -293,6 +293,7 @@ public sealed class UserManagementService(
             return UserManagementResult<ManagedRoleDto>.Failure("role_not_found", "Роль не найдена.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, role);
         var permissionsResult = NormalizePermissions(request.Permissions);
         if (!permissionsResult.Succeeded)
         {
@@ -492,6 +493,7 @@ public sealed class UserManagementService(
         return new ManagedRoleDto(
             role.Code,
             role.Name,
-            role.Permissions.Order(StringComparer.Ordinal).ToArray());
+            role.Permissions.Order(StringComparer.Ordinal).ToArray(),
+            role.Version);
     }
 }
