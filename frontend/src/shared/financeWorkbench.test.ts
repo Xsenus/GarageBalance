@@ -118,6 +118,9 @@ describe('finance workbench metadata', () => {
       supplierAccruals: 'Начисление поставщику',
       meterReadings: 'Показание счетчика',
     })
+    expect(getFinanceEditorTitle('income', true)).toBe('Изменить поступление')
+    expect(getFinanceEditorTitle('expense', true)).toBe('Изменить выплату')
+    expect(getFinanceEditorTitle('meterReadings', true)).toBe('Показание счетчика')
   })
 
   it('returns create submit labels for every payment editor', () => {

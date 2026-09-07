@@ -1701,7 +1701,7 @@ export function FinancePanel({
       setMeterForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'meterReadings') {
-      const nextForm = { ...meterForm, garageId: meterForm.garageId || defaultGarageId }
+      const nextForm = { ...meterForm, garageId: meterForm.garageId || defaultGarageId, currentValue: 0, comment: '' }
       setMeterForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     }
@@ -2908,7 +2908,7 @@ export function FinancePanel({
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">{financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('editMode') : getFinanceEditorUiLabel('createMode')}</p>
-                <h3 id="finance-editor-title">{getFinanceEditorTitle(financeEditor.section)}</h3>
+                <h3 id="finance-editor-title">{getFinanceEditorTitle(financeEditor.section, financeEditor.mode === 'edit')}</h3>
               </div>
               <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" disabled={saving === 'salary-accruals'} aria-label={getFinanceEditorUiLabel('close')} onClick={() => closeFinanceEditor()}>
                 <X size={18} aria-hidden="true" />
@@ -2943,7 +2943,7 @@ export function FinancePanel({
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <p className="confirmation-text" id="finance-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend запишет корректировку в историю платежей.</p>
+            <p className="confirmation-text" id="finance-edit-confirmation-description">Изменения сохранятся в истории.</p>
             <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingFinanceEditConfirmation.changes} />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={financeEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingFinanceEditConfirmation(null)}>Отмена</button>
@@ -2962,7 +2962,7 @@ export function FinancePanel({
               <div>
                 <p className="eyebrow">Черновик</p>
                 <h3 id="finance-editor-close-confirmation-title">Закрыть форму без сохранения?</h3>
-                <p>{financeEditor ? getFinanceEditorTitle(financeEditor.section) : getFinancePanelLabel('section')}</p>
+                <p>{financeEditor ? getFinanceEditorTitle(financeEditor.section, financeEditor.mode === 'edit') : getFinancePanelLabel('section')}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Остаться в форме платежа" onClick={() => setFinanceEditorCloseConfirmation(false)}>
                 <X size={18} aria-hidden="true" />
@@ -6027,7 +6027,9 @@ function PaymentsPrototypePanel({
         <GaragePaymentHistoryEditDialog
           state={historyEdit}
           saving={historyActionSaving}
-          onChange={(patch) => setHistoryEdit((value) => value ? { ...value, ...patch, error: null } : value)}
+          onChange={(patch) => setHistoryEdit((value) => value
+            ? { ...value, ...patch, error: 'error' in patch ? patch.error ?? null : null }
+            : value)}
           onClose={closeHistoryEditDialog}
           onSubmit={saveHistoryEdit}
         />
@@ -6161,8 +6163,17 @@ function GaragePaymentHistoryEditDialog({
     }
 
     const amount = parsePaymentMoney(state.amount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      onChange({ error: 'Укажите сумму платежа больше нуля.' })
+    const validationError = getIncomeValidationErrors({
+      garageId: operation.garageId ?? '',
+      incomeTypeId: operation.incomeTypeId ?? '',
+      operationDate: state.operationDate,
+      accountingMonth: `${state.accountingMonth}-01`,
+      amount,
+      documentNumber: state.documentNumber,
+      comment: state.comment,
+    })[0]
+    if (validationError) {
+      onChange({ error: validationError })
       return
     }
 
@@ -6246,7 +6257,7 @@ function GaragePaymentHistoryEditDialog({
               <X size={18} aria-hidden="true" />
             </button>
           </div>
-          <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Проверьте изменения перед сохранением. После подтверждения backend запишет корректировку в историю платежей.</p>
+          <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Изменения сохранятся в истории.</p>
           <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingChanges} />
           <div className="detail-dialog-actions contractors-dialog-actions">
             <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingChanges(null)} disabled={saving}>Отмена</button>

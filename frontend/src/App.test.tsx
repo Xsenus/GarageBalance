@@ -12800,11 +12800,33 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Месяц изменяемого платежа')).toHaveValue('06.2026')
     expect(within(editDialog).getByRole('button', { name: 'Открыть календарь: Дата изменяемого платежа' })).toBeInTheDocument()
     expect(within(editDialog).getByRole('button', { name: 'Открыть календарь: Месяц изменяемого платежа' })).toBeInTheDocument()
-    await user.clear(within(editDialog).getByLabelText('Сумма изменяемого платежа'))
-    await user.type(within(editDialog).getByLabelText('Сумма изменяемого платежа'), '1500')
+    const editedAmount = within(editDialog).getByLabelText('Сумма изменяемого платежа')
+    const editedDate = within(editDialog).getByLabelText('Дата изменяемого платежа')
+    const editedMonth = within(editDialog).getByLabelText('Месяц изменяемого платежа')
+    const saveEdit = within(editDialog).getByRole('button', { name: 'Сохранить' })
+    for (const invalidAmount of ['0', '-1']) {
+      await user.clear(editedAmount)
+      await user.type(editedAmount, invalidAmount)
+      await user.click(saveEdit)
+      expect(within(editDialog).getByRole('alert')).toHaveTextContent('Сумма поступления должна быть больше 0.')
+      expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument()
+      expect(updateIncome).not.toHaveBeenCalled()
+    }
+    await user.clear(editedAmount)
+    await user.type(editedAmount, '1500')
+    await user.clear(editedDate)
+    await user.click(saveEdit)
+    expect(within(editDialog).getByRole('alert')).toHaveTextContent('Укажите дату поступления.')
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument()
+    await user.type(editedDate, '19.06.2026')
+    await user.clear(editedMonth)
+    await user.click(saveEdit)
+    expect(within(editDialog).getByRole('alert')).toHaveTextContent('Укажите месяц поступления.')
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument()
+    await user.type(editedMonth, '06.2026')
     await user.clear(within(editDialog).getByLabelText('Комментарий к изменяемому платежу'))
     await user.type(within(editDialog).getByLabelText('Комментарий к изменяемому платежу'), 'Исправление суммы')
-    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+    await user.click(saveEdit)
     const paymentChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
     expect(updateIncome).not.toHaveBeenCalled()
     const paymentChangeList = within(paymentChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
@@ -19814,7 +19836,7 @@ describe('App', () => {
     paymentRow.focus()
     expect(paymentRow).toHaveFocus()
     await user.keyboard(' ')
-    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить поступление' })
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
 
     await user.clear(within(dialog).getByLabelText('Сумма поступления'))
@@ -19833,15 +19855,15 @@ describe('App', () => {
     expect(within(paymentChangeList).getByText('PKO-fixed')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument())
-    expect(screen.getByRole('dialog', { name: 'Новое поступление' })).toBeInTheDocument()
-    paymentChangeDialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    expect(screen.getByRole('dialog', { name: 'Изменить поступление' })).toBeInTheDocument()
+    paymentChangeDialog = await screen.findByRole('dialog', { name: 'Изменить поступление' })
     await user.click(within(paymentChangeDialog).getByRole('button', { name: 'Сохранить' }))
     paymentChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
     blockEditedIncomeRefresh = true
     await user.click(within(paymentChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
     await editedIncomeRefreshStarted
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить поступление' })).not.toBeInTheDocument())
     releaseEditedIncomeRefresh()
     await editedIncomeRefresh
     expect(await within(financePanel).findByText('PKO-fixed')).toBeInTheDocument()
@@ -19884,7 +19906,7 @@ describe('App', () => {
     const expenseRow = expenseCell.closest('tr')!
     expenseRow.focus()
     await user.keyboard(' ')
-    const dialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить выплату' })
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
     const expenseSource = within(dialog).getByRole('combobox', { name: 'Источник выплаты' })
     expect(expenseSource).toHaveTextContent('Банк · регулярный поставщик')
@@ -19913,7 +19935,7 @@ describe('App', () => {
     expect(within(expenseChangeList).getByText('RKO-fixed')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument())
-    expect(screen.getByRole('dialog', { name: 'Новая выплата' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Изменить выплату' })).toBeInTheDocument()
     expect(within(financePanel).queryByText('RKO-fixed')).not.toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
@@ -19922,7 +19944,7 @@ describe('App', () => {
     await user.click(within(expenseChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
     await editedExpenseRefreshStarted
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить выплату' })).not.toBeInTheDocument())
     releaseEditedExpenseRefresh()
     await editedExpenseRefresh
     expect(await within(financePanel).findByText('RKO-fixed')).toBeInTheDocument()
@@ -20246,6 +20268,43 @@ describe('App', () => {
     }
   }, 60_000)
 
+  it('clears a discarded new meter reading before reopening the create editor', async () => {
+    const user = userEvent.setup()
+    const createMeterReading = vi.fn()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ createMeterReading })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const meterTab = within(financePanel).getByRole('tab', { name: /Счетчики/ })
+    await user.click(meterTab)
+    await waitFor(() => expect(meterTab).toHaveAttribute('aria-selected', 'true'))
+    const tableArea = await within(financePanel).findByRole('group', { name: 'Рабочая область платежной таблицы' })
+
+    async function openMeterCreateEditor() {
+      fireEvent.contextMenu(tableArea)
+      const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
+      await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
+      return screen.findByRole('dialog', { name: 'Показание счетчика' })
+    }
+
+    let dialog = await openMeterCreateEditor()
+    const currentValue = within(dialog).getByLabelText('Текущее показание')
+    fireEvent.change(currentValue, { target: { value: '-1' } })
+    expect(currentValue).toHaveValue(-1)
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
+    const closeConfirmation = await screen.findByRole('dialog', { name: 'Закрыть форму без сохранения?' })
+    await user.click(within(closeConfirmation).getByRole('button', { name: 'Закрыть без сохранения' }))
+
+    dialog = await openMeterCreateEditor()
+    expect(within(dialog).getByLabelText('Текущее показание')).toHaveValue(0)
+    expect(within(dialog).queryByText('Есть несохраненные изменения формы платежа.')).not.toBeInTheDocument()
+    expect(createMeterReading).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Показание счетчика' })).not.toBeInTheDocument())
+  })
+
   it('opens payment context menu from focused row keyboard shortcut', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -20283,7 +20342,7 @@ describe('App', () => {
     fireEvent.keyDown(paymentRow, { key: 'F10', shiftKey: true })
     const reopenedMenu = await screen.findByRole('menu', { name: 'Операции с платежами' })
     await user.click(within(reopenedMenu).getByRole('menuitem', { name: 'Изменить' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить поступление' })
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
   })
 
@@ -20624,7 +20683,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const cases = [
-      { tab: /Расходы/, rowText: 'RKO-context-edit', dialog: 'Новая выплата' },
+      { tab: /Расходы/, rowText: 'RKO-context-edit', dialog: 'Изменить выплату' },
       { tab: /Начисления владельцам/, rowText: '2 000.00', dialog: 'Ручное начисление' },
       { tab: /Начисления поставщикам/, rowText: '650.00', dialog: 'Начисление поставщику' },
       { tab: /Счетчики/, rowText: '5.5', dialog: 'Показание счетчика' },
@@ -22165,7 +22224,7 @@ describe('App', () => {
     expect(within(dialog).getByRole('checkbox', { name: consentName })).toBeDisabled()
     expect(createExpense).toHaveBeenLastCalledWith('token', expect.objectContaining({ supplierId: 'supplier-1', expensePaymentSource: 'bank', amount: 1, confirmNegativeFundBalance: true }))
     await act(async () => finish())
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить выплату' })).not.toBeInTheDocument())
   })
 
   it('shows supplier obligation before and after expense payment', async () => {

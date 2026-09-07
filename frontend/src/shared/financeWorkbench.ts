@@ -301,7 +301,9 @@ const financeVisibleListTableHeaders: Record<FinanceVisibleListStatusKind, strin
   meterReadings: ['Месяц', 'Счетчик', 'Расход'],
 }
 
-export function getFinanceEditorTitle(section: FinanceEditorKey) {
+export function getFinanceEditorTitle(section: FinanceEditorKey, editing = false) {
+  if (editing && section === 'income') return 'Изменить поступление'
+  if (editing && section === 'expense') return 'Изменить выплату'
   return financeEditorTitles[section]
 }
 
