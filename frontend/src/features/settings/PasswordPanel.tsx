@@ -60,7 +60,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [actionCommentsRequired, actionCommentSettingsLoading, actionCommentSettingsError, saveActionCommentsRequired] = useActionCommentSettings()
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
-  const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
+  const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
+  const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
+  const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
+  const canManageDadataSettings = dadataSettingsVisible
+  const integrationTabVisible = canViewIntegrationStatus || canViewReceiptPrintingStatus || canManageIntegrationSettings || canManageDadataSettings
   const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'business-date' | 'cash-bank' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
@@ -148,10 +152,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     amount: string
     reason: string
   } | null>(null)
-  const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
-  const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
-  const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
-  const canManageDadataSettings = dadataSettingsVisible
   const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
   const canManageBusinessDate = isAdministrator(auth)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
@@ -1491,11 +1491,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       {integrationTabVisible && activeSettingsTab === 'integrations' ? (
       <>
       {canViewIntegrationStatus ? (
-        <section className="password-panel" aria-label="Интеграция 1C Fresh">
+        <section className="password-panel settings-card settings-card--integration" aria-label="Интеграция 1C Fresh">
           <div>
             <p className="eyebrow">Интеграции</p>
             <h2>1C Fresh</h2>
-            <p>Статус рабочего подключения показывается без раскрытия токенов и других защищенных настроек.</p>
+            <p>Состояние подключения без секретов.</p>
           </div>
           {integrationError ? <AsyncErrorState message={integrationError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={integrationLoading} /> : null}
           {integrationLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус 1C Fresh" rows={3} columns={4} /> : null}
@@ -1530,7 +1530,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <FormField label="Refresh token 1C Fresh">
                 <input aria-label="Новый refresh token 1C Fresh" type="password" autoComplete="new-password" value={oneCFreshToken} onChange={(event) => setOneCFreshToken(event.target.value)} />
               </FormField>
-              <p className="form-hint">Сохраненное значение нельзя просмотреть: можно только заменить новым.</p>
+              <p className="form-hint">Сохраненный токен можно только заменить.</p>
               <button className="secondary-button" type="submit" disabled={protectedSettingSaving !== null}>
                 <ShieldCheck size={16} />
                 <span>{protectedSettingSaving === 'OneCFresh:RefreshToken' ? 'Сохраняем...' : 'Сохранить токен'}</span>
@@ -1596,11 +1596,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </section>
       ) : null}
       {canViewReceiptPrintingStatus ? (
-        <section className="password-panel" aria-label="Печать чеков и квитанций">
+        <section className="password-panel settings-card settings-card--integration" aria-label="Печать чеков и квитанций">
           <div>
             <p className="eyebrow">Интеграции</p>
             <h2>Чеки и квитанции</h2>
-            <p>Статус рабочего подключения печати показывается без раскрытия параметров фискального оборудования и шаблонов.</p>
+            <p>Состояние печати без секретов.</p>
           </div>
           {receiptPrintingError ? <AsyncErrorState message={receiptPrintingError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={receiptPrintingLoading} /> : null}
           {receiptPrintingLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус печати" rows={3} columns={4} /> : null}
@@ -1646,17 +1646,17 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <ShieldCheck size={16} />
                 <span>{protectedSettingSaving === 'ReceiptPrinting:ReceiptTemplate' ? 'Сохраняем...' : 'Сохранить шаблон'}</span>
               </button>
-              <p className="form-hint">Сохраненные значения не возвращаются из API и после записи очищаются из формы.</p>
+              <p className="form-hint">Сохраненные значения не отображаются и очищаются из формы.</p>
             </form>
           ) : null}
         </section>
       ) : null}
       {canManageDadataSettings ? (
-        <section className="password-panel" aria-label="Подсказки DaData">
+        <section className="password-panel settings-card settings-card--integration" aria-label="Подсказки DaData">
           <div>
             <p className="eyebrow">Интеграции</p>
             <h2>DaData</h2>
-            <p>Ключ используется для подсказок организаций по ИНН и адресов в карточках гаражей и поставщиков.</p>
+            <p>Ключ включает подсказки организаций и адресов.</p>
           </div>
           <form className="dictionary-form" aria-label="Защищенная настройка DaData" onSubmit={(event) => {
             event.preventDefault()
@@ -1665,7 +1665,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <FormField label="API-ключ DaData">
               <input aria-label="Новый API-ключ DaData" type="password" autoComplete="new-password" value={dadataApiKey} onChange={(event) => setDadataApiKey(event.target.value)} />
             </FormField>
-            <p className="form-hint">Сохраненный ключ нельзя просмотреть: администратор может только заменить его новым.</p>
+            <p className="form-hint">Сохраненный ключ можно только заменить.</p>
             <button className="secondary-button" type="submit" disabled={protectedSettingSaving !== null}>
               <ShieldCheck size={16} />
               <span>{protectedSettingSaving === 'DaData:ApiKey' ? 'Сохраняем...' : 'Сохранить API-ключ'}</span>

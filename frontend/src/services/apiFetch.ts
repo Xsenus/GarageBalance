@@ -9,6 +9,13 @@ export class ApiRequestTimeoutError extends Error {
   }
 }
 
+export class ApiNetworkError extends Error {
+  constructor() {
+    super('Сервер недоступен. Проверьте подключение и повторите запрос.')
+    this.name = 'ApiNetworkError'
+  }
+}
+
 function createAbortError(): Error {
   return new DOMException('The operation was aborted.', 'AbortError')
 }
@@ -39,6 +46,14 @@ async function fetchAttempt(input: RequestInfo | URL, init: RequestInit, timeout
   } catch (error) {
     if (timedOut) {
       throw new ApiRequestTimeoutError()
+    }
+
+    if (callerSignal?.aborted) {
+      throw callerSignal.reason ?? error
+    }
+
+    if (error instanceof TypeError) {
+      throw new ApiNetworkError()
     }
 
     throw error
@@ -86,7 +101,7 @@ async function fetchWithRetry(input: RequestInfo | URL, init: RequestInit, metho
   try {
     return await fetchAttempt(input, init, timeoutMs)
   } catch (error) {
-    if (!canRetry || init.signal?.aborted || !(error instanceof TypeError)) {
+    if (!canRetry || init.signal?.aborted || !(error instanceof ApiNetworkError)) {
       throw error
     }
   }

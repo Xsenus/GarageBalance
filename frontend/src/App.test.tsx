@@ -37,6 +37,7 @@ import { settingsApi } from './services/settingsApi'
 import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
+import { ApiNetworkError } from './services/apiFetch'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
@@ -16870,6 +16871,30 @@ describe('App', () => {
     beforeEach(() => vi.stubEnv('VITE_SHOW_INTEGRATION_SETTINGS', 'true'))
     afterEach(() => vi.unstubAllEnvs())
 
+  it('hides integrations from a reports-only user even when staged integrations are enabled', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({
+      user: {
+        roles: ['reports_viewer'],
+        permissions: ['dictionaries.read', 'reports.read'],
+      },
+    })
+    const getOneCFreshStatus = vi.fn(async () => createOneCFreshStatus())
+    const getReceiptPrintingStatus = vi.fn(async () => createReceiptPrintingStatus())
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient({ getOneCFreshStatus, getReceiptPrintingStatus })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
+    expect(within(settings).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
+    expect(within(settings).queryByRole('tabpanel', { name: 'Интеграции' })).not.toBeInTheDocument()
+    expect(getOneCFreshStatus).not.toHaveBeenCalled()
+    expect(getReceiptPrintingStatus).not.toHaveBeenCalled()
+  })
+
   it('cancels pending integration statuses when leaving the integrations tab', async () => {
     const user = userEvent.setup()
     const signals: AbortSignal[] = []
@@ -26742,6 +26767,25 @@ describe('App', () => {
 
     resolveReleases(createReleasePage([createAppRelease()]))
     expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
+  })
+
+  it('shows a Russian connection error for release notes and keeps retry available', async () => {
+    const user = userEvent.setup()
+    const getPage = vi.fn()
+      .mockRejectedValueOnce(new ApiNetworkError())
+      .mockResolvedValueOnce(createReleasePage([createAppRelease()]))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getManageableReleases: getPage })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Что нового')
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    expect(await within(releasePanel).findByRole('alert')).toHaveTextContent('Сервер недоступен. Проверьте подключение и повторите запрос.')
+    await user.click(within(releasePanel).getByRole('button', { name: 'Повторить загрузку' }))
+    expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
+    expect(within(releasePanel).queryByRole('alert')).not.toBeInTheDocument()
+    expect(getPage).toHaveBeenCalledTimes(2)
   })
 
   it('cancels a pending release retry when the user leaves the section without showing an abort error', async () => {

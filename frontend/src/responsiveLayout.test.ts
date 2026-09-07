@@ -228,6 +228,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n  .settings-card--diagnostics .summary-strip {\n    grid-template-columns: 1fr;')
   })
 
+  it('keeps integration status cards inside the settings column at desktop and tablet widths', () => {
+    expect(settingsPanel.match(/className="password-panel settings-card settings-card--integration"/g)).toHaveLength(3)
+    expect(normalizedAppCss).toContain('.settings-card--integration {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--integration .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.settings-card--integration .summary-strip strong {\n  min-width: 0;\n  overflow-wrap: anywhere;')
+    expect(normalizedAppCss).toContain('.settings-card--cash-bank,\n  .settings-card--integration {\n    grid-template-columns: minmax(0, 1fr);')
+  })
+
   it('keeps the single garage search and grouped active card responsive', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-heading {\n  margin-bottom: 2px;')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header {\n  display: grid;\n  gap: 10px;\n  min-width: 0;\n  border: 1px solid #dfe4ec;\n  border-radius: 10px;')
@@ -394,7 +402,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card--security {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  width: 100%;')
     expect(normalizedAppCss).toContain('.settings-card--business-date {\n  width: 100%;\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('@media (max-width: 1500px) {\n  .settings-card--security,\n  .settings-card--display,\n  .settings-card--backups,\n  .settings-card--diagnostics,\n  .settings-card--business-date,\n  .settings-card--cash-bank {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('@media (max-width: 1500px) {\n  .settings-card--security,\n  .settings-card--display,\n  .settings-card--backups,\n  .settings-card--diagnostics,\n  .settings-card--business-date,\n  .settings-card--cash-bank,\n  .settings-card--integration {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.settings-form-actions {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 8px;')
     expect(normalizedAppCss).toContain('.business-date-salary-form {\n  margin-top: 4px;\n  background: #ffffff;')
     expect(normalizedAppCss).toContain('.settings-card-body {\n  display: grid;\n  min-width: 0;\n  align-content: start;\n  gap: 12px;')
@@ -403,7 +411,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-switch-row {\n  display: grid;\n  grid-template-columns: minmax(170px, 1fr) max-content;\n  min-height: 42px;')
     expect(normalizedAppCss).toContain('.settings-layout {\n    grid-template-columns: 1fr;\n    min-height: 0;')
     expect(normalizedAppCss).toContain('.password-panel,\n  .settings-card--security,\n  .settings-card--display,')
-    expect(normalizedAppCss).toContain('.settings-card--cash-bank {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--cash-bank,\n  .settings-card--integration {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('.settings-form-actions {\n    display: grid;\n    grid-template-columns: 1fr;')
     expect(settingsPanel).not.toContain('className="dialog-heading"')

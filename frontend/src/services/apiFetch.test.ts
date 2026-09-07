@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiRequestTimeoutError, apiFetch } from './apiFetch'
+import { ApiNetworkError, ApiRequestTimeoutError, apiFetch } from './apiFetch'
 
 describe('apiFetch', () => {
   afterEach(() => {
@@ -68,7 +68,10 @@ describe('apiFetch', () => {
       .mockRejectedValueOnce(new TypeError('retry failed'))
       .mockResolvedValueOnce(response)
 
-    await expect(apiFetch('/api/finance/summary')).rejects.toThrow('retry failed')
+    await expect(apiFetch('/api/finance/summary')).rejects.toMatchObject({
+      name: 'ApiNetworkError',
+      message: 'Сервер недоступен. Проверьте подключение и повторите запрос.',
+    })
     await expect(apiFetch('/api/finance/summary')).resolves.toBe(response)
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
@@ -91,7 +94,7 @@ describe('apiFetch', () => {
   it('does not retry write requests because the server may have accepted them', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('connection closed'))
 
-    await expect(apiFetch('/api/finance/income', { method: 'POST' })).rejects.toThrow('connection closed')
+    await expect(apiFetch('/api/finance/income', { method: 'POST' })).rejects.toBeInstanceOf(ApiNetworkError)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
@@ -100,7 +103,7 @@ describe('apiFetch', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('connection closed'))
     const request = new Request('https://garagebalance.test/api/finance/income', { method: 'POST' })
 
-    await expect(apiFetch(request)).rejects.toThrow('connection closed')
+    await expect(apiFetch(request)).rejects.toBeInstanceOf(ApiNetworkError)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
