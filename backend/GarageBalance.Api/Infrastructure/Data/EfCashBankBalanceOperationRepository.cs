@@ -42,11 +42,25 @@ public sealed class EfCashBankBalanceOperationRepository(GarageBalanceDbContext 
 
     public async Task<IReadOnlyList<CashBankBalanceOperation>> GetRecentAsync(
         int take,
-        CancellationToken cancellationToken) =>
-        await dbContext.CashBankBalanceOperations
-            .AsNoTracking()
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.CashBankBalanceOperations.AsNoTracking();
+        if (dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            // SQLite is used only by tests and cannot order DateTimeOffset values.
+            return (await query.ToListAsync(cancellationToken))
+                .OrderByDescending(operation => operation.OperationDate)
+                .ThenByDescending(operation => operation.CreatedAtUtc)
+                .ThenByDescending(operation => operation.Id)
+                .Take(take)
+                .ToList();
+        }
+
+        return await query
             .OrderByDescending(operation => operation.OperationDate)
+            .ThenByDescending(operation => operation.CreatedAtUtc)
             .ThenByDescending(operation => operation.Id)
             .Take(take)
             .ToListAsync(cancellationToken);
+    }
 }

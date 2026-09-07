@@ -15773,6 +15773,34 @@ describe('App', () => {
     await waitFor(() => expect(toggle).toBeChecked())
   })
 
+  it('preserves the server chronology of recent cash and bank operations when revisiting the tab', async () => {
+    const user = userEvent.setup()
+    const settingsClient = createSettingsClient({ getCashBankBalances: async () => ({
+      cashOpeningBalance: 0, bankOpeningBalance: 0, cashCurrentBalance: 2, bankCurrentBalance: 1,
+      recentOperations: [
+        { id: 'a', account: 'cash' as const, operationKind: 'adjustment' as const, direction: 'increase' as const, operationDate: '2026-09-07', amount: 1, reason: 'Поздняя операция', createdAtUtc: '2026-09-07T11:14:00Z' },
+        { id: 'z', account: 'bank' as const, operationKind: 'adjustment' as const, direction: 'increase' as const, operationDate: '2026-09-07', amount: 1, reason: 'Ранняя операция', createdAtUtc: '2026-09-07T11:06:00Z' },
+        { id: 'm', account: 'cash' as const, operationKind: 'adjustment' as const, direction: 'increase' as const, operationDate: '2026-09-06', amount: 1, reason: 'Предыдущий рабочий день', createdAtUtc: '2026-09-08T11:15:00Z' },
+      ],
+    }) })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = within(await screen.findByRole('region', { name: 'Настройки' }))
+    for (let visit = 0; visit < 2; visit++) {
+      await user.click(settings.getByRole('tab', { name: 'Касса и счёт' }))
+      const table = within(await settings.findByRole('table', { name: 'Последние операции с кассой и банковским счётом' }))
+      await table.findByText('Поздняя операция')
+      const rows = table.getAllByRole('row').slice(1)
+      expect(rows).toHaveLength(3)
+      expect(rows[0]).toHaveTextContent('Поздняя операция')
+      expect(rows[1]).toHaveTextContent('Ранняя операция')
+      expect(rows[2]).toHaveTextContent('Предыдущий рабочий день')
+      expect(rows[0].querySelector('time')).toHaveAttribute('dateTime', '2026-09-07T11:14:00Z')
+      await user.click(settings.getByRole('tab', { name: 'Отображение' }))
+    }
+  })
   it('hides opening balance editing and records a cash replenishment in a modal', async () => {
     const user = userEvent.setup()
     const createCashBankBalanceAdjustment = vi.fn(async (_accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }) => ({
