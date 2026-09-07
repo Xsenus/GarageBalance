@@ -633,7 +633,11 @@ public sealed class FinanceServiceTests
             fixtures.Garage.Id,
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
             CancellationToken.None);
-        Assert.DoesNotContain(worksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        var paidRow = Assert.Single(worksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(500m, paidRow.AccrualAmount);
+        Assert.Equal(500m, paidRow.IncomeAmount);
+        Assert.Equal(0m, paidRow.Debt);
+        Assert.Equal(0m, paidRow.FeeCampaignRemainingAmount);
         Assert.Equal(500m, worksheet.Value.AccrualTotal);
         Assert.Equal(500m, worksheet.Value.IncomeTotal);
         Assert.Equal(0m, worksheet.Value.DebtTotal);
@@ -2006,6 +2010,7 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.Equal(new DateOnly(2026, 7, 17), result.Value!.AsOfDate);
         Assert.Equal(600m, result.Value.Total);
+        Assert.Equal(1900m, result.Value.Balance);
         Assert.Collection(
             result.Value.Rows,
             opening =>
@@ -8383,8 +8388,8 @@ public sealed class FinanceServiceTests
 
         var closedFirstWorksheet = await service.GetGarageIncomeWorksheetAsync(fixtures.Garage.Id, period, CancellationToken.None);
         var closedSecondWorksheet = await service.GetGarageIncomeWorksheetAsync(secondGarage.Id, period, CancellationToken.None);
-        Assert.DoesNotContain(closedFirstWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
-        Assert.DoesNotContain(closedSecondWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(995m, Assert.Single(closedFirstWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id).IncomeAmount);
+        Assert.Equal(5m, Assert.Single(closedSecondWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id).IncomeAmount);
         Assert.Equal(995m, closedFirstWorksheet.Value.AccrualTotal);
         Assert.Equal(995m, closedFirstWorksheet.Value.IncomeTotal);
         Assert.Equal(0m, closedFirstWorksheet.Value.DebtTotal);
@@ -8861,7 +8866,7 @@ public sealed class FinanceServiceTests
             row => row.FeeCampaignId == campaign.Id);
         Assert.Equal(new DateOnly(2026, 7, 1), unpaidProjection.AccountingMonth);
         Assert.Equal(500m, unpaidProjection.Debt);
-        Assert.DoesNotContain(paidWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(500m, Assert.Single(paidWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id).IncomeAmount);
 
         var julyOnlyWorksheet = await service.GetGarageIncomeWorksheetAsync(
             partiallyPaidGarage.Id,
@@ -8895,7 +8900,7 @@ public sealed class FinanceServiceTests
             unpaidGarage.Id,
             range,
             CancellationToken.None);
-        Assert.DoesNotContain(closedPartialWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(200m, Assert.Single(closedPartialWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id).IncomeAmount);
         Assert.DoesNotContain(closedUnpaidWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
         Assert.Equal(200m, closedPartialWorksheet.Value.AccrualTotal);
         Assert.Equal(200m, closedPartialWorksheet.Value.IncomeTotal);

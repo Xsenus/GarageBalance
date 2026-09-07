@@ -594,7 +594,8 @@ public sealed record GarageOverdueDebtDto(
     string? OwnerName,
     DateOnly AsOfDate,
     decimal Total,
-    IReadOnlyList<GarageOverdueDebtRowDto> Rows);
+    IReadOnlyList<GarageOverdueDebtRowDto> Rows,
+    decimal Balance = 0m);
 
 public sealed record GarageIncomeWorksheetRequest(
     DateOnly? MonthFrom,

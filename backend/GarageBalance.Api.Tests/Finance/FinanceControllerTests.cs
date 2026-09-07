@@ -442,7 +442,7 @@ public sealed class FinanceControllerTests
             "Иванов Иван",
             new DateOnly(2026, 7, 17),
             300m,
-            [new GarageOverdueDebtRowDto("accrual", Guid.NewGuid(), "Вода", new DateOnly(2026, 5, 1), new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 11), 500m, 200m, 300m)]);
+            [new GarageOverdueDebtRowDto("accrual", Guid.NewGuid(), "Вода", new DateOnly(2026, 5, 1), new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 11), 500m, 200m, 300m)], 900m);
         var service = new FakeFinanceService
         {
             GarageOverdueDebtResult = FinanceResult<GarageOverdueDebtDto>.Success(breakdown)
@@ -453,6 +453,8 @@ public sealed class FinanceControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(breakdown, ok.Value);
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(breakdown, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Equal(900m, json.GetProperty("balance").GetDecimal());
         Assert.Equal(garageId, service.LastGarageOverdueDebtGarageId);
     }
 

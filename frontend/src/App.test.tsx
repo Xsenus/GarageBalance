@@ -10831,7 +10831,7 @@ describe('App', () => {
   it('cancels the post-payment overdue refresh when another garage is selected', async () => {
     const user = userEvent.setup()
     const firstGarage = createGarage({ id: 'garage-refresh-first', number: '83', ownerName: 'Первый владелец' })
-    const secondGarage = createGarage({ id: 'garage-refresh-second', number: '84', ownerName: 'Второй владелец' })
+    const secondGarage = createGarage({ id: 'garage-refresh-second', number: '84', ownerName: 'Второй владелец', balance: 700 })
     const waterType = createAccountingType({ id: 'income-refresh-water', name: 'Водоснабжение', code: 'water' })
     let resolveOverdue!: (value: Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>) => void
     const overdueRequest = new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>((resolve) => { resolveOverdue = resolve })
@@ -10900,12 +10900,14 @@ describe('App', () => {
       ownerName: firstGarage.ownerName,
       asOfDate: '2026-06-30',
       total: 500,
+      balance: 9999,
       rows: [{ rowKind: 'accrual', incomeTypeId: waterType.id, incomeTypeName: 'Устаревшая задолженность', accountingMonth: '2026-06-01', dueDate: '2026-06-20', overdueFromDate: '2026-06-21', originalAmount: 500, paidAmount: 0, outstandingAmount: 500 }],
     })
     await act(async () => { await overdueRequest })
 
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
     expect(within(prototype).queryByText('Устаревшая задолженность')).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('region', { name: 'Финансы' })).toHaveTextContent('Баланс-700.00')
   })
 
   it('caps a garage row payment and shows the excess as advance', async () => {
@@ -11187,13 +11189,61 @@ describe('App', () => {
     expect(savePaymentFormMeterReading).not.toHaveBeenCalled()
   })
 
+  it.each([['manual', 'success'], ['penalty', 'success'], ['manual', 'error'], ['penalty', 'stale']] as const)('refreshes the whole garage balance after a %s accrual with %s response', async (kind, response) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-accrual-balance', number: '105', ownerName: 'Проверка баланса', balance: 1000, overdueDebt: 0 })
+    const penalty = createAccountingType({ id: 'penalty-balance', code: 'penalty', name: 'Штраф', isSystem: true })
+    const nextGarage = createGarage({ id: 'garage-next-balance', number: '106', ownerName: 'Другой гараж', balance: 700, overdueDebt: 0 })
+    let rejectBalance!: (error: Error) => void
+    let saved = false
+    let resolveBalance!: (value: Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>) => void
+    const getGarageOverdueDebt = vi.fn(async () => saved
+      ? await new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>((resolve, reject) => { resolveBalance = resolve; rejectBalance = reject })
+      : { garageId: garage.id, garageNumber: garage.number, ownerName: garage.ownerName, asOfDate: '2026-09-07', total: 0, rows: [], balance: 1000 })
+    const save = async () => {
+      saved = true
+      return createAccrual({ garageId: garage.id, incomeTypeId: penalty.id, incomeTypeName: penalty.name, amount: 150, accountingMonth: '2026-09-01' })
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage, nextGarage], getIncomeTypes: async () => [penalty] })} financeClient={createFinanceClient({ getGarageOverdueDebt, createAccrual: save, createIrregularAccrual: save })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(panel).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(panel).findByRole('option', { name: /Гараж\s*105/ }))
+    await user.click(within(panel).getByRole('button', { name: kind === 'manual' ? 'Добавить начисление гаражу' : 'Начислить штраф' }))
+    const dialog = await screen.findByRole('dialog', { name: kind === 'manual' ? 'Новое начисление' : 'Начислить штраф' })
+    if (kind === 'manual') await user.type(within(dialog).getByRole('combobox', { name: 'Основание начисления гаража' }), 'Проверка')
+    else await user.type(within(dialog).getByLabelText('Причина начисления штрафа'), 'Проверка')
+    await user.type(within(dialog).getByLabelText(kind === 'manual' ? 'Сумма нерегулярного начисления гаража' : 'Сумма штрафа'), '150')
+    await user.click(within(dialog).getByRole('button', { name: kind === 'manual' ? 'Ок' : 'Начислить', exact: true }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    const finances = within(panel).getByRole('region', { name: 'Финансы' })
+    expect(finances).toHaveTextContent('Баланс-1 150.00')
+    await waitFor(() => expect(resolveBalance).toBeTypeOf('function'))
+    if (response === 'error') {
+      await act(async () => rejectBalance(new Error('Проверка недоступности')))
+      expect(panel).toHaveTextContent('Изменения сохранены, но не удалось обновить баланс и просроченную задолженность.')
+      expect(finances).toHaveTextContent('Баланс-1 150.00')
+      return
+    }
+    if (response === 'stale') {
+      const search = within(panel).getByLabelText('Поиск номера гаража или ФИО владельца')
+      await user.clear(search)
+      await user.type(search, '106')
+      await user.click(await within(panel).findByRole('option', { name: /Гараж\s*106/ }))
+    }
+    await act(async () => resolveBalance({ garageId: garage.id, garageNumber: garage.number, ownerName: garage.ownerName, asOfDate: '2026-09-07', total: 0, rows: [], balance: 1250 }))
+    expect(within(panel).getByRole('region', { name: 'Финансы' })).toHaveTextContent(response === 'stale' ? 'Баланс-700.00' : 'Баланс-1 250.00')
+  })
+
   it('saves the April trash payment and removes the paid overdue debt without reloading the page', async () => {
     const user = userEvent.setup()
     const garage = createGarage({
       id: 'garage-101-trash',
       number: '101',
       ownerName: 'Тестовый владелец',
-      balance: 360,
+      balance: 1360,
       overdueDebt: 360,
     })
     const trashIncomeType = createAccountingType({
@@ -11283,7 +11333,7 @@ describe('App', () => {
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*101\s*Тестовый владелец/ }))
 
     const finances = within(prototype).getByRole('region', { name: 'Финансы' })
-    expect(finances).toHaveTextContent('Баланс-360.00')
+    expect(finances).toHaveTextContent('Баланс-1 360.00')
     expect(finances).toHaveTextContent('Просроченная задолженность360.00')
     expect(await within(prototype).findByRole('table', { name: 'Расшифровка просроченной задолженности' })).toHaveTextContent('Мусор')
 
@@ -11302,13 +11352,18 @@ describe('App', () => {
       feeCampaignId: 'fee-campaign-trash',
     })))
     await waitFor(() => {
-      expect(finances).toHaveTextContent('Баланс0.00')
+      expect(finances).toHaveTextContent('Баланс-1 000.00')
       expect(finances).toHaveTextContent('Просроченная задолженность0.00')
       expect(within(prototype).queryByRole('table', { name: 'Расшифровка просроченной задолженности' })).not.toBeInTheDocument()
     })
     expect(paymentInput).toHaveValue('')
     expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2)
     expect(getGarageOverdueDebt).toHaveBeenCalledTimes(2)
+    expect(paymentInput).toBeDisabled()
+    expect(saveButton).toBeDisabled()
+    fireEvent.keyDown(paymentInput, { key: 'Enter' })
+    expect(createIncome).toHaveBeenCalledTimes(1)
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 101' })).toHaveTextContent('360.00')
   })
 
   it('keeps a successful payment saved when the overdue refresh fails', async () => {
@@ -11374,7 +11429,7 @@ describe('App', () => {
     await user.type(paymentInput, '100')
     await user.click(within(prototype).getByRole('button', { name: 'Сохранить платеж Вода июн.26' }))
 
-    expect(await within(prototype).findByText('Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')).toBeInTheDocument()
+    expect(await within(prototype).findByText('Изменения сохранены, но не удалось обновить баланс и просроченную задолженность. Обновите страницу.')).toBeInTheDocument()
     expect(createIncome).toHaveBeenCalledTimes(1)
     expect(paymentInput).toHaveValue('')
   })
@@ -11840,7 +11895,7 @@ describe('App', () => {
 
   it('pays opening debt through full payment when worksheet has no service rows', async () => {
     const user = userEvent.setup()
-    const garageFromDictionary = createGarage({ id: 'garage-opening-debt', number: '88', ownerName: 'Смирнов Алексей', peopleCount: 2, floorCount: 1, startingBalance: -900 })
+    const garageFromDictionary = createGarage({ id: 'garage-opening-debt', number: '88', ownerName: 'Смирнов Алексей', peopleCount: 2, floorCount: 1, startingBalance: 900 })
     const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
       garageId,
       garageNumber: '88',
@@ -11921,7 +11976,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const currentMonth = getTestCurrentMonthInputValue()
     const previousMonth = addTestMonths(currentMonth, -1)
-    const garage = createGarage({ id: 'garage-full-payment-order', number: '88-А', ownerName: 'Смирнов Алексей' })
+    const garage = createGarage({ id: 'garage-full-payment-order', number: '88-А', ownerName: 'Смирнов Алексей', balance: 2000 })
     const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
       garageId: garage.id,
       garageNumber: garage.number,
@@ -11962,6 +12017,7 @@ describe('App', () => {
       totalAmount: request.lines.reduce((sum, line) => sum + line.amount, 0),
       operations: request.lines.map((line, index) => createFinancialOperation({
         id: `ordered-full-payment-${index + 1}`,
+        garageDebtAfter: 300,
         garageId: request.garageId,
         garageNumber: garage.number,
         ownerName: garage.ownerName,
@@ -12009,6 +12065,7 @@ describe('App', () => {
         amount: 200,
       }),
     ])
+    await waitFor(() => expect(within(prototype).getByRole('region', { name: 'Финансы' })).toHaveTextContent('Баланс-1 300.00'))
   })
 
   it('includes targeted fees and irregular accruals in a precise full payment', async () => {

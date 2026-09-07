@@ -1077,7 +1077,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             Assert.Equal(650m, projection.AccrualAmount);
             Assert.Equal(300m, projection.IncomeAmount);
             Assert.Equal(350m, projection.Debt);
-            Assert.DoesNotContain(paidWorksheet.Value!.Rows, row => row.FeeCampaignId == campaignId);
+            Assert.Equal(650m, Assert.Single(paidWorksheet.Value!.Rows, row => row.FeeCampaignId == campaignId).IncomeAmount);
 
             var julyOnlyWorksheet = await service.GetGarageIncomeWorksheetAsync(
                 partialGarage.Id,
@@ -1106,7 +1106,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 partialGarage.Id,
                 range,
                 CancellationToken.None);
-            Assert.DoesNotContain(closedWorksheet.Value!.Rows, row => row.FeeCampaignId == campaignId);
+            Assert.Equal(300m, Assert.Single(closedWorksheet.Value!.Rows, row => row.FeeCampaignId == campaignId).IncomeAmount);
             Assert.Equal(300m, closedWorksheet.Value.AccrualTotal);
             Assert.Equal(300m, closedWorksheet.Value.IncomeTotal);
             Assert.Equal(0m, closedWorksheet.Value.ClosingBalance);
@@ -1903,7 +1903,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 8, 1)),
                 CancellationToken.None);
             Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
-            Assert.DoesNotContain(worksheet.Value!.Rows, row => row.FeeCampaignId == campaignId);
+            Assert.Equal(600m, Assert.Single(worksheet.Value!.Rows, row => row.FeeCampaignId == campaignId).IncomeAmount);
             Assert.Equal(600m, worksheet.Value.AccrualTotal);
             Assert.Equal(600m, worksheet.Value.IncomeTotal);
             Assert.Equal(0m, worksheet.Value.AdvanceTotal);
@@ -2180,7 +2180,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1)),
             CancellationToken.None);
         Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
-        Assert.DoesNotContain(worksheet.Value!.Rows, row => row.FeeCampaignId == campaignId);
+        Assert.Equal(600m, Assert.Single(worksheet.Value!.Rows, row => row.FeeCampaignId == campaignId).IncomeAmount);
         Assert.Equal(600m, worksheet.Value.AccrualTotal);
         Assert.Equal(600m, worksheet.Value.IncomeTotal);
         Assert.Equal(0m, worksheet.Value.AdvanceTotal);
@@ -2243,7 +2243,7 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
             CancellationToken.None);
         Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
-        Assert.DoesNotContain(worksheet.Value!.Rows, row => row.FeeCampaignId == campaignId);
+        Assert.Equal(600m, Assert.Single(worksheet.Value!.Rows, row => row.FeeCampaignId == campaignId).IncomeAmount);
         Assert.Equal(600m, worksheet.Value.AccrualTotal);
         Assert.Equal(600m, worksheet.Value.IncomeTotal);
         Assert.Equal(0m, worksheet.Value.AdvanceTotal);

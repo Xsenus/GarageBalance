@@ -36,7 +36,7 @@ import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toS
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
-import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, isFeePaymentClosed, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -47,6 +47,7 @@ import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '.
 const FinancialJournalPanel = lazy(() => import('./FinancialJournalPanel').then((module) => ({ default: module.FinancialJournalPanel })))
 const ExpenseBatchPaymentDialog = lazy(() => import('./ExpenseBatchPaymentDialog'))
 const advancedFinanceToolsVisible = false
+const garageRefreshError = 'Изменения сохранены, но не удалось обновить баланс и просроченную задолженность. Обновите страницу.'
 
 const regularAccrualRecalculationActionLabels: Record<RegularAccrualRecalculationPreviewDto['rows'][number]['action'], string> = {
   update: 'Изменить сумму и снимок',
@@ -3907,7 +3908,7 @@ function PaymentsPrototypePanel({
       const details = await financeClient.getGarageOverdueDebt(auth.accessToken, garage.id, controller.signal)
       if (!controller.signal.aborted && selectedGarageIdRef.current === garage.id) {
         setSelectedGarage((currentGarage) => currentGarage?.id === garage.id
-          ? { ...currentGarage, overdueDebt: details.total }
+          ? { ...currentGarage, overdueDebt: details.total, balance: details.balance ?? currentGarage.balance }
           : currentGarage)
         setOverdueDebtDetails(details.total > 0 ? details : null)
         setOverdueDebtError(null)
@@ -3918,14 +3919,25 @@ function PaymentsPrototypePanel({
     }
   }
 
-  function refreshGarageAfterIncomeSave(garage: PaymentsPrototypeGarage, overdueDebtErrorMessage: string) {
+  function refreshGarageAfterIncomeSave(garage: PaymentsPrototypeGarage) {
     void Promise.all([
       refreshGarageOverdueDebt(garage),
       loadGarageIncomeWorksheet(garage),
       paymentHistoryOpen ? loadGaragePaymentHistory(garage) : Promise.resolve(),
     ]).then(([overdueDebtRefreshed]) => {
       if (!overdueDebtRefreshed && selectedGarageIdRef.current === garage.id) {
-        setPaymentError(overdueDebtErrorMessage)
+        setPaymentError(garageRefreshError)
+      }
+    })
+  }
+
+  function refreshGarageAfterAccrualSave(garage: PaymentsPrototypeGarage, amount: number) {
+    setSelectedGarage((current) => current?.id === garage.id
+      ? { ...current, balance: roundPaymentMoney(current.balance + amount) }
+      : current)
+    void refreshGarageOverdueDebt(garage).then((refreshed) => {
+      if (!refreshed && selectedGarageIdRef.current === garage.id) {
+        setPaymentError(garageRefreshError)
       }
     })
   }
@@ -4021,7 +4033,7 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + balanceDelta) }
         : currentGarage)
       closeHistoryEditDialog()
-      refreshGarageAfterIncomeSave(selectedGarage, 'Платеж изменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
+      refreshGarageAfterIncomeSave(selectedGarage)
     } catch (error) {
       setHistoryEdit((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось изменить платеж.' } : state)
     } finally {
@@ -4049,7 +4061,7 @@ function PaymentsPrototypePanel({
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + canceledAmount) }
         : currentGarage)
       closeHistoryCancelDialog()
-      refreshGarageAfterIncomeSave(selectedGarage, 'Платеж отменён, но не удалось обновить просроченную задолженность. Обновите страницу.')
+      refreshGarageAfterIncomeSave(selectedGarage)
     } catch (error) {
       setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось отменить платеж.' } : state)
     } finally {
@@ -4269,6 +4281,7 @@ function PaymentsPrototypePanel({
   }
 
   async function commitGaragePayment(row: GarageIncomePrototypeRow, warningConfirmed = false) {
+    if (isFeePaymentClosed(row)) return
     const amount = parsePaymentMoney(row.paymentDraft)
     if (!Number.isFinite(amount) || amount <= 0) {
       return
@@ -4328,7 +4341,6 @@ function PaymentsPrototypePanel({
       })
       const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
       const historyDebtAfter = operation.garageDebtAfter ?? nextDebt
-      const optimisticGarageDebtAfter = operation.garageDebtAfter ?? selectedGarage.balance - amount
 
       setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, advance: nextAdvance, debt: nextDebt } : currentRow))
       setGarageWorksheetSummary((currentSummary) => currentSummary
@@ -4345,10 +4357,10 @@ function PaymentsPrototypePanel({
         ...currentRows,
       ])
       setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
-        ? { ...currentGarage, balance: optimisticGarageDebtAfter }
+        ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance - amount) }
         : currentGarage)
 
-      refreshGarageAfterIncomeSave(selectedGarage, 'Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')
+      refreshGarageAfterIncomeSave(selectedGarage)
     } catch (error) {
       if (warningController?.signal.aborted) return
       setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж.')
@@ -4535,13 +4547,11 @@ function PaymentsPrototypePanel({
       ...currentRows,
     ])
 
-    const optimisticGarageDebtAfter = batch.operations.at(-1)?.garageDebtAfter
-      ?? Math.max(selectedGarage.balance - request.amount, 0)
     setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
-      ? { ...currentGarage, balance: optimisticGarageDebtAfter }
+      ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance - request.amount) }
       : currentGarage)
 
-    refreshGarageAfterIncomeSave(selectedGarage, 'Полная оплата сохранена, но не удалось обновить просроченную задолженность. Обновите страницу.')
+    refreshGarageAfterIncomeSave(selectedGarage)
 
     return null
   }
@@ -4610,6 +4620,7 @@ function PaymentsPrototypePanel({
         }
       : currentSummary)
 
+    refreshGarageAfterAccrualSave(selectedGarage, savedAccrual.amount)
     return null
   }
 
@@ -4680,6 +4691,7 @@ function PaymentsPrototypePanel({
         }
       : currentSummary)
 
+    refreshGarageAfterAccrualSave(selectedGarage, savedAccrual.amount)
     return null
   }
 
@@ -5490,7 +5502,7 @@ function PaymentsPrototypePanel({
                                 <MoneyTextInput
                                   className="payments-prototype-payment-input"
                                   aria-label={`Платеж ${row.service} ${row.monthLabel}`}
-                                  disabled={savingPaymentRowId === row.id}
+                                  disabled={savingPaymentRowId === row.id || isFeePaymentClosed(row)}
                                   value={row.paymentDraft}
                                   onValueChange={(paymentDraft) => handlePaymentDraftChange(row.id, paymentDraft)}
                                   onBlur={() => formatPaymentDraft(row.id)}
@@ -5506,7 +5518,7 @@ function PaymentsPrototypePanel({
                                   className="icon-button payments-prototype-payment-save"
                                   aria-label={savingPaymentRowId === row.id ? `Сохраняется платеж ${row.service} ${row.monthLabel}` : `Сохранить платеж ${row.service} ${row.monthLabel}`}
                                   title={savingPaymentRowId === row.id ? 'Сохраняется платёж' : 'Сохранить платёж'}
-                                  disabled={savingPaymentRowId === row.id || !Number.isFinite(parsePaymentMoney(row.paymentDraft)) || parsePaymentMoney(row.paymentDraft) <= 0}
+                                  disabled={savingPaymentRowId === row.id || isFeePaymentClosed(row) || !Number.isFinite(parsePaymentMoney(row.paymentDraft)) || parsePaymentMoney(row.paymentDraft) <= 0}
                                   onClick={() => void commitGaragePayment(row)}
                                 >
                                   {savingPaymentRowId === row.id

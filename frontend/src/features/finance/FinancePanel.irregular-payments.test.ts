@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GarageIncomeWorksheetDto } from '../../services/financeApi'
-import { createGarageIncomeRowsFromWorksheet } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, isFeePaymentClosed } from './garageIncomeWorksheetRows'
 
 function worksheet(rows: GarageIncomeWorksheetDto['rows']): GarageIncomeWorksheetDto {
   return {
@@ -21,6 +21,16 @@ function worksheet(rows: GarageIncomeWorksheetDto['rows']): GarageIncomeWorkshee
 }
 
 describe('irregular payment worksheet mapping', () => {
+  it.each([
+    [null, 0, 0, false],
+    ['fee', 100, 100, false],
+    ['fee', 0, 100, true],
+    ['fee', 100, 0, true],
+    ['fee', -10, 100, true],
+    ['fee', 100, undefined, false],
+  ] as const)('protects settled fee %s with debt %s and remaining %s', (feeCampaignId, debt, feeCampaignRemainingAmount, expected) => {
+    expect(isFeePaymentClosed({ feeCampaignId, debt, feeCampaignRemainingAmount })).toBe(expected)
+  })
   it('keeps the unpaid remainder linked to its irregular payment', () => {
     const rows = createGarageIncomeRowsFromWorksheet(worksheet([{
       accountingMonth: '2026-08-01',

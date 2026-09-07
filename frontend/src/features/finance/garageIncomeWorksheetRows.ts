@@ -72,6 +72,10 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
   })
 }
 
+export function isFeePaymentClosed(row: Pick<GarageIncomePrototypeRow, 'feeCampaignId' | 'feeCampaignRemainingAmount' | 'debt'>) {
+  return Boolean(row.feeCampaignId && (row.debt <= 0 || row.feeCampaignRemainingAmount === 0))
+}
+
 export function shouldShowAccrualReason(row: GarageIncomePrototypeRow, mode: AccrualReasonDisplayMode) {
   if (!row.reason || mode === 'hidden') {
     return false

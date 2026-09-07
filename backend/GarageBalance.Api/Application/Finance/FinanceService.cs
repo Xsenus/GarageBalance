@@ -396,7 +396,8 @@ public sealed class FinanceService(
             garage.Owner?.FullName,
             asOfDate,
             total,
-            rows));
+            rows,
+            MoneyMath.RoundMoney(garage.StartingBalance + totals.AccrualTotals.GetValueOrDefault(garageId) - totals.IncomeTotals.GetValueOrDefault(garageId))));
     }
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)
@@ -631,7 +632,7 @@ public sealed class FinanceService(
                 rows.RemoveAll(row => row.FeeCampaignId == campaign.Id);
             }
 
-            if (campaign.ClosedAtUtc.HasValue || accrual is null)
+            if (accrual is null)
             {
                 continue;
             }
@@ -648,7 +649,11 @@ public sealed class FinanceService(
                 .Sum(allocation => allocation.Amount));
             var payable = MoneyMath.RoundMoney(Math.Max(accrual.Amount - paidBeforePeriod, 0m));
             var debt = MoneyMath.RoundMoney(Math.Max(payable - paidInPeriod, 0m));
-            if (campaignRemaining <= 0m || debt <= 0m)
+            var accruedInPeriod = accrual.AccountingMonth >= monthFrom && accrual.AccountingMonth <= monthTo
+                ? MoneyMath.RoundMoney(accrual.Amount)
+                : 0m;
+            if ((campaign.ClosedAtUtc.HasValue || campaignRemaining <= 0m || debt <= 0m)
+                && accruedInPeriod == 0m && paidInPeriod == 0m)
             {
                 continue;
             }
@@ -664,15 +669,13 @@ public sealed class FinanceService(
                 null,
                 null,
                 null,
-                accrual.AccountingMonth >= monthFrom && accrual.AccountingMonth <= monthTo
-                    ? MoneyMath.RoundMoney(accrual.Amount)
-                    : 0m,
+                accruedInPeriod,
                 payable,
                 paidInPeriod,
                 0m,
                 debt,
                 FeeCampaignId: campaign.Id,
-                FeeCampaignRemainingAmount: campaignRemaining,
+                FeeCampaignRemainingAmount: campaign.ClosedAtUtc.HasValue ? 0m : campaignRemaining,
                 Reason: accrual.Comment));
         }
 

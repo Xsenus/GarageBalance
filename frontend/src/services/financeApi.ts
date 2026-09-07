@@ -367,6 +367,7 @@ export type GarageOverdueDebtDto = {
   ownerName: string | null
   asOfDate: string
   total: number
+  balance?: number
   rows: GarageOverdueDebtRowDto[]
 }
 
