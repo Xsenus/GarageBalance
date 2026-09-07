@@ -20098,6 +20098,10 @@ describe('App', () => {
       comment: 'Отменено: ошибочное показание',
     })
     const activeReading = { ...canceledReading, isCanceled: false, comment: null }
+    const canceledAccrualComment = 'Начисление по показанию electricity: показание отменено; заметка сотрудника'
+    const restoredAccrualComment = 'Начисление по показанию electricity: расход 28; заметка сотрудника'
+    let meterAccrual = createAccrual({ amount: 0, comment: canceledAccrualComment })
+    const getAccrualsPage = vi.fn(async () => ({ items: [meterAccrual], totalCount: 1, offset: 0, limit: 25 }))
     let pageItems: MeterReadingDto[] = [canceledReading]
     let blockMeterRefresh = false
     let resolveMeterRefreshStarted!: () => void
@@ -20119,15 +20123,18 @@ describe('App', () => {
     })
     const restoreMeterReading = vi.fn(async (_token: string, meterReadingId: string) => {
       pageItems = [activeReading]
+      meterAccrual = { ...meterAccrual, amount: 209.16, comment: restoredAccrualComment }
       return { ...activeReading, id: meterReadingId }
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getMeterReadingsPage, restoreMeterReading })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getMeterReadingsPage, restoreMeterReading, getAccrualsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+    expect(await within(financePanel).findByText(canceledAccrualComment)).toBeInTheDocument()
     await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
     await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledWith('token', expect.objectContaining({ limit: 25, offset: 0 }), expect.any(AbortSignal)))
     const menu = await openFinanceContextMenuByCellText(financePanel, '28')
@@ -20153,6 +20160,10 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть показание счетчика?' })).not.toBeInTheDocument())
     releaseMeterRefresh()
     await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(2))
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+    expect(await within(financePanel).findByText(restoredAccrualComment)).toBeInTheDocument()
+    expect(within(financePanel).queryByText(canceledAccrualComment)).not.toBeInTheDocument()
+    expect(within(financePanel).getByText('209.16')).toBeInTheDocument()
   })
 
   it('restores canceled payment and accrual records from payment context menu', async () => {

@@ -654,7 +654,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(accrual => accrual.DueDateReviewReason).HasMaxLength(80);
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
             entity.Property(accrual => accrual.Basis).HasMaxLength(200);
-            entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
+            entity.Property(accrual => accrual.Comment).HasColumnType("text");
             entity.Property(accrual => accrual.CalculationDetailsJson).HasColumnType("jsonb");
             entity.Property(accrual => accrual.CalculationMeterKind).HasMaxLength(80);
             entity.HasIndex(accrual => accrual.AccountingMonth);

@@ -7132,9 +7132,12 @@ public sealed class FinanceService(
                 }
             }
 
-            if (newAmount.HasValue && (accrual.Amount != newAmount.Value || newDetails is not null))
+            var newComment = newAmount.HasValue
+                ? MeteredAccrualComments.Refresh(accrual.Comment, newDetails?.MeterConsumption)
+                : accrual.Comment;
+            if (newAmount.HasValue && (accrual.Amount != newAmount.Value || newDetails is not null || newComment != accrual.Comment))
             {
-                recalculations.Add(new MeteredAccrualRecalculation(accrual, newAmount.Value, newDetails));
+                recalculations.Add(new MeteredAccrualRecalculation(accrual, newAmount.Value, newDetails, newComment));
             }
         }
 
@@ -7188,6 +7191,7 @@ public sealed class FinanceService(
             var before = AccrualAuditSnapshot.From(accrual);
             var oldAmount = accrual.Amount;
             accrual.Amount = recalculation.NewAmount;
+            accrual.Comment = recalculation.Comment;
             if (recalculation.Details is not null)
             {
                 accrual.CalculationDetailsJson = RegularAccrualCalculator.Serialize(recalculation.Details);
@@ -7199,8 +7203,8 @@ public sealed class FinanceService(
                 "finance.accrual_updated_from_meter_reading",
                 accrual,
                 $"{reason}: было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.",
-                new Dictionary<string, object?> { ["amount"] = oldAmount },
-                new Dictionary<string, object?> { ["amount"] = recalculation.NewAmount });
+                new Dictionary<string, object?> { ["amount"] = oldAmount, ["comment"] = before.Comment },
+                new Dictionary<string, object?> { ["amount"] = recalculation.NewAmount, ["comment"] = recalculation.Comment });
         }
     }
 
@@ -9084,7 +9088,8 @@ public sealed class FinanceService(
     private sealed record MeteredAccrualRecalculation(
         Accrual Accrual,
         decimal NewAmount,
-        AccrualCalculationDetailsDto? Details);
+        AccrualCalculationDetailsDto? Details,
+        string? Comment);
 
     private sealed record AccrualAuditSnapshot(
         string GarageNumber,
