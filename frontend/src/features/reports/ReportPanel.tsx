@@ -14,11 +14,12 @@ import { formatCount, formatDateOnly, formatMoney, formatMonth, formatOperationT
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { filterAndRankReportOptions } from '../../shared/reportFilters'
-import type { RankableReportFilterOption, ReportQuickPeriodRange } from '../../shared/reportFilters'
+import type { RankableReportFilterOption } from '../../shared/reportFilters'
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
 import { SelectControl } from '../../shared/SelectControl'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { getReportDateRangeValidationErrors } from '../../shared/validation'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
@@ -252,15 +253,21 @@ function formatReportAmount(value: number | undefined) {
   return value === undefined ? '—' : formatMoney(value)
 }
 
-function getReportLoadError(error: unknown) {
-  return error instanceof Error ? error.message : 'Не удалось загрузить отчёт.'
+
+function scheduleReportLoad<T>(request: (signal: AbortSignal) => Promise<T>, onSuccess: (report: T) => void, setLoading: (value: boolean) => void, setError: (value: string | null) => void) {
+  return scheduleDebouncedRequest({
+    delay: 0,
+    request,
+    onStart: () => { setLoading(true); setError(null) },
+    onSuccess: (report) => { onSuccess(report); setLoading(false) },
+    onError: (caught) => { setError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчёт.'); setLoading(false) },
+  })
 }
 
-function getReportView<T extends object>(report: T | null, loading: boolean, error: string | null, reportQueries: WeakMap<object, string>, currentQuery: string) {
-  const data = report && reportQueries.get(report) === currentQuery ? report : null
-  return [data, !data && !error, loading && !!data] as const
-}
 
+function renderReportTotal(label: string, amount: number | undefined) {
+  return <div className="report-workbook-summary-row report-workbook-summary-row--single"><span><strong>{label}</strong><b>{formatReportAmount(amount)}</b></span></div>
+}
 function renderReportLoadingState(primaryLoading: boolean, refreshing: boolean) {
   if (refreshing) {
     return <BackgroundRefreshStatus label="Обновляем отчёт" />
@@ -286,6 +293,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     bankDeposits: { dateFrom: today, dateTo: today },
     funds: { dateFrom: today, dateTo: today },
   })
+  const reportPeriodErrorId = useId()
+  const activeMonthRange = monthlyFilters[activeReportTab as ReportMonthlyFilterKey]
+  const activeDateRange = dateFilters[activeReportTab as ReportDateFilterKey]
+  const reportPeriodError = activeMonthRange || activeDateRange
+    ? getReportDateRangeValidationErrors(
+      activeMonthRange ? getReportMonthStart(activeMonthRange.monthFrom) : activeDateRange.dateFrom,
+      activeMonthRange ? getReportMonthStart(activeMonthRange.monthTo) : activeDateRange.dateTo,
+      'периода отчета',
+    ).join(' ') : ''
   const [selectedFundIds, setSelectedFundIds] = useState<string[]>([])
   const [fundFilterOptions, setFundFilterOptions] = useState<ReportFilterOption[]>([])
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
@@ -438,53 +454,32 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   }, [activeReportTab, auth.accessToken, reportClient])
 
   useEffect(() => {
-    if (activeReportTab !== 'consolidated') {
+    if (activeReportTab !== 'consolidated' || reportPeriodError) {
       return
     }
 
-    return scheduleDebouncedRequest({
-      delay: 0,
-      onStart: () => {
-        setConsolidatedReportLoading(true)
-        setConsolidatedReportError(null)
-      },
-      request: (signal) => {
+    return scheduleReportLoad((signal) => {
         const consolidatedFilter = monthlyFilters.consolidated
-        const monthFrom = getReportMonthStart(consolidatedFilter.monthFrom)
-        const monthTo = getReportMonthStart(consolidatedFilter.monthTo)
         const sort = reportSorts.consolidated
         return reportClient.getConsolidatedReport(auth.accessToken, {
-          monthFrom,
-          monthTo,
+          monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+          monthTo: getReportMonthStart(consolidatedFilter.monthTo),
           limit: 120,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
         }, signal)
-      },
-      onSuccess: (loadedConsolidated) => {
+      }, (loadedConsolidated) => {
         reportQueries.set(loadedConsolidated, currentReportQuery)
         setConsolidatedReport(loadedConsolidated)
-        setConsolidatedReportLoading(false)
-      },
-      onError: (caught) => {
-        setConsolidatedReportError(getReportLoadError(caught))
-        setConsolidatedReportLoading(false)
-      },
-    })
-  }, [activeReportTab, auth.accessToken, currentReportQuery, monthlyFilters.consolidated, reportClient, reportQueries, reportReloadRevision, reportSorts.consolidated])
+      }, setConsolidatedReportLoading, setConsolidatedReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, monthlyFilters.consolidated, reportClient, reportQueries, reportReloadRevision, reportSorts.consolidated])
 
   useEffect(() => {
-    if (activeReportTab !== 'fees') {
+    if (activeReportTab !== 'fees' || reportPeriodError) {
       return
     }
 
-    return scheduleDebouncedRequest({
-      delay: 0,
-      onStart: () => {
-        setFeeReportLoading(true)
-        setFeeReportError(null)
-      },
-      request: (signal) => {
+    return scheduleReportLoad((signal) => {
         const sort = reportSorts.fees
         return reportClient.getFeeReport(auth.accessToken, {
           feeEntryIds: selectedFeeEntryIds.length > 0 ? selectedFeeEntryIds : undefined,
@@ -493,39 +488,25 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           sortBy: sort?.field,
           sortDirection: sort?.direction,
         }, signal)
-      },
-      onSuccess: (report) => {
+      }, (report) => {
         reportQueries.set(report, currentReportQuery)
         setFeeReport(report)
         setFeeFilterOptions((current) => Array.from(new Map([
           ...current,
           ...report.summaryRows.map((row) => ({ value: row.incomeTypeId, label: row.name, description: row.goal })),
         ].map((option) => [option.value, option])).values()))
-        setFeeReportLoading(false)
-      },
-      onError: (caught) => {
-        setFeeReportError(getReportLoadError(caught))
-        setFeeReportLoading(false)
-      },
-    })
-  }, [activeReportTab, auth.accessToken, currentReportQuery, reportClient, reportQueries, reportReloadRevision, reportSorts.fees, selectedFeeEntryIds])
+      }, setFeeReportLoading, setFeeReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, reportClient, reportQueries, reportReloadRevision, reportSorts.fees, selectedFeeEntryIds])
 
   useEffect(() => {
-    if (activeReportTab !== 'garages') {
+    if (activeReportTab !== 'garages' || reportPeriodError) {
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadGarageReport() {
-      setGarageReportLoading(true)
-      setGarageReportError(null)
-      try {
+    return scheduleReportLoad((signal) => {
         const filter = monthlyFilters.garages
         const sort = reportSorts.garages
-        const report = await reportClient.getGarageReport(auth.accessToken, {
+        return reportClient.getGarageReport(auth.accessToken, {
           monthFrom: getReportMonthStart(filter.monthFrom),
           monthTo: getReportMonthStart(filter.monthTo),
           garageIds: selectedGarageIds,
@@ -534,48 +515,24 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setGarageReport(report)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setGarageReportError(getReportLoadError(caught))
-        }
-      } finally {
-        if (!ignore) {
-          setGarageReportLoading(false)
-        }
-      }
-    }
-
-    void loadGarageReport()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, garageAccrualsGrouped, monthlyFilters.garages, reportClient, reportQueries, reportReloadRevision, reportSorts.garages, selectedGarageIds])
+        }, signal)
+      }, (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setGarageReport(report)
+      }, setGarageReportLoading, setGarageReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, garageAccrualsGrouped, monthlyFilters.garages, reportClient, reportQueries, reportReloadRevision, reportSorts.garages, selectedGarageIds])
 
   useEffect(() => {
-    if (activeReportTab !== 'payouts') {
+    if (activeReportTab !== 'payouts' || reportPeriodError) {
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadPayoutReport() {
-      setPayoutReportLoading(true)
-      setPayoutReportError(null)
-      try {
+    return scheduleReportLoad((signal) => {
         const filter = monthlyFilters.payouts
         const supplierIds = selectedCounterpartyKeys.filter((key) => key.startsWith('supplier:')).map((key) => key.slice('supplier:'.length))
         const staffMemberIds = selectedCounterpartyKeys.filter((key) => key.startsWith('staff:')).map((key) => key.slice('staff:'.length))
         const sort = reportSorts.payouts
-        const report = await reportClient.getExpenseReport(auth.accessToken, {
+        return reportClient.getExpenseReport(auth.accessToken, {
           dateFrom: getReportMonthStart(filter.monthFrom),
           dateTo: getReportMonthEnd(filter.monthTo),
           supplierIds,
@@ -584,48 +541,23 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setPayoutReport(report)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setPayoutReportError(getReportLoadError(caught))
-        }
-      } finally {
-        if (!ignore) {
-          setPayoutReportLoading(false)
-        }
-      }
-    }
-
-    void loadPayoutReport()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, monthlyFilters.payouts, reportClient, reportQueries, reportReloadRevision, reportSorts.payouts, selectedCounterpartyKeys])
+        }, signal)
+      }, (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setPayoutReport(report)
+      }, setPayoutReportLoading, setPayoutReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, monthlyFilters.payouts, reportClient, reportQueries, reportReloadRevision, reportSorts.payouts, selectedCounterpartyKeys])
 
   useEffect(() => {
-    if (activeReportTab !== 'income') {
+    if (activeReportTab !== 'income' || reportPeriodError) {
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadIncomeReport() {
-      setIncomeReportLoading(true)
-      setIncomeReportError(null)
-      try {
+    return scheduleReportLoad((signal) => {
         const filter = dateFilters.income
         const sort = reportSorts.income
-        const report = await reportClient.getIncomeReport(auth.accessToken, {
-          dateFrom: filter.dateFrom,
-          dateTo: filter.dateTo,
+        return reportClient.getIncomeReport(auth.accessToken, {
+          ...filter,
           garageIds: selectedIncomeGarageIds,
           rowMode: 'payments',
           groupPayments: incomePaymentsGrouped,
@@ -633,204 +565,79 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setIncomeReport(report)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setIncomeReportError(getReportLoadError(caught))
-        }
-      } finally {
-        if (!ignore) {
-          setIncomeReportLoading(false)
-        }
-      }
-    }
-
-    void loadIncomeReport()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, dateFilters.income, incomePaymentsGrouped, reportClient, reportQueries, reportReloadRevision, reportSorts.income, selectedIncomeGarageIds])
+        }, signal)
+      }, (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setIncomeReport(report)
+      }, setIncomeReportLoading, setIncomeReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, dateFilters.income, incomePaymentsGrouped, reportClient, reportQueries, reportReloadRevision, reportSorts.income, selectedIncomeGarageIds])
 
   useEffect(() => {
-    if (activeReportTab !== 'cashPayments') {
+    if (activeReportTab !== 'cashPayments' || reportPeriodError) {
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadCashPayments() {
-      setCashPaymentReportLoading(true)
-      setCashPaymentReportError(null)
-      try {
+    return scheduleReportLoad((signal) => {
         const filter = dateFilters.cashPayments
         const sort = reportSorts.cashPayments
-        const report = await reportClient.getCashPaymentReport(auth.accessToken, {
-          dateFrom: filter.dateFrom,
-          dateTo: filter.dateTo,
+        return reportClient.getCashPaymentReport(auth.accessToken, {
+          ...filter,
           offset: 0,
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setCashPaymentReport(report)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setCashPaymentReportError(getReportLoadError(caught))
-        }
-      } finally {
-        if (!ignore) {
-          setCashPaymentReportLoading(false)
-        }
-      }
-    }
-
-    void loadCashPayments()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, dateFilters.cashPayments, reportClient, reportQueries, reportReloadRevision, reportSorts.cashPayments])
+        }, signal)
+      }, (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setCashPaymentReport(report)
+      }, setCashPaymentReportLoading, setCashPaymentReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, dateFilters.cashPayments, reportClient, reportQueries, reportReloadRevision, reportSorts.cashPayments])
 
   useEffect(() => {
-    if (activeReportTab !== 'bankDeposits') {
+    if (activeReportTab !== 'bankDeposits' || reportPeriodError) {
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadBankDeposits() {
-      setBankDepositReportLoading(true)
-      setBankDepositReportError(null)
-      try {
+    return scheduleReportLoad((signal) => {
         const filter = dateFilters.bankDeposits
         const sort = reportSorts.bankDeposits
-        const report = await reportClient.getBankDepositReport(auth.accessToken, {
-          dateFrom: filter.dateFrom,
-          dateTo: filter.dateTo,
+        return reportClient.getBankDepositReport(auth.accessToken, {
+          ...filter,
           offset: 0,
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setBankDepositReport(report)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setBankDepositReportError(getReportLoadError(caught))
-        }
-      } finally {
-        if (!ignore) {
-          setBankDepositReportLoading(false)
-        }
-      }
-    }
-
-    void loadBankDeposits()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, dateFilters.bankDeposits, reportClient, reportQueries, reportReloadRevision, reportSorts.bankDeposits])
+        }, signal)
+      }, (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setBankDepositReport(report)
+      }, setBankDepositReportLoading, setBankDepositReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, dateFilters.bankDeposits, reportClient, reportQueries, reportReloadRevision, reportSorts.bankDeposits])
 
   useEffect(() => {
-    if (activeReportTab !== 'funds') {
+    if (activeReportTab !== 'funds' || reportPeriodError) {
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadFundChanges() {
-      setFundChangeReportLoading(true)
-      setFundChangeReportError(null)
-      try {
+    return scheduleReportLoad((signal) => {
         const filter = dateFilters.funds
         const sort = reportSorts.funds
-        const report = await reportClient.getFundChangeReport(auth.accessToken, {
+        return reportClient.getFundChangeReport(auth.accessToken, {
           ...filter,
           fundIds: selectedFundIds,
           offset: 0,
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setFundChangeReport(report)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setFundChangeReportError(getReportLoadError(caught))
-        }
-      } finally {
-        if (!ignore) {
-          setFundChangeReportLoading(false)
-        }
-      }
-    }
-
-    void loadFundChanges()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, dateFilters.funds, reportClient, reportQueries, reportReloadRevision, reportSorts.funds, selectedFundIds])
+        }, signal)
+      }, (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setFundChangeReport(report)
+      }, setFundChangeReportLoading, setFundChangeReportError)
+  }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, dateFilters.funds, reportClient, reportQueries, reportReloadRevision, reportSorts.funds, selectedFundIds])
 
   const selectedTab = reportWorkbookTabs[activeReportIndex]
   const feeVariationLabel = selectedFeeEntryIds.length === 0 ? 'Все сборы' : `Выбрано сборов: ${selectedFeeEntryIds.length}`
-
-  function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
-    setMonthlyFilters((current) => ({
-      ...current,
-      [key]: {
-        ...current[key],
-        [field]: value,
-      },
-    }))
-  }
-
-  function updateDateFilter(key: ReportDateFilterKey, field: keyof ReportDateRange, value: string) {
-    setDateFilters((current) => ({
-      ...current,
-      [key]: {
-        ...current[key],
-        [field]: value,
-      },
-    }))
-  }
-
-  function applyMonthlyQuickPeriod(key: ReportMonthlyFilterKey, range: ReportQuickPeriodRange) {
-    setMonthlyFilters((current) => ({
-      ...current,
-      [key]: { monthFrom: range.monthFrom, monthTo: range.monthTo },
-    }))
-  }
-
-  function applyDateQuickPeriod(key: ReportDateFilterKey, range: ReportQuickPeriodRange) {
-    setDateFilters((current) => ({
-      ...current,
-      [key]: { dateFrom: range.dateFrom, dateTo: range.dateTo },
-    }))
-  }
 
   async function downloadConsolidatedReport(extension: 'xlsx' | 'pdf') {
     const filter = monthlyFilters.consolidated
@@ -1136,72 +943,53 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
   }
 
-  function renderReportExportButton(extension: 'xlsx' | 'pdf', exportKey: string, onClick: () => void) {
-    const label = extension === 'xlsx' ? 'Скачать XLSX' : 'Скачать PDF'
-    const Icon = extension === 'xlsx' ? FileSpreadsheet : FileText
-    const isExporting = reportExporting === exportKey
-
-    return (
-      <button className={`secondary-button report-export-button report-export-button--${extension}`} type="button" aria-label={label} aria-busy={isExporting} title={label} disabled={reportExporting !== null} onClick={onClick}>
-        {isExporting ? <LoaderCircle className="report-export-button__spinner" size={19} aria-hidden="true" /> : <Icon size={19} strokeWidth={2.1} aria-hidden="true" />}
-      </button>
-    )
+  function getReportView<T extends object>(report: T | null, loading: boolean, error: string | null) {
+    const data = report && reportQueries.get(report) === currentReportQuery ? report : null
+    return [data, !data && !error && !reportPeriodError, loading && !!data] as const
   }
 
-  function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode; actions?: ReactNode }) {
-    const filter = monthlyFilters[key]
+  function renderReportError(error: string | null, loading: boolean) {
+    return !reportPeriodError && error ? <AsyncErrorState message={error} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={loading} /> : null
+  }
+  function renderReportExports(key: string, onExport: (extension: 'xlsx' | 'pdf') => Promise<void>) {
+    return (['xlsx', 'pdf'] as const).map((extension) => {
+      const label = "Скачать " + extension.toUpperCase()
+      const Icon = extension === 'xlsx' ? FileSpreadsheet : FileText
+      const isExporting = reportExporting === `${key}-${extension}`
+      return (
+        <button key={extension} className={`secondary-button report-export-button report-export-button--${extension}`} type="button" aria-label={label} aria-busy={isExporting} title={label} disabled={reportExporting !== null || Boolean(reportPeriodError)} onClick={() => void onExport(extension)}>
+          {isExporting ? <LoaderCircle className="report-export-button__spinner" size={19} aria-hidden="true" /> : <Icon size={19} strokeWidth={2.1} aria-hidden="true" />}
+        </button>
+      )
+    })
+  }
+  function renderPeriodFilter(key: ReportMonthlyFilterKey | ReportDateFilterKey, labels: { from: string; to: string; extra?: ReactNode; actions?: ReactNode }) {
+    const month = monthlyFilters[key as ReportMonthlyFilterKey]
+    const date = dateFilters[key as ReportDateFilterKey]
+    const mode = month ? 'month' : 'date'
+    const from = month ? month.monthFrom : date.dateFrom
+    const to = month ? month.monthTo : date.dateTo
+    function updateRange(from: string, to: string) {
+      if (month) setMonthlyFilters((current) => ({ ...current, [key]: { monthFrom: from, monthTo: to } }))
+      else setDateFilters((current) => ({ ...current, [key]: { dateFrom: from, dateTo: to } }))
+    }
     return (
       <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
         <div className="report-workbook-filter__fields">
-          <label>
-            <span>{labels.from}</span>
-            <LocalizedDatePicker ariaLabel={labels.from} mode="month" value={filter.monthFrom} onChange={(value) => updateMonthlyFilter(key, 'monthFrom', value)} required />
-          </label>
-          <label>
-            <span>{labels.to}</span>
-            <LocalizedDatePicker ariaLabel={labels.to} mode="month" value={filter.monthTo} onChange={(value) => updateMonthlyFilter(key, 'monthTo', value)} required />
-          </label>
-          <ReportPeriodQuickSelect
-            mode="month"
-            valueFrom={filter.monthFrom}
-            valueTo={filter.monthTo}
-            referenceDate={today}
-            onSelect={(range) => applyMonthlyQuickPeriod(key, range)}
-          />
+          {(['from', 'to'] as const).map((bound) => (
+            <label key={bound}>
+              <span>{labels[bound]}</span>
+              <LocalizedDatePicker ariaLabel={labels[bound]} mode={mode} value={bound === 'from' ? from : to} aria-invalid={!(bound === 'from' ? from : to) || Boolean(to && from > to)} aria-describedby={reportPeriodError ? reportPeriodErrorId : undefined} onChange={(value) => updateRange(bound === 'from' ? value : from, bound === 'to' ? value : to)} required />
+            </label>
+          ))}
+          <ReportPeriodQuickSelect mode={mode} valueFrom={from} valueTo={to} referenceDate={today} onSelect={(range) => updateRange(month ? range.monthFrom : range.dateFrom, month ? range.monthTo : range.dateTo)} />
         </div>
+        {reportPeriodError ? <FormError id={reportPeriodErrorId}>{reportPeriodError}</FormError> : null}
         {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
         {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}
       </div>
     )
   }
-
-  function renderDateFilter(key: ReportDateFilterKey, labels: { from: string; to: string; extra?: ReactNode; actions?: ReactNode }) {
-    const filter = dateFilters[key]
-    return (
-      <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
-        <div className="report-workbook-filter__fields">
-          <label>
-            <span>{labels.from}</span>
-            <LocalizedDatePicker ariaLabel={labels.from} mode="date" value={filter.dateFrom} onChange={(value) => updateDateFilter(key, 'dateFrom', value)} required />
-          </label>
-          <label>
-            <span>{labels.to}</span>
-            <LocalizedDatePicker ariaLabel={labels.to} mode="date" value={filter.dateTo} onChange={(value) => updateDateFilter(key, 'dateTo', value)} required />
-          </label>
-          <ReportPeriodQuickSelect
-            mode="date"
-            valueFrom={filter.dateFrom}
-            valueTo={filter.dateTo}
-            referenceDate={today}
-            onSelect={(range) => applyDateQuickPeriod(key, range)}
-          />
-        </div>
-        {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
-        {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}
-      </div>
-    )
-  }
-
   function updateReportSort(tab: ReportWorkbookTab, field: string) {
     setReportSorts((current) => ({ ...current, [tab]: advanceReportSort(current[tab], field) ?? undefined }))
   }
@@ -1218,6 +1006,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     sortOptions?: { tab: ReportWorkbookTab; disabled?: boolean; totalCount?: number },
     emptyMessage?: string,
   ) {
+    if (reportPeriodError) return null
     const normalizedColumns = columns.map((column) => typeof column === 'string' ? { label: column } : column)
     const sort = sortOptions ? reportSorts[sortOptions.tab] : undefined
     const sortLabel = normalizedColumns.find((column) => column.sortField === sort?.field)?.label
@@ -1281,7 +1070,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
 
   function renderActiveReport() {
     if (activeReportTab === 'consolidated') {
-      const [report, primaryLoading, refreshing] = getReportView(consolidatedReport, consolidatedReportLoading, consolidatedReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(consolidatedReport, consolidatedReportLoading, consolidatedReportError)
       const reportRows = (report?.monthlyRows ?? []).flatMap((month) => {
         const incomeRows = month.incomeBreakdown ?? []
         const expenseRows = month.expenseBreakdown ?? []
@@ -1316,13 +1105,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       })
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
-          {renderMonthlyFilter('consolidated', {
+          {renderPeriodFilter('consolidated', {
             from: 'Месяц с',
             to: 'Месяц по',
-            actions: <>{renderReportExportButton('xlsx', 'consolidated-xlsx', () => void downloadConsolidatedReport('xlsx'))}{renderReportExportButton('pdf', 'consolidated-pdf', () => void downloadConsolidatedReport('pdf'))}</>,
+            actions: renderReportExports('consolidated', downloadConsolidatedReport),
           })}
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {consolidatedReportError ? <AsyncErrorState message={consolidatedReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={consolidatedReportLoading} /> : null}
+          {renderReportError(consolidatedReportError, consolidatedReportLoading)}
           {renderReportTable(
             'Консолидированный отчет',
             [{ label: 'Месяц', sortField: 'accountingMonth' }, 'Наименование поступления', 'Поступления', 'Наименование выплаты', 'Выплаты', 'Разница', 'Остаток по счёту — На начало месяца', 'Остаток по счёту — На конец месяца'],
@@ -1336,7 +1125,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
 
     if (activeReportTab === 'garages') {
-      const [report, primaryLoading, refreshing] = getReportView(garageReport, garageReportLoading, garageReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(garageReport, garageReportLoading, garageReportError)
       const garageReportColumns: ReportColumn[] = garageAccrualsGrouped
         ? [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Гараж', sortField: 'garageNumber' }, { label: 'Начисления', sortField: 'accrualAmount' }, { label: 'Поступления', sortField: 'incomeAmount' }, { label: 'Разница', sortField: 'difference' }]
         : [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Гараж', sortField: 'garageNumber' }, { label: 'Услуга', sortField: 'incomeTypeName' }, { label: 'Начисления', sortField: 'accrualAmount' }, { label: 'Поступления', sortField: 'incomeAmount' }, { label: 'Разница', sortField: 'difference' }]
@@ -1363,7 +1152,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         : undefined
       return (
         <ReportWorkbookSheet title="Отчёт по гаражам">
-          {renderMonthlyFilter('garages', {
+          {renderPeriodFilter('garages', {
             from: 'Месяц с',
             to: 'Месяц по',
             actions: (
@@ -1379,8 +1168,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                 >
                   {garageAccrualsGrouped ? 'Разгруппировать начисления' : 'Сгруппировать начисления'}
                 </button>
-                {renderReportExportButton('xlsx', 'garages-xlsx', () => void downloadGarageReport('xlsx'))}
-                {renderReportExportButton('pdf', 'garages-pdf', () => void downloadGarageReport('pdf'))}
+                {renderReportExports('garages', downloadGarageReport)}
               </>
             ),
             extra: (
@@ -1510,7 +1298,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             Начисления и поступления сопоставлены по месяцу, гаражу и услуге. Разница = начисления − поступления. Группировка объединяет услуги в одну строку по гаражу и месяцу.
           </p>
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {garageReportError ? <AsyncErrorState message={garageReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={garageReportLoading} /> : null}
+          {renderReportError(garageReportError, garageReportLoading)}
           <div className="report-workbook-summary-row">
             <span><strong>ИТОГО начислений</strong><b>{formatReportAmount(report?.accrualTotal)}</b></span>
             <span><strong>ИТОГО поступлений</strong><b>{formatReportAmount(report?.incomeTotal)}</b></span>
@@ -1529,7 +1317,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
 
     if (activeReportTab === 'payouts') {
-      const [report, primaryLoading, refreshing] = getReportView(payoutReport, payoutReportLoading, payoutReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(payoutReport, payoutReportLoading, payoutReportError)
       const reportRows = report?.rows.map((row) => [
         formatMonth(row.accountingMonth),
         row.expenseTypeName,
@@ -1540,10 +1328,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по выплатам">
-          {renderMonthlyFilter('payouts', {
+          {renderPeriodFilter('payouts', {
             from: 'Месяц с',
             to: 'Месяц по',
-            actions: <>{renderReportExportButton('xlsx', 'payouts-xlsx', () => void downloadPayoutReport('xlsx'))}{renderReportExportButton('pdf', 'payouts-pdf', () => void downloadPayoutReport('pdf'))}</>,
+            actions: renderReportExports('payouts', downloadPayoutReport),
             extra: (
               <ReportCheckboxMultiSelect
                 key="payout-report-filter"
@@ -1561,7 +1349,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             ),
           })}
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {payoutReportError ? <AsyncErrorState message={payoutReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={payoutReportLoading} /> : null}
+          {renderReportError(payoutReportError, payoutReportLoading)}
           <div className="report-workbook-summary-row">
             <span><strong>ИТОГО начислений</strong><b>{formatReportAmount(report?.accrualTotal)}</b></span>
             <span><strong>ИТОГО выплат</strong><b>{formatReportAmount(report?.expenseTotal)}</b></span>
@@ -1580,7 +1368,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
 
     if (activeReportTab === 'income') {
-      const [report, primaryLoading, refreshing] = getReportView(incomeReport, incomeReportLoading, incomeReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(incomeReport, incomeReportLoading, incomeReportError)
       const incomeRows = report?.rows.filter((row) => row.rowType === 'payments').map((row) => [
         row.garageNumber,
         formatDateOnly(row.date),
@@ -1591,7 +1379,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчет по поступлениям">
-          {renderDateFilter('income', {
+          {renderPeriodFilter('income', {
             from: 'С',
             to: 'По',
             actions: (
@@ -1607,8 +1395,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                 >
                   {incomePaymentsGrouped ? 'Показать отдельные платежи' : 'Сгруппировать платежи'}
                 </button>
-                {renderReportExportButton('xlsx', 'income-xlsx', () => void downloadIncomeReport('xlsx'))}
-                {renderReportExportButton('pdf', 'income-pdf', () => void downloadIncomeReport('pdf'))}
+                {renderReportExports('income', downloadIncomeReport)}
               </>
             ),
             extra: (
@@ -1631,10 +1418,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             По умолчанию части одной квитанции или полной оплаты, в том числе сохранённой ранее, объединены. В режиме отдельных платежей каждая операция показана собственной строкой.
           </p>
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {incomeReportError ? <AsyncErrorState message={incomeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={incomeReportLoading} /> : null}
-          <div className="report-workbook-summary-row report-workbook-summary-row--single">
-            <span><strong>ИТОГО поступлений</strong><b>{formatReportAmount(report?.incomeTotal)}</b></span>
-          </div>
+          {renderReportError(incomeReportError, incomeReportLoading)}
+          {renderReportTotal('ИТОГО поступлений', report?.incomeTotal)}
           {renderReportTable(
             'Отчет по поступлениям',
             [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Дата', sortField: 'date' }, 'Время', { label: 'Сумма платежа', sortField: 'incomeAmount' }, { label: 'Назначение платежа', sortField: 'incomeTypeName' }, { label: 'Остаток долга после платежа', sortField: 'debt' }],
@@ -1648,7 +1433,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
 
     if (activeReportTab === 'cashPayments') {
-      const [report, primaryLoading, refreshing] = getReportView(cashPaymentReport, cashPaymentReportLoading, cashPaymentReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(cashPaymentReport, cashPaymentReportLoading, cashPaymentReportError)
       const cashRows = report?.rows.map((row) => [
         formatDateOnly(row.date),
         formatMoney(row.amount),
@@ -1658,12 +1443,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
-          {renderDateFilter('cashPayments', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadDatedReport('cashPayments', 'xlsx'))}{renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadDatedReport('cashPayments', 'pdf'))}</> })}
+          {renderPeriodFilter('cashPayments', { from: 'С', to: 'По', actions: renderReportExports('cashPayments', (extension) => downloadDatedReport('cashPayments', extension)) })}
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {cashPaymentReportError ? <AsyncErrorState message={cashPaymentReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={cashPaymentReportLoading} /> : null}
-          <div className="report-workbook-summary-row report-workbook-summary-row--single">
-            <span><strong>ИТОГО оплачено</strong><b>{formatReportAmount(report?.total)}</b></span>
-          </div>
+          {renderReportError(cashPaymentReportError, cashPaymentReportLoading)}
+          {renderReportTotal('ИТОГО оплачено', report?.total)}
           {renderReportTable(
             'Отчет по оплатам из кассы',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Наличие чека', sortField: 'hasReceipt' }, { label: 'Назначение', sortField: 'purpose' }, 'Комментарий'],
@@ -1677,7 +1460,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
 
     if (activeReportTab === 'bankDeposits') {
-      const [report, primaryLoading, refreshing] = getReportView(bankDepositReport, bankDepositReportLoading, bankDepositReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(bankDepositReport, bankDepositReportLoading, bankDepositReportError)
       const bankRows = report?.rows.map((row) => [
         formatDateOnly(row.date),
         formatMoney(row.amount),
@@ -1685,12 +1468,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
-          {renderDateFilter('bankDeposits', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadDatedReport('bankDeposits', 'xlsx'))}{renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadDatedReport('bankDeposits', 'pdf'))}</> })}
+          {renderPeriodFilter('bankDeposits', { from: 'С', to: 'По', actions: renderReportExports('bankDeposits', (extension) => downloadDatedReport('bankDeposits', extension)) })}
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {bankDepositReportError ? <AsyncErrorState message={bankDepositReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={bankDepositReportLoading} /> : null}
-          <div className="report-workbook-summary-row report-workbook-summary-row--single">
-            <span><strong>ИТОГО сдано в банк</strong><b>{formatReportAmount(report?.total)}</b></span>
-          </div>
+          {renderReportError(bankDepositReportError, bankDepositReportLoading)}
+          {renderReportTotal('ИТОГО сдано в банк', report?.total)}
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Комментарий', sortField: 'comment' }],
@@ -1704,7 +1485,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
 
     if (activeReportTab === 'fees') {
-      const [report, primaryLoading, refreshing] = getReportView(feeReport, feeReportLoading, feeReportError, reportQueries, currentReportQuery)
+      const [report, primaryLoading, refreshing] = getReportView(feeReport, feeReportLoading, feeReportError)
       const summaryRows = (report?.summaryRows ?? []).map((row) => [
         <button
           className="link-button"
@@ -1737,7 +1518,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       return (
           <ReportWorkbookSheet title="Отчёт по сборам">
           {renderReportLoadingState(primaryLoading, refreshing)}
-          {feeReportError ? <AsyncErrorState message={feeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={feeReportLoading} /> : null}
+          {renderReportError(feeReportError, feeReportLoading)}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <div className="report-workbook-filter__fields">
               <ReportCheckboxMultiSelect
@@ -1755,8 +1536,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
               />
             </div>
             <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">
-              {renderReportExportButton('xlsx', 'fees-xlsx', () => void downloadFeeReport('xlsx'))}
-              {renderReportExportButton('pdf', 'fees-pdf', () => void downloadFeeReport('pdf'))}
+              {renderReportExports('fees', downloadFeeReport)}
             </div>
           </div>
           <div className="report-workbook-split">
@@ -1820,7 +1600,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       )
     }
 
-    const [report, primaryLoading, refreshing] = getReportView(fundChangeReport, fundChangeReportLoading, fundChangeReportError, reportQueries, currentReportQuery)
+    const [report, primaryLoading, refreshing] = getReportView(fundChangeReport, fundChangeReportLoading, fundChangeReportError)
     const fundRows = report?.rows.map((row) => [
       row.fundName,
       formatDateOnly(row.date),
@@ -1833,9 +1613,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     ]) ?? []
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
-        {renderDateFilter('funds', { from: 'С', to: 'По', extra: <ReportCheckboxMultiSelect label="Фонды" ariaLabel="Фонды отчета" allLabel="Все фонды" placeholder="Выберите фонды" resultsAriaLabel="Доступные фонды" selectedAriaLabel="Выбранные фонды" options={fundFilterOptions} loadOptions={loadFundFilterOptions} selectedValues={selectedFundIds} onChange={setSelectedFundIds} openOnFocus />, actions: <>{renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadDatedReport('funds', 'xlsx'))}{renderReportExportButton('pdf', 'funds-pdf', () => void downloadDatedReport('funds', 'pdf'))}</> })}
+        {renderPeriodFilter('funds', { from: 'С', to: 'По', extra: <ReportCheckboxMultiSelect label="Фонды" ariaLabel="Фонды отчета" allLabel="Все фонды" placeholder="Выберите фонды" resultsAriaLabel="Доступные фонды" selectedAriaLabel="Выбранные фонды" options={fundFilterOptions} loadOptions={loadFundFilterOptions} selectedValues={selectedFundIds} onChange={setSelectedFundIds} openOnFocus />, actions: renderReportExports('funds', (extension) => downloadDatedReport('funds', extension)) })}
         {renderReportLoadingState(primaryLoading, refreshing)}
-        {fundChangeReportError ? <AsyncErrorState message={fundChangeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={fundChangeReportLoading} /> : null}
+        {renderReportError(fundChangeReportError, fundChangeReportLoading)}
         {report ? (
           <div className="report-workbook-summary-row">
             <strong>Пополнено: {formatMoney(report.depositTotal)}</strong>

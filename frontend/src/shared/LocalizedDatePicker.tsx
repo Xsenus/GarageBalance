@@ -13,6 +13,8 @@ export function LocalizedDatePicker({
   placement = 'below',
   disabled = false,
   required = false,
+  'aria-invalid': invalid = false,
+  'aria-describedby': ariaDescribedBy,
   onChange,
 }: {
   ariaLabel: string
@@ -21,6 +23,8 @@ export function LocalizedDatePicker({
   placement?: 'above' | 'below'
   disabled?: boolean
   required?: boolean
+  'aria-invalid'?: boolean
+  'aria-describedby'?: string
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -132,7 +136,8 @@ export function LocalizedDatePicker({
         value={draft}
         disabled={disabled}
         required={required}
-        aria-invalid={draftIsInvalid}
+        aria-invalid={invalid || draftIsInvalid}
+        aria-describedby={ariaDescribedBy}
         onChange={(event) => commitDraft(event.target.value)}
         onBlur={() => setPickerState((current) => ({ ...current, sourceValue: value, sourceMode: mode, draft: formatLocalizedValue(value, mode) }))}
       />

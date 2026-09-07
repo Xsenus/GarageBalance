@@ -471,6 +471,9 @@ export function FinancePanel({
   const recalculationCloseRef = useFocusOnOpen<HTMLButtonElement>(recalculationOpen && !recalculationPending)
   useEscapeKey(recalculationOpen && !recalculationPending, () => setRecalculationOpen(false))
   const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
+  const financePeriodErrorId = useId()
+  const financePeriodError = financeFilter.monthTo && financeFilter.monthFrom > financeFilter.monthTo
+    ? 'Начало периода позже конца.' : ''
   const [financeSearchInput, setFinanceSearchInput] = useState('')
   const [financeEditor, setFinanceEditor] = useState<{ section: FinanceEditorKey; mode: 'create' | 'edit'; record?: FinanceRecord } | null>(null)
   const [financeEditorInitialSnapshot, setFinanceEditorInitialSnapshot] = useState('')
@@ -888,8 +891,12 @@ export function FinancePanel({
     financeWorkbenchControllerRef.current = controller
     const requestId = financeWorkbenchRequests.begin()
     setFinanceContextMenu(null)
-    setWorkbenchLoading(true)
     setError(null)
+    if (financePeriodError) {
+      setWorkbenchLoading(false)
+      return
+    }
+    setWorkbenchLoading(true)
     try {
       const params = {
         monthFrom: financeFilter.monthFrom,
@@ -972,7 +979,7 @@ export function FinancePanel({
         setWorkbenchLoading(false)
       }
     }
-  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financeWorkbenchRequests, meterForm.accountingMonth])
+  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financePeriodError, financeWorkbenchRequests, meterForm.accountingMonth])
 
   function refreshFinanceWorkbenchAfterSave(section: FinanceSectionKey, offset = financePage.offset) {
     void loadFinanceWorkbench(section, offset, financePage.limit, true)
@@ -2329,7 +2336,7 @@ export function FinancePanel({
   const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
   const paymentsHeadingStatus = paymentsPrototypeLoading || !paymentDisplaySettingsLoaded
     ? getFinancePanelLabel('loading')
-    : showAllGarageOperations
+    : showAllGarageOperations && !financePeriodError
       ? formatCount(summary.operationCount, 'операция', 'операции', 'операций')
       : null
 
@@ -2369,32 +2376,18 @@ export function FinancePanel({
         refreshRevision={paymentsPrototypeRefreshRevision}
       />
 
-      <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
-        <div>
-          <span>{getFinancePanelLabel('incomeTotal')}</span>
-          <strong>{formatMoney(summary.incomeTotal)}</strong>
-        </div>
-        <div>
-          <span>{getFinancePanelLabel('accrualTotal')}</span>
-          <strong>{formatMoney(summary.accrualTotal)}</strong>
-        </div>
-        <div>
-          <span>{formatDebtLabel(summary.debt)}</span>
-          <strong className={getDebtClassName(summary.debt)}>{formatDebtAmount(summary.debt)}</strong>
-        </div>
-        <div>
-          <span>{getFinancePanelLabel('expenseTotal')}</span>
-          <strong>{formatMoney(summary.expenseTotal)}</strong>
-        </div>
-        <div>
-          <span>{getFinancePanelLabel('balance')}</span>
-          <strong>{formatMoney(summary.balance)}</strong>
-        </div>
-        <div>
-          <span>{getFinancePanelLabel('meterReadings')}</span>
-          <strong>{summary.meterReadingCount}</strong>
-        </div>
-      </div>
+      {!financePeriodError ? <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
+        {[
+          [getFinancePanelLabel('incomeTotal'), formatMoney(summary.incomeTotal)],
+          [getFinancePanelLabel('accrualTotal'), formatMoney(summary.accrualTotal)],
+          [formatDebtLabel(summary.debt), formatDebtAmount(summary.debt), getDebtClassName(summary.debt)],
+          [getFinancePanelLabel('expenseTotal'), formatMoney(summary.expenseTotal)],
+          [getFinancePanelLabel('balance'), formatMoney(summary.balance)],
+          [getFinancePanelLabel('meterReadings'), summary.meterReadingCount],
+        ].map(([label, value, className]) => (
+          <div key={label}><span>{label}</span><strong className={className as string | undefined}>{value}</strong></div>
+        ))}
+      </div> : null}
 
       {advancedFinanceToolsVisible ? <div className="finance-toolbar-actions">
         <button className="secondary-button" type="button" aria-expanded={journalOpen} onClick={() => setJournalOpen((value) => !value)}>
@@ -2462,15 +2455,15 @@ export function FinancePanel({
               onClick={() => selectFinanceSection(section.key)}
             >
               <span>{section.label}</span>
-              <small>{getFinanceSectionDescription(section, financeSectionCounts)}</small>
+              {!financePeriodError ? <small>{getFinanceSectionDescription(section, financeSectionCounts)}</small> : null}
             </button>
           ))}
         </div>
 
         <div className="dictionary-toolbar finance-table-toolbar">
           <div className="finance-period-filter" aria-label={getFinanceToolbarLabel('periodFilter')}>
-            <LocalizedDatePicker ariaLabel={getFinanceToolbarLabel('periodFrom')} mode="month" value={financeFilter.monthFrom} onChange={(monthFrom) => setFinanceFilter((current) => ({ ...current, monthFrom }))} />
-            <LocalizedDatePicker ariaLabel={getFinanceToolbarLabel('periodTo')} mode="month" value={financeFilter.monthTo} onChange={(monthTo) => setFinanceFilter((current) => ({ ...current, monthTo }))} />
+            <LocalizedDatePicker ariaLabel={getFinanceToolbarLabel('periodFrom')} mode="month" aria-invalid={Boolean(financePeriodError)} aria-describedby={financePeriodError ? financePeriodErrorId : undefined} value={financeFilter.monthFrom} onChange={(monthFrom) => setFinanceFilter((current) => ({ ...current, monthFrom }))} />
+            <LocalizedDatePicker ariaLabel={getFinanceToolbarLabel('periodTo')} mode="month" aria-invalid={Boolean(financePeriodError)} aria-describedby={financePeriodError ? financePeriodErrorId : undefined} value={financeFilter.monthTo} onChange={(monthTo) => setFinanceFilter((current) => ({ ...current, monthTo }))} />
           </div>
           <label className="dictionary-search">
             <Search size={16} aria-hidden="true" />
@@ -2485,7 +2478,7 @@ export function FinancePanel({
           </div>
         </div>
 
-        <div className="dictionary-table-shell">
+        {financePeriodError ? <FormError id={financePeriodErrorId}>{financePeriodError}</FormError> : <div className="dictionary-table-shell">
           <div
             className={`dictionary-table-scroll${loading && getActiveFinanceRowsCount() === 0 ? ' dictionary-table-scroll--loading' : ''}`}
             role="group"
@@ -2511,7 +2504,7 @@ export function FinancePanel({
             onPageChange={(page) => void loadFinanceWorkbench(activeFinanceSection, (page - 1) * financePage.limit, financePage.limit)}
             onPageSizeChange={(limit) => void loadFinanceWorkbench(activeFinanceSection, 0, limit)}
           />
-        </div>
+        </div>}
       </div>
 
       <div className="finance-grid">

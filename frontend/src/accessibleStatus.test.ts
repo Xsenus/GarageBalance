@@ -84,13 +84,13 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps report workbook period filters typed and quickly adjustable', () => {
-    expect(reportPanelSource).toContain('<LocalizedDatePicker ariaLabel={labels.from} mode="month"')
-    expect(reportPanelSource).toContain('<LocalizedDatePicker ariaLabel={labels.from} mode="date"')
+    expect(reportPanelSource).toContain('<LocalizedDatePicker ariaLabel={labels[bound]} mode={mode}')
+    expect(reportPanelSource).toContain("const mode = month ? 'month' : 'date'")
     expect(reportPanelSource).not.toContain('type="month"')
     expect(reportPanelSource).not.toContain('type="date"')
-    expect(reportPanelSource).toContain('applyMonthlyQuickPeriod')
-    expect(reportPanelSource).toContain('applyDateQuickPeriod')
-    expect(reportPanelSource.match(/<ReportPeriodQuickSelect\b/g)).toHaveLength(2)
+    expect(reportPanelSource).toContain('month ? range.monthFrom : range.dateFrom')
+    expect(reportPanelSource).toContain('month ? range.monthTo : range.dateTo')
+    expect(reportPanelSource.match(/<ReportPeriodQuickSelect\b/g)).toHaveLength(1)
     expect(appCss).toContain('.report-workbook-filter')
     expect(appCss).toContain('.report-quick-periods')
     expect(appCss).toContain('.report-quick-periods__button')

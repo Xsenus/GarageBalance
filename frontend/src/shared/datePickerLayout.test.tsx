@@ -7,6 +7,23 @@ import { LocalizedDatePicker } from './LocalizedDatePicker'
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('calendar layout lifecycle', () => {
+  it('associates an external period error with the input and clears it independently of draft validation', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<><LocalizedDatePicker ariaLabel="Дата" mode="date" value="" required aria-invalid aria-describedby="period-error" onChange={onChange} /><p id="period-error">Укажите дату.</p></>)
+    const input = screen.getByRole('textbox', { name: 'Дата' })
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAccessibleDescription('Укажите дату.')
+    expect(screen.getByRole('button', { name: 'Открыть календарь: Дата' })).toBeEnabled()
+    fireEvent.change(input, { target: { value: '06.09.2026' } })
+    expect(onChange).toHaveBeenLastCalledWith('2026-09-06')
+    rerender(<LocalizedDatePicker ariaLabel="Дата" mode="date" value="2026-09-06" required onChange={onChange} />)
+    expect(input).toHaveAttribute('aria-invalid', 'false')
+    expect(input).not.toHaveAttribute('aria-describedby')
+    fireEvent.change(input, { target: { value: '32.09.2026' } })
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
   it('repositions on scroll, resize and content resize, then removes observers when disabled', async () => {
     const user = userEvent.setup()
     let resized: ResizeObserverCallback = () => undefined

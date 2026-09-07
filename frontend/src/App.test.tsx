@@ -21170,6 +21170,49 @@ describe('App', () => {
     expect(within(financePanel).getByText('Доступное фоновое начисление')).toBeInTheDocument()
   })
 
+  it('rejects reversed payment periods across tabs and preserves optional bounds', async () => {
+    const user = userEvent.setup()
+    let resolveInitial!: (value: Awaited<ReturnType<FinanceClient['getOperationsPage']>>) => void
+    const initial = new Promise<Awaited<ReturnType<FinanceClient['getOperationsPage']>>>((resolve) => { resolveInitial = resolve })
+    const financeClient = createFinanceClient()
+    vi.spyOn(financeClient, 'getOperationsPage').mockReturnValueOnce(initial)
+    const reads = (['getOperationsPage', 'getAccrualsPage', 'getSupplierAccrualsPage', 'getMeterReadingsPage', 'getSummary', 'getMissingMeterReadings'] as const).map((method) => vi.spyOn(financeClient, method))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = within(await screen.findByRole('region', { name: 'Платежи' }))
+    await waitFor(() => expect(reads[0]).toHaveBeenCalled())
+    const from = panel.getByLabelText('Период с')
+    const to = panel.getByLabelText('Период по')
+    fireEvent.change(to, { target: { value: '08.2026' } })
+    await waitFor(() => expect(reads[0]).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ monthFrom: '', monthTo: '2026-08' }), expect.any(AbortSignal)))
+    const calls = reads.map((read) => read.mock.calls.length)
+    fireEvent.change(from, { target: { value: '09.2026' } })
+    const message = 'Начало периода позже конца.'
+    expect(await panel.findByText(message)).toHaveAttribute('role', 'alert')
+    expect(from).toHaveAttribute('aria-invalid', 'true')
+    expect(to).toHaveAccessibleDescription(message)
+    expect(reads[0].mock.calls[0][2]?.aborted).toBe(true)
+    await act(async () => resolveInitial({ items: [], totalCount: 0, offset: 0, limit: 25 }))
+    for (const tab of panel.getAllByRole('tab')) {
+      await user.click(tab)
+      expect(panel.getByText(message)).toBeInTheDocument()
+      expect(panel.queryByLabelText('Итоги платежей')).not.toBeInTheDocument()
+      expect(panel.queryByText(/^\d+ операций$/)).not.toBeInTheDocument()
+      expect(panel.queryByRole('group', { name: 'Рабочая область платежной таблицы' })).not.toBeInTheDocument()
+    }
+    expect(reads.map((read) => read.mock.calls.length)).toEqual(calls)
+    fireEvent.change(to, { target: { value: '09.2026' } })
+    expect(await panel.findByRole('group', { name: 'Рабочая область платежной таблицы' })).toBeInTheDocument()
+    expect(panel.queryByText(message)).not.toBeInTheDocument()
+    expect(from).toHaveAttribute('aria-invalid', 'false')
+    fireEvent.change(to, { target: { value: '' } })
+    await waitFor(() => expect(reads[3]).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ monthFrom: '2026-09', monthTo: '' }), expect.any(AbortSignal)))
+    fireEvent.change(from, { target: { value: '' } })
+    await waitFor(() => expect(reads[3]).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ monthFrom: '', monthTo: '' }), expect.any(AbortSignal)))
+    expect(panel.queryByText(message)).not.toBeInTheDocument()
+  })
   it('refreshes payment summary totals from server when period filter changes', async () => {
     const user = userEvent.setup()
     const summaryRequests: Array<{ monthFrom?: string; monthTo?: string; search?: string } | undefined> = []
@@ -24732,6 +24775,82 @@ describe('App', () => {
     await waitFor(() => expect(getFundChangeReport).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ fundIds: [], offset: 0 }), expect.any(AbortSignal)))
   })
 
+  it.each([
+    ['Консолидированный', 'getConsolidatedReport', 'month'],
+    ['По гаражам', 'getGarageReport', 'month'],
+    ['По выплатам', 'getExpenseReport', 'month'],
+    ['Поступления', 'getIncomeReport', 'date'],
+    ['Оплаты из кассы', 'getCashPaymentReport', 'date'],
+    ['Сдача кассы в банк', 'getBankDepositReport', 'date'],
+    ['Изменение фондов', 'getFundChangeReport', 'date'],
+  ] as const)('validates empty and reversed periods before loading or exporting %s', async (tab, method, mode) => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient()
+    const read = vi.spyOn(reportClient, method)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, panel, tab)
+    await waitFor(() => expect(read).toHaveBeenCalled())
+    const from = within(panel).getByLabelText(mode === 'month' ? 'Месяц с' : 'С', { exact: true })
+    const to = within(panel).getByLabelText(mode === 'month' ? 'Месяц по' : 'По', { exact: true })
+    for (const [field, message] of [[from, 'Укажите начало периода отчета.'], [to, 'Укажите конец периода отчета.']] as const) {
+      const callCount = read.mock.calls.length
+      fireEvent.change(field, { target: { value: '' } })
+      expect(await within(panel).findByText(message)).toBeInTheDocument()
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      expect(read).toHaveBeenCalledTimes(callCount)
+      expect(within(panel).getByRole('button', { name: 'Скачать XLSX', exact: true })).toBeDisabled()
+      expect(within(panel).getByRole('button', { name: 'Скачать PDF', exact: true })).toBeDisabled()
+      expect(within(panel).queryByRole('button', { name: 'Повторить загрузку' })).not.toBeInTheDocument()
+      expect(within(panel).queryByText('Данных за период нет')).not.toBeInTheDocument()
+      await user.click(within(panel).getByRole('button', { name: 'Текущий месяц', exact: true }))
+      await waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(callCount))
+      expect(within(panel).queryByText(message)).not.toBeInTheDocument()
+      expect(field).toHaveAttribute('aria-invalid', 'false')
+    }
+    fireEvent.change(to, { target: { value: mode === 'month' ? '08.2026' : '31.08.2026' } })
+    fireEvent.change(from, { target: { value: mode === 'month' ? '10.2026' : '01.10.2026' } })
+    expect(await within(panel).findByText('Начало периода отчета не может быть позже конца.')).toBeInTheDocument()
+    expect(from).toHaveAttribute('aria-invalid', 'true')
+    expect(to).toHaveAttribute('aria-invalid', 'true')
+    await user.click(within(panel).getByRole('button', { name: 'Текущий месяц', exact: true }))
+    await waitFor(() => expect(within(panel).queryByText('Начало периода отчета не может быть позже конца.')).not.toBeInTheDocument())
+    expect(within(panel).getByRole('button', { name: 'Скачать XLSX', exact: true })).toBeEnabled()
+  })
+
+  it('keeps invalid report periods empty when a cancelled request completes and recovers after a failure', async () => {
+    const user = userEvent.setup()
+    let resolvePending!: (value: ReturnType<typeof createFundChangeReport>) => void
+    const pending = new Promise<ReturnType<typeof createFundChangeReport>>((resolve) => { resolvePending = resolve })
+    const read = vi.fn().mockReturnValueOnce(pending).mockRejectedValueOnce(new Error('Тестовая ошибка отчета')).mockResolvedValue(createFundChangeReport())
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getFundChangeReport: read })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, panel, 'Изменение фондов')
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    const signal = read.mock.calls[0][2] as AbortSignal
+    fireEvent.change(within(panel).getByLabelText('По', { exact: true }), { target: { value: '' } })
+    expect(await within(panel).findByText('Укажите конец периода отчета.')).toBeInTheDocument()
+    expect(signal.aborted).toBe(true)
+    await act(async () => resolvePending(createFundChangeReport()))
+    expect(within(panel).queryByText('Распределение средств')).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Данных за период нет')).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Текущий месяц', exact: true }))
+    expect(await within(panel).findByText('Тестовая ошибка отчета')).toBeInTheDocument()
+    fireEvent.change(within(panel).getByLabelText('С', { exact: true }), { target: { value: '' } })
+    expect(await within(panel).findByText('Укажите начало периода отчета.')).toBeInTheDocument()
+    expect(within(panel).queryByText('Тестовая ошибка отчета')).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Повторить загрузку' })).not.toBeInTheDocument()
+    expect(read).toHaveBeenCalledTimes(2)
+    await user.click(within(panel).getByRole('button', { name: 'Текущий месяц', exact: true }))
+    expect(await within(panel).findByText('Распределение средств')).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Скачать PDF', exact: true })).toBeEnabled()
+  })
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
     const incomePageRequests: Array<{ offset?: number; limit?: number; groupPayments?: boolean }> = []
