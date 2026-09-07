@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
-import { AsyncErrorState, BackgroundRefreshStatus, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDelayedAction } from '../../shared/debouncedRequest'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
@@ -561,7 +561,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
         </div>
         {loading && !hasLoadedPage ? <TableLoadingState label="Загружаем историю изменений" /> : null}
         {loading && hasLoadedPage ? <BackgroundRefreshStatus label="Обновляем историю изменений" /> : null}
-        {hasLoadedPage && !loading && page.items.length === 0 ? <StatusMessage>Событий пока нет</StatusMessage> : null}
+        {hasLoadedPage && !loading && page.items.length === 0 ? <EmptyState>Событий пока нет</EmptyState> : null}
         {hasLoadedPage ? page.items.map((auditEvent) => {
           const beforeAfter = getAuditBeforeAfter(auditEvent)
           return (

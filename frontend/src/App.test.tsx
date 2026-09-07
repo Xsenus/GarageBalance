@@ -9349,7 +9349,7 @@ describe('App', () => {
     expect(garageSearchInput).toBeInTheDocument()
     expect(within(prototype).queryByRole('region', { name: 'Карточка выбранного гаража' })).not.toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: /Поступления гаража/ })).not.toBeInTheDocument()
-    await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск'))
+    await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж для платежей'))
 
     await user.click(garageSearchInput)
     const initialGarageResults = within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })
@@ -10331,7 +10331,7 @@ describe('App', () => {
     expect(within(prototype).queryByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })).not.toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
     expect(within(prototype).queryByText('19.06.2026')).not.toBeInTheDocument()
-    expect(within(prototype).getByText(/^Выберите гараж через поиск/)).toHaveAttribute('role', 'status')
+    expect(within(prototype).getByText(/^Выберите гараж для платежей/)).toHaveAttribute('role', 'status')
   })
 
   it('does not show prototype income rows while selected real garage worksheet is unavailable', async () => {
@@ -10412,7 +10412,7 @@ describe('App', () => {
 
     const searchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
     expect(searchInput).toHaveValue('')
-    expect(await within(prototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
+    expect(await within(prototype).findByText('Выберите гараж для платежей.')).toHaveAttribute('role', 'status')
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: 'Поступления гаража 1' })).not.toBeInTheDocument()
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
@@ -10425,7 +10425,7 @@ describe('App', () => {
     await openSection(user, 'Главное меню')
     await openSection(user, 'Платежи')
     const reopenedPrototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
-    expect(await within(reopenedPrototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
+    expect(await within(reopenedPrototype).findByText('Выберите гараж для платежей.')).toHaveAttribute('role', 'status')
     expect(within(reopenedPrototype).getByLabelText('Поиск номера гаража или ФИО владельца')).toHaveValue('')
     expect(within(reopenedPrototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByLabelText('Выбранный гараж')).not.toBeInTheDocument()
@@ -12714,7 +12714,7 @@ describe('App', () => {
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
 
-    expect(await within(prototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
+    expect(await within(prototype).findByText('Выберите гараж для платежей.')).toHaveAttribute('role', 'status')
     expect(financePanel).not.toHaveClass('finance-panel--show-overview')
     await act(async () => new Promise((resolve) => window.setTimeout(resolve, 600)))
     expect(getOperations).not.toHaveBeenCalled()
@@ -13234,6 +13234,34 @@ describe('App', () => {
       preview.mockRestore()
       pay.mockRestore()
     }
+  })
+
+  it('shows a retryable payment history error without a false empty state', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-history-error', number: '79', ownerName: 'Петрова Ольга' })
+    let historyRequests = 0
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => {
+      if (params?.garageId === garage.id && historyRequests++ === 0) throw new Error('История платежей временно недоступна.')
+      return { items: [], totalCount: 0, offset: 0, limit: params?.limit ?? 25 }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ getOperationsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*79\s*Петрова Ольга/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'История платежей' }))
+
+    const history = await within(prototype).findByRole('region', { name: 'История платежей гаража' })
+    expect(await within(history).findByRole('alert')).toHaveTextContent('История платежей временно недоступна.')
+    expect(within(history).queryByText('Платежей пока нет.')).not.toBeInTheDocument()
+    await user.click(within(history).getByRole('button', { name: 'Повторить загрузку' }))
+    const empty = await within(history).findByText('Платежей пока нет.')
+    expect(empty).toHaveClass('empty-state', 'empty-state--spacious')
+    expect(within(history).queryByRole('alert')).not.toBeInTheDocument()
+    expect(historyRequests).toBe(2)
   })
 
   it('cancels the expense worksheet when leaving the payouts tab', async () => {
@@ -15532,6 +15560,7 @@ describe('App', () => {
     await waitFor(() => expect(nextPageSignal).toBeInstanceOf(AbortSignal))
 
     expect(within(usersTable).getByText('Видимый сотрудник 1')).toBeInTheDocument()
+    expect(within(usersPanel).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
     expect(within(usersPanel).getByRole('status', { name: 'Обновляем список пользователей' })).toBeInTheDocument()
     expect(within(usersPanel).getByText('26 пользователей')).toBeInTheDocument()
     expect(usersTable).toHaveAttribute('aria-busy', 'true')
@@ -15540,6 +15569,39 @@ describe('App', () => {
 
     await openSection(user, 'Отчеты')
     expect(nextPageSignal?.aborted).toBe(true)
+  })
+
+  it('keeps user rows and pagination on the committed page when navigation fails', async () => {
+    const user = userEvent.setup()
+    const users = Array.from({ length: 26 }, (_item, index) => createManagedUser({
+      id: `atomic-user-${index + 1}`,
+      email: `atomic-${index + 1}@example.com`,
+      displayName: `Атомарный сотрудник ${index + 1}`,
+    }))
+    let firstPageRequests = 0
+    const getUsersPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25) => {
+      if (offset === 0 && firstPageRequests++ === 1) throw new Error('Страница пользователей недоступна.')
+      return { items: users.slice(offset, offset + limit), totalCount: users.length, offset, limit }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getUsersPage })} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const panel = await screen.findByRole('region', { name: 'Пользователи' })
+    await user.click(await within(panel).findByRole('button', { name: 'Страница 2' }))
+    expect(await within(panel).findByText('atomic-26@example.com')).toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Страница 1' }))
+
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('Страница пользователей недоступна.')
+    expect(within(panel).getByText('atomic-26@example.com')).toBeInTheDocument()
+    expect(within(panel).queryByText('atomic-1@example.com')).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Страница 2' })).toHaveAttribute('aria-current', 'page')
+    expect(within(panel).getByText('Показано 26-26 из 26')).toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('button', { name: 'Повторить загрузку' }))
+    expect(await within(panel).findByText('atomic-1@example.com')).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('returns to the first user page after creation without reloading the stale page', async () => {
@@ -24357,7 +24419,7 @@ describe('App', () => {
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
     const auditTable = within(auditPanel).getByRole('table', { name: 'События истории изменений' })
 
-    expect(await within(auditTable).findByText('Событий пока нет')).toHaveAttribute('role', 'status')
+    expect(await within(auditTable).findByText('Событий пока нет')).toHaveClass('empty-state', 'empty-state--spacious')
   })
 
   it('retries audit journal loading after an error', async () => {

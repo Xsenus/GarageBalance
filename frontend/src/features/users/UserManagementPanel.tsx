@@ -616,8 +616,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           <TablePagination
             ariaLabel="Пагинация пользователей"
             totalCount={page.totalCount}
-            offset={offset}
-            limit={pageSize}
+            offset={page.offset}
+            limit={page.limit}
             visibleCount={page.items.length}
             disabled={loading}
             pageSizeLabel="Количество строк пользователей"

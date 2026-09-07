@@ -11,7 +11,7 @@ import type { IntegrationClient } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
 import type { AccrualReasonDisplayMode, ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDebouncedRequest, scheduleDelayedAction } from '../../shared/debouncedRequest'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
@@ -3174,6 +3174,7 @@ function PaymentsPrototypePanel({
   const expenseSupplierBreakdownControllersRef = useRef(new Map<string, AbortController>())
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
+  const [paymentHistoryError, setPaymentHistoryError] = useState<string | null>(null)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
   const paymentHistoryRequestControllerRef = useRef<AbortController | null>(null)
   const incomePaymentWarningControllerRef = useRef<AbortController | null>(null)
@@ -3874,6 +3875,7 @@ function PaymentsPrototypePanel({
     paymentHistoryRequestControllerRef.current = controller
     const requestId = paymentHistoryRequests.begin()
     setGaragePaymentHistoryLoadingId(garage.id)
+    setPaymentHistoryError(null)
     try {
       const page = await financeClient.getOperationsPage(auth.accessToken, {
         operationKind: 'income',
@@ -3885,7 +3887,7 @@ function PaymentsPrototypePanel({
       }
     } catch (error) {
       if (!controller.signal.aborted && paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
-        setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
+        setPaymentHistoryError(error instanceof Error ? error.message : 'История платежей недоступна.')
       }
     } finally {
       if (!controller.signal.aborted && paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
@@ -5291,10 +5293,11 @@ function PaymentsPrototypePanel({
       {activeTab === 'income' ? !selectedGarage ? (
         loading
           ? <TableLoadingState label="Загружаем раздел платежей" />
-          : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
+          : <p className="empty-state" role="status">Выберите гараж для платежей.</p>
       ) : (
         <>
           {paymentHistoryOpen ? <section id={paymentHistoryId} className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
+            {paymentHistoryError ? <AsyncErrorState message={paymentHistoryError} onRetry={() => void loadGaragePaymentHistory(selectedGarage)} /> : null}
             <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
               <thead>
                 <tr>
@@ -5333,9 +5336,9 @@ function PaymentsPrototypePanel({
                     </td>
                   </tr>
                   )
-                }) : (
+                }) : paymentHistoryError ? null : (
                   <tr>
-                    <td colSpan={6}>Платежей по выбранному гаражу пока нет.</td>
+                    <td colSpan={6}><EmptyState>Платежей пока нет.</EmptyState></td>
                   </tr>
                 )}
               </tbody>

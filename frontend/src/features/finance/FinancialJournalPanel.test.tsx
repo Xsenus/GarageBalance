@@ -64,6 +64,14 @@ function clients(items = [entry()]) {
 }
 
 describe('FinancialJournalPanel', () => {
+  it('uses the shared spacious empty state', async () => {
+    const client = clients([])
+    client.getFinancialJournalPage.mockResolvedValue({ items: [], totalCount: 0, offset: 0, limit: 25 })
+    render(<FinancialJournalPanel auth={writableAuth} financeClient={client.finance} fundsClient={client.funds} onEdit={vi.fn()} />)
+
+    expect(await screen.findByText('По выбранным условиям операций нет.')).toHaveClass('empty-state', 'empty-state--spacious')
+  })
+
   it('loads a server page, applies filters, and uses the shared pagination', async () => {
     const client = clients()
     const user = userEvent.setup()
