@@ -4326,13 +4326,14 @@ export function AddServicePrototypeDialog({
                               rate: last?.rate ?? baseRate,
                               isCustom: true,
                             }
-                            return last ? [...current.slice(0, -1), nextTier, last] : [...current, nextTier]
+                            const finalTier = last?.name === nextTier.name ? { ...last, name: `Ступень ${current.length + 1}` } : last
+                            return finalTier ? [...current.slice(0, -1), nextTier, finalTier] : [...current, nextTier]
                           })
                         }}
                       >Добавить порог</button>
                     </div>
                   ) : (
-                    <p className="form-hint">Добавьте минимум один порог и последнюю ступень без верхней границы.</p>
+                    <p className="form-hint">Добавьте порог и последнюю ступень без верхней границы.</p>
                   )}
                 </section>
               ) : null}

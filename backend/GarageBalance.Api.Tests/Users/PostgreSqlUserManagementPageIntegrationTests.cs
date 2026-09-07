@@ -137,6 +137,49 @@ public sealed class PostgreSqlUserManagementPageIntegrationTests
         Assert.Empty(context.ChangeTracker.Entries());
     }
 
+    [PostgreSqlFact]
+    public async Task UserSearchMatchesLocalizedRoleNameAndTechnicalRoleCode()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var role = new AppRole
+        {
+            Code = "reports_viewer",
+            Name = "Просмотр отчетов",
+            Permissions = ["reports.read"]
+        };
+        var target = CreateUser("target@example.test", "Контрольный пользователь");
+        target.UserRoles.Add(new AppUserRole { User = target, Role = role });
+        var unrelated = CreateUser("other@example.test", "Другой пользователь");
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.AddRange(target, unrelated);
+            await seedContext.SaveChangesAsync();
+        }
+
+        var capture = new ReaderCommandCapture();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .AddInterceptors(capture)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        var repository = new EfUserManagementRepository(context);
+        foreach (var search in new[] { "просмотр ОТЧЕТОВ", "REPORTS_VIEWER", "viewer" })
+        {
+            var page = await repository.GetUsersPageAsync(search.ToLowerInvariant(), 0, 25, CancellationToken.None);
+            Assert.Equal(target.Id, Assert.Single(page.Users).Id);
+            Assert.Equal(1, page.TotalCount);
+            Assert.Equal(target.Id, Assert.Single(await repository.GetUsersAsync(search.ToLowerInvariant(), 25, CancellationToken.None)).Id);
+        }
+        Assert.Equal(6, capture.Commands.Count);
+        Assert.All(capture.Commands, command =>
+        {
+            Assert.Contains("EXISTS", command, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("PasswordHash", command, StringComparison.Ordinal);
+            Assert.DoesNotContain("SessionVersion", command, StringComparison.Ordinal);
+        });
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
     private static AppUser CreateUser(string email, string displayName) =>
         new()
         {

@@ -594,6 +594,27 @@ public sealed class UserManagementServiceTests
     }
 
     [Fact]
+    public async Task GetUsersPageAsync_SearchesByRoleCode()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest(
+                "role-target@example.test",
+                "Иван Сверка",
+                "StrongPass123",
+                [SystemRoles.Accountant]),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+
+        var page = await service.GetUsersPageAsync("accountant", 0, 25, CancellationToken.None);
+
+        Assert.Equal(created.Value!.Id, Assert.Single(page.Items).Id);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
     public async Task GetUsersPageAsync_TreatsWildcardCharactersAsText()
     {
         await using var database = await TestDatabase.CreateAsync();

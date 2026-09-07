@@ -566,6 +566,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   async function saveEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setError(null)
     if (!editor) {
       return
     }
@@ -1396,7 +1397,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="dictionary-edit-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
+            <p className="confirmation-text" id="dictionary-edit-confirmation-description">Действие будет записано в историю изменений.</p>
             <ChangePreviewList ariaLabel="Изменяемые поля" changes={pendingEditorConfirmation.changes} />
             <div className="detail-dialog-actions">
               <button ref={editorConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingEditorConfirmation(null)} disabled={saving === 'dictionary-editor'}>Отмена</button>

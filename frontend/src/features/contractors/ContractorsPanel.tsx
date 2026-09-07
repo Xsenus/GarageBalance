@@ -4120,9 +4120,15 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSaveError(null)
 
     if (form.employmentEndDate && form.employmentEndDate < form.employmentStartDate) {
-      setSaveError('Дата увольнения не может быть раньше даты принятия.')
+      setSaveError('Дата увольнения раньше даты принятия.')
+      return
+    }
+
+    if (parseStaffRate(form.rate) < 0) {
+      setSaveError('Введите ставку неотрицательным числом.')
       return
     }
 

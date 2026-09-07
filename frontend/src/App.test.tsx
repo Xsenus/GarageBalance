@@ -3985,7 +3985,7 @@ describe('App', () => {
     expect(employmentEndInput.closest('.form-field')?.nextElementSibling?.nextElementSibling).toContainElement(within(employeeDialog).getByLabelText('Ставка сотрудника'))
     await user.type(employmentEndInput, '29.06.2026')
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
-    expect(within(employeeDialog).getByRole('alert')).toHaveTextContent('Дата увольнения не может быть раньше даты принятия.')
+    expect(within(employeeDialog).getByRole('alert')).toHaveTextContent('Дата увольнения раньше даты принятия.')
     await user.clear(employmentEndInput)
     expect(within(employeeDialog).getByLabelText('Отдел сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
     expect(within(employeeDialog).getByRole('combobox', { name: 'Отдел сотрудника' })).toHaveClass('select-control__trigger')
@@ -4005,6 +4005,11 @@ describe('App', () => {
     expect(employeeDepartmentControl).toHaveAttribute('aria-expanded', 'false')
     await user.click(employeeDepartmentControl)
     await user.click(within(within(employeeDialog).getByRole('listbox', { name: 'Отдел сотрудника: варианты' })).getByRole('option', { name: 'Охрана' }))
+    await user.type(within(employeeDialog).getByLabelText('Ставка сотрудника'), '-1')
+    await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
+    expect(within(employeeDialog).getByRole('alert')).toHaveTextContent('Введите ставку неотрицательным числом.')
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения сотрудника' })).not.toBeInTheDocument()
+    await user.clear(within(employeeDialog).getByLabelText('Ставка сотрудника'))
     await user.type(within(employeeDialog).getByLabelText('Ставка сотрудника'), '25000')
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
@@ -4026,6 +4031,11 @@ describe('App', () => {
     expect(within(editEmployeeDialog).getByLabelText('Ставка сотрудника')).toHaveValue('25 000.00')
     expect(within(editEmployeeDialog).getByRole('button', { name: 'Открыть фин. отчет' })).toHaveClass('contractors-report-button')
     expect(within(editEmployeeDialog).queryByRole('button', { name: 'Удалить сотрудника' })).not.toBeInTheDocument()
+    await user.clear(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'))
+    await user.type(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'), '-1')
+    await user.click(within(editEmployeeDialog).getByRole('button', { name: /Сохранить/i }))
+    expect(within(editEmployeeDialog).getByRole('alert')).toHaveTextContent('Введите ставку неотрицательным числом.')
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения сотрудника' })).not.toBeInTheDocument()
     await user.clear(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'))
     await user.type(within(editEmployeeDialog).getByLabelText('Ставка сотрудника'), '30000')
     await user.click(within(editEmployeeDialog).getByRole('button', { name: /Сохранить/i }))
@@ -6244,6 +6254,11 @@ describe('App', () => {
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeEnabled()
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
+    expect(within(serviceDialog).getAllByLabelText('Ступень 1: цена за единицу')).toHaveLength(1)
+    expect(within(serviceDialog).getAllByLabelText('Ступень 2: цена за единицу')).toHaveLength(1)
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Добавить порог' }))
+    expect(within(serviceDialog).getAllByLabelText('Ступень 2: цена за единицу')).toHaveLength(1)
+    expect(within(serviceDialog).getAllByLabelText('Ступень 3: цена за единицу')).toHaveLength(1)
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     tariffInput = within(serviceDialog).getByLabelText('Тариф регулярной услуги')
     await user.click(within(serviceDialog).getByLabelText('По счетчику'))
@@ -15526,6 +15541,42 @@ describe('App', () => {
     expect(emptyRolesState).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('searches users by localized role name and technical role code', async () => {
+    const user = userEvent.setup()
+    const target = createManagedUser({
+      id: 'reports-role-user',
+      email: 'viewer@example.com',
+      displayName: 'Проверка отчетов',
+      roles: ['reports_viewer'],
+    })
+    const getUsersPage = vi.fn(async (_token: string, search: string, offset = 0, limit = 25) => {
+      const normalized = search.toLowerCase()
+      const items = normalized.includes('просмотр отчетов') || normalized.includes('reports_viewer') ? [target] : []
+      return { items, totalCount: items.length, offset, limit }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getUsersPage })} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const panel = await screen.findByRole('region', { name: 'Пользователи' })
+    const search = within(panel).getByLabelText('Поиск пользователей')
+    for (const query of ['Просмотр отчетов', 'reports_viewer']) {
+      await user.clear(search)
+      await user.type(search, query)
+      await user.click(within(panel).getByRole('button', { name: 'Найти' }))
+      expect(await within(panel).findByText('viewer@example.com')).toBeInTheDocument()
+      await waitFor(() => expect(getUsersPage).toHaveBeenLastCalledWith('token', query, 0, 25, expect.any(AbortSignal)))
+    }
+
+    await user.clear(search)
+    await user.type(search, 'несуществующая роль')
+    await user.click(within(panel).getByRole('button', { name: 'Найти' }))
+    const emptyState = await within(panel).findByText('Пользователей пока нет')
+    expect(emptyState).toHaveAttribute('role', 'status')
+    expect(emptyState).toHaveAttribute('aria-live', 'polite')
+  })
+
   it('changes current user password from the workspace', async () => {
     const user = userEvent.setup()
     let passwordRequest: { token: string; currentPassword: string; newPassword: string } | null = null
@@ -18611,6 +18662,52 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Проверьте гараж')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Укажите номер гаража.')).toBeInTheDocument()
     expect(createGarageCalled).toBe(false)
+  })
+
+  it('clears a rejected expense-type edit before opening a corrected confirmation', async () => {
+    const user = userEvent.setup()
+    let expenseType = createAccountingType({ id: 'expense-audit', name: 'Проверочная выплата', code: 'audit_old' })
+    let attempt = 0
+    const updateExpenseType = vi.fn(async (_token: string, id: string, request: { name: string; code?: string | null }) => {
+      attempt += 1
+      if (attempt === 1) {
+        throw new Error('Системный код нельзя изменять.')
+      }
+      expenseType = createAccountingType({ id, name: request.name, code: request.code ?? null })
+      return expenseType
+    })
+    const dictionaryClient = createDictionaryClient({
+      getExpenseTypes: async () => [expenseType],
+      updateExpenseType,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const panel = await screen.findByRole('region', { name: 'Справочники' })
+    const table = await openDictionarySubgroup(user, panel, 'Статьи расходов')
+    await user.dblClick(within(table).getByText('Проверочная выплата').closest('tr')!)
+    const editor = await screen.findByRole('dialog', { name: 'Статьи расходов' })
+    const code = within(editor).getByLabelText('Код вида операции')
+    await user.clear(code)
+    await user.type(code, 'salary')
+    await user.click(within(editor).getByRole('button', { name: 'Сохранить' }))
+    let confirmation = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить изменения' }))
+    expect(await within(editor).findByRole('alert')).toHaveTextContent('Системный код нельзя изменять.')
+
+    await user.clear(code)
+    await user.type(code, 'audit_expense')
+    await user.click(within(editor).getByRole('button', { name: 'Сохранить' }))
+    confirmation = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
+    expect(within(editor).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(confirmation).getByText('audit_expense')).toBeInTheDocument()
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить изменения' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Статьи расходов' })).not.toBeInTheDocument())
+    expect(updateExpenseType).toHaveBeenCalledTimes(2)
+    expect(await within(table).findByText('audit_expense')).toBeInTheDocument()
   })
 
   it('derives opening debt from overdue in the garage dictionary editor', async () => {
