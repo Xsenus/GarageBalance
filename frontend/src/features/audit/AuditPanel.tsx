@@ -30,16 +30,17 @@ const auditSectionOptions = [
 
 const auditActionKindOptions = [
   { value: '', label: 'Все действия' },
-  { value: 'create', label: 'Создание' },
-  { value: 'update', label: 'Изменение' },
-  { value: 'archive', label: 'Архивирование' },
-  { value: 'restore', label: 'Восстановление' },
-  { value: 'cancel', label: 'Отмена' },
-  { value: 'login', label: 'Вход' },
-  { value: 'fail', label: 'Ошибки и отказы' },
-  { value: 'generate', label: 'Формирование' },
-  { value: 'export', label: 'Выгрузка' },
-  { value: 'import', label: 'Импорт' },
+  { value: 'create', label: 'Создание', pattern: /_created/ },
+  { value: 'update', label: 'Изменение', pattern: /_updated|password_changed/ },
+  { value: 'archive', label: 'Архивирование', pattern: /_archived/ },
+  { value: 'delete', label: 'Удаление', pattern: /_deleted/ },
+  { value: 'restore', label: 'Восстановление', pattern: /_restored/ },
+  { value: 'cancel', label: 'Отмена', pattern: /_cancell?ed/ },
+  { value: 'fail', label: 'Ошибки и отказы', pattern: /_failed|_rate_limited|_inactive/ },
+  { value: 'generate', label: 'Формирование', pattern: /_generated/ },
+  { value: 'export', label: 'Выгрузка', pattern: /_exported|\.export/ },
+  { value: 'login', label: 'Вход', pattern: /^auth\.login/ },
+  { value: 'import', label: 'Импорт', pattern: /^import\./ },
 ]
 
 const auditEntityTypeOptions = [
@@ -53,6 +54,7 @@ const auditEntityTypeOptions = [
   { value: 'supplier_accrual', label: 'Начисление поставщику' },
   { value: 'meter_reading', label: 'Показание счетчика' },
   { value: 'report', label: 'Отчет' },
+  { value: 'garage_report_quick_list', label: 'Быстрый список гаражей' },
   { value: 'app_user', label: 'Пользователь' },
   { value: 'access_import_run', label: 'Импорт Access' },
 ]
@@ -70,25 +72,12 @@ function getAuditEventSectionLabel(auditEvent: AuditEventDto) {
 }
 
 function getAuditEventActionKindLabel(auditEvent: AuditEventDto) {
-  if (auditEvent.actionKind) {
-    const option = auditActionKindOptions.find((item) => item.value === auditEvent.actionKind)
-    if (option && option.value) {
-      return option.label
-    }
-  }
+  const explicit = auditActionKindOptions.find((option) => option.value && option.value === auditEvent.actionKind)
+  if (explicit) return explicit.label
 
   const action = auditEvent.action.toLowerCase()
-  if (action.includes('_created')) return 'Создание'
-  if (action.includes('_updated') || action.includes('password_changed')) return 'Изменение'
-  if (action.includes('_archived')) return 'Архивирование'
-  if (action.includes('_restored')) return 'Восстановление'
-  if (action.includes('_canceled') || action.includes('_cancelled')) return 'Отмена'
-  if (action.includes('_failed') || action.includes('_rate_limited') || action.includes('_inactive')) return 'Ошибка'
-  if (action.includes('_generated')) return 'Формирование'
-  if (action.includes('_exported') || action.includes('.export')) return 'Выгрузка'
-  if (action.startsWith('auth.login')) return 'Вход'
-  if (action.startsWith('import.')) return 'Импорт'
-  return auditEvent.action
+  const inferred = auditActionKindOptions.find((option) => option.pattern?.test(action))
+  return inferred?.value === 'fail' ? 'Ошибка' : inferred?.label ?? auditEvent.action
 }
 
 function getAuditEntityTypeLabel(entityType: string) {
@@ -107,18 +96,6 @@ function formatAuditActorId(actorUserId: string | null) {
   return actorUserId ? `ID ${actorUserId}` : 'Системное событие'
 }
 
-function parseAuditBeforeAfter(summary: string) {
-  const match = summary.match(/было\s+(.+?);?\s+стало\s+(.+?)(?:\.|$)/i)
-  if (!match) {
-    return { before: 'не указано', after: 'не указано' }
-  }
-
-  return {
-    before: match[1].trim(),
-    after: match[2].trim(),
-  }
-}
-
 function getAuditBeforeAfter(auditEvent: AuditEventDto) {
   if (auditEvent.oldValue || auditEvent.newValue) {
     return {
@@ -127,14 +104,12 @@ function getAuditBeforeAfter(auditEvent: AuditEventDto) {
     }
   }
 
-  const parsed = parseAuditBeforeAfter(auditEvent.summary)
-  if (parsed.before !== 'не указано' || parsed.after !== 'не указано') {
-    return parsed
+  const match = auditEvent.summary.match(/было\s+(.+?);?\s+стало\s+(.+?)(?:\.|$)/i)
+  if (match) {
+    return { before: match[1].trim(), after: match[2].trim() }
   }
-
-  return auditEvent.actionKind === 'update'
-    ? parsed
-    : { before: '—', after: '—' }
+  const empty = auditEvent.actionKind === 'update' ? 'не указано' : '—'
+  return { before: empty, after: empty }
 }
 
 function getAuditRelatedContext(auditEvent: AuditEventDto) {

@@ -59,8 +59,8 @@ public static class AuditChangeDiffBuilder
             oldValues.TryGetValue(fieldName, out var oldValue);
             newValues.TryGetValue(fieldName, out var newValue);
 
-            var normalizedOldValue = NormalizeValue(oldValue);
-            var normalizedNewValue = NormalizeValue(newValue);
+            var normalizedOldValue = NormalizeValue(oldValue, fieldName);
+            var normalizedNewValue = NormalizeValue(newValue, fieldName);
             if (string.Equals(normalizedOldValue, normalizedNewValue, StringComparison.Ordinal))
             {
                 continue;
@@ -99,12 +99,13 @@ public static class AuditChangeDiffBuilder
         return fieldName;
     }
 
-    private static string? NormalizeValue(object? value)
+    private static string? NormalizeValue(object? value, string fieldName)
     {
         return value switch
         {
             null => null,
             string text => string.IsNullOrWhiteSpace(text) ? null : text.Trim(),
+            DateOnly date when string.Equals(fieldName, "accountingMonth", StringComparison.OrdinalIgnoreCase) => date.ToString("MM.yyyy", CultureInfo.InvariantCulture),
             DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             TimeOnly time => time.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
@@ -140,6 +141,6 @@ public static class AuditChangeDiffBuilder
         }
 
         var normalized = fieldName.Replace(" ", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
-        return SensitiveFieldNameParts.Any(part => normalized.Contains(part, StringComparison.Ordinal));
+        return !fieldName.Equals("accountingMonth", StringComparison.OrdinalIgnoreCase) && SensitiveFieldNameParts.Any(part => normalized.Contains(part, StringComparison.Ordinal));
     }
 }

@@ -14,6 +14,90 @@ namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditServiceTests
 {
+    [Theory]
+    [InlineData("action")]
+    [InlineData("oldValue")]
+    [InlineData("newValue")]
+    [InlineData("fieldName")]
+    [InlineData("prefix")]
+    [InlineData("missingOld")]
+    [InlineData("missingNew")]
+    [InlineData("invalidOld")]
+    [InlineData("invalidNew")]
+    [InlineData("same")]
+    [InlineData("amount")]
+    [InlineData("ambiguousOld")]
+    [InlineData("ambiguousNew")]
+    [InlineData("maskedChange")]
+    public async Task LegacyMonthRecoveryDoesNotGuessOrReplaceExplicitValues(string scenario)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var before = "364.62 по гаражу 12 от 06.09.2026 за 09.2026; вид Мусор; документ без документа";
+        var after = before.Replace("за 09.2026", "за 10.2026");
+        var metadata = new Dictionary<string, string> { ["fieldName"] = "Расчетный месяц" };
+        switch (scenario)
+        {
+            case "oldValue": metadata["oldValue"] = "08.2026"; break;
+            case "newValue": metadata["newValue"] = "11.2026"; break;
+            case "fieldName": metadata["fieldName"] = "Сумма"; break;
+            case "missingOld": before = before.Replace(" за 09.2026", ""); break;
+            case "missingNew": after = after.Replace(" за 10.2026", ""); break;
+            case "invalidOld": before = before.Replace("за 09.2026", "за 13.2026"); break;
+            case "invalidNew": after = after.Replace("за 10.2026", "за 13.2026"); break;
+            case "same": after = before; break;
+            case "amount": after = after.Replace("364.62", "365.62"); break;
+            case "ambiguousOld": before += " от 06.09.2026 за 08.2026;"; break;
+            case "ambiguousNew": after += " от 06.09.2026 за 08.2026;"; break;
+            case "maskedChange": before += "; old@example.test"; after += "; new@example.test"; break;
+        }
+        var summary = $"Изменено поступление: было {before}; стало {after}.";
+        if (scenario == "prefix") summary = "Другой формат: " + summary;
+        var metadataJson = System.Text.Json.JsonSerializer.Serialize(metadata);
+        var audit = new AuditEvent { Action = scenario == "action" ? "other.updated" : "finance.income_updated", EntityType = "financial_operation", Summary = summary, MetadataJson = metadataJson };
+        database.Context.AuditEvents.Add(audit);
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var result = await service.GetEventAsync(audit.Id, CancellationToken.None);
+        Assert.Equal(metadata.OrderBy(item => item.Key), result!.Metadata!.OrderBy(item => item.Key));
+        var stored = await database.Context.AuditEvents.AsNoTracking().SingleAsync();
+        Assert.Equal(summary, stored.Summary);
+        Assert.Equal(metadataJson, stored.MetadataJson);
+    }
+
+    [Theory]
+    [InlineData("09.2026", "10.2026", false, false)]
+    [InlineData("10.2026", "09.2026", false, false)]
+    [InlineData("09.2026", "10.2026", true, false)]
+    [InlineData("10.2026", "09.2026", true, false)]
+    [InlineData("09.2026", "10.2026", false, true)]
+    [InlineData("10.2026", "09.2026", true, true)]
+    public async Task LegacyPaymentMonthChangeShowsBothMonthsWithoutChangingStoredEvent(string oldMonth, string newMonth, bool maskedMetadata, bool expense)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var summary = $"Изменено поступление: было 364.62 по гаражу 12 от 06.09.2026 за {oldMonth}; вид Мусор; документ без документа; стало 364.62 по гаражу 12 от 06.09.2026 за {newMonth}; вид Мусор; документ без документа. Комментарий: Полная оплата сен.26.";
+        if (expense)
+        {
+            summary = summary.Replace("Изменено поступление", "Изменена выплата").Replace("по гаражу 12", "получателю Проверка").Replace("вид Мусор", "услуга/статья Вывоз; источник банк; тип оплата");
+        }
+        var metadata = maskedMetadata ? "{\"fieldName\":\"Расчетный месяц\",\"oldValue\":\"[секрет скрыт]\",\"newValue\":\"[секрет скрыт]\"}" : null;
+        var audit = new AuditEvent { Action = expense ? "finance.expense_updated" : "finance.income_updated", EntityType = "financial_operation", Summary = summary, MetadataJson = metadata };
+        database.Context.AuditEvents.Add(audit);
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var result = await service.GetEventAsync(audit.Id, CancellationToken.None);
+        Assert.Equal("Расчетный месяц", result!.FieldName);
+        Assert.Equal(oldMonth, result.OldValue);
+        Assert.Equal(newMonth, result.NewValue);
+        var csv = Encoding.UTF8.GetString((await service.ExportEventsCsvAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None)).Content);
+        Assert.Contains(oldMonth, csv);
+        Assert.Contains(newMonth, csv);
+        Assert.Equal(oldMonth, result.Metadata!["oldValue"]);
+        Assert.Equal(newMonth, result.Metadata["newValue"]);
+        var stored = await database.Context.AuditEvents.AsNoTracking().SingleAsync();
+        Assert.Equal(summary, stored.Summary);
+        Assert.Equal(metadata, stored.MetadataJson);
+    }
+
     [Fact]
     public async Task LegacyCancelReasonRecoveryRetainsMasking()
     {

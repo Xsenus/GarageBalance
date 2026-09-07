@@ -61,6 +61,7 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
         var (restoredSummary, restoredMetadata) = RestoreLegacyCancelReason(auditEvent.Action, auditEvent.Summary, metadata);
         metadata = restoredMetadata;
         var maskedSummary = AuditTextMasker.Mask(restoredSummary) ?? string.Empty;
+        metadata = RestoreLegacyPaymentMonth(auditEvent.Action, auditEvent.Summary, metadata);
         var beforeAfter = ExtractBeforeAfter(maskedSummary);
         var legacyBeforeAfter = ExtractLegacyBeforeAfter(maskedSummary);
         var actionKind = MaskStoredValue(auditEvent.ActionKind) ?? GetActionKind(auditEvent.Action);
@@ -327,6 +328,50 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
     {
         var match = Regex.Match(summary, @"(?:Причина|Комментарий):\s*(?<reason>.+)\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
         return match.Success ? NormalizeExtractedValue(match.Groups["reason"].Value) : null;
+    }
+
+    private static IReadOnlyDictionary<string, string>? RestoreLegacyPaymentMonth(
+        string action, string summary, IReadOnlyDictionary<string, string>? metadata)
+    {
+        if (action is not ("finance.income_updated" or "finance.expense_updated") ||
+            ExtractMetadataValue(metadata, "oldValue") is not null || ExtractMetadataValue(metadata, "newValue") is not null)
+        {
+            return metadata;
+        }
+        var field = ExtractMetadataValue(metadata, "fieldName", "changedFields");
+        if (field is not (null or "Расчетный месяц" or "Расчётный месяц" or "Описание платежа"))
+        {
+            return metadata;
+        }
+        var match = Regex.Match(summary, @"\A(?:Изменено поступление|Изменена выплата): было (?<before>.+?); стало (?<after>.+?)(?:\. Комментарий:.*)?\z", RegexOptions.CultureInvariant | RegexOptions.Singleline);
+        if (!match.Success)
+        {
+            return metadata;
+        }
+        var before = match.Groups["before"].Value.TrimEnd('.');
+        var after = match.Groups["after"].Value.TrimEnd('.');
+        const string monthPattern = @" от \d{2}\.\d{2}\.\d{4} за (?<month>\d{2}\.\d{4});";
+        var oldMatches = Regex.Matches(before, monthPattern, RegexOptions.CultureInvariant);
+        var newMatches = Regex.Matches(after, monthPattern, RegexOptions.CultureInvariant);
+        if (oldMatches.Count != 1 || newMatches.Count != 1)
+        {
+            return metadata;
+        }
+        var oldMatch = oldMatches[0].Groups["month"];
+        var newMatch = newMatches[0].Groups["month"];
+        if (oldMatch.Value == newMatch.Value ||
+            !DateOnly.TryParseExact("01." + oldMatch.Value, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) ||
+            !DateOnly.TryParseExact("01." + newMatch.Value, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) ||
+            !before.AsSpan(0, oldMatch.Index).SequenceEqual(after.AsSpan(0, newMatch.Index)) ||
+            !before.AsSpan(oldMatch.Index + oldMatch.Length).SequenceEqual(after.AsSpan(newMatch.Index + newMatch.Length)))
+        {
+            return metadata;
+        }
+        var restored = metadata is null ? new Dictionary<string, string>(StringComparer.Ordinal) : new Dictionary<string, string>(metadata, StringComparer.Ordinal);
+        restored["fieldName"] = "Расчетный месяц";
+        restored["oldValue"] = oldMatch.Value;
+        restored["newValue"] = newMatch.Value;
+        return restored;
     }
 
     private static (string Summary, IReadOnlyDictionary<string, string>? Metadata) RestoreLegacyCancelReason(

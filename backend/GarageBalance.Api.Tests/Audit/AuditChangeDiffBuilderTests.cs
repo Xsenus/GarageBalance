@@ -4,6 +4,37 @@ namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditChangeDiffBuilderTests
 {
+    [Theory]
+    [InlineData("accountingMonth")]
+    [InlineData("ACCOUNTINGMONTH")]
+    public void AccountingMonthShowsLocalizedOldAndNewMonth(string field)
+    {
+        var change = Assert.Single(AuditChangeDiffBuilder.Build(
+            new Dictionary<string, object?> { [field] = new DateOnly(2026, 9, 1) },
+            new Dictionary<string, object?> { [field] = new DateOnly(2026, 10, 1) },
+            new Dictionary<string, string> { [field] = "Расчетный месяц" }));
+        Assert.Equal("Расчетный месяц", change.FieldName);
+        Assert.Equal("09.2026", change.OldValue);
+        Assert.Equal("10.2026", change.NewValue);
+    }
+
+    [Theory]
+    [InlineData("accountNumber", "Номер")]
+    [InlineData("bankAccount", "Номер")]
+    [InlineData("accountingMonthSecret", "Номер")]
+    [InlineData("account ingMonth", "Номер")]
+    [InlineData("accountingMonth ", "Номер")]
+    [InlineData("accountingMonth", "Пароль")]
+    public void MonthRecognitionDoesNotUnmaskSensitiveFields(string field, string label)
+    {
+        var change = Assert.Single(AuditChangeDiffBuilder.Build(
+            new Dictionary<string, object?> { [field] = "old-private" },
+            new Dictionary<string, object?> { [field] = "new-private" },
+            new Dictionary<string, string> { [field] = label }));
+        Assert.Equal("[секрет скрыт]", change.OldValue);
+        Assert.Equal("[секрет скрыт]", change.NewValue);
+    }
+
     [Fact]
     public void Build_ReturnsOnlyChangedFieldsWithLabels()
     {

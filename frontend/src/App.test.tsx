@@ -50,6 +50,94 @@ import type { AppReleaseDto, AppReleasePageDto, ReleaseClient } from './services
 import type { ManagedRoleDto, ManagedUserDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
+  it('keeps explicit audit values and legacy fallbacks in the before and after columns', async () => {
+    const user = userEvent.setup()
+    const examples = [
+      { oldValue: 'Ранее', newValue: null, actionKind: 'update', summary: 'Explicit old', expected: ['Ранее', 'не указано'] },
+      { oldValue: null, newValue: 'Теперь', actionKind: 'update', summary: 'Explicit new', expected: ['не указано', 'Теперь'] },
+      { oldValue: null, newValue: null, actionKind: 'update', summary: 'Изменено: было Ранее; стало Теперь.', expected: ['Ранее', 'Теперь'] },
+      { oldValue: null, newValue: null, actionKind: 'update', summary: 'Без значений', expected: ['не указано', 'не указано'] },
+      { oldValue: null, newValue: null, actionKind: 'create', summary: 'Создание без значений', expected: ['—', '—'] },
+    ]
+    const events = examples.map(({ oldValue, newValue, actionKind, summary }, index) => createAuditEvent({ oldValue, newValue, actionKind, summary, id: `fallback-${index}` }))
+    render(<App authClient={createAuthClient()} auditClient={createAuditClient({ getEvents: async () => events })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = await screen.findByRole('region', { name: 'История изменений' })
+    for (const example of examples) {
+      const description = await within(panel).findByText(example.summary)
+      const cells = within(description.closest('[role="row"]') as HTMLElement).getAllByRole('cell')
+      expect(cells[6]).toHaveTextContent(example.expected[0])
+      expect(cells[7]).toHaveTextContent(example.expected[1])
+    }
+  })
+
+  it.each([['09.2026', '10.2026'], ['10.2026', '09.2026']])('shows payment month change from %s to %s in audit details', async (oldValue, newValue) => {
+    const user = userEvent.setup()
+    const event = createAuditEvent({ id: 'payment-month', action: 'finance.income_updated', actionKind: 'update', entityType: 'financial_operation', fieldName: 'Расчетный месяц', oldValue, newValue, summary: 'Изменено поступление: было 364.62; стало 364.62.' })
+    render(<App authClient={createAuthClient()} auditClient={createAuditClient({ getEvents: async () => [event], getEvent: async () => event })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = await screen.findByRole('region', { name: 'История изменений' })
+    expect(await within(panel).findByText('Расчетный месяц')).toBeInTheDocument()
+    expect(within(panel).getByText(oldValue)).toBeInTheDocument()
+    expect(within(panel).getByText(newValue)).toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Открыть карточку события Изменение' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Изменение' })
+    expect(within(dialog).getByText(oldValue)).toBeInTheDocument()
+    expect(within(dialog).getByText(newValue)).toBeInTheDocument()
+  })
+
+  it('preserves legacy audit action labels and their precedence', async () => {
+    const user = userEvent.setup()
+    const examples = [
+      ['reports.list_created', 'Создание'], ['reports.list_updated', 'Изменение'],
+      ['reports.list_archived', 'Архивирование'], ['reports.list_deleted', 'Удаление'],
+      ['reports.list_restored', 'Восстановление'], ['users.password_changed', 'Изменение'],
+      ['finance.entry_canceled', 'Отмена'], ['finance.entry_cancelled', 'Отмена'],
+      ['auth.login_failed', 'Ошибка'], ['auth.login_rate_limited', 'Ошибка'], ['auth.login_inactive', 'Ошибка'],
+      ['reports.list_created_updated', 'Создание'], ['reports.list_archived_password_changed', 'Изменение'],
+      ['reports.list_generated', 'Формирование'], ['reports.list_exported', 'Выгрузка'],
+      ['reports.export', 'Выгрузка'], ['auth.login', 'Вход'], ['import.started', 'Импорт'], ['custom.event', 'custom.event'],
+    ]
+    const events = examples.map(([action], index) => createAuditEvent({ id: `legacy-${index}`, action, actionKind: 'other', summary: `Legacy event ${index}` }))
+    render(<App authClient={createAuthClient()} auditClient={createAuditClient({ getEvents: async () => events })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = await screen.findByRole('region', { name: 'История изменений' })
+    for (const [index, [, label]] of examples.entries()) {
+      const description = await within(panel).findByText(`Legacy event ${index}`)
+      const row = description.closest('[role="row"]')!
+      expect(within(row as HTMLElement).getByRole('button', { name: `Открыть карточку события ${label}` })).toBeInTheDocument()
+    }
+  })
+
+  it.each(['delete', 'other'])('localizes quick-list deletion with %s action kind', async (actionKind) => {
+    const user = userEvent.setup()
+    const event = createAuditEvent({ id: 'quick-list-deletion', action: 'reports.garage_quick_list_deleted', actionKind, entityType: 'garage_report_quick_list', section: 'reports', summary: 'Удалён быстрый список «Контроль».', reason: 'Завершение проверки' })
+    const getEvents = vi.fn(async () => [event])
+    const auditClient = createAuditClient({ getEvents, getEvent: async () => event })
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = await screen.findByRole('region', { name: 'История изменений' })
+    expect(await within(panel).findByText('Быстрый список гаражей')).toBeInTheDocument()
+    await user.click(within(panel).getByRole('combobox', { name: 'Тип действия истории изменений' }))
+    await user.click(within(panel).getByRole('option', { name: 'Удаление' }))
+    await user.click(within(panel).getByRole('combobox', { name: 'Тип объекта истории изменений' }))
+    await user.click(within(panel).getByRole('option', { name: 'Быстрый список гаражей' }))
+    await waitFor(() => expect(getEvents).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ actionKind: 'delete', entityType: 'garage_report_quick_list' })))
+    await user.click(within(panel).getByRole('button', { name: 'Открыть карточку события Удаление' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Удаление' })
+    expect(within(dialog).getByText('Быстрый список гаражей')).toBeInTheDocument()
+    expect(within(dialog).getByText('reports.garage_quick_list_deleted')).toBeInTheDocument()
+    expect(within(dialog).getByText('Завершение проверки')).toBeInTheDocument()
+  })
+
   it.each(['create', 'cancel'] as const)('shows full audit reason with abbreviations and decimal values for %s', async (actionKind) => {
     const user = userEvent.setup()
     const reason = 'Возврат за сен.26. Проверена сумма 100.60'
