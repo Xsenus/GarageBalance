@@ -14,11 +14,14 @@ public sealed record GarageReportQuickListDto(
     string Name,
     IReadOnlyList<GarageReportQuickListGarageDto> Garages,
     DateTimeOffset UpdatedAtUtc,
-    Guid? UpdatedByUserId);
+    Guid? UpdatedByUserId,
+    Guid Version = default);
 
 public sealed record UpsertGarageReportQuickListRequest(
     [Required, MaxLength(100)] string Name,
-    [Required, MinLength(1), MaxLength(500)] IReadOnlyList<Guid> GarageIds);
+    [Required, MinLength(1), MaxLength(500)] IReadOnlyList<Guid> GarageIds,
+    Guid? Version = null);
 
 public sealed record DeleteGarageReportQuickListRequest(
-    [ActionComment, MaxLength(1000)] string Reason);
+    [ActionComment, MaxLength(1000)] string Reason,
+    Guid? Version = null);

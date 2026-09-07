@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Reports;
 
@@ -60,6 +61,7 @@ public sealed class GarageReportQuickListService(
             return ReportResult<GarageReportQuickListDto>.Failure("garage_quick_list_not_found", "Быстрый список гаражей не найден.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, quickList);
         var validation = await ValidateAsync(request, id, cancellationToken);
         if (!validation.Succeeded)
         {
@@ -116,6 +118,7 @@ public sealed class GarageReportQuickListService(
             return ReportResult<bool>.Failure("garage_quick_list_not_found", "Быстрый список гаражей не найден.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, quickList);
         quickList.IsArchived = true;
         quickList.ArchivedAtUtc = DateTimeOffset.UtcNow;
         quickList.ArchivedByUserId = actorUserId;
@@ -224,7 +227,8 @@ public sealed class GarageReportQuickListService(
             quickList.Name,
             garages,
             quickList.UpdatedAtUtc,
-            quickList.UpdatedByUserId);
+            quickList.UpdatedByUserId,
+            quickList.Version);
     }
 
     private sealed record ValidatedQuickList(

@@ -11,6 +11,34 @@ namespace GarageBalance.Api.Tests.Controllers;
 public sealed class RequireConcurrencyVersionAttributeTests
 {
     [Theory]
+    [InlineData("Update", null)]
+    [InlineData("Update", "00000000-0000-0000-0000-000000000000")]
+    [InlineData("Update", "981fbaed-e292-4a4b-ae1b-5529d47c9460")]
+    [InlineData("Delete", null)]
+    [InlineData("Delete", "00000000-0000-0000-0000-000000000000")]
+    [InlineData("Delete", "981fbaed-e292-4a4b-ae1b-5529d47c9460")]
+    public void QuickListMutation_RequiresNonemptyVersion(string method, string? versionText)
+    {
+        Guid? version = versionText is null ? null : Guid.Parse(versionText);
+        var attribute = Assert.Single(typeof(GarageReportQuickListsController).GetMethod(method)!
+            .GetCustomAttributes(typeof(RequireConcurrencyVersionAttribute), true).Cast<RequireConcurrencyVersionAttribute>());
+        object request = method == "Update"
+            ? new GarageBalance.Api.Application.Reports.UpsertGarageReportQuickListRequest("Список", [Guid.NewGuid()], version)
+            : new GarageBalance.Api.Application.Reports.DeleteGarageReportQuickListRequest("Удаление", version);
+        var context = CreateContext(request);
+        attribute.OnActionExecuting(context);
+        if (version is null || version == Guid.Empty)
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(context.Result);
+            Assert.Equal("concurrency_version_required", Assert.IsType<ValidationProblemDetails>(result.Value).Title);
+        }
+        else
+        {
+            Assert.Null(context.Result);
+        }
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("00000000-0000-0000-0000-000000000000")]
     [InlineData("981fbaed-e292-4a4b-ae1b-5529d47c9460")]

@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Infrastructure.Data;
@@ -9,6 +10,38 @@ namespace GarageBalance.Api.Tests.Reports;
 
 public sealed class GarageReportQuickListServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StaleEditor_CannotRestoreRemovedGarageOrDeleteChangedList(bool delete)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var garages = await AddGaragesAsync(database.Context, "901", "904");
+        var service = CreateService(database.Context);
+        var created = (await service.CreateAsync(new UpsertGarageReportQuickListRequest(
+            "Контрольный список", garages.Select(garage => garage.Id).ToArray()), null, CancellationToken.None)).Value!;
+        var changed = (await service.UpdateAsync(created.Id,
+            new UpsertGarageReportQuickListRequest(created.Name, [garages[0].Id], created.Version), null, CancellationToken.None)).Value!;
+        Assert.NotEqual(created.Version, changed.Version);
+        var auditCount = await database.Context.AuditEvents.CountAsync();
+
+        if (delete)
+        {
+            await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => service.DeleteAsync(created.Id,
+                new DeleteGarageReportQuickListRequest("Устаревшее удаление", created.Version), null, CancellationToken.None));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => service.UpdateAsync(created.Id,
+                new UpsertGarageReportQuickListRequest("Новое имя", garages.Select(garage => garage.Id).ToArray(), created.Version), null, CancellationToken.None));
+        }
+        var current = Assert.Single(await service.GetAllAsync(CancellationToken.None));
+        Assert.Equal(created.Name, current.Name);
+        Assert.Equal(garages[0].Id, Assert.Single(current.Garages).GarageId);
+        Assert.Equal(changed.Version, current.Version);
+        Assert.Equal(auditCount, await database.Context.AuditEvents.CountAsync());
+    }
+
     [Fact]
     public async Task CreateUpdateDelete_PersistsMembershipAndAudit()
     {

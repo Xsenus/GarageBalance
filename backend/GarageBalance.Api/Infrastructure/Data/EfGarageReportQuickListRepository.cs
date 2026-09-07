@@ -29,6 +29,7 @@ public sealed class EfGarageReportQuickListRepository(GarageBalanceDbContext dbC
                 select new GarageReportQuickListRow
                 {
                     QuickListId = quickList.Id,
+                    Version = quickList.Version,
                     Name = quickList.Name,
                     NormalizedName = quickList.NormalizedName,
                     UpdatedAtUtc = quickList.UpdatedAtUtc,
@@ -50,6 +51,7 @@ public sealed class EfGarageReportQuickListRepository(GarageBalanceDbContext dbC
             .GroupBy(row => new
             {
                 row.QuickListId,
+                row.Version,
                 row.Name,
                 row.NormalizedName,
                 row.UpdatedAtUtc,
@@ -58,6 +60,7 @@ public sealed class EfGarageReportQuickListRepository(GarageBalanceDbContext dbC
             .Select(group => new GarageReportQuickList
             {
                 Id = group.Key.QuickListId,
+                Version = group.Key.Version,
                 Name = group.Key.Name,
                 NormalizedName = group.Key.NormalizedName,
                 UpdatedAtUtc = group.Key.UpdatedAtUtc,
@@ -132,6 +135,7 @@ public sealed class EfGarageReportQuickListRepository(GarageBalanceDbContext dbC
     private sealed class GarageReportQuickListRow
     {
         public Guid QuickListId { get; init; }
+        public Guid Version { get; init; }
         public string Name { get; init; } = string.Empty;
         public string NormalizedName { get; init; } = string.Empty;
         public DateTimeOffset UpdatedAtUtc { get; init; }

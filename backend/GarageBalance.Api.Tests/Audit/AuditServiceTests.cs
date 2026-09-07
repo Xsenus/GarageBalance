@@ -14,6 +14,74 @@ namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditServiceTests
 {
+    [Theory]
+    [InlineData(null, "relatedDocumentId", "[документ скрыт]", false)]
+    [InlineData("not-a-uuid", "relatedDocumentId", "[документ скрыт]", false)]
+    [InlineData("00000000-0000-0000-0000-000000000000", "relatedDocumentId", "[документ скрыт]", false)]
+    [InlineData("46014234-02ed-4224-94db-4988601325e2", "customId", "[документ скрыт]", false)]
+    [InlineData("46014234-02ed-4224-94db-4988601325e2", "relatedDocumentId", "[секрет скрыт]", false)]
+    [InlineData("46014234-02ed-4224-94db-4988601325e2", "relatedDocumentId", "Исходное значение", false)]
+    [InlineData("46014234-02ed-4224-94db-4988601325e2", "relatedDocumentId", "[телефон скрыт]", true)]
+    [InlineData("46014234-02ed-4224-94db-4988601325e2", "relatedDocumentId", "[номер скрыт]", true)]
+    public async Task LegacyTechnicalMetadata_RestoresOnlyKnownNumericMasksWithReliableUuid(string? stored, string key, string legacy, bool restore)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            Action = "finance.meter_reading_created",
+            EntityType = "meter_reading",
+            Summary = "Проверка старого события",
+            RelatedDocumentId = stored,
+            MetadataJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { [key] = legacy })
+        });
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var actual = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
+        Assert.Equal(restore ? stored : legacy, actual.Metadata![key]);
+    }
+
+    [Theory]
+    [InlineData("entityId")]
+    [InlineData("relatedDocumentId")]
+    [InlineData("relatedGarageId")]
+    [InlineData("relatedCounterpartyId")]
+    public async Task LegacyTechnicalMetadata_UsesIntactStoredUuidWithoutChangingHistory(string key)
+    {
+        const string identifier = "46014234-02ed-4224-94db-4988601325e2";
+        await using var database = await TestDatabase.CreateAsync();
+        var entry = new AuditEvent
+        {
+            Action = "finance.meter_reading_created",
+            EntityType = "meter_reading",
+            Summary = "Контрольное показание",
+            EntityId = identifier,
+            RelatedDocumentId = identifier,
+            RelatedGarageId = identifier,
+            RelatedCounterpartyId = identifier,
+            MetadataJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                [key] = "46014234-02ed-4224-94db-[документ скрыт]e2",
+                ["passport"] = "1234567890",
+                ["apiToken"] = "private-test-value"
+            })
+        };
+        database.Context.AuditEvents.Add(entry);
+        await database.Context.SaveChangesAsync();
+        var originalJson = entry.MetadataJson;
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var actual = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
+        Assert.Equal(identifier, actual.EntityId);
+        Assert.Equal(identifier, actual.RelatedDocumentId);
+        Assert.Equal(identifier, actual.Metadata![key]);
+        Assert.Equal(identifier, (await service.GetEventAsync(entry.Id, CancellationToken.None))!.Metadata![key]);
+        Assert.Equal(identifier, Assert.Single((await service.GetEventsPageAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None)).Items).Metadata![key]);
+        var exported = await service.ExportEventsCsvAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None);
+        Assert.Contains($"{key}={identifier}", Encoding.UTF8.GetString(exported.Content));
+        Assert.Equal("[документ скрыт]", actual.Metadata["passport"]);
+        Assert.Equal("[секрет скрыт]", actual.Metadata["apiToken"]);
+        Assert.Equal(originalJson, (await database.Context.AuditEvents.AsNoTracking().SingleAsync()).MetadataJson);
+    }
+
     [Fact]
     public async Task GetEventsAsync_ReturnsActorIdentityAndLegacyMeterDiff()
     {

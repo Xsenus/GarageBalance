@@ -60,7 +60,7 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
         var maskedSummary = AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty;
         var beforeAfter = ExtractBeforeAfter(maskedSummary);
         var legacyBeforeAfter = ExtractLegacyBeforeAfter(maskedSummary);
-        var metadata = ParseMetadata(auditEvent.MetadataJson);
+        var metadata = RestoreStoredTechnicalIds(ParseMetadata(auditEvent.MetadataJson), auditEvent);
         var actionKind = MaskStoredValue(auditEvent.ActionKind) ?? GetActionKind(auditEvent.Action);
         var actor = auditEvent.ActorUserId is { } actorUserId && actors.TryGetValue(actorUserId, out var actorInfo)
             ? actorInfo
@@ -331,6 +331,40 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
     {
         var normalized = value.Trim().TrimEnd(';', '.').Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static IReadOnlyDictionary<string, string>? RestoreStoredTechnicalIds(
+        IReadOnlyDictionary<string, string>? metadata, AuditEvent auditEvent)
+    {
+        if (metadata is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, string>? restored = null;
+        foreach (var (key, storedValue) in new[]
+        {
+            ("entityId", auditEvent.EntityId),
+            ("relatedGarageId", auditEvent.RelatedGarageId),
+            ("relatedCounterpartyId", auditEvent.RelatedCounterpartyId),
+            ("relatedDocumentId", auditEvent.RelatedDocumentId)
+        })
+        {
+            if (!Guid.TryParseExact(storedValue, "D", out var identifier) || identifier == Guid.Empty ||
+                !metadata.TryGetValue(key, out var legacyValue) ||
+                !(legacyValue.Contains("[документ скрыт]", StringComparison.Ordinal) ||
+                  legacyValue.Contains("[телефон скрыт]", StringComparison.Ordinal) ||
+                  legacyValue.Contains("[номер скрыт]", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            // Канонические UUID берём только из отдельного поля того же события.
+            // Исходный JSON истории и значения персональных/секретных полей не меняем.
+            restored ??= new Dictionary<string, string>(metadata, StringComparer.Ordinal);
+            restored[key] = storedValue!;
+        }
+        return restored ?? metadata;
     }
 
     private static IReadOnlyDictionary<string, string>? ParseMetadata(string? metadataJson)

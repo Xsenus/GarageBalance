@@ -41,6 +41,7 @@ public sealed class OptimisticConcurrencyTests
             typeof(FinancialOperation),
             typeof(AppUser),
             typeof(AppRole),
+            typeof(GarageBalance.Api.Domain.Reports.GarageReportQuickList),
             typeof(ApplicationSetting)
         };
 

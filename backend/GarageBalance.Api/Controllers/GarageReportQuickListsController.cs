@@ -33,6 +33,8 @@ public sealed class GarageReportQuickListsController(IGarageReportQuickListServi
     }
 
     [HttpPut("{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<GarageReportQuickListDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -47,6 +49,8 @@ public sealed class GarageReportQuickListsController(IGarageReportQuickListServi
     }
 
     [HttpDelete("{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

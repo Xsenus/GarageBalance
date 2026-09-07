@@ -13,6 +13,84 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class PostgreSqlGarageReportQuickListIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task ConcurrentQuickListDelete_DoesNotArchiveNewerListOrWriteAudit()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        GarageReportQuickListDto created;
+        var garage = new Garage { Number = "DELETE-56", PeopleCount = 1, FloorCount = 1 };
+        await using (var setup = database.CreateContext())
+        {
+            setup.Garages.Add(garage);
+            await setup.SaveChangesAsync();
+            created = (await CreateService(setup).CreateAsync(new UpsertGarageReportQuickListRequest(
+                "До изменения", [garage.Id]), null, CancellationToken.None)).Value!;
+        }
+        await using var first = database.CreateContext();
+        await using var second = database.CreateContext();
+        await new EfGarageReportQuickListRepository(second).FindAsync(created.Id, CancellationToken.None);
+        var changed = (await CreateService(first).UpdateAsync(created.Id,
+            new UpsertGarageReportQuickListRequest("После изменения", [garage.Id], created.Version), null, CancellationToken.None)).Value!;
+        var auditCount = await first.AuditEvents.CountAsync();
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => CreateService(second).DeleteAsync(created.Id,
+            new DeleteGarageReportQuickListRequest("Устаревшее удаление", created.Version), null, CancellationToken.None));
+        await using var verification = database.CreateContext();
+        var actual = Assert.Single(await CreateService(verification).GetAllAsync(CancellationToken.None));
+        Assert.Equal("После изменения", actual.Name);
+        Assert.Equal(changed.Version, actual.Version);
+        Assert.False((await verification.GarageReportQuickLists.SingleAsync()).IsArchived);
+        Assert.Equal(auditCount, await verification.AuditEvents.CountAsync());
+    }
+
+    [PostgreSqlFact]
+    public async Task ConcurrentQuickListUpdate_RollsBackMembershipNameAndAudit()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var garages = new[] { "901", "904", "905" }.Select(number => new Garage { Number = number, PeopleCount = 1, FloorCount = 1 }).ToArray();
+        GarageReportQuickListDto created;
+        await using (var setup = database.CreateContext())
+        {
+            setup.Garages.AddRange(garages);
+            await setup.SaveChangesAsync();
+            created = (await CreateService(setup).CreateAsync(new UpsertGarageReportQuickListRequest(
+                "Исходный список", [garages[0].Id, garages[1].Id]), null, CancellationToken.None)).Value!;
+        }
+        await using var first = database.CreateContext();
+        await using var second = database.CreateContext();
+        await new EfGarageReportQuickListRepository(second).FindAsync(created.Id, CancellationToken.None);
+        var changed = (await CreateService(first).UpdateAsync(created.Id,
+            new UpsertGarageReportQuickListRequest(created.Name, [garages[0].Id], created.Version), null, CancellationToken.None)).Value!;
+        var auditCount = await first.AuditEvents.CountAsync();
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => CreateService(second).UpdateAsync(created.Id,
+            new UpsertGarageReportQuickListRequest("Устаревшее имя", garages.Select(garage => garage.Id).ToArray(), created.Version), null, CancellationToken.None));
+        await using var verification = database.CreateContext();
+        var actual = Assert.Single(await CreateService(verification).GetAllAsync(CancellationToken.None));
+        Assert.Equal(created.Name, actual.Name);
+        Assert.Equal(changed.Version, actual.Version);
+        Assert.Equal(garages[0].Id, Assert.Single(actual.Garages).GarageId);
+        Assert.Equal(auditCount, await verification.AuditEvents.CountAsync());
+    }
+
+    [PostgreSqlFact]
+    public async Task QuickListVersionMigration_PreservesExistingNamesAndMemberships()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var garage = new Garage { Number = "MIGRATION-56", PeopleCount = 1, FloorCount = 1 };
+        await using (var setup = database.CreateContext())
+        {
+            setup.Garages.Add(garage);
+            await setup.SaveChangesAsync();
+            await CreateService(setup).CreateAsync(new UpsertGarageReportQuickListRequest("Список до обновления", [garage.Id]), null, CancellationToken.None);
+            await setup.Database.MigrateAsync("20260907060131_AddRoleConcurrencyVersion");
+            await setup.Database.MigrateAsync();
+        }
+        await using var verification = database.CreateContext();
+        var actual = Assert.Single(await CreateService(verification).GetAllAsync(CancellationToken.None));
+        Assert.NotEqual(Guid.Empty, actual.Version);
+        Assert.Equal("Список до обновления", actual.Name);
+        Assert.Equal(garage.Id, Assert.Single(actual.Garages).GarageId);
+    }
+
+    [PostgreSqlFact]
     public async Task QuickListRead_UsesOneCompactUntrackedProjection()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -62,6 +140,7 @@ public sealed class PostgreSqlGarageReportQuickListIntegrationTests
 
         var item = Assert.Single(result);
         Assert.Equal("Компактный список", item.Name);
+        Assert.Equal(quickList.Version, item.Version);
         Assert.Equal(actorUserId, item.UpdatedByUserId);
         var selectedGarage = Assert.Single(item.Garages);
         Assert.Equal("КОМПАКТ-1", selectedGarage.GarageNumber);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react'
 import type { FundsClient } from '../../services/fundsApi'
@@ -54,6 +54,7 @@ type ReportColumn = {
 
 type GarageQuickListEditor = {
   id: string | null
+  version?: string
   name: string
   garageIds: string[]
 }
@@ -298,6 +299,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   const [garageQuickListDeleteTarget, setGarageQuickListDeleteTarget] = useState<GarageReportQuickListDto | null>(null)
   const [garageQuickListDeleteReason, setGarageQuickListDeleteReason] = useState('')
   const [garageQuickListSaving, setGarageQuickListSaving] = useState(false)
+  const quickListReloadRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => quickListReloadRef.current?.abort(), [activeReportTab, auth.accessToken, reportClient])
   const [selectedCounterpartyKeys, setSelectedCounterpartyKeys] = useState<string[]>([])
   const [selectedIncomeGarageIds, setSelectedIncomeGarageIds] = useState<string[]>([])
   const [selectedFeeEntryIds, setSelectedFeeEntryIds] = useState<string[]>([])
@@ -940,7 +944,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
 
     setGarageQuickListError(null)
     setGarageQuickListMessage(null)
-    setGarageQuickListEditor({ id: quickList.id, name: quickList.name, garageIds: [...selectedGarageIds] })
+    setGarageQuickListEditor({ id: quickList.id, version: quickList.version, name: quickList.name, garageIds: [...selectedGarageIds] })
   }
 
   async function saveGarageQuickList() {
@@ -962,7 +966,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     setGarageQuickListError(null)
     setGarageQuickListMessage(null)
     try {
-      const request = { name, garageIds: garageQuickListEditor.garageIds }
+      const request = { name, garageIds: garageQuickListEditor.garageIds, ...(garageQuickListEditor.id ? { version: garageQuickListEditor.version } : {}) }
       const saved = garageQuickListEditor.id
         ? await reportClient.updateGarageReportQuickList(auth.accessToken, garageQuickListEditor.id, request)
         : await reportClient.createGarageReportQuickList(auth.accessToken, request)
@@ -976,6 +980,37 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось сохранить быстрый список.')
     } finally {
       setGarageQuickListSaving(false)
+    }
+  }
+
+  async function reloadGarageQuickList() {
+    const id = garageQuickListEditor?.id ?? garageQuickListDeleteTarget?.id
+    if (!id) return
+    quickListReloadRef.current?.abort()
+    const controller = new AbortController()
+    quickListReloadRef.current = controller
+    setGarageQuickListSaving(true)
+    try {
+      const items = await reportClient.getGarageReportQuickLists(auth.accessToken, controller.signal)
+      if (controller.signal.aborted) return
+      setGarageQuickLists(items)
+      const current = items.find((item) => item.id === id)
+      if (!current) {
+        setGarageQuickListError('Список больше недоступен. Закройте окно и выберите другой список.')
+        return
+      }
+      const garageIds = current.garages.filter((garage) => !garage.isArchived).map((garage) => garage.garageId)
+      setSelectedGarageIds(garageIds)
+      if (garageQuickListEditor) {
+        setGarageQuickListEditor({ id, version: current.version, name: current.name, garageIds })
+      } else {
+        setGarageQuickListDeleteTarget(current)
+      }
+      setGarageQuickListError(null)
+    } catch (error) {
+      if (!controller.signal.aborted) setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось перечитать список.')
+    } finally {
+      if (!controller.signal.aborted) setGarageQuickListSaving(false)
     }
   }
 
@@ -993,7 +1028,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     setGarageQuickListError(null)
     setGarageQuickListMessage(null)
     try {
-      await reportClient.deleteGarageReportQuickList(auth.accessToken, garageQuickListDeleteTarget.id, reason)
+      await reportClient.deleteGarageReportQuickList(auth.accessToken, garageQuickListDeleteTarget.id, reason, garageQuickListDeleteTarget.version)
       setGarageQuickLists((current) => current.filter((item) => item.id !== garageQuickListDeleteTarget.id))
       if (selectedGarageQuickListId === garageQuickListDeleteTarget.id) {
         setSelectedGarageQuickListId('')
@@ -1921,6 +1956,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                 />
               </fieldset>
               {garageQuickListError ? <FormError>{garageQuickListError}</FormError> : null}
+              {garageQuickListError && garageQuickListEditor.id ? <button className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => void reloadGarageQuickList()}>Отбросить черновик и загрузить актуальный список</button> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => setGarageQuickListEditor(null)}>Отмена</button>
                 <button className="primary-button" type="submit" disabled={garageQuickListSaving}>
@@ -1963,6 +1999,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
               />
             </label>
             {garageQuickListError ? <FormError>{garageQuickListError}</FormError> : null}
+            {garageQuickListError ? <button className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => void reloadGarageQuickList()}>Загрузить актуальный список</button> : null}
             <div className="detail-dialog-actions">
               <button ref={garageQuickListDeleteCancelRef} className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => setGarageQuickListDeleteTarget(null)}>Отмена</button>
               <button className="ghost-button danger-button" type="button" disabled={garageQuickListSaving} onClick={() => void deleteGarageQuickList()}>

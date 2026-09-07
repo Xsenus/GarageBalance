@@ -17281,6 +17281,13 @@ describe('App', () => {
 
   it('opens user edit and delete operations from context menu modals', async () => {
     const user = userEvent.setup()
+    async function clickAndExpectToast(button: HTMLElement, text: string) {
+      // Observe the toast as it appears, before slower dialog queries can outlive it.
+      await Promise.all([
+        screen.findByText(text).then((toast) => expect(toast.closest('[role="status"]')).toBeInTheDocument()),
+        user.click(button),
+      ])
+    }
     const statefulUserClient = createStatefulUserClient()
     let deactivationReason: string | null = null
     let pendingUserRefresh: { started: () => void; wait: Promise<void> } | null = null
@@ -17407,11 +17414,10 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Имя пользователя')).toHaveValue('Старший оператор')
     expect(updateCalls).toBe(1)
     const editRefresh = blockNextUserRefresh()
-    await user.click(editSaveButton)
+    await clickAndExpectToast(editSaveButton, 'Пользователь изменен.')
 
     await editRefresh.started
     expect(screen.queryByRole('dialog', { name: 'Изменить пользователя' })).not.toBeInTheDocument()
-    expect((await screen.findByText('Пользователь изменен.')).closest('[role="status"]')).toBeInTheDocument()
     expect(updateCalls).toBe(2)
     expect(lastUpdateRequest?.newPassword).toBeNull()
     expect(lastUpdateRequest?.version).toBe('user-version')
@@ -17460,10 +17466,9 @@ describe('App', () => {
     expect(await within(reopenedDeleteDialog).findByRole('alert')).toHaveTextContent('Не удалось отключить пользователя.')
     expect(reopenedDeleteReasonInput).toHaveValue('Access no longer needed')
     const deleteRefresh = blockNextUserRefresh()
-    await user.click(reopenedDeleteButton)
+    await clickAndExpectToast(reopenedDeleteButton, 'Пользователь отключен.')
     await deleteRefresh.started
     expect(screen.queryByRole('dialog', { name: 'Удалить пользователя' })).not.toBeInTheDocument()
-    expect((await screen.findByText('Пользователь отключен.')).closest('[role="status"]')).toBeInTheDocument()
     await act(async () => deleteRefresh.release())
 
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
@@ -17493,10 +17498,9 @@ describe('App', () => {
     await act(async () => rejectRestore?.(new Error('Не удалось восстановить пользователя.')))
     expect(await within(restoreDialog).findByRole('alert')).toHaveTextContent('Не удалось восстановить пользователя.')
     const restoreRefresh = blockNextUserRefresh()
-    await user.click(restoreConfirmButton)
+    await clickAndExpectToast(restoreConfirmButton, 'Пользователь восстановлен.')
     await restoreRefresh.started
     expect(screen.queryByRole('dialog', { name: 'Вернуть пользователя?' })).not.toBeInTheDocument()
-    expect((await screen.findByText('Пользователь восстановлен.')).closest('[role="status"]')).toBeInTheDocument()
     await act(async () => restoreRefresh.release())
     expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
 
@@ -24005,7 +24009,7 @@ describe('App', () => {
     await waitFor(() => expect(updateGarageReportQuickList).toHaveBeenCalledWith(
       expect.any(String),
       'garage-quick-list-created',
-      { name: 'Северные гаражи', garageIds: ['garage-1'] },
+      { name: 'Северные гаражи', garageIds: ['garage-1'], version: 'quick-list-version' },
     ))
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Все' }))
@@ -24034,9 +24038,125 @@ describe('App', () => {
       expect.any(String),
       'garage-quick-list-created',
       'Список больше не используется',
+      'updated-quick-list-version',
     ))
     expect(await within(reportsPanel).findByText('Быстрый список удалён.')).toHaveAttribute('role', 'status')
     expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('reloads a conflicting garage list without restoring removed garages and uses fresh versions for edits and deletion', async () => {
+    const user = userEvent.setup()
+    const base = createReportClient()
+    let saved = await base.createGarageReportQuickList('token', { name: 'Контрольный список', garageIds: ['garage-1', 'garage-2'] })
+    let loads = 0
+    const getGarageReportQuickLists = vi.fn(async () => {
+      loads += 1
+      if (loads === 2) throw new Error('Перечитывание недоступно')
+      if (loads === 3) return []
+      return [saved]
+    })
+    const updateGarageReportQuickList = vi.fn(async (_token: string, _id: string, request: { name: string; garageIds: string[]; version?: string }) => {
+      if (request.version === 'quick-list-version') {
+        saved = { ...saved, version: 'changed-list-version', garages: saved.garages.slice(0, 1) }
+        throw new Error('Список изменён другим пользователем')
+      }
+      saved = { ...saved, name: request.name, version: 'saved-list-version' }
+      return saved
+    })
+    const deleteGarageReportQuickList = vi.fn(async (_token: string, _id: string, _reason: string, version: string) => {
+      if (version === 'saved-list-version') {
+        saved = { ...saved, name: 'Изменён перед удалением', version: 'delete-list-version' }
+        throw new Error('Список изменён перед удалением')
+      }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReportQuickLists, updateGarageReportQuickList, deleteGarageReportQuickList })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, panel, 'По гаражам')
+    await user.click(within(panel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+    const filters = within(panel).getByRole('region', { name: 'Гаражи и личные фильтры отчёта' })
+    await user.click(within(filters).getByRole('combobox', { name: 'Быстрый список гаражей' }))
+    await user.click(await screen.findByRole('option', { name: 'Контрольный список (2)' }))
+    await user.click(within(filters).getByRole('button', { name: 'Изменить', exact: true }))
+    let dialog = await screen.findByRole('dialog', { name: 'Изменить быстрый список' })
+    await user.clear(within(dialog).getByLabelText('Название быстрого списка'))
+    await user.type(within(dialog).getByLabelText('Название быстрого списка'), 'Новое имя')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить список' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Список изменён другим пользователем')
+    expect(within(dialog).getByLabelText('Название быстрого списка')).toHaveValue('Новое имя')
+    const reload = within(dialog).getByRole('button', { name: 'Отбросить черновик и загрузить актуальный список' })
+    await user.click(reload)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Перечитывание недоступно')
+    await user.click(reload)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Список больше недоступен')
+    await user.click(reload)
+    await waitFor(() => expect(within(dialog).getByLabelText('Название быстрого списка')).toHaveValue('Контрольный список'))
+    expect(within(dialog).getByText(/Выбрано гаражей: 1/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    await user.click(within(filters).getByRole('button', { name: 'Изменить', exact: true }))
+    dialog = await screen.findByRole('dialog', { name: 'Изменить быстрый список' })
+    expect(within(dialog).getByText(/Выбрано гаражей: 1/)).toBeInTheDocument()
+    await user.clear(within(dialog).getByLabelText('Название быстрого списка'))
+    await user.type(within(dialog).getByLabelText('Название быстрого списка'), 'Новое имя')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить список' }))
+    await waitFor(() => expect(updateGarageReportQuickList).toHaveBeenLastCalledWith('token', saved.id, {
+      name: 'Новое имя', garageIds: ['garage-1'], version: 'changed-list-version',
+    }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить быстрый список' })).not.toBeInTheDocument())
+    await user.click(within(filters).getByRole('button', { name: 'Удалить', exact: true }))
+    let deletion = await screen.findByRole('alertdialog', { name: 'Удалить список «Новое имя»?' })
+    await user.type(within(deletion).getByLabelText('Причина удаления быстрого списка'), 'Проверка удаления')
+    await user.click(within(deletion).getByRole('button', { name: 'Удалить список' }))
+    expect(await within(deletion).findByRole('alert')).toHaveTextContent('Список изменён перед удалением')
+    await user.click(within(deletion).getByRole('button', { name: 'Загрузить актуальный список' }))
+    deletion = await screen.findByRole('alertdialog', { name: 'Удалить список «Изменён перед удалением»?' })
+    expect(within(deletion).getByLabelText('Причина удаления быстрого списка')).toHaveValue('Проверка удаления')
+    await user.click(within(deletion).getByRole('button', { name: 'Удалить список' }))
+    await waitFor(() => expect(deleteGarageReportQuickList).toHaveBeenLastCalledWith('token', saved.id, 'Проверка удаления', 'delete-list-version'))
+  })
+
+  it.each([false, true])('aborts garage list reload on unmount and ignores late completion: %s', async (rejectReload) => {
+    const user = userEvent.setup()
+    const base = createReportClient()
+    const saved = await base.createGarageReportQuickList('token', { name: 'Список для отмены', garageIds: ['garage-1'] })
+    let loadCount = 0
+    let signal: AbortSignal | undefined
+    let finishReload!: () => void
+    const reportClient = createReportClient({
+      getGarageReportQuickLists: async (_token, requestSignal) => {
+        if (++loadCount === 1) return [saved]
+        signal = requestSignal
+        return new Promise((resolve, reject) => {
+          finishReload = () => rejectReload ? reject(new Error('Отменённая загрузка')) : resolve([saved])
+        })
+      },
+      updateGarageReportQuickList: async () => { throw new Error('Конфликт списка') },
+    })
+    const rendered = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, panel, 'По гаражам')
+    await user.click(within(panel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+    const filters = within(panel).getByRole('region', { name: 'Гаражи и личные фильтры отчёта' })
+    await user.click(within(filters).getByRole('combobox', { name: 'Быстрый список гаражей' }))
+    await user.click(await screen.findByRole('option', { name: 'Список для отмены (1)' }))
+    await user.click(within(filters).getByRole('button', { name: 'Изменить', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить быстрый список' })
+    await user.type(within(dialog).getByLabelText('Название быстрого списка'), ' новое имя')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить список' }))
+    await user.click(await within(dialog).findByRole('button', { name: 'Отбросить черновик и загрузить актуальный список' }))
+    expect(within(dialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(dialog).toBeInTheDocument()
+    rendered.unmount()
+    expect(signal?.aborted).toBe(true)
+    await act(async () => finishReload())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('creates a garage list from an empty filter, validates selection and preserves the draft after a save error', async () => {
@@ -27407,6 +27527,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     getGarageReportQuickLists: async () => [],
     createGarageReportQuickList: async (_token, request) => ({
       id: 'garage-quick-list-created',
+      version: 'quick-list-version',
       name: request.name,
       garages: request.garageIds.map((garageId) => ({
         garageId,
@@ -27419,6 +27540,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     }),
     updateGarageReportQuickList: async (_token, id, request) => ({
       id,
+      version: 'updated-quick-list-version',
       name: request.name,
       garages: request.garageIds.map((garageId) => ({
         garageId,

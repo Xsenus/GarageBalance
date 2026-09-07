@@ -177,8 +177,8 @@ describe('reportsApi', () => {
 
     await reportsApi.getGarageReportQuickLists('token')
     await reportsApi.createGarageReportQuickList('token', { name: 'Северный ряд', garageIds: ['garage-1'] })
-    await reportsApi.updateGarageReportQuickList('token', 'list/1', { name: 'Северные гаражи', garageIds: ['garage-1'] })
-    await reportsApi.deleteGarageReportQuickList('token', 'list/1', 'Список больше не используется')
+    await reportsApi.updateGarageReportQuickList('token', 'list/1', { name: 'Северные гаражи', garageIds: ['garage-1'], version: 'list-version' })
+    await reportsApi.deleteGarageReportQuickList('token', 'list/1', 'Список больше не используется', 'list-version')
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/garage-quick-lists', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/garage-quick-lists', jsonRequest('POST', {
@@ -188,9 +188,11 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/garage-quick-lists/list%2F1', jsonRequest('PUT', {
       name: 'Северные гаражи',
       garageIds: ['garage-1'],
+      version: 'list-version',
     }))
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/garage-quick-lists/list%2F1', jsonRequest('DELETE', {
       reason: 'Список больше не используется',
+      version: 'list-version',
     }))
   })
 })

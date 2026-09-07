@@ -973,6 +973,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
         {
             entity.ToTable("garage_report_quick_lists");
             entity.HasKey(quickList => quickList.Id);
+            entity.Property(quickList => quickList.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.Property(quickList => quickList.Name).HasMaxLength(100).IsRequired();
             entity.Property(quickList => quickList.NormalizedName).HasMaxLength(100).IsRequired();
             entity.HasIndex(quickList => quickList.NormalizedName)

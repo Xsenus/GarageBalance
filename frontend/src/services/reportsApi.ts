@@ -59,6 +59,7 @@ export type GarageReportQuickListGarageDto = {
 
 export type GarageReportQuickListDto = {
   id: string
+  version: string
   name: string
   garages: GarageReportQuickListGarageDto[]
   updatedAtUtc: string
@@ -68,6 +69,7 @@ export type GarageReportQuickListDto = {
 export type UpsertGarageReportQuickListRequest = {
   name: string
   garageIds: string[]
+  version?: string
 }
 
 export type ConsolidatedReportDto = {
@@ -277,7 +279,7 @@ export type ReportClient = {
   getGarageReportQuickLists(accessToken: string, signal?: AbortSignal): Promise<GarageReportQuickListDto[]>
   createGarageReportQuickList(accessToken: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
   updateGarageReportQuickList(accessToken: string, id: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
-  deleteGarageReportQuickList(accessToken: string, id: string, reason: string): Promise<void>
+  deleteGarageReportQuickList(accessToken: string, id: string, reason: string, version: string): Promise<void>
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number; offset?: number; sortBy?: string; sortDirection?: string }, signal?: AbortSignal): Promise<ConsolidatedReportDto>
   getGarageReport(
     accessToken: string,
@@ -538,8 +540,8 @@ export const reportsApi: ReportClient = {
   updateGarageReportQuickList(accessToken, id, request) {
     return requestJson(accessToken, `/api/reports/garage-quick-lists/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(request) })
   },
-  deleteGarageReportQuickList(accessToken, id, reason) {
-    return requestJson(accessToken, `/api/reports/garage-quick-lists/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  deleteGarageReportQuickList(accessToken, id, reason, version) {
+    return requestJson(accessToken, `/api/reports/garage-quick-lists/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason, version }) })
   },
   getConsolidatedReport(accessToken, params = {}, signal) {
     const query = buildConsolidatedReportQuery(params)

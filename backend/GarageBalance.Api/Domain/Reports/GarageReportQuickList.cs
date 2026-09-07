@@ -1,10 +1,12 @@
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Common;
 
 namespace GarageBalance.Api.Domain.Reports;
 
-public sealed class GarageReportQuickList
+public sealed class GarageReportQuickList : IOptimisticConcurrencyEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Version { get; set; } = Guid.NewGuid();
     public required string Name { get; set; }
     public required string NormalizedName { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
