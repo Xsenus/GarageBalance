@@ -2,11 +2,69 @@ using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using System.Buffers.Binary;
+using System.Data;
+using System.Data.Common;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext) : ISupplierAccrualRepository
 {
+    public async Task<IAsyncDisposable> AcquireGroupSalaryLockAsync(Guid supplierGroupId, DateOnly accountingMonth, CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsNpgsql()) return NoOpAsyncDisposable.Instance;
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"group-salary:{supplierGroupId:N}:{accountingMonth:yyyyMM}"));
+        var key = BinaryPrimitives.ReadInt64BigEndian(hash);
+        var connection = dbContext.Database.GetDbConnection();
+        var closeConnection = connection.State == ConnectionState.Closed;
+        if (closeConnection) await connection.OpenAsync(cancellationToken);
+        try
+        {
+            await ExecuteSalaryLockCommandAsync(connection, "SELECT pg_advisory_lock(@key)", key, cancellationToken);
+            return new SalaryLockLease(connection, key, closeConnection);
+        }
+        catch
+        {
+            if (closeConnection) await connection.CloseAsync();
+            throw;
+        }
+    }
+
+    private static async Task ExecuteSalaryLockCommandAsync(DbConnection connection, string sql, long key, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "key";
+        parameter.Value = key;
+        command.Parameters.Add(parameter);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private sealed class SalaryLockLease(DbConnection connection, long key, bool closeConnection) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await ExecuteSalaryLockCommandAsync(connection, "SELECT pg_advisory_unlock(@key)", key, CancellationToken.None);
+            }
+            finally
+            {
+                if (closeConnection) await connection.CloseAsync();
+            }
+        }
+    }
+
+    private sealed class NoOpAsyncDisposable : IAsyncDisposable
+    {
+        public static NoOpAsyncDisposable Instance { get; } = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     public async Task<IReadOnlyList<SupplierAccrual>> GetListAsync(
         DateOnly? monthFrom,
         DateOnly? monthTo,

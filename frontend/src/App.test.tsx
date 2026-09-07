@@ -21686,6 +21686,136 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('Авто').length).toBeGreaterThan(0)
   })
 
+  it('keeps pending group salary in its editor and preserves the draft through conflict and retry', async () => {
+    const user = userEvent.setup()
+    const base = createStatefulFinanceClient()
+    let release!: () => void
+    let reject!: (error: Error) => void
+    const generateSupplierGroupSalaryAccruals = vi.fn(async (...args: Parameters<FinanceClient['generateSupplierGroupSalaryAccruals']>) => {
+      await new Promise<void>((resolve, fail) => { release = resolve; reject = fail })
+      return base.generateSupplierGroupSalaryAccruals(...args)
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={{ ...base, generateSupplierGroupSalaryAccruals }} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(panel).getByRole('tab', { name: /Начисления поставщикам/ }))
+    const trigger = within(panel).getByRole('button', { name: 'Зарплата группы' })
+    await user.click(trigger)
+    const dialog = await screen.findByRole('dialog', { name: 'Зарплата группы' })
+    const amount = within(dialog).getByLabelText('Сумма зарплаты')
+    fireEvent.submit(amount.closest('form')!)
+    expect(generateSupplierGroupSalaryAccruals).not.toHaveBeenCalled()
+    await user.clear(amount)
+    await user.type(amount, '7000')
+    await user.type(within(dialog).getByLabelText('Документ зарплаты'), 'SAL-PENDING')
+    await user.type(within(dialog).getByLabelText('Комментарий зарплаты'), 'Проверка ожидания')
+    const form = amount.closest('form')!
+    // Two submissions before React commits must still dispatch only one request.
+    act(() => { fireEvent.submit(form); fireEvent.submit(form) })
+    expect(generateSupplierGroupSalaryAccruals).toHaveBeenCalledTimes(1)
+    expect(within(dialog).getByText('Начисляем зарплату...')).toHaveAttribute('role', 'status')
+    expect(within(dialog).getByRole('button', { name: 'Начисляем зарплату...' })).toBeDisabled()
+    for (const label of ['Группа для зарплаты', 'Месяц зарплаты', 'Сумма зарплаты', 'Документ зарплаты', 'Комментарий зарплаты']) {
+      expect(within(dialog).getByLabelText(label)).toBeDisabled()
+    }
+    expect(within(dialog).getByRole('button', { name: 'Отмена', exact: true })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Закрыть форму платежа' })).toBeDisabled()
+    await user.keyboard('{Escape}{Enter}')
+    fireEvent.mouseDown(screen.getByTestId('finance-editor-backdrop'))
+    expect(screen.queryByRole('dialog', { name: 'Закрыть форму без сохранения?' })).not.toBeInTheDocument()
+    expect(dialog).toBeInTheDocument()
+    expect(generateSupplierGroupSalaryAccruals).toHaveBeenCalledTimes(1)
+    await act(async () => reject(new Error('Зарплата уже начислена: конфликт 409.')))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Зарплата уже начислена: конфликт 409.')
+    expect(within(dialog).getByLabelText('Документ зарплаты')).toHaveValue('SAL-PENDING')
+    expect(within(dialog).getByLabelText('Комментарий зарплаты')).toHaveValue('Проверка ожидания')
+    expect(amount).toBeEnabled()
+    await user.keyboard('{Escape}')
+    const discard = await screen.findByRole('dialog', { name: 'Закрыть форму без сохранения?' })
+    await user.click(within(discard).getByRole('button', { name: 'Остаться', exact: true }))
+    await user.click(within(dialog).getByRole('button', { name: 'Начислить зарплату', exact: true }))
+    expect(generateSupplierGroupSalaryAccruals).toHaveBeenCalledTimes(2)
+    await act(async () => release())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Зарплата группы' })).not.toBeInTheDocument())
+    expect(await within(panel).findByText('SAL-PENDING')).toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('requires fresh negative fund consent in the general expense editor and keeps bank errors visible', async () => {
+    const user = userEvent.setup()
+    const suppliers = [
+      createSupplier({ id: 'supplier-1', name: 'Отрицательный фонд', expenseFundBalance: -10 }),
+      createSupplier({ id: 'supplier-2', name: 'Другой фонд', expenseFundId: 'fund-second', expenseFundBalance: -20 }),
+      createSupplier({ id: 'supplier-3', name: 'Достаточный фонд', expenseFundBalance: 100 }),
+    ].map((supplier) => ({ ...supplier, expenseTypeId: 'expense-type-1', expenseFundId: supplier.expenseFundId ?? 'fund-water', expenseFundName: 'Фонд проверки' }))
+    const base = createStatefulFinanceClient()
+    let bankAvailable = false
+    let finish!: () => void
+    const createExpense = vi.fn(async (...args: Parameters<FinanceClient['createExpense']>) => {
+      if (!args[1].confirmNegativeFundBalance) throw new Error('Подтвердите отрицательный остаток фонда.')
+      if (!bankAvailable) throw new Error('Недостаточно денег в банке.')
+      await new Promise<void>((resolve) => { finish = resolve })
+      return base.createExpense(...args)
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getSuppliers: async () => suppliers })} financeClient={{ ...base, createExpense }} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(panel).getByRole('tab', { name: /Расходы/ }))
+    async function openEditor() {
+      fireEvent.contextMenu(within(panel).getByRole('group', { name: 'Рабочая область платежной таблицы' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Добавить', exact: true }))
+      return screen.findByRole('dialog', { name: 'Новая выплата' })
+    }
+    let dialog = await openEditor()
+    await user.clear(within(dialog).getByLabelText('Сумма выплаты'))
+    await user.type(within(dialog).getByLabelText('Сумма выплаты'), '1')
+    const consentName = 'Подтвердить отрицательный остаток фонда'
+    expect(within(dialog).getByRole('checkbox', { name: consentName })).not.toBeChecked()
+    await user.click(within(dialog).getByRole('button', { name: 'Провести', exact: true }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Подтвердите отрицательный остаток фонда.')
+    await user.click(within(dialog).getByRole('checkbox', { name: consentName }))
+    await user.clear(within(dialog).getByLabelText('Сумма выплаты'))
+    await user.type(within(dialog).getByLabelText('Сумма выплаты'), '2')
+    expect(within(dialog).getByRole('checkbox', { name: consentName })).not.toBeChecked()
+    await user.click(within(dialog).getByRole('checkbox', { name: consentName }))
+    await user.click(within(dialog).getByRole('combobox', { name: 'Источник выплаты' }))
+    await user.click(within(dialog).getByRole('option', { name: 'Касса · эпизодическая выплата' }))
+    expect(within(dialog).queryByRole('checkbox', { name: consentName })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('combobox', { name: 'Источник выплаты' }))
+    await user.click(within(dialog).getByRole('option', { name: 'Банк · регулярный поставщик' }))
+    expect(within(dialog).getByRole('checkbox', { name: consentName })).not.toBeChecked()
+    for (const supplier of ['Другой фонд', 'Достаточный фонд', 'Отрицательный фонд']) {
+      await user.click(within(dialog).getByRole('combobox', { name: 'Поставщик для выплаты' }))
+      await user.click(within(dialog).getByRole('option', { name: supplier, exact: true }))
+      if (supplier === 'Достаточный фонд') expect(within(dialog).queryByRole('checkbox', { name: consentName })).not.toBeInTheDocument()
+      else {
+        expect(within(dialog).getByRole('checkbox', { name: consentName })).not.toBeChecked()
+        await user.click(within(dialog).getByRole('checkbox', { name: consentName }))
+      }
+    }
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена', exact: true }))
+    await user.click(await screen.findByRole('button', { name: 'Закрыть без сохранения', exact: true }))
+    dialog = await openEditor()
+    await user.clear(within(dialog).getByLabelText('Сумма выплаты'))
+    await user.type(within(dialog).getByLabelText('Сумма выплаты'), '1')
+    expect(within(dialog).getByRole('checkbox', { name: consentName })).not.toBeChecked()
+    act(() => within(dialog).getByRole('checkbox', { name: consentName }).focus())
+    await user.keyboard(' ')
+    await user.click(within(dialog).getByRole('button', { name: 'Провести', exact: true }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Недостаточно денег в банке.')
+    expect(within(dialog).getByRole('checkbox', { name: consentName })).toBeChecked()
+    bankAvailable = true
+    await user.click(within(dialog).getByRole('button', { name: 'Провести', exact: true }))
+    expect(within(dialog).getByRole('checkbox', { name: consentName })).toBeDisabled()
+    expect(createExpense).toHaveBeenLastCalledWith('token', expect.objectContaining({ supplierId: 'supplier-1', expensePaymentSource: 'bank', amount: 1, confirmNegativeFundBalance: true }))
+    await act(async () => finish())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+  })
+
   it('shows supplier obligation before and after expense payment', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()

@@ -24,6 +24,7 @@ import { formatAccrualSource, formatCount, formatDateOnly, formatDebtAmount, for
 import { focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
+import { NegativeFundBalanceConfirmation } from './NegativeFundBalanceConfirmation'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
@@ -440,6 +441,7 @@ export function FinancePanel({
     expensePaymentType: 'with_receipt' as ExpensePaymentType,
     expensePaymentSource: 'bank' as ExpensePaymentSource,
     expenseFundId: '',
+    confirmNegativeFundBalance: false,
     operationDate: today,
     accountingMonth: month,
     amount: 0,
@@ -521,6 +523,7 @@ export function FinancePanel({
   const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
+  const salarySubmissionRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [financeReloadRevision, setFinanceReloadRevision] = useState(0)
   const referencesLoading = financeReferenceLoading !== 0
@@ -580,7 +583,7 @@ export function FinancePanel({
   }
 
   function closeFinanceEditor(options?: { skipConfirmation?: boolean }) {
-    if (!financeEditor) {
+    if (!financeEditor || salarySubmissionRef.current) {
       return
     }
 
@@ -1069,7 +1072,7 @@ export function FinancePanel({
         refreshFinanceWorkbenchAfterSave('income')
       } else if (pending.kind === 'expense') {
         await financeClient.updateExpense(auth.accessToken, pending.recordId, pending.request as CreateExpenseOperationRequest)
-        setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+        setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '', confirmNegativeFundBalance: false }))
         refreshFinanceWorkbenchAfterSave('expense')
       } else if (pending.kind === 'accrual') {
         await financeClient.updateAccrual(auth.accessToken, pending.recordId, pending.request as CreateAccrualRequest)
@@ -1151,6 +1154,7 @@ export function FinancePanel({
       expensePaymentType: expenseForm.expensePaymentType,
       expensePaymentSource: expenseForm.expensePaymentSource,
       expenseFundId: expenseForm.expenseFundId || undefined,
+      ...(expenseForm.expensePaymentSource === 'bank' && expenseForm.confirmNegativeFundBalance ? { confirmNegativeFundBalance: true } : {}),
       operationDate: expenseForm.operationDate,
       accountingMonth: expenseForm.accountingMonth,
       amount: expenseForm.amount,
@@ -1184,7 +1188,7 @@ export function FinancePanel({
 
     const saved = await runSaving('expense', async () => {
       await financeClient.createExpense(auth.accessToken, request)
-      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
+      setExpenseForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '', confirmNegativeFundBalance: false }))
       refreshFinanceWorkbenchAfterSave('expense')
     })
     if (saved) {
@@ -1305,6 +1309,7 @@ export function FinancePanel({
 
   async function saveSupplierGroupSalaryAccruals(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (salarySubmissionRef.current) return
     if (!canWritePayments) {
       setError('Для начисления зарплаты нужно право payments.write.')
       return
@@ -1325,6 +1330,7 @@ export function FinancePanel({
     }
 
     setSalaryValidationErrors([])
+    salarySubmissionRef.current = true
     const saved = await runSaving('salary-accruals', async () => {
       const result = await financeClient.generateSupplierGroupSalaryAccruals(auth.accessToken, request)
       setSupplierAccruals((items) => [...result.createdAccruals, ...items])
@@ -1332,6 +1338,7 @@ export function FinancePanel({
       setSalaryForm((value) => ({ ...value, amount: 0, documentNumber: '', comment: '' }))
       refreshFinanceWorkbenchAfterSave('supplierAccruals', 0)
     })
+    salarySubmissionRef.current = false
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
       setActiveFinanceSection('supplierAccruals')
@@ -1621,6 +1628,7 @@ export function FinancePanel({
         expensePaymentType: record.expensePaymentType ?? 'with_receipt',
         expensePaymentSource: record.expensePaymentSource ?? (record.expensePaymentType === 'without_receipt' ? 'cash' : 'bank'),
         expenseFundId: record.expenseFundId ?? suppliers.find((supplier) => supplier.id === record.supplierId)?.expenseFundId ?? '',
+        confirmNegativeFundBalance: false,
         operationDate: record.operationDate,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
@@ -1630,7 +1638,7 @@ export function FinancePanel({
       setExpenseForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (!record && section === 'expense') {
-      const nextForm = { ...expenseForm, amount: 0, documentNumber: '', comment: '' }
+      const nextForm = { ...expenseForm, amount: 0, documentNumber: '', comment: '', confirmNegativeFundBalance: false }
       setExpenseForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'accruals' && 'incomeTypeId' in record && !('operationKind' in record)) {
@@ -2085,6 +2093,14 @@ export function FinancePanel({
     void saveMeterReading(event)
   }
 
+  function renderExpenseFundConfirmation() {
+    return <NegativeFundBalanceConfirmation
+      visible={expenseForm.expensePaymentSource === 'bank' && expenseForm.amount > (selectedExpenseSupplier?.expenseFundBalance ?? 0)}
+      checked={expenseForm.confirmNegativeFundBalance}
+      disabled={saving === 'expense' || !canWritePayments}
+      onChange={(checked) => { setExpenseForm({ ...expenseForm, confirmNegativeFundBalance: checked }); setError(null) }} />
+  }
+
   function renderFinanceEditorFields(section: FinanceEditorKey) {
     const financeField = (key: Parameters<typeof getFinanceEditorFieldLabel>[0], children: ReactNode) => (
       <FormField label={getFinanceEditorFieldLabel(key)}>{children}</FormField>
@@ -2150,6 +2166,7 @@ export function FinancePanel({
                   expensePaymentSource: source,
                   expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
                   expenseFundId: supplier?.expenseFundId ?? '',
+                  confirmNegativeFundBalance: false,
                 })
               }} />
           ))}
@@ -2167,6 +2184,7 @@ export function FinancePanel({
                   supplierId,
                   expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
                   expenseFundId: supplier?.expenseFundId ?? '',
+                  confirmNegativeFundBalance: false,
                 })
               }} />
           ))}
@@ -2193,10 +2211,11 @@ export function FinancePanel({
             {financeField('expenseMonth', <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />)}
           </div>
           <div className="inline-fields">
-            {financeField('expenseAmount', <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount })} required />)}
+            {financeField('expenseAmount', <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount, confirmNegativeFundBalance: false })} required />)}
             {financeField('expenseDocument', <input aria-label="Документ выплаты" placeholder="Номер документа" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />)}
           </div>
           {financeField('expenseComment', <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />)}
+          {renderExpenseFundConfirmation()}
           <FormValidationSummary title={getFinanceEditorValidationTitle('expense')} items={expenseValidationErrors} />
         </>
       )
@@ -2260,18 +2279,18 @@ export function FinancePanel({
       return (
         <>
           {financeField('salaryGroup', (
-            <SelectControl aria-label="Группа для зарплаты" value={salaryForm.supplierGroupId} options={[
+            <SelectControl aria-label="Группа для зарплаты" disabled={saving === 'salary-accruals'} value={salaryForm.supplierGroupId} options={[
               { value: '', label: 'Выберите группу' },
               ...supplierGroups.map((group) => ({ value: group.id, label: group.name })),
             ]} onChange={(supplierGroupId) => setSalaryForm({ ...salaryForm, supplierGroupId })} />
           ))}
           <div className="inline-fields">
-          {financeField('salaryMonth', <LocalizedDatePicker ariaLabel="Месяц зарплаты" mode="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSalaryForm({ ...salaryForm, accountingMonth: `${accountingMonth}-01` })} required />)}
-            {financeField('salaryAmount', <MoneyInput aria-label="Сумма зарплаты" min="0.01" value={salaryForm.amount} onValueChange={(amount) => setSalaryForm({ ...salaryForm, amount })} required />)}
+          {financeField('salaryMonth', <LocalizedDatePicker ariaLabel="Месяц зарплаты" disabled={saving === 'salary-accruals'} mode="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSalaryForm({ ...salaryForm, accountingMonth: `${accountingMonth}-01` })} required />)}
+            {financeField('salaryAmount', <MoneyInput aria-label="Сумма зарплаты" disabled={saving === 'salary-accruals'} min="0.01" value={salaryForm.amount} onValueChange={(amount) => setSalaryForm({ ...salaryForm, amount })} required />)}
           </div>
           <div className="inline-fields">
-            {financeField('salaryDocument', <input aria-label="Документ зарплаты" placeholder="Номер документа" value={salaryForm.documentNumber} onChange={(event) => setSalaryForm({ ...salaryForm, documentNumber: event.target.value })} />)}
-            {financeField('salaryComment', <input aria-label="Комментарий зарплаты" placeholder="Комментарий" value={salaryForm.comment} onChange={(event) => setSalaryForm({ ...salaryForm, comment: event.target.value })} />)}
+            {financeField('salaryDocument', <input aria-label="Документ зарплаты" disabled={saving === 'salary-accruals'} placeholder="Номер документа" value={salaryForm.documentNumber} onChange={(event) => setSalaryForm({ ...salaryForm, documentNumber: event.target.value })} />)}
+            {financeField('salaryComment', <input aria-label="Комментарий зарплаты" disabled={saving === 'salary-accruals'} placeholder="Комментарий" value={salaryForm.comment} onChange={(event) => setSalaryForm({ ...salaryForm, comment: event.target.value })} />)}
           </div>
           <FormValidationSummary title={getFinanceEditorValidationTitle('supplierGroupSalaryAccruals')} items={salaryValidationErrors} />
           {salaryStatus ? <p className="form-hint">{salaryStatus}</p> : null}
@@ -2547,6 +2566,7 @@ export function FinancePanel({
                 expensePaymentSource: source,
                 expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
                 expenseFundId: supplier?.expenseFundId ?? '',
+                  confirmNegativeFundBalance: false,
               })
             }} />
           <SelectControl
@@ -2562,6 +2582,7 @@ export function FinancePanel({
                 supplierId,
                 expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
                 expenseFundId: supplier?.expenseFundId ?? '',
+                  confirmNegativeFundBalance: false,
               })
             }} />
           <SelectControl
@@ -2583,10 +2604,11 @@ export function FinancePanel({
             <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />
           </div>
           <div className="inline-fields">
-            <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount })} required />
+            <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount, confirmNegativeFundBalance: false })} required />
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
+          {renderExpenseFundConfirmation()}
           <FormValidationSummary title={getFinanceEditorValidationTitle('expense')} items={expenseValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'expense' || !expenseForm.supplierId || !expenseForm.expenseTypeId}>
             <span>Провести</span>
@@ -2894,7 +2916,7 @@ export function FinancePanel({
                 <p className="eyebrow">{financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('editMode') : getFinanceEditorUiLabel('createMode')}</p>
                 <h3 id="finance-editor-title">{getFinanceEditorTitle(financeEditor.section)}</h3>
               </div>
-              <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" aria-label={getFinanceEditorUiLabel('close')} onClick={() => closeFinanceEditor()}>
+              <button ref={financeEditorCloseButtonRef} className="icon-button" type="button" disabled={saving === 'salary-accruals'} aria-label={getFinanceEditorUiLabel('close')} onClick={() => closeFinanceEditor()}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -2902,11 +2924,12 @@ export function FinancePanel({
               {renderFinanceEditorFields(financeEditor.section)}
               {financeEditorHasUnsavedChanges ? <p className="form-hint" id="finance-editor-unsaved-changes" role="status" aria-live="polite">{getFinanceEditorUiLabel('unsavedHint')}</p> : null}
               <div className="detail-dialog-actions">
-                <button className="ghost-button" type="button" onClick={() => closeFinanceEditor()}>
+                <button className="ghost-button" type="button" disabled={saving === 'salary-accruals'} onClick={() => closeFinanceEditor()}>
                   {getFinanceEditorUiLabel('cancel')}
                 </button>
                 <button className="secondary-button" type="submit" disabled={!canWritePayments || Boolean(pendingFinanceEditConfirmation) || saving === getFinanceEditorSavingScope(financeEditor.section)}>
-                  <span>{financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('save') : getFinanceEditorSubmitLabel(financeEditor.section)}</span>
+                  {saving === 'salary-accruals' ? <LoaderCircle size={16} className="financial-report-button__spinner" aria-hidden="true" /> : null}
+                  {saving === 'salary-accruals' ? <span role="status" aria-live="polite">Начисляем зарплату...</span> : financeEditor.mode === 'edit' ? getFinanceEditorUiLabel('save') : getFinanceEditorSubmitLabel(financeEditor.section)}
                 </button>
               </div>
             </form>
@@ -6596,24 +6619,11 @@ function NewExpensePrototypeDialog({
               setError(null)
             }} />
           </FormField>
-          {!isCashExpense && (parsePaymentMoney(amount) ?? 0) > (selectedSupplier?.expenseFundBalance ?? 0) ? (
-            <label className="payments-negative-fund-confirmation">
-              <input
-                type="checkbox"
-                aria-label="Подтвердить отрицательный остаток фонда"
-                checked={confirmNegativeFundBalance}
-                onChange={(event) => {
-                  setConfirmNegativeFundBalance(event.target.checked)
-                  setError(null)
-                }}
-                disabled={saving}
-              />
-              <span>
-                <strong>После выплаты фонд станет отрицательным.</strong>
-                <small>Банк будет проверен отдельно. Подтверждение сохранится в истории изменений.</small>
-              </span>
-            </label>
-          ) : null}
+          <NegativeFundBalanceConfirmation
+            visible={!isCashExpense && (parsePaymentMoney(amount) ?? 0) > (selectedSupplier?.expenseFundBalance ?? 0)}
+            checked={confirmNegativeFundBalance}
+            disabled={saving}
+            onChange={(checked) => { setConfirmNegativeFundBalance(checked); setError(null) }} />
           <FormField label="Документ">
             <input aria-label="Документ выплаты" value={documentNumber} disabled={saving} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>

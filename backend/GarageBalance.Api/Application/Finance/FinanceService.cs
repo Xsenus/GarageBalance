@@ -5760,6 +5760,7 @@ public sealed class FinanceService(
     public async Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
+        await using var salaryLock = await supplierAccrualRepository.AcquireGroupSalaryLockAsync(request.SupplierGroupId, month, cancellationToken);
         var amount = MoneyMath.RoundMoney(request.Amount);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
         var comment = NormalizeOptional(request.Comment);

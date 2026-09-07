@@ -4,6 +4,8 @@ namespace GarageBalance.Api.Application.Finance;
 
 public interface ISupplierAccrualRepository
 {
+    Task<IAsyncDisposable> AcquireGroupSalaryLockAsync(Guid supplierGroupId, DateOnly accountingMonth, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<SupplierAccrual>> GetListAsync(
         DateOnly? monthFrom,
         DateOnly? monthTo,
