@@ -649,7 +649,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {editor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={busy ? undefined : closeEditor}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={busy ? undefined : (event) => {
+          event.preventDefault()
+          closeEditor()
+        }}>
           <section ref={editorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -701,7 +704,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <FormField label="Причина отключения">
                   <textarea
                     aria-label="Причина отключения пользователя"
-                    placeholder="Например: сотрудник больше не работает или доступ выдан ошибочно"
+                    placeholder="Например: сотрудник больше не работает"
                     maxLength={1000}
                     value={form.deactivationReason}
                     disabled={busy}
@@ -760,7 +763,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {deactivationConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'edit' ? undefined : closeDeactivationConfirmation}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'edit' ? undefined : (event) => {
+          event.preventDefault()
+          closeDeactivationConfirmation()
+        }}>
           <section ref={deactivationConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="user-deactivation-confirmation-title" aria-describedby="user-deactivation-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -786,7 +792,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {roleEditor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'role' ? undefined : closeRoleEditor}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'role' ? undefined : (event) => {
+          event.preventDefault()
+          closeRoleEditor()
+        }}>
           <section ref={roleEditorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="role-permissions-title" aria-describedby="role-permissions-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -834,7 +843,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {deleteTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'delete' ? undefined : closeDeleteDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'delete' ? undefined : (event) => {
+          event.preventDefault()
+          closeDeleteDialog()
+        }}>
           <section ref={deleteDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -859,7 +871,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   setDeleteReasonError(null)
                 }
               }}
-              placeholder="Например: сотрудник больше не работает или доступ выдан ошибочно"
+              placeholder="Например: сотрудник больше не работает"
               disabled={saving === 'delete'}
               required={actionCommentsRequired}
             />
@@ -877,7 +889,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {restoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'restore' ? undefined : closeRestoreDialog}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'restore' ? undefined : (event) => {
+          event.preventDefault()
+          closeRestoreDialog()
+        }}>
           <section ref={restoreDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-restore-title" aria-describedby="user-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>

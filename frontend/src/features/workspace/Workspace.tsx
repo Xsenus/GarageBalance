@@ -69,6 +69,7 @@ export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken 
 
 export function NotificationsButton() {
   const [open, setOpen] = useState(false)
+  useRestoreFocusOnClose(open)
   useEscapeKey(open, () => setOpen(false))
 
   return (
@@ -295,7 +296,10 @@ export const Workspace = memo(function Workspace({
         </Suspense>
       </WorkspaceSectionErrorBoundary>
       {logoutConfirmationOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmationOpen(false)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          event.preventDefault()
+          setLogoutConfirmationOpen(false)
+        }}>
           <section
             ref={logoutConfirmationDialogRef}
             className="detail-dialog logout-confirmation-dialog"
@@ -315,7 +319,7 @@ export const Workspace = memo(function Workspace({
               </button>
             </div>
             <p className="confirmation-text" id="logout-confirmation-description">
-              Текущий сеанс будет завершён. Чтобы продолжить работу, потребуется снова войти в систему.
+              Сеанс завершится. Войдите снова.
             </p>
             <div className="detail-dialog-actions">
               <button ref={logoutConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setLogoutConfirmationOpen(false)}>

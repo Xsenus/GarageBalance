@@ -105,15 +105,19 @@ describe('NotificationsButton', () => {
     await user.click(screen.getByRole('button', { name: 'Закрыть уведомления' }))
     expect(screen.queryByRole('dialog', { name: 'Уведомления' })).not.toBeInTheDocument()
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveFocus()
   })
 
   it('closes the notification panel with Escape', async () => {
     const user = userEvent.setup()
     render(<NotificationsButton />)
 
-    await user.click(screen.getByRole('button', { name: 'Уведомления' }))
+    const trigger = screen.getByRole('button', { name: 'Уведомления' })
+    await user.click(trigger)
+    screen.getByRole('button', { name: 'Закрыть уведомления' }).focus()
     await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('dialog', { name: 'Уведомления' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 })

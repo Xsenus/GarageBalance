@@ -2781,7 +2781,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={supplierServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <SupplierServiceDialog edit={modal.edit} services={supplierServices} onClose={() => setModal(null)} onSave={saveSupplierService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
@@ -3563,14 +3563,14 @@ function ContractorDialogShell({ children, className = '', closeDisabled = false
   )
 }
 
-function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
+function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
-  useEscapeKey(saveChanges.length === 0 && !saving, onClose)
+  useEscapeKey(saveChanges.length === 0 && !saving && !financialReportOpen, onClose)
   const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
   const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
   const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)

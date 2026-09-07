@@ -144,7 +144,18 @@ function ReportCheckboxMultiSelect({
   return (
     <div className="report-workbook-filter-wide report-checkbox-picker">
       <label htmlFor={searchId}>{label}</label>
-      <div ref={wrapRef} className="payments-prototype-search-wrap">
+      <div
+        ref={wrapRef}
+        className="payments-prototype-search-wrap"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && searchOpen) {
+            event.preventDefault()
+            event.stopPropagation()
+            event.currentTarget.querySelector<HTMLInputElement>('[role="combobox"]')?.focus()
+            setSearchOpen(false)
+          }
+        }}
+      >
         <label className="payments-prototype-search">
           <Search size={18} aria-hidden="true" />
           <input
@@ -229,15 +240,15 @@ function ReportCheckboxMultiSelect({
   )
 }
 
-const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; meta: string }> = [
-  { key: 'consolidated', label: 'Консолидированный', meta: 'месяцы' },
-  { key: 'garages', label: 'По гаражам', meta: 'гаражи' },
-  { key: 'payouts', label: 'По выплатам', meta: 'поставщики и сотрудники' },
-  { key: 'income', label: 'Поступления', meta: 'касса' },
-  { key: 'cashPayments', label: 'Оплаты из кассы', meta: 'расход' },
-  { key: 'bankDeposits', label: 'Сдача кассы в банк', meta: 'банк' },
-  { key: 'fees', label: 'Сборы', meta: 'вариации' },
-  { key: 'funds', label: 'Изменение фондов', meta: 'фонды' },
+const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string }> = [
+  { key: 'consolidated', label: 'Консолидированный' },
+  { key: 'garages', label: 'По гаражам' },
+  { key: 'payouts', label: 'По выплатам' },
+  { key: 'income', label: 'Поступления' },
+  { key: 'cashPayments', label: 'Оплаты из кассы' },
+  { key: 'bankDeposits', label: 'Сдача кассы в банк' },
+  { key: 'fees', label: 'Сборы' },
+  { key: 'funds', label: 'Изменение фондов' },
 ]
 
 function getReportMonthStart(monthValue: string) {
@@ -449,7 +460,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         setGarageQuickListsLoading(false)
       },
       onError: (error) => {
-        setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось загрузить быстрые списки гаражей.')
+        setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось загрузить списки гаражей.')
         setGarageQuickListsLoading(false)
       },
     })
@@ -638,7 +649,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       }, setFundChangeReportLoading, setFundChangeReportError)
   }, [activeReportTab, auth.accessToken, currentReportQuery, reportPeriodError, dateFilters.funds, reportClient, reportQueries, reportReloadRevision, reportSorts.funds, selectedFundIds])
 
-  const selectedTab = reportWorkbookTabs[activeReportIndex]
   const feeVariationLabel = selectedFeeEntryIds.length === 0 ? 'Все сборы' : `Выбрано сборов: ${selectedFeeEntryIds.length}`
 
   async function downloadConsolidatedReport(extension: 'xlsx' | 'pdf') {
@@ -773,7 +783,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       setGarageQuickListEditor(null)
       setGarageQuickListMessage(garageQuickListEditor.id ? 'Быстрый список обновлён.' : 'Быстрый список создан.')
     } catch (error) {
-      setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось сохранить быстрый список.')
+      setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось сохранить список.')
     } finally {
       setGarageQuickListSaving(false)
     }
@@ -792,7 +802,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       setGarageQuickLists(items)
       const current = items.find((item) => item.id === id)
       if (!current) {
-        setGarageQuickListError('Список больше недоступен. Закройте окно и выберите другой список.')
+        setGarageQuickListError('Список больше недоступен. Выберите другой.')
         return
       }
       const garageIds = current.garages.filter((garage) => !garage.isArchived).map((garage) => garage.garageId)
@@ -804,7 +814,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       }
       setGarageQuickListError(null)
     } catch (error) {
-      if (!controller.signal.aborted) setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось перечитать список.')
+      if (!controller.signal.aborted) setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось обновить список.')
     } finally {
       if (!controller.signal.aborted) setGarageQuickListSaving(false)
     }
@@ -834,7 +844,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       setGarageQuickListDeleteReason('')
       setGarageQuickListMessage('Быстрый список удалён.')
     } catch (error) {
-      setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось удалить быстрый список.')
+      setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось удалить список.')
     } finally {
       setGarageQuickListSaving(false)
     }
@@ -1278,7 +1288,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                       label="Гаражи"
                       ariaLabel="Гаражи"
                       allLabel="Все гаражи"
-                      placeholder="Выберите гаражи или начните вводить номер либо ФИО"
+                      placeholder="Номер гаража или ФИО"
                       resultsAriaLabel="Найденные гаражи отчёта"
                       selectedAriaLabel="Выбранные гаражи отчёта"
                       options={garageFilterOptions}
@@ -1528,7 +1538,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                 label="Вариации сборов"
                 ariaLabel="Вариации сборов"
                 allLabel="Все сборы"
-                placeholder="Выберите один или несколько сборов"
+                placeholder="Выберите сборы"
                 resultsAriaLabel="Доступные вариации сборов"
                 selectedAriaLabel="Выбранные вариации сборов"
                 options={feeFilterOptions}
@@ -1644,7 +1654,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           <p className="eyebrow">Отчеты</p>
           <h2>Отчетность ГСК</h2>
         </div>
-        <span>{selectedTab.meta}</span>
       </div>
 
       {reportDataError ? <FormError>{reportDataError}</FormError> : null}
@@ -1659,14 +1668,26 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             id={`report-tab-${tab.key}`}
             aria-selected={activeReportTab === tab.key}
             aria-controls={`report-panel-${tab.key}`}
+            tabIndex={activeReportTab === tab.key ? 0 : -1}
             className={activeReportTab === tab.key ? 'is-active' : undefined}
+            onKeyDown={(event) => {
+              const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])
+              const target = event.key === 'Home' ? tabs[0]
+                : event.key === 'End' ? tabs.at(-1)
+                  : event.key === 'ArrowRight' ? tabs[tabs.indexOf(event.currentTarget) + 1] ?? tabs[0]
+                    : event.key === 'ArrowLeft' ? tabs[tabs.indexOf(event.currentTarget) - 1] ?? tabs.at(-1)
+                      : null
+              if (target) {
+                event.preventDefault()
+                target.focus()
+              }
+            }}
             onClick={() => {
               setActiveReportTab(tab.key)
             }}
             key={tab.key}
           >
             <span>{tab.label}</span>
-            <small>{tab.meta}</small>
           </button>
         ))}
       </div>
@@ -1689,7 +1710,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <p id="garage-quick-list-editor-description">Выбрано гаражей: {garageQuickListEditor.garageIds.length}. Список будет доступен всем пользователям отчётов.</p>
+            <p id="garage-quick-list-editor-description">Выбрано гаражей: {garageQuickListEditor.garageIds.length}. Доступен всем с правом отчётов.</p>
             <form onSubmit={(event) => {
               event.preventDefault()
               void saveGarageQuickList()
