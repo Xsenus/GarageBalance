@@ -8,6 +8,32 @@ namespace GarageBalance.Api.Tests.Funds;
 
 public sealed class FundsControllerTests
 {
+    [Theory]
+    [InlineData("update")]
+    [InlineData("cancel")]
+    [InlineData("restore")]
+    public async Task HistoricalMutation_ReturnsConflictForArchivedFund(string action)
+    {
+        var failure = FundResult<FundOperationDto>.Failure("fund_archived", "Фонд архивирован. Его операции доступны только для просмотра.");
+        var controller = CreateController(new FakeFundService
+        {
+            UpdateOperationResult = failure,
+            CancelOperationResult = failure,
+            RestoreOperationResult = failure
+        });
+        var operationId = Guid.NewGuid();
+        var result = action switch
+        {
+            "update" => await controller.UpdateOperation(operationId, new(81m, "Уточнение"), CancellationToken.None),
+            "cancel" => await controller.CancelOperation(operationId, new("Отмена"), CancellationToken.None),
+            _ => await controller.RestoreOperation(operationId, CancellationToken.None)
+        };
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("fund_archived", problem.Title);
+        Assert.Equal(failure.ErrorMessage, problem.Detail);
+    }
+
     [Fact]
     public async Task GetFunds_ReturnsLinkedServicesFromService()
     {

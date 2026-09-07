@@ -14,7 +14,7 @@ public sealed class PostgreSqlFundOperationPageIntegrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var firstFund = new Fund { Name = "Первый фонд", NormalizedName = "ПЕРВЫЙ ФОНД", SortOrder = 1 };
-        var secondFund = new Fund { Name = "Второй фонд", NormalizedName = "ВТОРОЙ ФОНД", SortOrder = 2 };
+        var secondFund = new Fund { Name = "Второй фонд", NormalizedName = "ВТОРОЙ ФОНД", SortOrder = 2, IsArchived = true };
         var first = CreateOperation(firstFund, new DateTimeOffset(2048, 1, 1, 10, 0, 0, TimeSpan.Zero), 100m);
         var second = CreateOperation(secondFund, new DateTimeOffset(2048, 1, 2, 10, 0, 0, TimeSpan.Zero), 200m);
         var third = CreateOperation(firstFund, new DateTimeOffset(2048, 1, 3, 10, 0, 0, TimeSpan.Zero), 300m, isCanceled: true);
@@ -39,6 +39,7 @@ public sealed class PostgreSqlFundOperationPageIntegrationTests
         Assert.Equal(second.Id, item.Id);
         Assert.Equal(secondFund.Id, item.FundId);
         Assert.Equal("Второй фонд", item.Fund.Name);
+        Assert.True(item.Fund.IsArchived);
         Assert.Equal(200m, item.Amount);
         Assert.Equal("Операция 200", item.Reason);
         var command = Assert.Single(capture.Commands);

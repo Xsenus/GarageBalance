@@ -50,7 +50,8 @@ public sealed record FundOperationDto(
     string Reason,
     DateTimeOffset CreatedAtUtc,
     bool IsCanceled,
-    bool IsAutomaticIncomeAssignment);
+    bool IsAutomaticIncomeAssignment,
+    bool IsFundArchived = false);
 
 public sealed record FundOperationPageDto(
     IReadOnlyList<FundOperationDto> Items,

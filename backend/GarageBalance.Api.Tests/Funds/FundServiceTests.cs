@@ -456,7 +456,7 @@ public sealed class FundServiceTests
             lightingService,
             electricityService,
             supplierGroup,
-            new Supplier { Name = "Освещение", Group = supplierGroup, SupplierService = new SupplierService { Id = lightingService.Id, Name = lightingService.Name }, ExpenseType = expenseType, ExpenseFundId = fund.Id },
+            new Supplier { Id = Guid.Parse("12345678-1234-4234-9234-4988601325e2"), Name = "Освещение", Group = supplierGroup, SupplierService = new SupplierService { Id = lightingService.Id, Name = lightingService.Name }, ExpenseType = expenseType, ExpenseFundId = fund.Id },
             new Supplier { Name = "Энергосбыт", Group = supplierGroup, SupplierService = new SupplierService { Id = electricityService.Id, Name = electricityService.Name }, ExpenseType = expenseType, ExpenseFundId = fund.Id });
         await database.Context.SaveChangesAsync();
 

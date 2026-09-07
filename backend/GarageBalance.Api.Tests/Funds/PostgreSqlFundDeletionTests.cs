@@ -11,6 +11,80 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class PostgreSqlFundDeletionTests
 {
     [PostgreSqlFact]
+    public async Task ArchivedFund_RejectsHistoricalMutationsWithoutChangingBalancesOrAudit()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid fundId;
+        Guid depositId;
+        Guid canceledId;
+        Guid withdrawalId;
+        await using (var context = database.CreateContext())
+        {
+            var fund = new Fund { Name = "Архивный контроль", NormalizedName = "АРХИВНЫЙ КОНТРОЛЬ", IsSystem = false };
+            context.AddRange(fund, new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                Amount = 200m,
+                OperationDate = new DateOnly(2026, 9, 7),
+                AccountingMonth = new DateOnly(2026, 9, 1)
+            });
+            await context.SaveChangesAsync();
+            fundId = fund.Id;
+            var service = CreateService(context);
+            var deposit = await service.CreateOperationAsync(fundId, new("deposit", 80m, "Распределение"), null, CancellationToken.None);
+            Assert.True(deposit.Succeeded, deposit.ErrorMessage);
+            depositId = deposit.Value!.Id;
+            var canceled = await service.CreateOperationAsync(fundId, new("deposit", 10m, "Отменяемое распределение"), null, CancellationToken.None);
+            Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+            canceledId = canceled.Value!.Id;
+            Assert.True((await service.CancelOperationAsync(canceledId, new("Отмена"), null, CancellationToken.None)).Succeeded);
+            var withdrawal = await service.CreateOperationAsync(fundId, new("withdraw", 40m, "Возврат"), null, CancellationToken.None);
+            Assert.True(withdrawal.Succeeded, withdrawal.ErrorMessage);
+            withdrawalId = withdrawal.Value!.Id;
+            Assert.True((await service.DeleteFundAsync(fundId, new("Закрытие", fund.Version), null, CancellationToken.None)).Succeeded);
+        }
+
+        await using var verification = database.CreateContext();
+        var beforeOperations = await verification.FundOperations.AsNoTracking().OrderBy(item => item.Id).ToListAsync();
+        var beforeAudit = await verification.AuditEvents.CountAsync();
+        var before = await CreateService(verification).GetReconciliationAsync(CancellationToken.None);
+        Assert.True(before.IsReconciled);
+        Assert.Equal(200m, before.UnallocatedTotal);
+        // Повторные запросы из устаревшего окна после архивирования тоже должны быть безопасны.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            await using var mutationContext = database.CreateContext();
+            var service = CreateService(mutationContext);
+            var results = new[]
+            {
+                await service.UpdateOperationAsync(depositId, new(81m, "Уточнение"), null, CancellationToken.None),
+                await service.UpdateOperationAsync(withdrawalId, new(39m, "Уточнение возврата"), null, CancellationToken.None),
+                await service.CancelOperationAsync(withdrawalId, new("Отмена возврата"), null, CancellationToken.None),
+                await service.RestoreOperationAsync(canceledId, null, CancellationToken.None)
+            };
+            Assert.All(results, result =>
+            {
+                Assert.False(result.Succeeded);
+                Assert.Equal("fund_archived", result.ErrorCode);
+            });
+            Assert.False((await service.CreateOperationAsync(fundId, new("deposit", 1m, "Обратная операция"), null, CancellationToken.None)).Succeeded);
+        }
+
+        verification.ChangeTracker.Clear();
+        var after = await CreateService(verification).GetReconciliationAsync(CancellationToken.None);
+        Assert.Equal(before, after);
+        var savedFund = await verification.Funds.AsNoTracking().SingleAsync(item => item.Id == fundId);
+        Assert.True(savedFund.IsArchived);
+        Assert.Equal(0m, savedFund.Balance);
+        var historyService = CreateService(verification);
+        Assert.All(await historyService.GetOperationsAsync(100, true, CancellationToken.None), item => Assert.True(item.IsFundArchived));
+        Assert.All((await historyService.GetOperationsPageAsync(0, 100, true, CancellationToken.None)).Items, item => Assert.True(item.IsFundArchived));
+        Assert.Equal(beforeAudit, await verification.AuditEvents.CountAsync());
+        var afterOperations = await verification.FundOperations.AsNoTracking().OrderBy(item => item.Id).ToListAsync();
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(beforeOperations), System.Text.Json.JsonSerializer.Serialize(afterOperations));
+    }
+
+    [PostgreSqlFact]
     public async Task DeleteFund_DetachesCurrentSettingsButPreservesHistoricalDocumentsAndReconciliation()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

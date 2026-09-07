@@ -14236,6 +14236,26 @@ describe('App', () => {
 
   })
 
+  it('keeps archived fund history readable without mutation actions', async () => {
+    const user = userEvent.setup()
+    const fundsClient = createFundsClient({
+      getOperations: async () => [
+        createFundOperation({ id: 'archived-active', fundName: 'Закрытый фонд', isFundArchived: true }),
+        createFundOperation({ id: 'archived-canceled', fundName: 'Закрытый фонд', isFundArchived: true, isCanceled: true }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const tiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(tiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const table = await screen.findByRole('table', { name: 'Операции фондов' })
+    expect(within(table).getAllByText('Архивный фонд: только просмотр')).toHaveLength(2)
+    expect(within(table).getByText('Активна')).toBeInTheDocument()
+    expect(within(table).getByText('Отменена')).toBeInTheDocument()
+    expect(within(table).queryByRole('button', { name: /операцию фонда/ })).not.toBeInTheDocument()
+  })
+
   it('edits cancels restores and reverses a fund operation with delayed refreshes', async () => {
     const user = userEvent.setup()
     const statefulFundsClient = createFundsClient()
@@ -23024,12 +23044,12 @@ describe('App', () => {
           id: 'audit-detail-1',
           action: 'dictionary.owner_updated',
           entityType: 'owner',
-          entityId: 'owner-1',
+          entityId: '12345678-1234-4234-9234-4988601325e2',
           entityDisplayName: 'Garage 12',
           relatedGarageNumber: '12',
           relatedAccountingMonth: '2026-06',
           relatedCounterpartyName: 'Иванов Иван',
-          relatedDocumentNumber: 'PAY-2026-06-12',
+          relatedDocumentNumber: null, relatedDocumentId: '12345678-1234-4234-9234-4988601325e2',
           summary: 'Изменен владелец.',
           section: 'dictionary',
           actionKind: 'update',
@@ -23041,12 +23061,12 @@ describe('App', () => {
           id,
           action: 'dictionary.owner_updated',
           entityType: 'owner',
-          entityId: 'owner-1',
+          entityId: '12345678-1234-4234-9234-4988601325e2',
           entityDisplayName: 'Garage 12',
           relatedGarageNumber: '12',
           relatedAccountingMonth: '2026-06',
           relatedCounterpartyName: 'Иванов Иван',
-          relatedDocumentNumber: 'PAY-2026-06-12',
+          relatedDocumentNumber: null, relatedDocumentId: '12345678-1234-4234-9234-4988601325e2',
           summary: 'Изменен владелец.',
           section: 'dictionary',
           actionKind: 'update',
@@ -23078,12 +23098,11 @@ describe('App', () => {
     expect(within(detailDialog).getByText('Администратор ГСК · admin@example.test')).toBeInTheDocument()
     expect(within(detailDialog).getByText('ID 5df20dec-2959-4726-a1cb-0e6ec6b28674')).toBeInTheDocument()
     expect(within(detailDialog).getByText('dictionary.owner_updated')).toBeInTheDocument()
-    expect(within(detailDialog).getByText('owner-1')).toBeInTheDocument()
+    expect(within(detailDialog).getAllByText('12345678-1234-4234-9234-4988601325e2')).toHaveLength(2)
     expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Связанные данные')).toBeInTheDocument()
     expect(within(detailDialog).getByText('№ 12')).toBeInTheDocument()
     expect(within(detailDialog).getByText('2026-06')).toBeInTheDocument()
-    expect(within(detailDialog).getByText('PAY-2026-06-12')).toBeInTheDocument()
     expect(within(detailDialog).getAllByText('Владелец')).toHaveLength(2)
     expect(within(detailDialog).getAllByText('Иванов Иван')).toHaveLength(2)
     expect(within(detailDialog).getByText('Петров Петр')).toBeInTheDocument()

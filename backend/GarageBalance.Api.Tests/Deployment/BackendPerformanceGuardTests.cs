@@ -1563,7 +1563,8 @@ public sealed class BackendPerformanceGuardTests
             "private static async Task<IReadOnlyList<FundOperation>> GetPostgresRecentOperationsAsync");
         Assert.Equal(1, CountOccurrences(postgresRecentOperationsSource, ".ToListAsync(cancellationToken)"));
         Assert.Contains("FundName = operation.Fund.Name", postgresRecentOperationsSource, StringComparison.Ordinal);
-        Assert.Contains("Fund = new Fund { Id = row.FundId, Name = row.FundName }", postgresRecentOperationsSource, StringComparison.Ordinal);
+        Assert.Contains("IsFundArchived = operation.Fund.IsArchived", postgresRecentOperationsSource, StringComparison.Ordinal);
+        Assert.Contains("Fund = new Fund { Id = row.FundId, Name = row.FundName, IsArchived = row.IsFundArchived }", postgresRecentOperationsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("ActorUserId", postgresRecentOperationsSource, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedAtUtc", postgresRecentOperationsSource, StringComparison.Ordinal);
         var postgresPageSource = ExtractMethodSource(
@@ -1571,6 +1572,7 @@ public sealed class BackendPerformanceGuardTests
             "private async Task<FundOperationPageData> GetPostgresOperationsPageAsync");
         Assert.Contains(".Concat(totalsRow)", postgresPageSource, StringComparison.Ordinal);
         Assert.Contains("TotalCount = query.Count()", postgresPageSource, StringComparison.Ordinal);
+        Assert.Contains("IsFundArchived = (bool?)operation.Fund.IsArchived", postgresPageSource, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(postgresPageSource, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("ActorUserId", postgresPageSource, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedAtUtc", postgresPageSource, StringComparison.Ordinal);

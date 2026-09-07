@@ -36,6 +36,7 @@ export type FundOperationDto = {
   createdAtUtc: string
   isCanceled: boolean
   isAutomaticIncomeAssignment?: boolean
+  isFundArchived?: boolean
 }
 
 export type FundOperationPageDto = {

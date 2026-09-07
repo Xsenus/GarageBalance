@@ -15,11 +15,21 @@ public static partial class AuditTextMasker
         masked = BearerTokenRegex().Replace(masked, "Bearer [token скрыт]");
         masked = SecretAssignmentRegex().Replace(masked, match => $"{match.Groups["label"].Value}{match.Groups["separator"].Value}[секрет скрыт]");
         masked = PersonalDataAssignmentRegex().Replace(masked, match => $"{match.Groups["label"].Value}{match.Groups["separator"].Value}[персональные данные скрыты]");
-        masked = PhoneRegex().Replace(masked, "[телефон скрыт]");
-        masked = PassportRegex().Replace(masked, "[документ скрыт]");
-        masked = LongNumberRegex().Replace(masked, "[номер скрыт]");
-        return masked;
+        // Секреты и явно подписанные персональные поля уже скрыты выше.
+        // Числовые фрагменты полного UUID не являются телефоном или паспортом.
+        var parts = TechnicalUuidRegex().Split(masked);
+        for (var index = 0; index < parts.Length; index += 2)
+        {
+            var text = PhoneRegex().Replace(parts[index], "[телефон скрыт]");
+            text = PassportRegex().Replace(text, "[документ скрыт]");
+            parts[index] = LongNumberRegex().Replace(text, "[номер скрыт]");
+        }
+
+        return string.Concat(parts);
     }
+
+    [GeneratedRegex(@"(\b[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\b)", RegexOptions.CultureInvariant)]
+    private static partial Regex TechnicalUuidRegex();
 
     [GeneratedRegex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EmailRegex();

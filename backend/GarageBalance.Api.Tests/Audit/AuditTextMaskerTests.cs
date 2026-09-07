@@ -4,6 +4,19 @@ namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditTextMaskerTests
 {
+    [Theory]
+    [InlineData("12345678-1234-4234-9234-4988601325e2")]
+    [InlineData("89991112-2334-4567-8901-234567890123")]
+    [InlineData("ABCDEF12-3456-4789-9012-123456ABCDEF")]
+    public void Mask_PreservesCompleteUuidsButStillHidesAdjacentPersonalData(string uuid)
+    {
+        Assert.Equal(uuid, AuditTextMasker.Mask(uuid));
+        Assert.Equal($"ID {{{uuid}}}, {uuid}; [документ скрыт]; [телефон скрыт]",
+            AuditTextMasker.Mask($"ID {{{uuid}}}, {uuid}; 1234-567890; +7 (999) 111-22-33"));
+        Assert.Equal("passport: [персональные данные скрыты]; token=[секрет скрыт]",
+            AuditTextMasker.Mask($"passport: {uuid}; token={uuid}"));
+    }
+
     [Fact]
     public void Mask_ReturnsNullAndEmptyValuesAsIs()
     {

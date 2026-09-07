@@ -165,7 +165,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return result.ErrorCode switch
         {
             "fund_not_found" or "fund_operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "fund_duplicate" or "fund_negative_balance" or "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" or "fund_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "fund_archived" or "fund_duplicate" or "fund_negative_balance" or "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" or "fund_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

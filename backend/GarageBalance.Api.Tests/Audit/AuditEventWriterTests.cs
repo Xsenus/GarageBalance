@@ -15,7 +15,7 @@ public sealed class AuditEventWriterTests
         await using var database = await TestDatabase.CreateAsync();
         var writer = new AuditEventWriter(database.Context);
         var actorUserId = Guid.NewGuid();
-        var entityId = Guid.NewGuid();
+        var entityId = Guid.Parse("12345678-1234-4234-9234-4988601325e2");
 
         var auditEvent = writer.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -40,6 +40,7 @@ public sealed class AuditEventWriterTests
             Metadata: new Dictionary<string, object?>
             {
                 ["documentNumber"] = "PKO-1",
+                ["relatedDocumentId"] = entityId,
                 ["apiToken"] = "raw-token",
                 ["ownerPhone"] = "+7 999 111-22-33"
             },
@@ -72,6 +73,9 @@ public sealed class AuditEventWriterTests
         var service = new AuditService(new EfAuditEventRepository(database.Context));
         var dto = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
         Assert.Equal("finance", dto.Section);
+        Assert.Equal(entityId.ToString(), dto.EntityId);
+        Assert.Equal(entityId.ToString(), dto.RelatedDocumentId);
+        Assert.Equal(entityId.ToString(), dto.Metadata!["relatedDocumentId"]);
         Assert.Equal("update", dto.ActionKind);
         Assert.Equal("Поступление PKO-1", dto.EntityDisplayName);
         Assert.Equal("12", dto.RelatedGarageNumber);

@@ -21,7 +21,7 @@ public sealed class PostgreSqlRecentFundOperationProjectionIntegrationTests
             SortOrder = 17,
             AllowOperations = true,
             IsSystem = false,
-            IsArchived = false,
+            IsArchived = true,
             CreatedAtUtc = new DateTimeOffset(2049, 1, 1, 0, 0, 0, TimeSpan.Zero),
             UpdatedAtUtc = new DateTimeOffset(2049, 1, 2, 0, 0, 0, TimeSpan.Zero),
             Version = Guid.NewGuid()
@@ -72,7 +72,8 @@ public sealed class PostgreSqlRecentFundOperationProjectionIntegrationTests
         Assert.DoesNotContain("SortOrder", command, StringComparison.Ordinal);
         Assert.DoesNotContain("AllowOperations", command, StringComparison.Ordinal);
         Assert.DoesNotContain("IsSystem", command, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsArchived", command, StringComparison.Ordinal);
+        Assert.Contains("IsArchived", command, StringComparison.Ordinal);
+        Assert.True(first.Fund.IsArchived);
         Assert.DoesNotContain("Version", command, StringComparison.Ordinal);
         Assert.Empty(context.ChangeTracker.Entries());
     }

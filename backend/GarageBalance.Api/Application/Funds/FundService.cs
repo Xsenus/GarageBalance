@@ -325,6 +325,13 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Failure("fund_operation_canceled", "Нельзя изменить отмененную операцию фонда.");
         }
 
+        if (operation.Fund.IsArchived)
+        {
+            return FundResult<FundOperationDto>.Failure(
+                "fund_archived",
+                "Фонд архивирован. Его операции доступны только для просмотра.");
+        }
+
         if (operation.SourceFinancialOperationId.HasValue)
         {
             return FundResult<FundOperationDto>.Failure(
@@ -391,6 +398,13 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Failure("fund_operation_already_canceled", "Операция фонда уже отменена.");
         }
 
+        if (operation.Fund.IsArchived)
+        {
+            return FundResult<FundOperationDto>.Failure(
+                "fund_archived",
+                "Фонд архивирован. Его операции доступны только для просмотра.");
+        }
+
         if (operation.SourceFinancialOperationId.HasValue)
         {
             return FundResult<FundOperationDto>.Failure(
@@ -436,6 +450,13 @@ public sealed class FundService(
         if (!operation.IsCanceled)
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_not_canceled", "Операция фонда уже активна.");
+        }
+
+        if (operation.Fund.IsArchived)
+        {
+            return FundResult<FundOperationDto>.Failure(
+                "fund_archived",
+                "Фонд архивирован. Его операции доступны только для просмотра.");
         }
 
         if (operation.SourceFinancialOperationId.HasValue)
@@ -802,7 +823,8 @@ public sealed class FundService(
             operation.Reason,
             operation.CreatedAtUtc,
             operation.IsCanceled,
-            operation.SourceFinancialOperationId.HasValue);
+            operation.SourceFinancialOperationId.HasValue,
+            operation.Fund.IsArchived);
     }
 
     private static IReadOnlyDictionary<string, object?> ToOperationAuditValues(FundOperation operation)

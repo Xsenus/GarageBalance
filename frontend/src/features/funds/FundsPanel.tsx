@@ -811,7 +811,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 </td>
                 <td>
                   <div className="funds-operation-actions">
-                    {fundOperation.isAutomaticIncomeAssignment ? (
+                    {fundOperation.isFundArchived ? (
+                      <span className="funds-operation-managed-label">Архивный фонд: только просмотр</span>
+                    ) : fundOperation.isAutomaticIncomeAssignment ? (
                       <span className="funds-operation-managed-label">Управляется поступлением</span>
                     ) : fundOperation.isCanceled ? (
                       <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} disabled={operationsLoading} onClick={() => openFundStatusAction('restore', fundOperation)}>
