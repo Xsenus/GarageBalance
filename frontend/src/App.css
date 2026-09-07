@@ -1995,6 +1995,22 @@ h1 {
   width: min(820px, 100%);
 }
 
+.detail-dialog.supplier-service-edit-dialog {
+  display: flex;
+  flex-direction: column;
+  min-height: min(620px, calc(100dvh - 48px));
+}
+
+.supplier-service-edit-dialog .dictionary-modal-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.supplier-service-edit-dialog .detail-dialog-actions {
+  margin-top: auto;
+}
+
 .detail-dialog.contractors-dialog--garage {
   width: min(1120px, calc(100vw - 48px));
 }

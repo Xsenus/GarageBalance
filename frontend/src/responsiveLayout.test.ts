@@ -11,6 +11,13 @@ describe('responsive layout styles', () => {
   const settingsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
+  it('gives the supplier service editor room for its options without exceeding the viewport', () => {
+    expect(normalizedAppCss).toContain('.detail-dialog.supplier-service-edit-dialog {\n  display: flex;\n  flex-direction: column;\n  min-height: min(620px, calc(100dvh - 48px));\n}')
+    expect(normalizedAppCss).toContain('.supplier-service-edit-dialog .dictionary-modal-form {\n  display: flex;\n  flex: 1;\n  flex-direction: column;\n}')
+    expect(normalizedAppCss).toContain('.supplier-service-edit-dialog .detail-dialog-actions {\n  margin-top: auto;\n}')
+    expect(normalizedAppCss).toContain('max-height: min(860px, calc(100dvh - 48px));')
+  })
+
   function collectFeatureTsxFiles(directory: string): string[] {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
       const path = resolve(directory, entry.name)

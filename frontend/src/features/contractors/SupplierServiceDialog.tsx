@@ -41,7 +41,7 @@ export function SupplierServiceDialog({ edit = false, services, onClose, onSave 
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-service-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className={`detail-dialog contractors-dialog${edit ? ' supplier-service-edit-dialog' : ''}`} role="dialog" aria-modal="true" aria-labelledby="supplier-service-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <h3 id="supplier-service-dialog-title">{edit ? 'Изменить услугу поставщика' : 'Новая услуга поставщика'}</h3>
           <button className="icon-button" type="button" aria-label="Закрыть форму услуги" disabled={saving} onClick={onClose}><X size={18} /></button>
