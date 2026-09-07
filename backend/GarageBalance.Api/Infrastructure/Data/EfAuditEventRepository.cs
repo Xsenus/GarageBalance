@@ -493,6 +493,8 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
                 auditEvent.EntityType == "financial_operation" ||
                 auditEvent.EntityType == "accrual" ||
                 auditEvent.EntityType == "supplier_accrual" ||
+                auditEvent.EntityType == "cash_bank_balance_operation" ||
+                auditEvent.EntityType == "cash_bank_balance_settings" ||
                 auditEvent.EntityType == "fund_operation"),
             _ => query
         };

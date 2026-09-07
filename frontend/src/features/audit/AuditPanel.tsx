@@ -25,6 +25,7 @@ const auditSectionOptions = [
   { value: 'import', label: 'Импорт' },
   { value: 'reports', label: 'Отчеты' },
   { value: 'app_releases', label: 'Что нового' },
+  { value: 'settings', label: 'Настройки' },
 ]
 
 const auditActionKindOptions = [
@@ -64,7 +65,7 @@ const auditQuickFilterOptions = [
 ]
 
 function getAuditEventSectionLabel(auditEvent: AuditEventDto) {
-  const sectionCode = auditEvent.section || auditEvent.action.split('.')[0] || ''
+  const sectionCode = auditEvent.section || auditEvent.action.split('.')[0]
   return auditSectionOptions.find((option) => option.value === sectionCode)?.label ?? (sectionCode || 'Система')
 }
 

@@ -23243,6 +23243,42 @@ describe('App', () => {
     expect(auditExportRequest?.limit).toBeUndefined()
   })
 
+  it('filters settings history together with financial events and preserves both filters in exports', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({ login: async () => ({ ...auth, user: { ...auth.user, permissions: [...auth.user.permissions, 'audit.read'] } }) })
+    const event = createAuditEvent({ section: 'settings', action: 'cash_bank_balance.increased', entityType: 'cash_bank_balance_operation', summary: 'Контроль банковского остатка' })
+    const getEvents = vi.fn(async (_token: string, params?: Parameters<AuditClient['getEvents']>[1]) => params?.section ? [event] : [
+      event,
+      createAuditEvent({ id: 'legacy-settings', section: null, action: 'settings.updated' }),
+      createAuditEvent({ id: 'unknown-section', section: '', action: '' }),
+    ])
+    const auditClient = createAuditClient({ getEvents })
+    const read = vi.spyOn(auditClient, 'getEventsPage')
+    const csv = vi.spyOn(auditClient, 'exportEvents')
+    const xlsx = vi.spyOn(auditClient, 'exportEventsXlsx')
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = within(await screen.findByRole('region', { name: 'История изменений' }))
+    const initialTable = within(panel.getByRole('table', { name: 'События истории изменений' }))
+    expect(await initialTable.findByText('Все разделы')).toBeInTheDocument()
+    expect(initialTable.getAllByText('Настройки')).toHaveLength(2)
+    await user.click(panel.getByRole('combobox', { name: 'Раздел истории изменений' }))
+    await user.click(panel.getByRole('option', { name: 'Настройки', exact: true }))
+    await user.click(panel.getByRole('combobox', { name: 'Быстрый фильтр истории изменений' }))
+    await user.click(panel.getByRole('option', { name: 'Только финансы' }))
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ section: 'settings', quickFilter: 'financial' }), expect.any(AbortSignal)))
+    expect(await within(panel.getByRole('table', { name: 'События истории изменений' })).findByText('Настройки')).toBeInTheDocument()
+    await user.click(panel.getByRole('button', { name: /CSV/ }))
+    await waitFor(() => expect(csv).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ section: 'settings', quickFilter: 'financial' })))
+    await user.click(panel.getByRole('button', { name: /XLSX/ }))
+    await waitFor(() => expect(xlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ section: 'settings', quickFilter: 'financial' })))
+    await user.click(panel.getByRole('combobox', { name: 'Раздел истории изменений' }))
+    await user.click(panel.getByRole('option', { name: 'Все разделы' }))
+    await waitFor(() => expect(read).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ section: undefined, quickFilter: 'financial' }), expect.any(AbortSignal)))
+  })
   it('filters audit journal by reports section and report entity type', async () => {
     const user = userEvent.setup()
     let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined

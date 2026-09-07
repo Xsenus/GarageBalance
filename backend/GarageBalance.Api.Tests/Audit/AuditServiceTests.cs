@@ -224,6 +224,29 @@ public sealed class AuditServiceTests
         Assert.Equal("owner", auditEvent.EntityType);
     }
 
+    [Theory]
+    [InlineData("settings", "cash_bank_balance_operation", true)]
+    [InlineData(null, "cash_bank_balance_operation", true)]
+    [InlineData("settings", "cash_bank_balance_settings", true)]
+    [InlineData(null, "cash_bank_balance_settings", true)]
+    [InlineData("settings", "application_setting", false)]
+    [InlineData(null, "application_setting", false)]
+    public async Task FinancialFilterIncludesCashBankHistoryWithoutIncludingOtherSettings(string? section, string entityType, bool included)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            Section = section,
+            Action = "cash_bank_balance.increased",
+            EntityType = entityType,
+            Summary = "Synthetic balance history"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var request = new AuditEventListRequest(null, null, null, null, QuickFilter: "financial");
+        Assert.Equal(included ? 1 : 0, (await service.GetEventsAsync(request, CancellationToken.None)).Count);
+        Assert.Equal(included ? 1 : 0, (await service.GetEventsPageAsync(request, CancellationToken.None)).TotalCount);
+    }
     [Fact]
     public async Task GetEventsAsync_FiltersByActorAndQuickFilter()
     {
