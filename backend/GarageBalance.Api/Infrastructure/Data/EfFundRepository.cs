@@ -93,16 +93,16 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
         return await dbContext.Suppliers.AsNoTracking()
             .Where(supplier =>
                 !supplier.IsArchived &&
-                supplier.ChargeServiceSettingId.HasValue &&
-                !supplier.ChargeServiceSetting!.IsArchived &&
+                supplier.SupplierServiceId.HasValue &&
+                !supplier.SupplierService!.IsArchived &&
                 supplier.ExpenseFundId.HasValue &&
                 fundIds.Contains(supplier.ExpenseFundId.Value))
-            .OrderBy(supplier => supplier.ChargeServiceSetting!.Name)
-            .ThenBy(supplier => supplier.ChargeServiceSettingId)
+            .OrderBy(supplier => supplier.SupplierService!.Name)
+            .ThenBy(supplier => supplier.SupplierServiceId)
             .Select(supplier => new FundLinkedServiceData(
                 supplier.ExpenseFundId!.Value,
-                supplier.ChargeServiceSettingId!.Value,
-                supplier.ChargeServiceSetting!.Name))
+                supplier.SupplierServiceId!.Value,
+                supplier.SupplierService!.Name))
             .ToListAsync(cancellationToken);
     }
 
@@ -112,6 +112,15 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
     {
         return await dbContext.IncomeTypes
             .Where(incomeType => incomeType.DestinationFundId == fundId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Supplier>> GetSuppliersForFundUpdateAsync(
+        Guid fundId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Suppliers
+            .Where(supplier => supplier.ExpenseFundId == fundId)
             .ToListAsync(cancellationToken);
     }
 

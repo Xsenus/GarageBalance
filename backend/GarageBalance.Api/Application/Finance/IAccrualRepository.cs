@@ -81,7 +81,8 @@ public sealed record OverdueAccrualDebtData(
     DateOnly OverdueFromDate,
     decimal Amount,
     decimal PaidAmount,
-    decimal OutstandingAmount);
+    decimal OutstandingAmount,
+    string? ChargeName = null);
 public sealed record OutstandingAccrualDebtData(
     Guid AccrualId,
     Guid IncomeTypeId,

@@ -127,7 +127,7 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   ownerNewGarageInitialElectricityMeterValue: { label: 'Старт электричества', ariaLabel: 'Стартовый счетчик электричества нового гаража' },
   ownerNewGarageComment: { label: 'Комментарий по гаражу', ariaLabel: 'Комментарий нового гаража', placeholder: 'Особенности гаража, начислений или импорта' },
   garageNumber: { label: 'Номер гаража', ariaLabel: 'Номер гаража', placeholder: 'Например, 42' },
-  garagePeopleCount: { label: 'Людей', ariaLabel: 'Количество людей' },
+  garagePeopleCount: { label: 'Людей', ariaLabel: 'Количество людей', hint: 'Изменение действует с рабочей даты сохранения. Начисления по людям рассчитываются по календарным дням; оплаченные суммы сохраняются. Начальное число нового гаража применяется с месяца его регистрации.' },
   garageFloorCount: { label: 'Этажей', ariaLabel: 'Количество этажей' },
   garageOwner: { label: 'Владелец', ariaLabel: 'Владелец гаража' },
   garageStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс гаража', hint: garageBalanceSignHelp },

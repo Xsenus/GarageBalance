@@ -2,7 +2,7 @@ import { formatMonthInputValue, getLocalDateInputValue } from './formatters'
 import { getDateOnlyOrDefault, getRowModeOrDefault, getStringArrayOrDefault, getStringOrDefault, isRecord, readSessionJson, saveSessionJson } from './sessionStorage'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters } from './validation'
 
-export type ReportQuickPeriodKey = 'currentMonth' | 'currentYear' | 'previousYear'
+export type ReportQuickPeriodKey = 'currentMonth' | 'previousMonth' | 'currentYear' | 'previousYear'
 
 export type ReportQuickPeriodRange = {
   monthFrom: string
@@ -73,6 +73,7 @@ export function filterAndRankReportOptions<T extends RankableReportFilterOption>
 
 export const reportQuickPeriodOptions: ReadonlyArray<{ key: ReportQuickPeriodKey; label: string }> = [
   { key: 'currentMonth', label: 'Текущий месяц' },
+  { key: 'previousMonth', label: 'Предыдущий месяц' },
   { key: 'currentYear', label: 'Текущий год' },
   { key: 'previousYear', label: 'Предыдущий год' },
 ]
@@ -80,6 +81,16 @@ export const reportQuickPeriodOptions: ReadonlyArray<{ key: ReportQuickPeriodKey
 export function getReportQuickPeriodRange(period: ReportQuickPeriodKey, referenceDate = getLocalDateInputValue()): ReportQuickPeriodRange {
   const [referenceYearText, referenceMonthText] = referenceDate.split('-')
   const referenceYear = Number(referenceYearText)
+  if (period === 'previousMonth') {
+    const previousMonthEnd = new Date(referenceYear, Number(referenceMonthText) - 1, 0)
+    const month = formatMonthInputValue(previousMonthEnd)
+    return {
+      monthFrom: month,
+      monthTo: month,
+      dateFrom: `${month}-01`,
+      dateTo: `${month}-${String(previousMonthEnd.getDate()).padStart(2, '0')}`,
+    }
+  }
   const targetYear = period === 'previousYear' ? referenceYear - 1 : referenceYear
   const monthFrom = period === 'currentMonth' ? `${referenceYearText}-${referenceMonthText}` : `${targetYear}-01`
   const monthTo = period === 'currentMonth' ? monthFrom : `${targetYear}-12`

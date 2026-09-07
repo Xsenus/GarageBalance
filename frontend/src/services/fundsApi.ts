@@ -1,4 +1,5 @@
-import { authenticatedApiFetch, authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
+import { authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
+import { invalidateDictionaryResponseCache } from './dictionaryResponseCache'
 
 export type FundDto = {
   id: string
@@ -71,6 +72,7 @@ export type UpsertFundRequest = {
 
 export type DeleteFundRequest = {
   reason: string
+  version?: string
 }
 
 export type CancelFundOperationRequest = {
@@ -111,7 +113,7 @@ function getFundsCacheVersion(accessToken: string): number {
   return fundsCacheVersions.get(accessToken) ?? 0
 }
 
-function invalidateFundsResponseCache(accessToken: string) {
+export function invalidateFundsResponseCache(accessToken: string) {
   fundsCacheVersions.set(accessToken, getFundsCacheVersion(accessToken) + 1)
   for (const cacheKey of fundsResponseCache.keys()) {
     if (cacheKey.startsWith(`${accessToken}\n`)) {
@@ -143,22 +145,14 @@ function getCachedFunds(accessToken: string): Promise<FundDto[]> {
   return response
 }
 
-async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
+async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit, readBody = true): Promise<TResponse> {
   const response = await authenticatedJsonApiFetch(accessToken, path, init)
 
   if (!response.ok) {
     throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить операцию фонда.'))
   }
 
-  return response.json()
-}
-
-async function requestVoid(accessToken: string, path: string, init?: RequestInit): Promise<void> {
-  const response = await authenticatedApiFetch(accessToken, path, init)
-
-  if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, 'Не удалось выполнить операцию фонда.'))
-  }
+  return readBody ? response.json() : undefined as TResponse
 }
 
 export const fundsApi: FundsClient = {
@@ -184,12 +178,13 @@ export const fundsApi: FundsClient = {
     return result
   },
   async deleteFund(accessToken, fundId, request) {
-    await requestVoid(accessToken, `/api/funds/${fundId}`, {
+    await requestJson<void>(accessToken, `/api/funds/${fundId}`, {
       method: 'DELETE',
       body: JSON.stringify(request),
-      headers: { 'Content-Type': 'application/json' },
-    })
+    }, false)
     invalidateFundsResponseCache(accessToken)
+    invalidateDictionaryResponseCache(accessToken, 'suppliers')
+    invalidateDictionaryResponseCache(accessToken, 'income-types')
   },
   getOperations(accessToken, query = {}, signal) {
     const search = new URLSearchParams()

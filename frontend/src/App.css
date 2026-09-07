@@ -1913,6 +1913,7 @@ h1 {
 }
 
 .contractors-supplier-cell--debt {
+  color: #000;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -2092,17 +2093,6 @@ h1 {
 
 .contractors-fee-participant-switch .contractors-switch-control {
   margin-left: auto;
-}
-
-.contractors-fee-participant-label {
-  display: grid;
-  gap: 2px;
-}
-
-.contractors-fee-participant-label small {
-  color: #667085;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .contractors-fee-participant-list {
@@ -2537,7 +2527,7 @@ h1 {
 }
 
 .contractors-supplier-lookup-grid {
-  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);
+  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);
   gap: 12px;
 }
 
@@ -4579,13 +4569,6 @@ h1 {
   font-weight: 750;
 }
 
-.payments-prototype-period-row .localized-date-picker__popover {
-  right: auto;
-  left: 0;
-  width: min(292px, calc(100vw - 44px));
-  box-sizing: border-box;
-}
-
 .payments-prototype-period-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(112px, 1fr));
@@ -6030,21 +6013,16 @@ h1 {
 }
 
 .localized-date-picker__popover {
-  position: absolute;
+  position: fixed;
+  box-sizing: border-box;
+  overflow: auto;
   z-index: 32;
-  top: calc(100% + 6px);
-  right: 0;
   width: 292px;
   border: 1px solid #d0d5dd;
   border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 16px 32px rgba(16, 24, 40, 0.16);
   padding: 12px;
-}
-
-.localized-date-picker__popover--above {
-  top: auto;
-  bottom: calc(100% + 6px);
 }
 
 .localized-date-picker__heading {
@@ -7774,11 +7752,6 @@ button.operation-row:focus-visible {
   color: #101828;
 }
 
-.report-workbook-filter__fields > label:first-child .localized-date-picker__popover {
-  right: auto;
-  left: 0;
-}
-
 .report-workbook-filter--single .report-workbook-filter__fields > label {
   flex-basis: 420px;
 }
@@ -7807,6 +7780,7 @@ button.operation-row:focus-visible {
 
 .report-garage-filter-disclosure {
   position: relative;
+  z-index: 2;
 }
 
 .report-garage-filter-disclosure:not([open]) .report-garage-filter-panel {
@@ -7820,8 +7794,11 @@ button.operation-row:focus-visible {
 }
 
 .report-garage-filter-panel {
+  position: absolute;
+  top: calc(100% + 8px);
   left: 0;
   display: grid;
+  align-content: start;
   width: min(var(--report-garage-filter-panel-width, 760px), calc(100vw - 48px));
   height: min(var(--report-garage-filter-panel-height, 480px), 78vh);
   max-width: calc(100vw - 48px);
@@ -7851,17 +7828,32 @@ button.operation-row:focus-visible {
 
 .report-garage-quick-lists {
   display: grid;
+  align-content: start;
   gap: 6px 8px;
 }
 
 .report-garage-quick-list-actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .report-garage-quick-list-dialog {
   width: min(520px, calc(100vw - 32px));
+}
+
+.report-quick-list-garages {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.report-quick-list-garages .payments-prototype-search-results {
+  position: static;
+  max-height: 220px;
+  overflow: auto;
 }
 
 .report-garage-quick-list-dialog form,

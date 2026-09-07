@@ -1254,7 +1254,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task CreateAndUpdateSupplierAsync_UsesUnifiedChargeServiceCatalog()
+    public async Task CreateAndUpdateSupplierAsync_UsesIndependentSupplierServiceCatalog()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1263,12 +1263,12 @@ public sealed class DictionaryServiceTests
         database.Context.Add(expenseFund);
         await database.Context.SaveChangesAsync();
         var existingWaterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вода", "water_expense"), null, CancellationToken.None);
-        var water = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
+        var water = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Вода"),
             null,
             CancellationToken.None);
-        var electricity = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Электроэнергия", false, null, null, null, null, 0, false, false, "руб."),
+        var electricity = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Электроэнергия"),
             null,
             CancellationToken.None);
 
@@ -1291,22 +1291,22 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
 
         Assert.True(created.Succeeded);
-        Assert.Equal(water.Value.Id, created.Value.ChargeServiceSettingId);
-        Assert.Equal("Вода", created.Value.ChargeServiceSettingName);
+        Assert.Equal(water.Value.Id, created.Value.SupplierServiceId);
+        Assert.Equal("Вода", created.Value.SupplierServiceName);
         Assert.Equal(existingWaterExpense.Value!.Id, created.Value.ExpenseTypeId);
         Assert.Equal("Вода", created.Value.ExpenseTypeName);
         Assert.Equal(expenseFund.Id, created.Value.ExpenseFundId);
         Assert.True(updated.Succeeded);
-        Assert.Equal(electricity.Value.Id, updated.Value!.ChargeServiceSettingId);
-        Assert.Equal("Электроэнергия", updated.Value.ChargeServiceSettingName);
+        Assert.Equal(electricity.Value.Id, updated.Value!.SupplierServiceId);
+        Assert.Equal("Электроэнергия", updated.Value.SupplierServiceName);
         Assert.NotNull(updated.Value.ExpenseTypeId);
         Assert.NotEqual(created.Value.ExpenseTypeId, updated.Value.ExpenseTypeId);
         Assert.Equal("Электроэнергия", updated.Value.ExpenseTypeName);
         Assert.Equal(expenseFund.Id, updated.Value.ExpenseFundId);
         var listedSupplier = Assert.Single(serviceSortedPage.Items);
         Assert.Equal(created.Value.Id, listedSupplier.Id);
-        Assert.Equal(electricity.Value.Id, listedSupplier.ChargeServiceSettingId);
-        Assert.Equal("Электроэнергия", listedSupplier.ChargeServiceSettingName);
+        Assert.Equal(electricity.Value.Id, listedSupplier.SupplierServiceId);
+        Assert.Equal("Электроэнергия", listedSupplier.SupplierServiceName);
         Assert.Equal(updated.Value.ExpenseTypeId, listedSupplier.ExpenseTypeId);
         Assert.Single(database.Context.ExpenseTypes.Where(item => item.IsSystem));
         Assert.Single(database.Context.AuditEvents.Where(item => item.Action == "dictionary.supplier_expense_type_created"));
@@ -1324,8 +1324,8 @@ public sealed class DictionaryServiceTests
         database.Context.AddRange(serviceFund, manualFund);
         await database.Context.SaveChangesAsync();
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supplier"), null, CancellationToken.None);
-        var chargeService = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
+        var chargeService = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Вода"),
             null,
             CancellationToken.None);
 
@@ -1340,7 +1340,7 @@ public sealed class DictionaryServiceTests
                 null,
                 0,
                 null,
-                ChargeServiceSettingId: chargeService.Value!.Id,
+                SupplierServiceId: chargeService.Value!.Id,
                 ExpenseTypeId: expenseType.Value!.Id,
                 ExpenseFundId: manualFund.Id),
             null,
@@ -1363,7 +1363,7 @@ public sealed class DictionaryServiceTests
                 null,
                 0,
                 null,
-                ChargeServiceSettingId: chargeService.Value.Id,
+                SupplierServiceId: chargeService.Value.Id,
                 Version: created.Value.Version,
                 ExpenseTypeId: expenseType.Value.Id,
                 ExpenseFundId: serviceFund.Id),
@@ -1411,8 +1411,8 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
-        var serviceWithoutExpenseType = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Не настроенная услуга", false, null, null, null, null, 0, false, false, "руб."),
+        var serviceWithoutExpenseType = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Не настроенная услуга"),
             null,
             CancellationToken.None);
         var expenseFund = new Fund { Name = "Фонд расходов", NormalizedName = "ФОНД РАСХОДОВ" };
@@ -1517,13 +1517,13 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task CreateSupplierAsync_RequiresExpenseFundForChargeService()
+    public async Task CreateSupplierAsync_RequiresExpenseFundForSupplierService()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
-        var chargeService = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
+        var chargeService = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Вода"),
             null,
             CancellationToken.None);
 
@@ -1591,8 +1591,8 @@ public sealed class DictionaryServiceTests
         var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Поставщики"), null, CancellationToken.None);
-        var chargeService = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Услуга", false, null, null, null, null, 0, false, false, "руб."),
+        var chargeService = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Услуга"),
             null,
             CancellationToken.None);
         var expenseFund = new Fund { Name = "Фонд услуги", NormalizedName = "ФОНД УСЛУГИ" };
@@ -1609,7 +1609,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task CreateSupplierAsync_RejectsMissingOrArchivedChargeService()
+    public async Task CreateSupplierAsync_RejectsMissingOrArchivedSupplierService()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1618,16 +1618,16 @@ public sealed class DictionaryServiceTests
         database.Context.Add(expenseFund);
         await database.Context.SaveChangesAsync();
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Архивная услуга", "archived_service"), null, CancellationToken.None);
-        var archived = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Архивная услуга", false, null, null, null, null, 0, false, false, null),
+        var archived = await DictionaryServiceTestFactory.CreateSupplierCatalog(database.Context).CreateAsync(
+            new UpsertSupplierServiceRequest("Архивная услуга"),
             null,
             CancellationToken.None);
         var existingSupplier = await service.CreateSupplierAsync(
             new UpsertSupplierRequest("Существующий поставщик", group.Value!.Id, null, null, null, null, null, 0, null, archived.Value!.Id, ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
-        var archivedWithActiveSupplier = await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
-        Assert.True(archivedWithActiveSupplier.Succeeded, archivedWithActiveSupplier.ErrorMessage);
+        (await database.Context.SupplierServices.FindAsync(archived.Value!.Id))!.IsArchived = true;
+        await database.Context.SaveChangesAsync();
         Assert.False(existingSupplier.Value!.IsArchived);
 
         var missingResult = await service.CreateSupplierAsync(
@@ -1639,9 +1639,9 @@ public sealed class DictionaryServiceTests
             null,
             CancellationToken.None);
         Assert.False(missingResult.Succeeded);
-        Assert.Equal("charge_service_not_found", missingResult.ErrorCode);
+        Assert.Equal("supplier_service_not_found", missingResult.ErrorCode);
         Assert.False(archivedResult.Succeeded);
-        Assert.Equal("charge_service_not_found", archivedResult.ErrorCode);
+        Assert.Equal("supplier_service_not_found", archivedResult.ErrorCode);
     }
 
     [Fact]
@@ -5084,7 +5084,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task UpdateChargeServiceWithTariffAsync_BackdatedRateKeepsLatestVersionCurrent()
+    public async Task UpdateChargeServiceWithTariffAsync_RejectsRateBeforeSourceStartWithoutCreatingHistory()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fund = CreateFund("Членские взносы", 10);
@@ -5116,16 +5116,14 @@ public sealed class DictionaryServiceTests
             Guid.NewGuid(),
             CancellationToken.None);
 
-        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.False(result.Succeeded);
+        Assert.Equal("charge_service_tariff_date_before_source", result.ErrorCode);
         Assert.Equal(currentTariff.Id, setting.TariffId);
         Assert.Equal(500m, currentTariff.Rate);
-
-        var repository = new EfChargeServiceSettingRepository(database.Context);
-        var july = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 7, 1), CancellationToken.None));
-        var august = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None));
-        Assert.Equal(400m, july.Tariff!.Rate);
-        Assert.Equal(currentTariff.Id, august.TariffId);
-        Assert.Equal(500m, august.Tariff!.Rate);
+        Assert.Equal(new DateOnly(2026, 8, 1), currentTariff.EffectiveFrom);
+        Assert.Single(database.Context.Tariffs);
+        Assert.Empty(database.Context.ChargeServiceTariffVersions);
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]

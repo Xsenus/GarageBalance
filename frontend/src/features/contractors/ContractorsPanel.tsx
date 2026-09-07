@@ -1,8 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
+import type { SupplierServiceDto, UpsertSupplierServiceRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
@@ -16,7 +16,7 @@ import { PhoneInput } from '../../shared/PhoneInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
@@ -24,15 +24,12 @@ import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilt
 import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
-import { createRetryableLazyLoader } from '../../shared/retryableLazyLoader'
+import { SupplierServiceDialog } from './SupplierServiceDialog'
 import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
-import { supplierBalanceWithDebtHelp, supplierStartingDebtHelp, syncDisplayedSupplierBalanceWithDebt, toDisplayedSupplierStartingBalance, toStoredSupplierStartingBalance } from '../../shared/supplierOpeningBalance'
-
-const AddServicePrototypeDialog = lazy(createRetryableLazyLoader(() =>
-  import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.AddServicePrototypeDialog }))))
+import { supplierBalanceWithDebtHelp, supplierDebtSortDirection, toDisplayedSupplierBalance, toStoredSupplierStartingBalance } from '../../shared/supplierOpeningBalance'
 
 function normalizeContractorTargetText(value?: string | null) {
   return (value ?? '').trim().toLocaleLowerCase('ru-RU')
@@ -130,6 +127,7 @@ type ContractorSupplierRow = {
   id: string
   version?: string
   name: string
+  groupId?: string
   serviceId?: string | null
   service: string
   expenseTypeId?: string | null
@@ -202,7 +200,7 @@ type ContractorDepartmentRow = {
 type ContractorModal =
   | { type: 'garage'; item?: ContractorGarageRow }
   | { type: 'supplier'; item?: ContractorSupplierRow }
-  | { type: 'service' }
+  | { type: 'service'; edit?: boolean }
   | { type: 'employee'; item?: ContractorStaffRow }
   | { type: 'department'; item?: ContractorDepartmentRow }
 
@@ -271,7 +269,7 @@ const contractorSupplierColumnDefinitions: Array<ContractorColumnDefinition<Cont
   { key: 'contactPerson', label: 'Контактное лицо', defaultWidth: 210, minWidth: 170 },
   { key: 'phone', label: 'Телефон', defaultWidth: 180, minWidth: 168 },
   { key: 'email', label: 'Почта', defaultWidth: 210, minWidth: 160 },
-  { key: 'debt', label: 'Задолженность', defaultWidth: 160, minWidth: 150 },
+  { key: 'debt', label: 'Баланс', defaultWidth: 160, minWidth: 150 },
   { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
 ]
 
@@ -577,8 +575,9 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
     id: supplier.id,
     version: supplier.version,
     name: supplier.name,
-    serviceId: supplier.chargeServiceSettingId ?? null,
-    service: supplier.chargeServiceSettingName ?? supplier.groupName,
+    groupId: supplier.groupId,
+    serviceId: supplier.supplierServiceId ?? null,
+    service: supplier.supplierServiceName ?? supplier.groupName,
     expenseTypeId: supplier.expenseTypeId ?? null,
     expenseFundId: supplier.expenseFundId ?? null,
     inn: supplier.inn ?? '',
@@ -587,9 +586,9 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
     phone: supplier.phone ?? '',
     email: supplier.email ?? '',
     contacts: supplierContacts,
-    startingBalance: formatPrototypeMoney(toDisplayedSupplierStartingBalance(supplier.startingBalance)),
+    startingBalance: formatPrototypeMoney(toDisplayedSupplierBalance(supplier.startingBalance)),
     startingDebt: formatPrototypeMoney(supplier.startingDebt ?? Math.max(supplier.startingBalance, 0)),
-    debt: formatPrototypeMoney(supplier.debt),
+    debt: formatPrototypeMoney(toDisplayedSupplierBalance(supplier.debt)),
     comment: supplier.comment ?? '',
     isDeleted: supplier.isArchived,
   })
@@ -648,7 +647,7 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     ),
     startingDebt: parsePrototypeMoney(normalized.startingDebt),
     comment: normalized.comment.trim(),
-    chargeServiceSettingId: normalized.serviceId,
+    supplierServiceId: normalized.serviceId,
     expenseTypeId: normalized.expenseTypeId,
     expenseFundId: normalized.expenseFundId,
     version: normalized.version,
@@ -818,11 +817,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [departmentPageNumber, setDepartmentPageNumber] = useState(1)
   const [departmentPageSize, setDepartmentPageSize] = useState(10)
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
-  const [chargeServices, setChargeServices] = useState<ChargeServiceSettingDto[]>([])
-  const [serviceIncomeTypes, setServiceIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [supplierServices, setSupplierServices] = useState<SupplierServiceDto[]>([])
   const [serviceFunds, setServiceFunds] = useState<FundOptionDto[]>([])
-  const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
-  const [serviceSaving, setServiceSaving] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [sectionReloadRevision, setSectionReloadRevision] = useState(0)
   const [modal, setModal] = useState<ContractorModal | null>(null)
@@ -954,18 +950,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           setOwners(ownerRows)
           setGarages((current) => current.map((garage) => applyGarageOwner(garage, garage.ownerId ? ownersById.get(garage.ownerId) : null)))
         } else {
-          const [groups, loadedChargeServices, loadedIncomeTypes, loadedTariffs, loadedFunds] = await Promise.all([
+          const [groups, loadedSupplierServices, loadedFunds] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true, undefined, undefined, controller.signal),
-            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            dictionaryClient.getSupplierServicesPage(auth.accessToken, undefined, 0, contractorsDictionaryListLimit, true, controller.signal),
             fundsClient.getFundOptions(auth.accessToken, controller.signal),
           ])
           if (controller.signal.aborted) return false
           setSupplierGroups(groups)
-          setChargeServices(loadedChargeServices)
-          setServiceIncomeTypes(loadedIncomeTypes)
-          setServiceTariffs(loadedTariffs)
+          setSupplierServices(loadedSupplierServices.items)
           setServiceFunds(loadedFunds)
         }
 
@@ -1205,7 +1197,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }, {})
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
-  const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
+  const canManageSupplierServices = hasPermission(auth, permissions.dictionariesWrite)
   const canAdjustOpeningData = hasPermission(auth, permissions.openingDataAdjust)
   const canUseGarageColumnFilters = isAdministrator(auth)
 
@@ -1289,7 +1281,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setSupplierContextMenu(null)
     try {
       const page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.key === 'debt' ? supplierDebtSortDirection(sort.direction) : sort.direction, controller.signal)
         : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
       if (controller.signal.aborted) {
         return
@@ -1419,10 +1411,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  async function openServiceCreator() {
+  async function openServiceCreator(edit = false) {
     setFormStateError(null)
     if (await ensureContractorReferences('suppliers')) {
-      setModal({ type: 'service' })
+      setModal({ type: 'service', edit })
     }
   }
 
@@ -1766,7 +1758,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
     try {
       const groups = [...supplierGroups]
-      const group = await resolveSupplierGroup(dictionaryClient, auth.accessToken, groups, normalizedSupplier.service)
+      const group = normalizedSupplier.groupId
+        ? { id: normalizedSupplier.groupId }
+        : await resolveSupplierGroup(dictionaryClient, auth.accessToken, groups, 'Поставщики')
       const request = createSupplierRequestFromRow(normalizedSupplier, group.id)
       const savedSupplier = isBackendDictionaryId(normalizedSupplier.id)
         ? await dictionaryClient.updateSupplier(auth.accessToken, normalizedSupplier.id, request)
@@ -2123,20 +2117,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const saveServiceWithTariff = async (request: CreateChargeServiceWithTariffRequest) => {
-    setServiceSaving(true)
-    setFormStateError(null)
-    try {
-      const created = await dictionaryClient.createChargeServiceWithTariff(auth.accessToken, request)
-      setChargeServices((currentServices) => [...currentServices.filter((service) => service.id !== created.service.id), created.service])
-      setServiceTariffs((currentTariffs) => [...currentTariffs.filter((tariff) => tariff.id !== created.tariff.id), created.tariff])
-      setModal(null)
-    } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось добавить услугу в единый каталог тарифов.')
-      throw error
-    } finally {
-      setServiceSaving(false)
-    }
+  const saveSupplierService = async (request: UpsertSupplierServiceRequest, id?: string) => {
+    const saved = id
+      ? await dictionaryClient.updateSupplierService(auth.accessToken, id, request)
+      : await dictionaryClient.createSupplierService(auth.accessToken, request)
+    setSupplierServices((current) => [...current.filter((service) => service.id !== saved.id), saved])
+    setSuppliers((current) => current.map((supplier) => supplier.serviceId === saved.id
+      ? { ...supplier, service: saved.name }
+      : supplier))
   }
 
   const changeContractorSort = (section: ContractorSortableSection, key: ContractorSortKey) => {
@@ -2266,9 +2254,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <UsersRound size={17} aria-hidden="true" />
                 <span>Добавить поставщика</span>
               </button>
-              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'suppliers'} disabled={!canManageTariffs || contractorReferenceLoading === 'suppliers'} title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined} onClick={() => void openServiceCreator()}>
+              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'suppliers'} disabled={!canManageSupplierServices || contractorReferenceLoading === 'suppliers'} title={!canManageSupplierServices ? 'Нужно право изменения справочников' : undefined} onClick={() => void openServiceCreator()}>
                 <FileText size={17} aria-hidden="true" />
                 <span>Добавить услугу</span>
+              </button>
+              <button className="secondary-button" type="button" disabled={!canManageSupplierServices || contractorReferenceLoading === 'suppliers'} onClick={() => void openServiceCreator(true)}>
+                <Pencil size={17} aria-hidden="true" />
+                <span>Изменить услугу</span>
               </button>
             </>
           ) : null}
@@ -2460,8 +2452,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--contact">{primaryContact?.fullName ?? row.contactPerson}</span>
                   <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--phone">{primaryContact?.phone ?? row.phone}</span>
                   <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--email">{primaryContact?.email ?? row.email}</span>
-                  <span role="cell" className={row.debt ? 'contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center money-expense' : 'contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center'}>
-                    {row.isDeleted ? 'Удален' : row.debt || 'Нет'}
+                  <span role="cell" className={`contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center${parsePrototypeMoney(row.debt) < 0 ? ' money-expense' : ''}`}>
+                    {row.isDeleted ? 'Удален' : row.debt}
                   </span>
                   <span role="cell" className="contractors-row-actions table-actions-column">
                     {row.isDeleted ? (
@@ -2790,18 +2782,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? (
-        <Suspense fallback={(
-          <div className="modal-backdrop" role="presentation">
-            <section className="detail-dialog contractors-dialog contractors-tariff-dialog contractors-service-dialog" role="dialog" aria-modal="true" aria-label="Загрузка формы услуги">
-              <LoadingSkeleton label="Загружаем форму услуги" rows={5} columns={2} />
-            </section>
-          </div>
-        )}>
-          <AddServicePrototypeDialog funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} />
-        </Suspense>
-      ) : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={supplierServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
+      {modal?.type === 'service' ? <SupplierServiceDialog edit={modal.edit} services={supplierServices} onClose={() => setModal(null)} onSave={saveSupplierService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 
@@ -3413,13 +3395,17 @@ function SuggestionStatus({ id, message }: { id: string; message: string }) {
 function DadataAddressField({ accessToken, inputLabel, integrationClient, label, listboxLabel, suggestionsId, value, onChange }: { accessToken: string; inputLabel: string; integrationClient: IntegrationClient; label: string; listboxLabel: string; suggestionsId: string; value: string; onChange: (value: string) => void }) {
   const [suggestions, setSuggestions] = useState<DadataAddressSuggestionDto[]>([])
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [searchEnabled, setSearchEnabled] = useState(false)
+  const suggestionsRef = useCloseOnOutsidePointer<HTMLDivElement>(searchEnabled, setSearchEnabled)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState('')
   const inputTouched = useRef(false)
   const statusId = `${suggestionsId}-status`
+  const visibleStatus = searchEnabled || status === 'Адрес выбран из DaData.' ? status : ''
 
   useEffect(() => {
     const query = value.trim()
-    if (!inputTouched.current || query.length < 2) {
+    if (!searchEnabled || !inputTouched.current || query.length < 2) {
       return
     }
 
@@ -3437,31 +3423,49 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
         setStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
       },
     })
-  }, [accessToken, integrationClient, value])
+  }, [accessToken, integrationClient, searchEnabled, value])
 
   function selectSuggestion(suggestion: DadataAddressSuggestionDto) {
     inputTouched.current = false
+    setSearchEnabled(false)
     onChange(suggestion.unrestrictedValue || suggestion.value)
     setSuggestionsOpen(false)
     setStatus('Адрес выбран из DaData.')
+    inputRef.current?.focus()
   }
 
   return (
     <FormField label={label}>
-      <div className="suggestion-combobox">
+      <div
+        className="suggestion-combobox"
+        ref={suggestionsRef}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setSearchEnabled(false)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && searchEnabled) {
+            event.preventDefault()
+            event.stopPropagation()
+            setSearchEnabled(false)
+            inputRef.current?.focus()
+          }
+        }}
+      >
         <input
+          ref={inputRef}
           aria-label={inputLabel}
           role="combobox"
           aria-autocomplete="list"
-          aria-expanded={suggestionsOpen}
+          aria-expanded={searchEnabled && suggestionsOpen}
           aria-controls={suggestionsId}
-          aria-describedby={status ? statusId : undefined}
+          aria-describedby={visibleStatus ? statusId : undefined}
           autoComplete="off"
           value={value}
-          onBlur={() => setSuggestionsOpen(false)}
           onChange={(event) => {
             const nextValue = event.target.value
             inputTouched.current = true
+            setSearchEnabled(true)
+            setSuggestionsOpen(false)
             if (nextValue.trim().length < 2) {
               setSuggestions([])
               setSuggestionsOpen(false)
@@ -3470,7 +3474,7 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
             onChange(nextValue)
           }}
         />
-        {suggestionsOpen ? (
+        {searchEnabled && suggestionsOpen ? (
           <div className="suggestion-options suggestion-options--above" id={suggestionsId} role="listbox" aria-label={listboxLabel}>
             {suggestions.map((suggestion) => (
               <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" title={suggestion.unrestrictedValue || suggestion.value} key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectSuggestion(suggestion)}>
@@ -3481,7 +3485,7 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
           </div>
         ) : null}
       </div>
-      <SuggestionStatus id={statusId} message={status} />
+      <SuggestionStatus id={statusId} message={visibleStatus} />
     </FormField>
   )
 }
@@ -3695,11 +3699,11 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
+function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: SupplierServiceDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const activeServices = services.filter((service) =>
-    service.id === item?.serviceId || (!service.isArchived && service.isRegular))
-  const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
+    service.id === item?.serviceId || !service.isArchived)
+  const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? (item ? null : activeServices[0] ?? null)
   const [form, setForm] = useState<ContractorSupplierRow>(item
     ? { ...item, serviceId: initialService?.id ?? item.serviceId, service: initialService?.name ?? item.service }
     : { ...createEmptySupplierPrototype(), serviceId: initialService?.id ?? null, service: initialService?.name ?? '' })
@@ -3943,23 +3947,6 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                       ...form,
                       startingBalance,
                       startingDebt: nextDebt > 0 ? formatPrototypeMoney(nextDebt) : '',
-                    })
-                  }}
-                />
-              </FormField>
-              <FormField label="Начальная задолженность" help={supplierStartingDebtHelp}>
-                <MoneyTextInput
-                  aria-label="Начальная задолженность"
-                  readOnly={Boolean(item)}
-                  value={form.startingDebt}
-                  onValueChange={(startingDebt) => {
-                    const nextDebt = parsePrototypeMoney(startingDebt)
-                    const currentStartingBalance = parsePrototypeMoney(form.startingBalance)
-                    const nextStartingBalance = syncDisplayedSupplierBalanceWithDebt(nextDebt)
-                    setForm({
-                      ...form,
-                      startingBalance: nextStartingBalance === currentStartingBalance ? form.startingBalance : formatPrototypeMoney(nextStartingBalance),
-                      startingDebt,
                     })
                   }}
                 />

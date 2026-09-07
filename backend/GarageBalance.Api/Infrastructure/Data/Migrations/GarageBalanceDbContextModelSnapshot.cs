@@ -411,6 +411,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<DateOnly?>("InitialMeterReadingMonth")
+                        .HasColumnType("date");
+
                     b.Property<decimal?>("InitialWaterMeterValue")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -428,6 +431,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
 
                     b.Property<int>("PeopleCount")
                         .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("RegisteredOn")
+                        .HasColumnType("date");
 
                     b.Property<decimal>("StartingBalance")
                         .HasPrecision(18, 2)
@@ -457,6 +463,25 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.ToTable("garages", null, t =>
                         {
                             t.HasCheckConstraint("CK_garages_StartingOverdueDebt", "\"StartingOverdueDebt\" IS NULL OR (CAST(\"StartingOverdueDebt\" AS NUMERIC) >= 0 AND CAST(\"StartingOverdueDebt\" AS NUMERIC) <= CASE WHEN CAST(\"StartingBalance\" AS NUMERIC) > 0 THEN CAST(\"StartingBalance\" AS NUMERIC) ELSE 0 END)");
+                        });
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.GaragePeopleCountPeriod", b =>
+                {
+                    b.Property<Guid>("GarageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PeopleCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("GarageId", "EffectiveFrom");
+
+                    b.ToTable("garage_people_count_periods", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_garage_people_count_periods_PeopleCount", "\"PeopleCount\" >= 0 AND \"PeopleCount\" <= 1000");
                         });
                 });
 
@@ -815,6 +840,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("SupplierServiceId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -839,6 +867,8 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.HasIndex("Inn");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("SupplierServiceId");
 
                     b.HasIndex("GroupId", "Name")
                         .IsUnique()
@@ -939,6 +969,41 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasFilter("\"IsArchived\" = false");
 
                     b.ToTable("supplier_groups", (string)null);
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.SupplierService", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasFilter("\"IsArchived\" = false");
+
+                    b.ToTable("supplier_services", (string)null);
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.Tariff", b =>
@@ -1306,6 +1371,46 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_cash_bank_transfers_Amount", "\"Amount\" > 0");
                         });
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.ExpensePaymentBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId", "CreatedAtUtc");
+
+                    b.ToTable("expense_payment_batches", (string)null);
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.ExpensePaymentBatchOperation", b =>
+                {
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("BatchId", "OperationId");
+
+                    b.HasIndex("OperationId")
+                        .IsUnique();
+
+                    b.ToTable("expense_payment_batch_operations", (string)null);
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.FinancialOperation", b =>
@@ -2618,6 +2723,15 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Navigation("Owner");
                 });
 
+            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.GaragePeopleCountPeriod", b =>
+                {
+                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.Garage", null)
+                        .WithMany()
+                        .HasForeignKey("GarageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.IncomeType", b =>
                 {
                     b.HasOne("GarageBalance.Api.Domain.Finance.Fund", "DestinationFund")
@@ -2684,6 +2798,11 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.SupplierService", "SupplierService")
+                        .WithMany()
+                        .HasForeignKey("SupplierServiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("ChargeServiceSetting");
 
                     b.Navigation("ExpenseFund");
@@ -2691,6 +2810,8 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Navigation("ExpenseType");
 
                     b.Navigation("Group");
+
+                    b.Navigation("SupplierService");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.SupplierContact", b =>
@@ -2761,6 +2882,34 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Navigation("Accrual");
 
                     b.Navigation("FinancialOperation");
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.ExpensePaymentBatch", b =>
+                {
+                    b.HasOne("GarageBalance.Api.Domain.Users.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.ExpensePaymentBatchOperation", b =>
+                {
+                    b.HasOne("GarageBalance.Api.Domain.Finance.ExpensePaymentBatch", "Batch")
+                        .WithMany("Operations")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GarageBalance.Api.Domain.Finance.FinancialOperation", "Operation")
+                        .WithMany()
+                        .HasForeignKey("OperationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("Operation");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.FinancialOperation", b =>
@@ -2989,6 +3138,11 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.SupplierGroup", b =>
                 {
                     b.Navigation("Suppliers");
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.ExpensePaymentBatch", b =>
+                {
+                    b.Navigation("Operations");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.Fund", b =>

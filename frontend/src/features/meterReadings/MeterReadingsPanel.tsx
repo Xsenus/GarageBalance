@@ -151,6 +151,9 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             <span role="rowheader">Гараж {garage.number}</span>
             {meterReadingMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
+              const baselineMonth = garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
+              const initialReading = baselineMonth === `${appliedYear}-${month.key}`
+              const beforeInitialReading = Boolean(baselineMonth && `${appliedYear}-${month.key}` < baselineMonth)
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
               const outsideCurrentMonth = `${appliedYear}-${month.key}` !== currentMonth
               const hasSavedReading = Boolean(savedReadings[cellKey]?.trim())
@@ -171,18 +174,19 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   ) : null}
                   <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
-                    disabled={loading || !yearIsValid || outsideMonthUnavailable || savingReadingKey === cellKey}
-                    title={outsideMonthUnavailable
+                    readOnly={initialReading}
+                    disabled={loading || !yearIsValid || beforeInitialReading || (!initialReading && outsideMonthUnavailable) || savingReadingKey === cellKey}
+                    title={initialReading ? 'Начальное показание из карточки гаража. Расход за этот месяц не начисляется.' : beforeInitialReading ? 'Месяц предшествует начальному показанию.' : outsideMonthUnavailable
                       ? !canEditOutsideCurrentMonth
                         ? 'Нет права на работу с показаниями за другие месяцы.'
                         : 'Изменение существующих показаний за другие месяцы отключено в настройках.'
                       : undefined}
-                    value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
+                    value={initialReading ? formatMeterReadingInputValue(garage.initialReadingValue!) : draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                     onBlur={(event) => {
-                      if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
+                      if (!initialReading && !loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
                     }}
                     onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
-                    onKeyDown={(event) => handleEditableInputKeyDown(event, () => onCommitReading(garage, month))}
+                    onKeyDown={(event) => { if (!initialReading) handleEditableInputKeyDown(event, () => onCommitReading(garage, month)) }}
                   />
                 </span>
               )

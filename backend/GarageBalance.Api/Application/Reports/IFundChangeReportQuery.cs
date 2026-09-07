@@ -9,7 +9,8 @@ public interface IFundChangeReportQuery
         int offset,
         int? limit,
         ReportSort sort,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? fundIds = null);
 }
 
 public sealed record FundChangeReportData(

@@ -16,6 +16,9 @@ public interface IFundRepository
     Task<IReadOnlyList<IncomeType>> GetIncomeTypesForFundUpdateAsync(
         Guid fundId,
         CancellationToken cancellationToken);
+    Task<IReadOnlyList<Supplier>> GetSuppliersForFundUpdateAsync(
+        Guid fundId,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<FundOperationPageData> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<Fund?> FindFundForUpdateAsync(Guid fundId, CancellationToken cancellationToken);

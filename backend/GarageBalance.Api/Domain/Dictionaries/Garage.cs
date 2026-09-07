@@ -12,6 +12,8 @@ public sealed class Garage : IOptimisticConcurrencyEntity
     public decimal? StartingOverdueDebt { get; set; }
     public decimal? InitialWaterMeterValue { get; set; }
     public decimal? InitialElectricityMeterValue { get; set; }
+    public DateOnly? InitialMeterReadingMonth { get; set; }
+    public DateOnly? RegisteredOn { get; set; }
     public string? Comment { get; set; }
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

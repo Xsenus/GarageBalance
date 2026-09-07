@@ -9,12 +9,17 @@ internal static class DictionaryServiceTestFactory
 {
     private static readonly DateOnly DefaultBusinessDate = new(2026, 8, 12);
 
+    public static SupplierServiceCatalog CreateSupplierCatalog(GarageBalanceDbContext dbContext) =>
+        new(new EfSupplierServiceRepository(dbContext), new EfFundRepository(dbContext),
+            new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext));
+
     public static DictionaryService Create(GarageBalanceDbContext dbContext, DateOnly? businessDate = null) =>
         new(
             new EfOwnerRepository(dbContext),
             new EfGarageRepository(dbContext),
             new EfSupplierGroupRepository(dbContext),
             new EfSupplierRepository(dbContext),
+            new EfSupplierServiceRepository(dbContext),
             new EfSupplierContactRepository(dbContext),
             new EfStaffDepartmentRepository(dbContext),
             new EfStaffMemberRepository(dbContext),

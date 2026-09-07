@@ -296,10 +296,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] int? offset,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? fundIds = null)
     {
         var result = await reportService.GetFundChangeReportAsync(
-            new FundChangeReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId(), sortBy, sortDirection),
+            new FundChangeReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId(), sortBy, sortDirection, fundIds),
             cancellationToken);
 
         return result.Succeeded
@@ -316,10 +317,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? fundIds = null)
     {
         var result = await reportService.ExportFundChangeReportXlsxAsync(
-            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
+            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection, FundIds: fundIds),
             cancellationToken);
 
         return result.Succeeded
@@ -336,10 +338,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? fundIds = null)
     {
         var result = await reportService.ExportFundChangeReportPdfAsync(
-            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
+            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection, FundIds: fundIds),
             cancellationToken);
 
         return result.Succeeded

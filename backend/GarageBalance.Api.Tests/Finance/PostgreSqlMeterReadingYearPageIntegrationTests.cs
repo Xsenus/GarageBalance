@@ -15,7 +15,7 @@ public sealed class PostgreSqlMeterReadingYearPageIntegrationTests
     public async Task YearPageLoadsTotalGaragesAndReadingsInOneCommandForEveryPageShape()
     {
         var firstGarage = new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 };
-        var secondGarage = new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 };
+        var secondGarage = new Garage { Number = "2", PeopleCount = 1, FloorCount = 1, InitialMeterReadingMonth = new DateOnly(2044, 12, 1), InitialWaterMeterValue = 0, InitialElectricityMeterValue = 100 };
         var thirdGarage = new Garage { Number = "10", PeopleCount = 1, FloorCount = 1 };
         var archivedGarage = new Garage { Number = "3", PeopleCount = 1, FloorCount = 1, IsArchived = true };
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -44,6 +44,10 @@ public sealed class PostgreSqlMeterReadingYearPageIntegrationTests
 
         Assert.Equal(3, page.TotalCount);
         Assert.Equal(["2", "10"], page.Garages.Select(garage => garage.Number));
+        Assert.Equal(new DateOnly(2044, 12, 1), page.Garages[0].InitialReadingMonth);
+        Assert.Equal(100m, page.Garages[0].InitialReadingValue);
+        Assert.Null(page.Garages[1].InitialReadingMonth);
+        Assert.Null(page.Garages[1].InitialReadingValue);
         Assert.Equal(
             [new DateOnly(2045, 1, 1), new DateOnly(2045, 2, 1)],
             page.Readings.Select(reading => reading.AccountingMonth));

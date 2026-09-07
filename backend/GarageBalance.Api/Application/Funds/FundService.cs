@@ -162,12 +162,12 @@ public sealed class FundService(
             return FundResult<bool>.Failure("fund_not_found", "Фонд не найден.");
         }
 
-        var linkedServices = await repository.GetLinkedServicesAsync([fund.Id], cancellationToken);
-        if (linkedServices.Count > 0)
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, fund);
+        if (fund.Balance < 0m)
         {
             return FundResult<bool>.Failure(
-                "fund_has_linked_services",
-                $"Сначала переназначьте услуги фонда: {string.Join(", ", linkedServices.Select(service => service.ServiceName))}.");
+                "fund_negative_balance",
+                "Перед удалением погасите отрицательный остаток фонда.");
         }
 
         var transferredAmount = fund.Balance;
@@ -198,7 +198,15 @@ public sealed class FundService(
 
         fund.IsArchived = true;
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddFundDeletedAudit(fund, incomeTypes.Count, transferredAmount, actorUserId, reason);
+        var suppliers = await repository.GetSuppliersForFundUpdateAsync(fund.Id, cancellationToken);
+        foreach (var supplier in suppliers)
+        {
+            supplier.ExpenseFundId = null;
+            supplier.ExpenseFund = null;
+            supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
+        AddFundDeletedAudit(fund, incomeTypes.Count, suppliers.Select(item => item.Id).ToArray(), transferredAmount, actorUserId, reason);
         await repository.SaveChangesAsync(cancellationToken);
 
         return FundResult<bool>.Success(true);
@@ -655,6 +663,7 @@ public sealed class FundService(
     private void AddFundDeletedAudit(
         Fund fund,
         int detachedIncomeTypeCount,
+        IReadOnlyList<Guid> detachedSupplierIds,
         decimal transferredAmount,
         Guid? actorUserId,
         string reason)
@@ -685,6 +694,8 @@ public sealed class FundService(
             Metadata: new Dictionary<string, object?>
             {
                 ["detachedIncomeTypeCount"] = detachedIncomeTypeCount,
+                ["detachedSupplierCount"] = detachedSupplierIds.Count,
+                ["detachedSupplierIds"] = string.Join(", ", detachedSupplierIds),
                 ["returnedToUnallocatedAmount"] = transferredAmount
             }));
     }

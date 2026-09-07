@@ -352,14 +352,14 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 Reason = "Остаток фонда для проверки",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var chargeService = new ChargeServiceSetting { Name = "Услуга банковского правила PG" };
+            var chargeService = new SupplierService { Name = "Услуга банковского правила PG" };
             var supplier = new Supplier
             {
                 Name = "Поставщик банковского правила PG",
                 ExpenseType = expenseType,
                 ExpenseFund = expenseFund,
                 Group = supplierGroup,
-                ChargeServiceSetting = chargeService
+                SupplierService = chargeService
             };
             supplierId = supplier.Id;
             expenseTypeId = expenseType.Id;
@@ -542,14 +542,14 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 Reason = "Остаток фонда для проверки",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var chargeService = new ChargeServiceSetting { Name = "Услуга атомарной выплаты PG" };
+            var chargeService = new SupplierService { Name = "Услуга атомарной выплаты PG" };
             var supplier = new Supplier
             {
                 Name = "Получатель атомарной выплаты PG",
                 ExpenseType = expenseType,
                 ExpenseFund = expenseFund,
                 Group = supplierGroup,
-                ChargeServiceSetting = chargeService
+                SupplierService = chargeService
             };
             supplierId = supplier.Id;
             expenseTypeId = expenseType.Id;
@@ -824,10 +824,10 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 Reason = "Остаток фонда для проверки",
                 CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var supplierService = new ChargeServiceSetting { Name = "Основная услуга сценария PG" };
-            var repairService = new ChargeServiceSetting { Name = "Ремонт сценария PG" };
-            var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup, ChargeServiceSetting = supplierService, ExpenseType = serviceType, ExpenseFund = expenseFund };
-            var repairSupplier = new Supplier { Name = "Ремонтная организация сценария PG", Group = supplierGroup, ChargeServiceSetting = repairService, ExpenseType = repairType, ExpenseFund = expenseFund };
+            var supplierService = new SupplierService { Name = "Основная услуга сценария PG" };
+            var repairService = new SupplierService { Name = "Ремонт сценария PG" };
+            var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup, SupplierService = supplierService, ExpenseType = serviceType, ExpenseFund = expenseFund };
+            var repairSupplier = new Supplier { Name = "Ремонтная организация сценария PG", Group = supplierGroup, SupplierService = repairService, ExpenseType = repairType, ExpenseFund = expenseFund };
             supplierId = supplier.Id;
             repairSupplierId = repairSupplier.Id;
             serviceTypeId = serviceType.Id;

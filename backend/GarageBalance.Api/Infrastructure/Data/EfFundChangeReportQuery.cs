@@ -23,13 +23,14 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         int offset,
         int? limit,
         ReportSort sort,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? fundIds = null)
     {
         var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         if (dbContext.Database.IsNpgsql())
         {
-            return await GetPostgresFundChangesAsync(fromUtc, toExclusiveUtc, search, offset, limit, sort, cancellationToken);
+            return await GetPostgresFundChangesAsync(fromUtc, toExclusiveUtc, search, offset, limit, sort, cancellationToken, fundIds);
         }
 
         var query = dbContext.FundOperations.AsNoTracking()
@@ -37,6 +38,11 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
                 !operation.IsCanceled &&
                 operation.CreatedAtUtc >= fromUtc &&
                 operation.CreatedAtUtc < toExclusiveUtc);
+
+        if (fundIds is { Count: > 0 })
+        {
+            query = query.Where(operation => fundIds.Contains(operation.FundId));
+        }
 
         IReadOnlyList<FundChangeReportQueryRow> rows;
         int rowCount;
@@ -48,7 +54,8 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
                 .Where(row =>
                     !row.IsCanceled &&
                     row.CreatedAtUtc >= fromUtc &&
-                    row.CreatedAtUtc < toExclusiveUtc);
+                    row.CreatedAtUtc < toExclusiveUtc &&
+                    (fundIds == null || fundIds.Count == 0 || fundIds.Contains(row.FundId)));
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var normalizedSearch = search.Trim();
@@ -112,7 +119,8 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         int offset,
         int? limit,
         ReportSort sort,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? fundIds = null)
     {
         const int PageCategory = 1;
         const int TotalsCategory = 2;
@@ -127,6 +135,7 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
             "reason" => "reason",
             _ => "created_at_utc"
         };
+        var fundClause = fundIds is { Count: > 0 } ? "AND operation.\"FundId\" = ANY(@fund_ids)" : string.Empty;
         var direction = sort.Descending ? "DESC" : "ASC";
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
@@ -161,6 +170,7 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
                   AND operation."CreatedAtUtc" >= @from_utc
                   AND operation."CreatedAtUtc" < @to_exclusive_utc
                   {{searchClause}}
+                  {{fundClause}}
             ), page_rows AS (
                 SELECT filtered_rows.*,
                        ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, id DESC)::int AS row_order
@@ -193,6 +203,10 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         if (!string.IsNullOrWhiteSpace(search))
         {
             parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
+        }
+        if (fundIds is { Count: > 0 })
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("fund_ids", fundIds.Distinct().ToArray()));
         }
         if (limit is > 0)
         {

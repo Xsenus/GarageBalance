@@ -28,6 +28,9 @@ public sealed class WorkingDataResetExecutor(GarageBalanceDbContext context)
     private static readonly string[] WorkingDataTables =
     [
         "form_states",
+        "expense_payment_batch_operations",
+        "expense_payment_batches",
+        "garage_people_count_periods",
         "access_import_created_records",
         "access_import_quarantine_items",
         "access_import_row_fingerprints",
@@ -103,6 +106,9 @@ public sealed class WorkingDataResetExecutor(GarageBalanceDbContext context)
         const string sql = """
             TRUNCATE TABLE
                 form_states,
+                expense_payment_batch_operations,
+                expense_payment_batches,
+                garage_people_count_periods,
                 access_import_created_records,
                 access_import_quarantine_items,
                 access_import_row_fingerprints,

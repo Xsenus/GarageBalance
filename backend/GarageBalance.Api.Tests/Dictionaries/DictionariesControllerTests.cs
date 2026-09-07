@@ -234,14 +234,16 @@ public sealed class DictionariesControllerTests
         Assert.Equal(actorUserId, service.LastActorUserId);
     }
 
-    [Fact]
-    public async Task CreateSupplier_ReturnsNotFoundForMissingGroup()
+    [Theory]
+    [InlineData("supplier_group_not_found")]
+    [InlineData("supplier_service_not_found")]
+    public async Task CreateSupplier_ReturnsNotFoundForMissingGroupOrService(string errorCode)
     {
         var actorUserId = Guid.NewGuid();
         var groupId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            CreateSupplierResult = DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.")
+            CreateSupplierResult = DictionaryResult<SupplierDto>.Failure(errorCode, "Группа поставщика не найдена.")
         };
         var controller = CreateController(service, actorUserId);
 
@@ -251,7 +253,7 @@ public sealed class DictionariesControllerTests
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
-        Assert.Equal("supplier_group_not_found", problem.Title);
+        Assert.Equal(errorCode, problem.Title);
         Assert.Equal(actorUserId, service.LastActorUserId);
     }
 
@@ -1310,15 +1312,17 @@ public sealed class DictionariesControllerTests
         Assert.Same(request, service.LastUpdateChargeServiceWithTariffRequest);
     }
 
-    [Fact]
-    public async Task UpdateChargeServiceWithTariff_ReturnsFundValidationError()
+    [Theory]
+    [InlineData("charge_service_fund_required", "Для вида поступления услуги должен быть назначен действующий фонд.")]
+    [InlineData("charge_service_tariff_date_before_source", "Дата новой ставки не может быть раньше 01.08.2026 — начала исходного тарифа.")]
+    public async Task UpdateChargeServiceWithTariff_ReturnsValidationError(string errorCode, string message)
     {
         var serviceId = Guid.NewGuid();
         var controller = CreateController(new FakeDictionaryService
         {
             UpdateChargeServiceWithTariffResult = DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
-                "charge_service_fund_required",
-                "Для вида поступления услуги должен быть назначен действующий фонд.")
+                errorCode,
+                message)
         });
         var request = new UpdateChargeServiceWithTariffRequest(
             new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, null, 30, true, false, "м³", Guid.NewGuid(), Guid.NewGuid()),
@@ -1328,7 +1332,8 @@ public sealed class DictionariesControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
-        Assert.Equal("charge_service_fund_required", problem.Title);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(message, problem.Detail);
     }
 
     [Fact]

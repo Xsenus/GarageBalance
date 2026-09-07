@@ -127,6 +127,21 @@ describe('report filter storage helpers', () => {
     expect(getReportQuickPeriodRange('currentMonth', '2025-02-10').dateTo).toBe('2025-02-28')
   })
 
+  it.each([
+    ['2026-09-05', '2026-08', '31'],
+    ['2026-01-01', '2025-12', '31'],
+    ['2024-03-31', '2024-02', '29'],
+    ['2025-03-01', '2025-02', '28'],
+    ['2026-05-31', '2026-04', '30'],
+  ])('selects the complete previous month relative to %s', (reference, month, lastDay) => {
+    expect(getReportQuickPeriodRange('previousMonth', reference)).toEqual({
+      monthFrom: month,
+      monthTo: month,
+      dateFrom: `${month}-01`,
+      dateTo: `${month}-${lastDay}`,
+    })
+  })
+
   it('loads saved report filters and normalizes unsafe values', () => {
     window.sessionStorage.setItem(reportFilterStorageKeys.consolidated, JSON.stringify({
       monthFrom: '2026-01-01',

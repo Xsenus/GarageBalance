@@ -94,7 +94,7 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
                 incomeType,
                 chargeService,
                 supplierGroup,
-                new Supplier { Name = "Энергосбыт", Group = supplierGroup, ChargeServiceSetting = chargeService, ExpenseType = expenseType, ExpenseFundId = renamedFundId });
+                new Supplier { Name = "Энергосбыт", Group = supplierGroup, SupplierService = new SupplierService { Id = chargeService.Id, Name = chargeService.Name }, ExpenseType = expenseType, ExpenseFundId = renamedFundId });
             await writeContext.SaveChangesAsync();
 
             var created = await service.CreateFundAsync(
@@ -116,7 +116,8 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         var verificationService = CreateService(verificationContext);
         var reloaded = await verificationService.GetFundsAsync(CancellationToken.None);
 
-        Assert.Equal(8, reloaded.Count);
+        Assert.Equal(6, reloaded.Count);
+        Assert.DoesNotContain(reloaded, item => item.Name is "Членский взнос" or "Целевой взнос");
         Assert.Contains(reloaded, item => item.Id == createdFundId && item.Name == "Резервный фонд" && !item.IsSystem);
         var renamedFund = Assert.Single(reloaded, item => item.Id == renamedFundId && item.Name == "Энергоснабжение" && item.IsSystem);
         Assert.Collection(
@@ -221,7 +222,7 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
             var expenseType = new ExpenseType { Name = "Охрана территории" };
             var chargeService = new ChargeServiceSetting { Name = "Охрана территории", IncomeType = incomeType, Tariff = tariff, IsRegular = true };
             var supplierGroup = new SupplierGroup { Name = "Охрана" };
-            setupContext.AddRange(incomeType, expenseType, tariff, chargeService, supplierGroup);
+            setupContext.AddRange(incomeType, expenseType, tariff, chargeService, supplierGroup, new SupplierService { Id = chargeService.Id, Name = chargeService.Name });
             await setupContext.SaveChangesAsync();
             incomeTypeId = incomeType.Id;
             expenseTypeId = expenseType.Id;
@@ -271,29 +272,27 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         var createResult = await createTask;
 
         Assert.True(bothCommandsWaitedForAllocationLock);
-        Assert.NotEqual(deleteResult.Succeeded, createResult.Succeeded);
+        Assert.True(deleteResult.Succeeded, deleteResult.ErrorMessage);
         await using var verificationContext = database.CreateContext();
         var storedFund = await verificationContext.Funds.SingleAsync(fund => fund.Id == fundId);
         var storedIncomeType = await verificationContext.IncomeTypes.SingleAsync(item => item.Id == incomeTypeId);
         var storedService = await verificationContext.ChargeServiceSettings
             .SingleOrDefaultAsync(item => item.Name == "Охрана территории");
         var storedSupplier = await verificationContext.Suppliers
-            .SingleOrDefaultAsync(item => item.ChargeServiceSettingId == serviceId);
+            .SingleOrDefaultAsync(item => item.SupplierServiceId == serviceId);
         Assert.NotNull(storedService);
-        if (storedFund.IsArchived)
+        Assert.True(storedFund.IsArchived);
+        Assert.Null(storedIncomeType.DestinationFundId);
+        if (createResult.Succeeded)
         {
-            Assert.True(deleteResult.Succeeded);
-            Assert.Null(storedIncomeType.DestinationFundId);
-            Assert.Null(storedSupplier);
+            Assert.NotNull(storedSupplier);
+            Assert.Null(storedSupplier.ExpenseFundId);
         }
         else
         {
-            Assert.True(createResult.Succeeded);
-            Assert.Equal("fund_has_linked_services", deleteResult.ErrorCode);
-            Assert.Equal(fundId, storedIncomeType.DestinationFundId);
-            Assert.NotNull(storedSupplier);
-            Assert.Equal(fundId, storedSupplier.ExpenseFundId);
+            Assert.Null(storedSupplier);
         }
+
     }
 
     private static FundService CreateService(GarageBalanceDbContext context) =>

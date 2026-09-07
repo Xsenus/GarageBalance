@@ -424,7 +424,7 @@ public sealed class PostgreSqlCustomerFundReconciliationIntegrationTests
         };
         var expenseType = new ExpenseType { Name = $"{name} expense", Code = $"pg_{Guid.NewGuid():N}" };
         var supplierGroup = new SupplierGroup { Name = $"{name} suppliers" };
-        var serviceSetting = new ChargeServiceSetting { Name = $"{name} service" };
+        var serviceSetting = new SupplierService { Name = $"{name} service" };
         var supplier = new Supplier
         {
             Name = $"{name} supplier",
@@ -432,7 +432,7 @@ public sealed class PostgreSqlCustomerFundReconciliationIntegrationTests
             Group = supplierGroup,
             ExpenseType = expenseType,
             ExpenseFund = expenseFund,
-            ChargeServiceSetting = serviceSetting
+            SupplierService = serviceSetting
         };
         context.AddRange(expenseFund, expenseType, supplierGroup, serviceSetting, supplier);
         await context.SaveChangesAsync();

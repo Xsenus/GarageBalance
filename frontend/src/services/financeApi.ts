@@ -260,6 +260,8 @@ export type MeterDeviceReplacementDto = { device: MeterDeviceDto; reading: Meter
 export type MeterReadingYearGarageDto = {
   id: string
   number: string
+  initialReadingMonth?: string | null
+  initialReadingValue?: number | null
 }
 
 export type MeterReadingYearValueDto = {
@@ -346,6 +348,8 @@ export type GarageBalanceHistoryDto = {
 }
 
 export type GarageOverdueDebtRowDto = {
+  accrualId?: string | null
+  chargeName?: string | null
   rowKind: 'opening_balance' | 'accrual'
   incomeTypeId: string | null
   incomeTypeName: string
@@ -400,6 +404,7 @@ export type AccrualCalculationTierDto = {
 }
 
 export type AccrualCalculationLineDto = {
+  peopleCount?: number | null
   effectiveFrom: string
   effectiveTo: string
   days: number
@@ -917,6 +922,8 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 
   return response.json()
 }
+
+export { requestJson as requestFinanceJson }
 
 export const financeApi: FinanceClient = {
   getFinancialJournalPage(accessToken, params = {}, signal) {

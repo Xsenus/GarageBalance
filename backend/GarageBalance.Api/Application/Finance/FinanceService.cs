@@ -246,7 +246,7 @@ public sealed class FinanceService(
             normalizedLimit,
             cancellationToken);
         var result = new MeterReadingYearPageDto(
-            page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number)).ToList(),
+            page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue)).ToList(),
             page.Readings.Select(reading => new MeterReadingYearValueDto(
                 reading.Id,
                 reading.GarageId,
@@ -384,7 +384,9 @@ public sealed class FinanceService(
                 accrual.OverdueFromDate,
                 MoneyMath.RoundMoney(accrual.Amount),
                 MoneyMath.RoundMoney(accrual.PaidAmount + creditApplied),
-                outstanding));
+                outstanding,
+                accrual.AccrualId,
+                accrual.ChargeName));
         }
 
         var total = MoneyMath.RoundMoney(rows.Sum(row => row.OutstandingAmount));
@@ -539,8 +541,12 @@ public sealed class FinanceService(
                 ? advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))
                 : 0m;
             var debt = MoneyMath.RoundMoney(Math.Max(accrualAmount - incomeAmount, 0m));
-            var meterKind = meterKindByIncomeTypeId.GetValueOrDefault(key.IncomeTypeId)
-                ?? InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
+            var calculationDetails = calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId));
+            var meterKind = calculationDetails is { RequiresMeter: false }
+                ? null
+                : meterKindByIncomeTypeId.GetValueOrDefault(key.IncomeTypeId)
+                  ?? (calculationDetails is null ? null : ResolveMeterKind(calculationDetails.Lines.Select(line => line.CalculationBase)))
+                  ?? InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
             meterReadingByMonthKind.TryGetValue((key.AccountingMonth, meterKind ?? string.Empty), out var reading);
             return new GarageIncomeWorksheetRowDto(
                 key.AccountingMonth,
@@ -561,7 +567,7 @@ public sealed class FinanceService(
                 FeeCampaignId: key.FeeCampaignId,
                 IrregularPaymentId: key.IrregularPaymentId,
                 IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
-                CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)),
+                CalculationDetails: calculationDetails,
                 Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)),
                 IncomeTypeCode: key.IncomeTypeCode);
         }).ToList();
@@ -888,6 +894,7 @@ public sealed class FinanceService(
         var paidAccrualIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
             existingAccruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
+        IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null;
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
         foreach (var historicalAccrual in existingAccruals.Where(accrual =>
                      accrual.AccountingMonth < garageAccrualStartMonth &&
@@ -972,7 +979,12 @@ public sealed class FinanceService(
                 var meterReading = meterKind is null
                     ? null
                     : meterReadings.GetValueOrDefault((month, meterKind));
-                var calculation = RegularAccrualCalculator.Calculate(garage, month, meterReading, segments);
+                if (segments.Any(segment => segment.CalculationBase == TariffCalculationBases.People))
+                {
+                    peopleCountPeriods ??= await garageRepository.GetPeopleCountPeriodsAsync(
+                        [garage.Id], monthFrom, monthTo.AddMonths(1).AddDays(-1), cancellationToken);
+                }
+                var calculation = RegularAccrualCalculator.Calculate(garage, month, meterReading, segments, peopleCountPeriods);
                 if (!calculation.Succeeded)
                 {
                     // Missing calculation inputs (for example, a meter reading) must not erase an
@@ -4987,6 +4999,9 @@ public sealed class FinanceService(
         var meterReadings = meterKind is null
             ? new Dictionary<Guid, MeterReading>()
             : await meterReadingRepository.GetActiveByGarageIdsAsync(pendingGarageIds, meterKind, month, cancellationToken);
+        var peopleCountPeriodsByGarage = (calculationSegments.Any(segment => segment.CalculationBase == TariffCalculationBases.People)
+            ? await garageRepository.GetPeopleCountPeriodsAsync(pendingGarageIds, month, month.AddMonths(1).AddDays(-1), cancellationToken)
+            : []).ToLookup(period => period.GarageId);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
 
@@ -5006,7 +5021,8 @@ public sealed class FinanceService(
             }
 
             meterReadings.TryGetValue(garage.Id, out var meterReading);
-            var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, calculationSegments);
+            var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, calculationSegments,
+                peopleCountPeriodsByGarage[garage.Id].ToArray());
             if (!amountResult.Succeeded)
             {
                 skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage}");
@@ -5377,6 +5393,10 @@ public sealed class FinanceService(
                 month,
                 cancellationToken);
         var rows = new List<RegularAccrualRecalculationRowDto>(accruals.Count);
+        var peopleCountPeriodsByGarage = (segments.Any(segment => segment.CalculationBase == TariffCalculationBases.People)
+            ? await garageRepository.GetPeopleCountPeriodsAsync(
+                accruals.Select(accrual => accrual.GarageId).Distinct().ToArray(), month, month.AddMonths(1).AddDays(-1), cancellationToken)
+            : []).ToLookup(period => period.GarageId);
         foreach (var accrual in accruals)
         {
             if (paidIds.Contains(accrual.Id))
@@ -5394,7 +5414,8 @@ public sealed class FinanceService(
             }
 
             readings.TryGetValue(accrual.GarageId, out var reading);
-            var calculation = RegularAccrualCalculator.Calculate(accrual.Garage, month, reading, segments);
+            var calculation = RegularAccrualCalculator.Calculate(accrual.Garage, month, reading, segments,
+                peopleCountPeriodsByGarage[accrual.GarageId].ToArray());
             if (!calculation.Succeeded || calculation.Details is null)
             {
                 rows.Add(new RegularAccrualRecalculationRowDto(
@@ -5941,6 +5962,11 @@ public sealed class FinanceService(
             return FinanceResult<MeterDeviceReplacementDto>.Failure("garage_not_found", "Гараж для замены счетчика не найден.");
         }
 
+        if (IsBeforeMeterBaseline(garage, meterKind, MonthPeriod.Normalize(request.AccountingMonth)))
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_before_baseline", "Показание должно относиться к месяцу после начального показания из карточки гаража.");
+        }
+
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [GetMeterChainLockKey(garage.Id, meterKind)],
             cancellationToken);
@@ -6220,6 +6246,11 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
+        if (IsBeforeMeterBaseline(garage, meterKind, month))
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_before_baseline", "Показание должно относиться к месяцу после начального показания из карточки гаража.");
+        }
+
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [GetMeterChainLockKey(garage.Id, meterKind)],
             cancellationToken);
@@ -6277,7 +6308,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
         }
 
-        var hasGapWarning = HasGapWarning(meterKind, month, previousReading);
+        var hasGapWarning = HasGapWarning(garage, meterKind, month, previousReading);
         var reading = new MeterReading
         {
             GarageId = garage.Id,
@@ -6551,6 +6582,11 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
+        if (IsBeforeMeterBaseline(garage, meterKind, month))
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_before_baseline", "Показание должно относиться к месяцу после начального показания из карточки гаража.");
+        }
+
         if (garage.Id != reading.GarageId || !string.Equals(meterKind, reading.MeterKind, StringComparison.Ordinal))
         {
             return FinanceResult<MeterReadingDto>.Failure(
@@ -6588,7 +6624,7 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_sequence_invalid", "Показание не может быть больше следующего внесенного месяца.");
         }
 
-        var hasGapWarning = HasGapWarning(meterKind, month, previousReading);
+        var hasGapWarning = HasGapWarning(garage, meterKind, month, previousReading);
         var comment = NormalizeOptional(request.Comment);
         var primaryMatches = MeterReadingMatches(reading, garage.Id, meterKind, month, request.ReadingDate, currentValue, previousValue, consumption, hasGapWarning, comment);
 
@@ -6999,7 +7035,7 @@ public sealed class FinanceService(
                     $"Показание за {reading.AccountingMonth:MM.yyyy} меньше предыдущего активного показания. Проверьте последовательность или оформите замену счетчика.");
             }
 
-            var hasGapWarning = HasGapWarning(meterKind, reading.AccountingMonth, previousReading);
+            var hasGapWarning = HasGapWarning(garage, meterKind, reading.AccountingMonth, previousReading);
             changes.Add(new MeterReadingChainChange(
                 reading,
                 normalizedPreviousValue,
@@ -7738,6 +7774,7 @@ public sealed class FinanceService(
         }
 
         var processedIncomeTypeIds = new HashSet<Guid>();
+        IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null;
         foreach (var setting in settings)
         {
             var incomeType = setting.IncomeType;
@@ -7765,12 +7802,18 @@ public sealed class FinanceService(
             }
 
             var calculationSegments = BuildRegularAccrualSegments(reading.AccountingMonth, setting, tariff);
+            if (calculationSegments.Any(segment => segment.CalculationBase == TariffCalculationBases.People))
+            {
+                peopleCountPeriods ??= await garageRepository.GetPeopleCountPeriodsAsync(
+                    [garage.Id], reading.AccountingMonth, reading.AccountingMonth.AddMonths(1).AddDays(-1), cancellationToken);
+            }
             var useTieredTariff = calculationSegments.Any(segment => segment.Tiers.Count > 0);
             var calculation = RegularAccrualCalculator.Calculate(
                 garage,
                 reading.AccountingMonth,
                 reading,
-                calculationSegments);
+                calculationSegments,
+                peopleCountPeriods);
             if (!calculation.Succeeded || calculation.Amount <= 0m)
             {
                 continue;
@@ -8330,10 +8373,15 @@ public sealed class FinanceService(
         };
     }
 
-    private static bool HasGapWarning(string meterKind, DateOnly month, MeterReading? previousReading)
+    private static bool HasGapWarning(Garage garage, string meterKind, DateOnly month, MeterReading? previousReading)
     {
-        return meterKind != MeterKinds.Water && (previousReading is null || previousReading.AccountingMonth < month.AddMonths(-1));
+        var previousMonth = previousReading?.AccountingMonth
+            ?? (GetInitialMeterValue(garage, meterKind).HasValue ? garage.InitialMeterReadingMonth : null);
+        return meterKind != MeterKinds.Water && (!previousMonth.HasValue || previousMonth.Value < month.AddMonths(-1));
     }
+
+    private static bool IsBeforeMeterBaseline(Garage garage, string meterKind, DateOnly month) =>
+        GetInitialMeterValue(garage, meterKind).HasValue && garage.InitialMeterReadingMonth.HasValue && month <= garage.InitialMeterReadingMonth.Value;
 
     private async Task<IReadOnlyList<FinancialOperationDto>> ToOperationDtosAsync(IReadOnlyList<FinancialOperation> operations, CancellationToken cancellationToken)
     {
@@ -8631,7 +8679,7 @@ public sealed class FinanceService(
 
     private static FinanceResult<SupplierAccrualDto>? ValidateSupplierExpenseTypeLink(Supplier supplier, ExpenseType expenseType)
     {
-        if (supplier.ChargeServiceSetting is null || supplier.ChargeServiceSetting.IsArchived)
+        if (supplier.SupplierService is null || supplier.SupplierService.IsArchived)
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_service_not_configured",
@@ -8649,7 +8697,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_expense_type_mismatch",
-                $"Поставщику «{supplier.Name}» можно начислять только услугу «{supplier.ChargeServiceSetting.Name}».");
+                $"Поставщику «{supplier.Name}» можно начислять только услугу «{supplier.SupplierService.Name}».");
         }
 
         var expenseFund = GetSupplierExpenseFund(supplier);
@@ -8657,7 +8705,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_service_expense_fund_not_configured",
-                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроен действующий фонд расходования.");
+                $"Для услуги «{supplier.SupplierService.Name}» не настроен действующий фонд расходования.");
         }
 
         return null;
@@ -8665,7 +8713,7 @@ public sealed class FinanceService(
 
     private static FinanceResult<FinancialOperationDto>? ValidateSupplierExpenseTypeLinkForPayment(Supplier supplier, ExpenseType expenseType)
     {
-        if (supplier.ChargeServiceSetting is null || supplier.ChargeServiceSetting.IsArchived)
+        if (supplier.SupplierService is null || supplier.SupplierService.IsArchived)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_service_not_configured",
@@ -8683,7 +8731,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_expense_type_mismatch",
-                $"Поставщику «{supplier.Name}» можно провести выплату только по услуге «{supplier.ChargeServiceSetting.Name}».");
+                $"Поставщику «{supplier.Name}» можно провести выплату только по услуге «{supplier.SupplierService.Name}».");
         }
 
         var expenseFund = GetSupplierExpenseFund(supplier);
@@ -8691,7 +8739,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_service_expense_fund_not_configured",
-                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроен действующий фонд расходования.");
+                $"Для услуги «{supplier.SupplierService.Name}» не настроен действующий фонд расходования.");
         }
 
         return null;
@@ -8940,7 +8988,7 @@ public sealed class FinanceService(
     }
 
     private DateOnly GetGarageRegistrationDate(Garage garage) =>
-        businessDateProvider.ToBusinessDate(garage.CreatedAtUtc);
+        garage.RegisteredOn ?? businessDateProvider.ToBusinessDate(garage.CreatedAtUtc);
 
     private DateOnly GetGarageAccrualStartMonth(Garage garage) =>
         MonthPeriod.Normalize(GetGarageRegistrationDate(garage));

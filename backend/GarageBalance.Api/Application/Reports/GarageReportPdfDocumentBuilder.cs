@@ -99,11 +99,26 @@ internal static class GarageReportPdfDocumentBuilder
                             foreach (var row in layout.Rows)
                             {
                                 cancellationToken.ThrowIfCancellationRequested();
-                                for (var index = 0; index < row.Count; index++)
+                                table.Cell().ColumnSpan((uint)layout.Headers.Count).PreventPageBreak().Table(rowTable =>
                                 {
-                                    AlignCell(table.Cell().Element(BodyCell), row[index], layout.Headers[index])
-                                        .Text(FormatCell(row[index]));
-                                }
+                                    rowTable.ColumnsDefinition(columns =>
+                                    {
+                                        columns.ConstantColumn(58);
+                                        columns.ConstantColumn(58);
+                                        if (layout.Headers.Count == 6)
+                                        {
+                                            columns.RelativeColumn(1.8f);
+                                        }
+                                        columns.RelativeColumn();
+                                        columns.RelativeColumn();
+                                        columns.RelativeColumn();
+                                    });
+                                    for (var index = 0; index < row.Count; index++)
+                                    {
+                                        AlignCell(rowTable.Cell().Element(BodyCell), row[index], layout.Headers[index])
+                                            .Text(FormatCell(row[index]));
+                                    }
+                                });
                             }
 
                             for (var index = 0; index < layout.Footer.Count; index++)

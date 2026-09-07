@@ -15,6 +15,7 @@ public sealed class DictionaryService(
     IGarageRepository garageRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
+    ISupplierServiceRepository supplierServiceRepository,
     ISupplierContactRepository supplierContactRepository,
     IStaffDepartmentRepository staffDepartmentRepository,
     IStaffMemberRepository staffMemberRepository,
@@ -46,6 +47,7 @@ public sealed class DictionaryService(
         ["meterNotes"] = "Счетчики",
         ["number"] = "Номер",
         ["peopleCount"] = "Количество людей",
+        ["peopleCountEffectiveFrom"] = "Число людей действует с",
         ["floorCount"] = "Количество этажей",
         ["owner"] = "Владелец",
         ["startingBalance"] = "Стартовый баланс",
@@ -340,6 +342,7 @@ public sealed class DictionaryService(
                 "Начальная просроченная задолженность не может превышать общую начальную задолженность.");
         }
 
+        var registeredOn = businessDateProvider.Today;
         var garage = new Garage
         {
             Number = number,
@@ -351,10 +354,18 @@ public sealed class DictionaryService(
             Owner = owner,
             InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue),
             InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue),
+            InitialMeterReadingMonth = MonthPeriod.Normalize(registeredOn).AddMonths(-1),
+            RegisteredOn = registeredOn,
             Comment = NormalizeOptional(request.Comment)
         };
 
         garageRepository.Add(garage);
+        garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
+        {
+            GarageId = garage.Id,
+            EffectiveFrom = MonthPeriod.Normalize(registeredOn),
+            PeopleCount = garage.PeopleCount
+        });
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
@@ -423,6 +434,43 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
         }
 
+        var peopleCountChanged = garage.PeopleCount != request.PeopleCount;
+        var peopleEffectiveFrom = businessDateProvider.Today;
+        if (peopleCountChanged)
+        {
+            var latestPeriod = await garageRepository.FindLatestPeopleCountPeriodAsync(garage.Id, cancellationToken);
+            if (latestPeriod is not null && latestPeriod.EffectiveFrom > peopleEffectiveFrom)
+            {
+                return DictionaryResult<GarageDto>.Failure(
+                    "garage_people_count_date_before_history",
+                    "Рабочая дата раньше последнего изменения числа людей. Установите дату не раньше последнего изменения, чтобы сохранить историю расчётов.");
+            }
+
+            if (latestPeriod is null && peopleEffectiveFrom > DateOnly.MinValue)
+            {
+                garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
+                {
+                    GarageId = garage.Id,
+                    EffectiveFrom = DateOnly.MinValue,
+                    PeopleCount = garage.PeopleCount
+                });
+            }
+
+            if (latestPeriod?.EffectiveFrom == peopleEffectiveFrom)
+            {
+                latestPeriod.PeopleCount = request.PeopleCount;
+            }
+            else
+            {
+                garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
+                {
+                    GarageId = garage.Id,
+                    EffectiveFrom = peopleEffectiveFrom,
+                    PeopleCount = request.PeopleCount
+                });
+            }
+        }
+
         var oldValues = new Dictionary<string, object?>
         {
             ["number"] = garage.Number,
@@ -449,6 +497,10 @@ public sealed class DictionaryService(
         };
 
         garage.Number = number;
+        if (peopleCountChanged)
+        {
+            newValues["peopleCountEffectiveFrom"] = peopleEffectiveFrom;
+        }
         garage.PeopleCount = request.PeopleCount;
         garage.FloorCount = request.FloorCount;
         garage.StartingBalance = startingBalance;
@@ -716,12 +768,12 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.");
         }
 
-        var chargeService = request.ChargeServiceSettingId.HasValue
-            ? await chargeServiceSettingRepository.FindActiveAsync(request.ChargeServiceSettingId.Value, cancellationToken)
+        var supplierService = request.SupplierServiceId.HasValue
+            ? await supplierServiceRepository.FindActiveAsync(request.SupplierServiceId.Value, cancellationToken)
             : null;
-        if (request.ChargeServiceSettingId.HasValue && chargeService is null)
+        if (request.SupplierServiceId.HasValue && supplierService is null)
         {
-            return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
+            return DictionaryResult<SupplierDto>.Failure("supplier_service_not_found", "Услуга поставщика не найдена или недоступна.");
         }
         var expenseFund = request.ExpenseFundId.HasValue
             ? await fundRepository.FindFundForUpdateAsync(request.ExpenseFundId.Value, cancellationToken)
@@ -732,7 +784,7 @@ public sealed class DictionaryService(
                 "supplier_expense_fund_not_found",
                 "Фонд расходования поставщика не найден или недоступен.");
         }
-        if (chargeService is not null && expenseFund is null)
+        if (supplierService is not null && expenseFund is null)
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_expense_configuration_required",
@@ -746,7 +798,7 @@ public sealed class DictionaryService(
         }
 
         var expenseTypeResult = await ResolveSupplierExpenseTypeAsync(
-            chargeService,
+            supplierService,
             request.ExpenseTypeId,
             currentExpenseType: null,
             actorUserId,
@@ -774,8 +826,8 @@ public sealed class DictionaryService(
             Name = name,
             GroupId = group.Id,
             Group = group,
-            ChargeServiceSettingId = chargeService?.Id,
-            ChargeServiceSetting = chargeService,
+            SupplierServiceId = supplierService?.Id,
+            SupplierService = supplierService,
             ExpenseTypeId = expenseType?.Id,
             ExpenseType = expenseType,
             ExpenseFundId = expenseFund?.Id,
@@ -812,14 +864,14 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.");
         }
 
-        var chargeService = request.ChargeServiceSettingId == supplier.ChargeServiceSettingId
-            ? supplier.ChargeServiceSetting
-            : request.ChargeServiceSettingId.HasValue
-                ? await chargeServiceSettingRepository.FindActiveAsync(request.ChargeServiceSettingId.Value, cancellationToken)
+        var supplierService = request.SupplierServiceId == supplier.SupplierServiceId
+            ? supplier.SupplierService
+            : request.SupplierServiceId.HasValue
+                ? await supplierServiceRepository.FindActiveAsync(request.SupplierServiceId.Value, cancellationToken)
                 : null;
-        if (request.ChargeServiceSettingId.HasValue && chargeService is null)
+        if (request.SupplierServiceId.HasValue && supplierService is null)
         {
-            return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
+            return DictionaryResult<SupplierDto>.Failure("supplier_service_not_found", "Услуга поставщика не найдена или недоступна.");
         }
         var expenseFund = request.ExpenseFundId == supplier.ExpenseFundId
             ? supplier.ExpenseFund
@@ -832,7 +884,7 @@ public sealed class DictionaryService(
                 "supplier_expense_fund_not_found",
                 "Фонд расходования поставщика не найден или недоступен.");
         }
-        if (chargeService is not null && expenseFund is null)
+        if (supplierService is not null && expenseFund is null)
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_expense_configuration_required",
@@ -873,9 +925,9 @@ public sealed class DictionaryService(
         }
 
         var expenseTypeResult = await ResolveSupplierExpenseTypeAsync(
-            chargeService,
+            supplierService,
             request.ExpenseTypeId,
-            supplier.ChargeServiceSettingId == chargeService?.Id ? supplier.ExpenseType : null,
+            supplier.SupplierServiceId == supplierService?.Id ? supplier.ExpenseType : null,
             actorUserId,
             cancellationToken);
         if (!expenseTypeResult.Succeeded)
@@ -884,7 +936,7 @@ public sealed class DictionaryService(
         }
         var expenseType = expenseTypeResult.Value;
 
-        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, expenseType?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, startingDebt, comment))
+        if (SupplierMatches(supplier, name, group.Id, supplierService?.Id, expenseType?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, startingDebt, comment))
         {
             return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
         }
@@ -893,7 +945,7 @@ public sealed class DictionaryService(
         {
             ["name"] = supplier.Name,
             ["group"] = supplier.Group.Name,
-            ["service"] = supplier.ChargeServiceSetting?.Name,
+            ["service"] = supplier.SupplierService?.Name,
             ["expenseType"] = supplier.ExpenseType?.Name,
             ["expenseFund"] = supplier.ExpenseFund?.Name,
             ["inn"] = supplier.Inn,
@@ -909,7 +961,7 @@ public sealed class DictionaryService(
         {
             ["name"] = name,
             ["group"] = group.Name,
-            ["service"] = chargeService?.Name,
+            ["service"] = supplierService?.Name,
             ["expenseType"] = expenseType?.Name,
             ["expenseFund"] = expenseFund?.Name,
             ["inn"] = inn,
@@ -925,8 +977,8 @@ public sealed class DictionaryService(
         supplier.Name = name;
         supplier.GroupId = group.Id;
         supplier.Group = group;
-        supplier.ChargeServiceSettingId = chargeService?.Id;
-        supplier.ChargeServiceSetting = chargeService;
+        supplier.SupplierServiceId = supplierService?.Id;
+        supplier.SupplierService = supplierService;
         supplier.ExpenseTypeId = expenseType?.Id;
         supplier.ExpenseType = expenseType;
         supplier.ExpenseFundId = expenseFund?.Id;
@@ -2550,6 +2602,24 @@ public sealed class DictionaryService(
                 "Услуга с таким наименованием уже существует.");
         }
 
+        if (request.EffectiveFrom.HasValue)
+        {
+            var sourceTariff = !string.IsNullOrWhiteSpace(request.TariffMode)
+                ? await FindTariffModeSourceAsync(setting, request.Service.TariffId.Value, cancellationToken)
+                : await tariffRepository.FindActiveAsync(request.Service.TariffId.Value, cancellationToken);
+            if (sourceTariff is not null && request.EffectiveFrom.Value < sourceTariff.EffectiveFrom)
+            {
+                var existingPeriod = await chargeServiceSettingRepository.FindApplicableTariffPeriodAsync(
+                    setting.Id, request.EffectiveFrom.Value, cancellationToken);
+                if (existingPeriod?.EffectiveFrom != request.EffectiveFrom.Value)
+                {
+                    return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                        "charge_service_tariff_date_before_source",
+                        $"Дата новой ставки не может быть раньше {sourceTariff.EffectiveFrom:dd.MM.yyyy} — начала исходного тарифа.");
+                }
+            }
+        }
+
         var incomeFundUpdate = await ApplyRequestedIncomeFundAsync(
             request.Service.IncomeTypeId,
             request.IncomeFundId,
@@ -3006,6 +3076,21 @@ public sealed class DictionaryService(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
     }
 
+    private async Task<Tariff?> FindTariffModeSourceAsync(
+        ChargeServiceSetting setting,
+        Guid requestedTariffId,
+        CancellationToken cancellationToken)
+    {
+        var sourceTariff = requestedTariffId == setting.TariffId
+            ? await tariffRepository.FindActiveAsync(requestedTariffId, cancellationToken)
+            : await chargeServiceSettingRepository.FindLinkedTariffAsync(setting.Id, requestedTariffId, cancellationToken);
+        if (sourceTariff is null && setting.TariffId.HasValue)
+        {
+            sourceTariff = await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
+        }
+        return sourceTariff;
+    }
+
     private async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> ChangeChargeServiceTariffModeAsync(
         ChargeServiceSetting setting,
         UpdateChargeServiceWithTariffRequest request,
@@ -3028,20 +3113,7 @@ public sealed class DictionaryService(
                 "Укажите дату начала действия новой версии тарифа.");
         }
 
-        Tariff? sourceTariff = null;
-        if (request.Service.TariffId.HasValue)
-        {
-            sourceTariff = request.Service.TariffId == setting.TariffId
-                ? await tariffRepository.FindActiveAsync(request.Service.TariffId.Value, cancellationToken)
-                : await chargeServiceSettingRepository.FindLinkedTariffAsync(
-                    setting.Id,
-                    request.Service.TariffId.Value,
-                    cancellationToken);
-        }
-        if (sourceTariff is null && setting.TariffId.HasValue)
-        {
-            sourceTariff = await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
-        }
+        var sourceTariff = await FindTariffModeSourceAsync(setting, request.Service.TariffId!.Value, cancellationToken);
         if (sourceTariff is null)
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
@@ -4791,13 +4863,13 @@ public sealed class DictionaryService(
     }
 
     private async Task<DictionaryResult<ExpenseType?>> ResolveSupplierExpenseTypeAsync(
-        ChargeServiceSetting? chargeService,
+        SupplierService? supplierService,
         Guid? requestedExpenseTypeId,
         ExpenseType? currentExpenseType,
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        if (chargeService is null)
+        if (supplierService is null)
         {
             return DictionaryResult<ExpenseType?>.Success(null);
         }
@@ -4818,9 +4890,9 @@ public sealed class DictionaryService(
                 : DictionaryResult<ExpenseType?>.Success(requested);
         }
 
-        var managedCode = $"{SupplierServiceExpenseTypeCodePrefix}{chargeService.Id:N}";
+        var managedCode = $"{SupplierServiceExpenseTypeCodePrefix}{supplierService.Id:N}";
         var existing = await expenseTypeRepository.FindActiveByCodeAsync(managedCode, cancellationToken)
-            ?? await expenseTypeRepository.FindActiveByNameAsync(chargeService.Name, cancellationToken);
+            ?? await expenseTypeRepository.FindActiveByNameAsync(supplierService.Name, cancellationToken);
         if (existing is not null)
         {
             return DictionaryResult<ExpenseType?>.Success(existing);
@@ -4828,7 +4900,7 @@ public sealed class DictionaryService(
 
         var created = new ExpenseType
         {
-            Name = chargeService.Name,
+            Name = supplierService.Name,
             Code = managedCode,
             IsSystem = true
         };
@@ -4838,15 +4910,15 @@ public sealed class DictionaryService(
             "dictionary.supplier_expense_type_created",
             "expense_type",
             created.Id,
-            $"Для услуги {chargeService.Name} создана внутренняя категория расходов поставщиков.");
+            $"Для услуги {supplierService.Name} создана внутренняя категория расходов поставщиков.");
         return DictionaryResult<ExpenseType?>.Success(created);
     }
 
-    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, Guid? expenseTypeId, Guid? expenseFundId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, decimal startingDebt, string? comment)
+    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? supplierServiceId, Guid? expenseTypeId, Guid? expenseFundId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, decimal startingDebt, string? comment)
     {
         return StringEquals(supplier.Name, name) &&
             supplier.GroupId == groupId &&
-            supplier.ChargeServiceSettingId == chargeServiceSettingId &&
+            supplier.SupplierServiceId == supplierServiceId &&
             supplier.ExpenseTypeId == expenseTypeId &&
             supplier.ExpenseFundId == expenseFundId &&
             StringEquals(supplier.Inn, inn) &&
@@ -5053,8 +5125,8 @@ public sealed class DictionaryService(
             supplier.Comment,
             supplier.IsArchived,
             debt ?? supplier.StartingBalance,
-            supplier.ChargeServiceSettingId,
-            supplier.ChargeServiceSetting?.Name,
+            supplier.SupplierServiceId,
+            supplier.SupplierService?.Name,
             supplier.Version,
             supplier.ExpenseTypeId,
             supplier.ExpenseType?.Name,

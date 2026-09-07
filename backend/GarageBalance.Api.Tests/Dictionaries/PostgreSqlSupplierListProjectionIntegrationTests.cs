@@ -21,13 +21,9 @@ public sealed class PostgreSqlSupplierListProjectionIntegrationTests
             CreatedAtUtc = DateTimeOffset.Parse("2025-01-01T00:00:00Z"),
             UpdatedAtUtc = DateTimeOffset.Parse("2025-02-01T00:00:00Z")
         };
-        var service = new ChargeServiceSetting
+        var service = new SupplierService
         {
             Name = "Водоснабжение",
-            IsRegular = true,
-            PeriodicityMonths = 12,
-            PaymentDueDay = 25,
-            OverdueGraceDays = 30
         };
         var expenseType = new ExpenseType
         {
@@ -55,7 +51,7 @@ public sealed class PostgreSqlSupplierListProjectionIntegrationTests
             Email = "supplier@example.test",
             StartingBalance = 100m,
             Comment = "Отображаемый комментарий",
-            ChargeServiceSetting = service,
+            SupplierService = service,
             ExpenseType = expenseType,
             ExpenseFund = fund
         };
@@ -134,8 +130,8 @@ public sealed class PostgreSqlSupplierListProjectionIntegrationTests
         Assert.Equal(100m, actual.StartingBalance);
         Assert.Equal("Отображаемый комментарий", actual.Comment);
         Assert.False(actual.IsArchived);
-        Assert.Equal(service.Id, actual.ChargeServiceSettingId);
-        Assert.Equal("Водоснабжение", actual.ChargeServiceSetting!.Name);
+        Assert.Equal(service.Id, actual.SupplierServiceId);
+        Assert.Equal("Водоснабжение", actual.SupplierService!.Name);
         Assert.Equal(expenseType.Id, actual.ExpenseTypeId);
         Assert.Equal("Коммунальные расходы", actual.ExpenseType!.Name);
         Assert.Equal(fund.Id, actual.ExpenseFundId);

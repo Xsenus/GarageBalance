@@ -72,8 +72,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             Comment = supplier.Comment,
             IsArchived = supplier.IsArchived,
             Version = supplier.Version,
-            ChargeServiceSettingId = supplier.ChargeServiceSettingId,
-            ChargeServiceSettingName = supplier.ChargeServiceSetting == null ? null : supplier.ChargeServiceSetting.Name,
+            SupplierServiceId = supplier.SupplierServiceId,
+            SupplierServiceName = supplier.SupplierService == null ? null : supplier.SupplierService.Name,
             ExpenseTypeId = supplier.ExpenseTypeId,
             ExpenseTypeName = supplier.ExpenseType == null ? null : supplier.ExpenseType.Name,
             ExpenseFundId = supplier.ExpenseFundId,
@@ -202,8 +202,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
                 Comment = null,
                 IsArchived = null,
                 Version = null,
-                ChargeServiceSettingId = null,
-                ChargeServiceSettingName = null,
+                SupplierServiceId = null,
+                SupplierServiceName = null,
                 ExpenseTypeId = null,
                 ExpenseTypeName = null,
                 ExpenseFundId = null,
@@ -259,8 +259,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             Comment = supplier.Comment,
             IsArchived = supplier.IsArchived,
             Version = supplier.Version,
-            ChargeServiceSettingId = supplier.ChargeServiceSettingId,
-            ChargeServiceSettingName = supplier.ChargeServiceSetting == null ? null : supplier.ChargeServiceSetting.Name,
+            SupplierServiceId = supplier.SupplierServiceId,
+            SupplierServiceName = supplier.SupplierService == null ? null : supplier.SupplierService.Name,
             ExpenseTypeId = supplier.ExpenseTypeId,
             ExpenseTypeName = supplier.ExpenseType == null ? null : supplier.ExpenseType.Name,
             ExpenseFundId = supplier.ExpenseFundId,
@@ -298,8 +298,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             ("phone", false) => query.OrderBy(row => row.PrimaryContactPhone),
             ("email", true) => query.OrderByDescending(row => row.PrimaryContactEmail),
             ("email", false) => query.OrderBy(row => row.PrimaryContactEmail),
-            (_, true) => query.OrderByDescending(row => row.ChargeServiceSettingName ?? row.GroupName),
-            _ => query.OrderBy(row => row.ChargeServiceSettingName ?? row.GroupName)
+            (_, true) => query.OrderByDescending(row => row.SupplierServiceName ?? row.GroupName),
+            _ => query.OrderBy(row => row.SupplierServiceName ?? row.GroupName)
         };
 
     private static IOrderedQueryable<SupplierListRow> ApplyPostgresSortingByCategory(
@@ -318,8 +318,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             ("phone", false) => query.OrderBy(row => row.Category).ThenBy(row => row.PrimaryContactPhone),
             ("email", true) => query.OrderBy(row => row.Category).ThenByDescending(row => row.PrimaryContactEmail),
             ("email", false) => query.OrderBy(row => row.Category).ThenBy(row => row.PrimaryContactEmail),
-            (_, true) => query.OrderBy(row => row.Category).ThenByDescending(row => row.ChargeServiceSettingName ?? row.GroupName),
-            _ => query.OrderBy(row => row.Category).ThenBy(row => row.ChargeServiceSettingName ?? row.GroupName)
+            (_, true) => query.OrderBy(row => row.Category).ThenByDescending(row => row.SupplierServiceName ?? row.GroupName),
+            _ => query.OrderBy(row => row.Category).ThenBy(row => row.SupplierServiceName ?? row.GroupName)
         };
 
     private static SupplierPageItem MaterializePostgresPageItem(SupplierListRow row)
@@ -339,10 +339,10 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             Comment = row.Comment,
             IsArchived = row.IsArchived!.Value,
             Version = row.Version!.Value,
-            ChargeServiceSettingId = row.ChargeServiceSettingId,
-            ChargeServiceSetting = row.ChargeServiceSettingId is null
+            SupplierServiceId = row.SupplierServiceId,
+            SupplierService = row.SupplierServiceId is null
                 ? null
-                : new ChargeServiceSetting { Id = row.ChargeServiceSettingId.Value, Name = row.ChargeServiceSettingName! },
+                : new SupplierService { Id = row.SupplierServiceId.Value, Name = row.SupplierServiceName! },
             ExpenseTypeId = row.ExpenseTypeId,
             ExpenseType = row.ExpenseTypeId is null
                 ? null
@@ -373,7 +373,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .Include(supplier => supplier.Group)
             .Include(supplier => supplier.ExpenseType)
             .Include(supplier => supplier.ExpenseFund)
-            .Include(supplier => supplier.ChargeServiceSetting)
+            .Include(supplier => supplier.SupplierService)
             .SingleOrDefaultAsync(supplier => supplier.Id == id && !supplier.IsArchived, cancellationToken);
     }
 
@@ -383,7 +383,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .Include(supplier => supplier.Group)
             .Include(supplier => supplier.ExpenseType)
             .Include(supplier => supplier.ExpenseFund)
-            .Include(supplier => supplier.ChargeServiceSetting)
+            .Include(supplier => supplier.SupplierService)
             .SingleOrDefaultAsync(supplier => supplier.Id == id && supplier.IsArchived, cancellationToken);
     }
 
@@ -551,7 +551,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
                 query = query.Where(supplier =>
                     EF.Functions.ILike(supplier.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
                     EF.Functions.ILike(supplier.Group.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
-                    (supplier.ChargeServiceSetting != null && EF.Functions.ILike(supplier.ChargeServiceSetting.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (supplier.SupplierService != null && EF.Functions.ILike(supplier.SupplierService.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
                     (supplier.Inn != null && EF.Functions.ILike(supplier.Inn, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
                     (supplier.ContactPerson != null && EF.Functions.ILike(supplier.ContactPerson, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
@@ -560,7 +560,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
                 query = query.Where(supplier =>
                     supplier.Name.ToLower().Contains(normalizedSearch) ||
                     supplier.Group.Name.ToLower().Contains(normalizedSearch) ||
-                    (supplier.ChargeServiceSetting != null && supplier.ChargeServiceSetting.Name.ToLower().Contains(normalizedSearch)) ||
+                    (supplier.SupplierService != null && supplier.SupplierService.Name.ToLower().Contains(normalizedSearch)) ||
                     (supplier.Inn != null && supplier.Inn.ToLower().Contains(normalizedSearch)) ||
                     (supplier.ContactPerson != null && supplier.ContactPerson.ToLower().Contains(normalizedSearch)));
             }
@@ -573,7 +573,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         query.Include(supplier => supplier.Group)
             .Include(supplier => supplier.ExpenseType)
             .Include(supplier => supplier.ExpenseFund)
-            .Include(supplier => supplier.ChargeServiceSetting);
+            .Include(supplier => supplier.SupplierService);
 
     private IOrderedQueryable<Supplier> ApplyPageSorting(IQueryable<Supplier> query, string sortBy, bool descending)
     {
@@ -625,8 +625,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
                 .ThenBy(contact => contact.FullName)
                 .Select(contact => contact.Email)
                 .FirstOrDefault()),
-            (_, true) => query.OrderByDescending(supplier => supplier.ChargeServiceSetting != null ? supplier.ChargeServiceSetting.Name : supplier.Group.Name),
-            _ => query.OrderBy(supplier => supplier.ChargeServiceSetting != null ? supplier.ChargeServiceSetting.Name : supplier.Group.Name)
+            (_, true) => query.OrderByDescending(supplier => supplier.SupplierService != null ? supplier.SupplierService.Name : supplier.Group.Name),
+            _ => query.OrderBy(supplier => supplier.SupplierService != null ? supplier.SupplierService.Name : supplier.Group.Name)
         };
     }
 
@@ -712,8 +712,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         public string? Comment { get; init; }
         public bool? IsArchived { get; init; }
         public Guid? Version { get; init; }
-        public Guid? ChargeServiceSettingId { get; init; }
-        public string? ChargeServiceSettingName { get; init; }
+        public Guid? SupplierServiceId { get; init; }
+        public string? SupplierServiceName { get; init; }
         public Guid? ExpenseTypeId { get; init; }
         public string? ExpenseTypeName { get; init; }
         public Guid? ExpenseFundId { get; init; }

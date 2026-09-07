@@ -4,6 +4,9 @@ public sealed class TransactionBoundaryGuardTests
 {
     private static readonly string[] ApprovedExplicitTransactions =
     [
+        // One batch must commit or roll back all financial writes together. The runner
+        // starts after account locks and is covered by PostgreSQL rollback/cancellation tests.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfExpenseBatchTransactionRunner.cs: BeginTransactionAsync(",
         $"Infrastructure{Path.DirectorySeparatorChar}Maintenance{Path.DirectorySeparatorChar}WorkingDataResetExecutor.cs: BeginTransactionAsync("
     ];
 

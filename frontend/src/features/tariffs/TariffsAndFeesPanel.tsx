@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -13,7 +13,7 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
-import { FormField } from '../../shared/FormField'
+import { FieldHelp, FormField } from '../../shared/FormField'
 import { EditableCombobox } from '../../shared/EditableCombobox'
 import { getTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
 import { formatDateOnly, getLocalDateInputValue } from '../../shared/formatters'
@@ -4403,6 +4403,7 @@ function AddFeePrototypeDialog({
   submitLabel?: string
   title?: string
 }) {
+  const allGaragesControlId = useId()
   const initialParticipantCount = initialCampaign?.appliesToAllGarages
     ? activeGarageCount
     : initialCampaign?.participantGarageIds.length ?? 0
@@ -4602,14 +4603,15 @@ function AddFeePrototypeDialog({
                 <FormField label="Цель">
                   <input aria-label="Цель сбора" value={goal} disabled={formBusy} onChange={(event) => setGoal(event.target.value)} />
                 </FormField>
-                <label className="contractors-switch-row contractors-fee-participant-switch">
-                  <span className="contractors-fee-participant-label">
-                    <strong>Участники</strong>
+                <div className="contractors-switch-row contractors-fee-participant-switch">
+                  <span className="field-label-with-help">
+                    <label htmlFor={allGaragesControlId}><strong>Участники</strong></label>
+                    <FieldHelp label="Все гаражи">Включено: все действующие гаражи. Выключено: выберите участников вручную.</FieldHelp>
                   </span>
                   <span className="contractors-switch-control">
-                    <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} disabled={formBusy} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
+                    <input id={allGaragesControlId} type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} disabled={formBusy} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
                   </span>
-                </label>
+                </div>
               </section>
               <section className="contractors-fee-card" aria-labelledby="fee-parameters-title">
                 <h4 id="fee-parameters-title">Параметры сбора</h4>

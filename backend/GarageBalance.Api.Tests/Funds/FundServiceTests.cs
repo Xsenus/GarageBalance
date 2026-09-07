@@ -13,6 +13,61 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class FundServiceTests
 {
     [Fact]
+    public async Task DeleteFundAsync_RejectsNegativeBalanceWithoutChangingHistory()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        _ = CreateService(database.Context);
+        var fund = await database.Context.Funds.FirstAsync();
+        fund.Balance = -10m;
+        await database.Context.SaveChangesAsync();
+        var version = fund.Version;
+
+        var result = await CreateService(database.Context).DeleteFundAsync(
+            fund.Id, new DeleteFundRequest("Закрытие", version), null, CancellationToken.None);
+
+        Assert.Equal("fund_negative_balance", result.ErrorCode);
+        Assert.False(fund.IsArchived);
+        Assert.Equal(-10m, fund.Balance);
+        Assert.Equal(version, fund.Version);
+        Assert.Empty(database.Context.FundOperations);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeleteFundAsync_RejectsStaleOrEmptyVersion(bool emptyVersion)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        _ = CreateService(database.Context);
+        var fund = await database.Context.Funds.FirstAsync();
+        var expected = emptyVersion ? Guid.Empty : Guid.NewGuid();
+
+        await Assert.ThrowsAsync<GarageBalance.Api.Application.Common.OptimisticConcurrencyException>(() =>
+            CreateService(database.Context).DeleteFundAsync(
+                fund.Id, new DeleteFundRequest("Закрытие", expected), null, CancellationToken.None));
+
+        Assert.False(fund.IsArchived);
+        Assert.Empty(database.Context.FundOperations);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task DeleteFundAsync_ZeroBalanceAndRepeatedRequestDoNotCreateTransfer()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        _ = CreateService(database.Context);
+        var fund = await database.Context.Funds.FirstAsync();
+        var service = CreateService(database.Context);
+        var request = new DeleteFundRequest("Закрытие", fund.Version);
+
+        Assert.True((await service.DeleteFundAsync(fund.Id, request, null, CancellationToken.None)).Succeeded);
+        Assert.Equal("fund_not_found", (await service.DeleteFundAsync(fund.Id, request, null, CancellationToken.None)).ErrorCode);
+        Assert.Empty(database.Context.FundOperations);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.archived");
+    }
+
+    [Fact]
     public async Task GetLinkedServicesAsync_ReturnsEmptyResultForEmptyFundSet()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -241,10 +296,10 @@ public sealed class FundServiceTests
                 IncomeType = new IncomeType { Name = "Поступления без фонда" }
             },
             supplierGroup,
-            new Supplier { Name = "Энергосбыт", Group = supplierGroup, ChargeServiceSetting = electricityService, ExpenseType = expenseType, ExpenseFundId = electricityFund.Id },
-            new Supplier { Name = "Освещение", Group = supplierGroup, ChargeServiceSetting = lightingService, ExpenseType = expenseType, ExpenseFundId = electricityFund.Id },
-            new Supplier { Name = "Архив", Group = supplierGroup, ChargeServiceSetting = archivedService, ExpenseType = expenseType, ExpenseFundId = electricityFund.Id },
-            new Supplier { Name = "Водоканал", Group = supplierGroup, ChargeServiceSetting = waterService, ExpenseType = expenseType, ExpenseFundId = waterFund.Id });
+            new Supplier { Name = "Энергосбыт", Group = supplierGroup, SupplierService = new SupplierService { Id = electricityService.Id, Name = electricityService.Name }, ExpenseType = expenseType, ExpenseFundId = electricityFund.Id },
+            new Supplier { Name = "Освещение", Group = supplierGroup, SupplierService = new SupplierService { Id = lightingService.Id, Name = lightingService.Name }, ExpenseType = expenseType, ExpenseFundId = electricityFund.Id },
+            new Supplier { Name = "Архив", Group = supplierGroup, SupplierService = new SupplierService { Id = archivedService.Id, Name = archivedService.Name, IsArchived = true }, ExpenseType = expenseType, ExpenseFundId = electricityFund.Id },
+            new Supplier { Name = "Водоканал", Group = supplierGroup, SupplierService = new SupplierService { Id = waterService.Id, Name = waterService.Name }, ExpenseType = expenseType, ExpenseFundId = waterFund.Id });
         await database.Context.SaveChangesAsync();
 
         var reloaded = await service.GetFundsAsync(CancellationToken.None);
@@ -327,7 +382,7 @@ public sealed class FundServiceTests
             expenseType,
             linkedService,
             supplierGroup,
-            new Supplier { Name = "Энергосбыт", Group = supplierGroup, ChargeServiceSetting = linkedService, ExpenseType = expenseType, ExpenseFundId = fund.Id });
+            new Supplier { Name = "Энергосбыт", Group = supplierGroup, SupplierService = new SupplierService { Id = linkedService.Id, Name = linkedService.Name }, ExpenseType = expenseType, ExpenseFundId = fund.Id });
         await database.Context.SaveChangesAsync();
         var actorUserId = Guid.NewGuid();
 
@@ -380,7 +435,7 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task DeleteFundAsync_RejectsFundWithLinkedServicesAndListsThem()
+    public async Task DeleteFundAsync_DetachesLinkedSuppliersAndPreservesServices()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
@@ -401,8 +456,8 @@ public sealed class FundServiceTests
             lightingService,
             electricityService,
             supplierGroup,
-            new Supplier { Name = "Освещение", Group = supplierGroup, ChargeServiceSetting = lightingService, ExpenseType = expenseType, ExpenseFundId = fund.Id },
-            new Supplier { Name = "Энергосбыт", Group = supplierGroup, ChargeServiceSetting = electricityService, ExpenseType = expenseType, ExpenseFundId = fund.Id });
+            new Supplier { Name = "Освещение", Group = supplierGroup, SupplierService = new SupplierService { Id = lightingService.Id, Name = lightingService.Name }, ExpenseType = expenseType, ExpenseFundId = fund.Id },
+            new Supplier { Name = "Энергосбыт", Group = supplierGroup, SupplierService = new SupplierService { Id = electricityService.Id, Name = electricityService.Name }, ExpenseType = expenseType, ExpenseFundId = fund.Id });
         await database.Context.SaveChangesAsync();
 
         var result = await service.DeleteFundAsync(
@@ -411,13 +466,19 @@ public sealed class FundServiceTests
             Guid.NewGuid(),
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("fund_has_linked_services", result.ErrorCode);
-        Assert.Contains("Освещение территории", result.ErrorMessage);
-        Assert.Contains("Электроэнергия по счётчику", result.ErrorMessage);
-        Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
-        Assert.Equal(fund.Id, (await database.Context.IncomeTypes.SingleAsync()).DestinationFundId);
-        Assert.Empty(database.Context.AuditEvents);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
+        Assert.Null((await database.Context.IncomeTypes.SingleAsync()).DestinationFundId);
+        Assert.All(await database.Context.Suppliers.ToListAsync(), item => Assert.Null(item.ExpenseFundId));
+        Assert.Equal(2, await database.Context.SupplierServices.CountAsync());
+        Assert.Equal(2, await database.Context.ChargeServiceSettings.CountAsync());
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.archived");
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("2", metadata.RootElement.GetProperty("detachedSupplierCount").GetString());
+        Assert.Equal(
+            (await database.Context.Suppliers.Select(item => item.Id).ToListAsync()).Order(),
+            metadata.RootElement.GetProperty("detachedSupplierIds").GetString()!.Split(", ").Select(Guid.Parse).Order());
+
     }
 
     [Fact]

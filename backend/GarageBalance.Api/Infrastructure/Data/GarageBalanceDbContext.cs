@@ -23,7 +23,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Owner> Owners => Set<Owner>();
     public DbSet<Garage> Garages => Set<Garage>();
+    public DbSet<GaragePeopleCountPeriod> GaragePeopleCountPeriods => Set<GaragePeopleCountPeriod>();
     public DbSet<SupplierGroup> SupplierGroups => Set<SupplierGroup>();
+    public DbSet<SupplierService> SupplierServices => Set<SupplierService>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierContact> SupplierContacts => Set<SupplierContact>();
     public DbSet<StaffDepartment> StaffDepartments => Set<StaffDepartment>();
@@ -40,6 +42,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<FeeCampaign> FeeCampaigns => Set<FeeCampaign>();
     public DbSet<FeeCampaignGarage> FeeCampaignGarages => Set<FeeCampaignGarage>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
+    public DbSet<ExpensePaymentBatch> ExpensePaymentBatches => Set<ExpensePaymentBatch>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
     public DbSet<AccrualPaymentAllocation> AccrualPaymentAllocations => Set<AccrualPaymentAllocation>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
@@ -239,12 +242,29 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<GaragePeopleCountPeriod>(entity =>
+        {
+            entity.ToTable("garage_people_count_periods", table => table.HasCheckConstraint(
+                "CK_garage_people_count_periods_PeopleCount", "\"PeopleCount\" >= 0 AND \"PeopleCount\" <= 1000"));
+            entity.HasKey(period => new { period.GarageId, period.EffectiveFrom });
+            entity.HasOne<Garage>().WithMany().HasForeignKey(period => period.GarageId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SupplierGroup>(entity =>
         {
             entity.ToTable("supplier_groups");
             entity.HasKey(group => group.Id);
             entity.Property(group => group.Name).HasMaxLength(200).IsRequired();
             entity.HasIndex(group => group.Name).IsUnique().HasFilter("\"IsArchived\" = false");
+        });
+
+        modelBuilder.Entity<SupplierService>(entity =>
+        {
+            entity.ToTable("supplier_services");
+            entity.HasKey(service => service.Id);
+            entity.Property(service => service.Name).HasMaxLength(200).IsRequired();
+            entity.Property(service => service.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
+            entity.HasIndex(service => service.Name).IsUnique().HasFilter("\"IsArchived\" = false");
         });
 
         modelBuilder.Entity<Supplier>(entity =>
@@ -266,6 +286,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(supplier => supplier.Inn);
             entity.HasIndex(supplier => supplier.ContactPerson);
             entity.HasIndex(supplier => supplier.GroupId);
+            entity.HasIndex(supplier => supplier.SupplierServiceId);
             entity.HasIndex(supplier => supplier.ChargeServiceSettingId);
             entity.HasIndex(supplier => supplier.ExpenseTypeId);
             entity.HasIndex(supplier => supplier.ExpenseFundId);
@@ -275,6 +296,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
                 .HasForeignKey(supplier => supplier.GroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(supplier => supplier.SupplierService)
+                .WithMany()
+                .HasForeignKey(supplier => supplier.SupplierServiceId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(supplier => supplier.ChargeServiceSetting)
                 .WithMany()
@@ -523,6 +548,25 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(item => item.GarageId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ExpensePaymentBatch>(entity =>
+        {
+            entity.ToTable("expense_payment_batches");
+            entity.HasKey(batch => batch.Id);
+            entity.Property(batch => batch.RequestHash).HasMaxLength(64).IsRequired();
+            entity.HasOne<AppUser>().WithMany().HasForeignKey(batch => batch.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(batch => new { batch.ActorUserId, batch.CreatedAtUtc });
+        });
+        modelBuilder.Entity<ExpensePaymentBatchOperation>(entity =>
+        {
+            entity.ToTable("expense_payment_batch_operations");
+            entity.HasKey(item => new { item.BatchId, item.OperationId });
+            entity.HasIndex(item => item.OperationId).IsUnique();
+            entity.HasOne(item => item.Batch).WithMany(batch => batch.Operations)
+                .HasForeignKey(item => item.BatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Operation).WithMany()
+                .HasForeignKey(item => item.OperationId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<FinancialOperation>(entity =>

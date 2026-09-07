@@ -1282,8 +1282,8 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var secondExpenseType = new ExpenseType { Name = "Связь", Code = "internet" };
-        var secondService = new ChargeServiceSetting { Name = "Связь" };
-        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService, ExpenseType = secondExpenseType, ExpenseFund = fixtures.ExpenseFund };
+        var secondService = new SupplierService { Name = "Связь" };
+        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId, SupplierService = secondService, ExpenseType = secondExpenseType, ExpenseFund = fixtures.ExpenseFund };
         database.Context.AddRange(secondExpenseType, secondService, secondSupplier);
         await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
@@ -2175,10 +2175,20 @@ public sealed class ReportServiceTests
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 9, 0, 0, TimeSpan.Zero)
             });
+        database.Context.FundOperations.Add(new FundOperation
+        {
+            Fund = new Fund { Name = "Электроэнергия чужого фонда", NormalizedName = "ДРУГОЙ ФОНД", SortOrder = 11 },
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 9876m,
+            BalanceBefore = 0m,
+            BalanceAfter = 9876m,
+            Reason = "Исключённая операция",
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
+        });
         await database.Context.SaveChangesAsync();
 
         var result = await service.ExportFundChangeReportXlsxAsync(
-            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId),
+            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId, FundIds: [fund.Id]),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -2192,6 +2202,7 @@ public sealed class ReportServiceTests
         AssertWorkbookContains(result.Value.Content, "10.06.2026");
         AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-10");
         AssertWorkbookDoesNotContain(result.Value.Content, "Вне периода");
+        AssertWorkbookDoesNotContain(result.Value.Content, "Исключённая операция");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_exported" &&
             auditEvent.ActorUserId == actorUserId &&
@@ -2218,10 +2229,20 @@ public sealed class ReportServiceTests
             ActorUserId = actorUserId,
             CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
         });
+        database.Context.FundOperations.Add(new FundOperation
+        {
+            Fund = new Fund { Name = "Электроэнергия чужого фонда", NormalizedName = "ДРУГОЙ ФОНД", SortOrder = 11 },
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = 9876m,
+            BalanceBefore = 0m,
+            BalanceAfter = 9876m,
+            Reason = "Исключённая операция",
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
+        });
         await database.Context.SaveChangesAsync();
 
         var result = await service.ExportFundChangeReportPdfAsync(
-            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId),
+            new FundChangeReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", ActorUserId: actorUserId, FundIds: [fund.Id]),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -2232,6 +2253,8 @@ public sealed class ReportServiceTests
         Assert.Contains("Изменение, руб.", pdfText);
         Assert.Contains("10.06.2026", pdfText);
         Assert.Contains("1 500.00", pdfText);
+        Assert.DoesNotContain("Исключённая операция", pdfText);
+        Assert.DoesNotContain("9 876.00", pdfText);
         AssertPdfIsLandscape(result.Value.Content);
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_exported" &&
@@ -3431,8 +3454,8 @@ public sealed class ReportServiceTests
                 Reason = "Тестовый остаток фонда",
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var chargeService = new ChargeServiceSetting { Name = "Вода" };
-            var supplier = new Supplier { Name = "Vodokanal", Group = group, ChargeServiceSetting = chargeService, ExpenseType = expenseType, ExpenseFund = expenseFund };
+            var chargeService = new SupplierService { Name = "Вода" };
+            var supplier = new Supplier { Name = "Vodokanal", Group = group, SupplierService = chargeService, ExpenseType = expenseType, ExpenseFund = expenseFund };
             var bankDeposit = new CashBankTransfer
             {
                 TransferDate = new DateOnly(2000, 1, 1),
@@ -3558,6 +3581,13 @@ public sealed class ReportServiceTests
     private static string ReadPdfText(byte[] content)
     {
         using var document = PdfDocument.Open(content);
+        Assert.All(document.GetPages(), page => Assert.All(page.Letters, letter =>
+        {
+            Assert.InRange(letter.BoundingBox.Left, -0.5, page.Width + 0.5);
+            Assert.InRange(letter.BoundingBox.Right, -0.5, page.Width + 0.5);
+            Assert.InRange(letter.BoundingBox.Bottom, -0.5, page.Height + 0.5);
+            Assert.InRange(letter.BoundingBox.Top, -0.5, page.Height + 0.5);
+        }));
         return string.Join(
             Environment.NewLine,
             document.GetPages().Select(page => ContentOrderTextExtractor.GetText(page)));

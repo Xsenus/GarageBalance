@@ -51,12 +51,14 @@ public sealed class PostgreSqlMeterReadingYearGridMigrationTests
         };
         await using (var seedContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.AddGarageInitialMeterMonthAsync(seedContext);
             seedContext.AddRange(garage, oldDevice, replacementDevice, historicalReplacement);
             await seedContext.SaveChangesAsync();
         }
 
         await using (var upgradeContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveGarageInitialMeterMonthAsync(upgradeContext);
             await upgradeContext.GetService<IMigrator>().MigrateAsync();
         }
 

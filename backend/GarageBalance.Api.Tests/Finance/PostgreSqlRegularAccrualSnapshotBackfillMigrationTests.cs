@@ -64,7 +64,9 @@ public sealed class PostgreSqlRegularAccrualSnapshotBackfillMigrationTests
             manualAccrualId = manual.Id;
             existingSnapshotAccrualId = regularWithSnapshot.Id;
             oldContext.AddRange(owner, garage, incomeType, regular, manual, regularWithSnapshot);
+            await PostgreSqlLegacyModelCompatibility.AddGarageInitialMeterMonthAsync(oldContext);
             await oldContext.SaveChangesAsync();
+            await PostgreSqlLegacyModelCompatibility.RemoveGarageInitialMeterMonthAsync(oldContext);
             await oldContext.Database.MigrateAsync();
         }
 

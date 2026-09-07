@@ -1,6 +1,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
-import { useCloseOnOutsidePointer, useEscapeKey } from './focusHooks'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCloseOnOutsidePointer } from './focusHooks'
+import { datePickerPosition } from './datePickerPosition'
 
 const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const weekDayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -45,10 +46,41 @@ export function LocalizedDatePicker({
   const expectedDraftLength = mode === 'date' ? 10 : 7
   const draftIsInvalid = draft.length >= expectedDraftLength && parseLocalizedValue(draft, mode) === null
   const rootRef = useCloseOnOutsidePointer<HTMLDivElement>(effectiveOpen, setOpen)
-  useEscapeKey(effectiveOpen, () => {
-    setOpen(false)
-    triggerRef.current?.focus()
-  })
+  const popoverRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (!effectiveOpen) return
+    const anchor = rootRef.current
+    const popover = popoverRef.current
+    if (!anchor || !popover) return
+    const viewport = window.visualViewport
+    const updatePosition = () => {
+      const bounds = anchor.getBoundingClientRect()
+      const position = datePickerPosition(bounds, popover.scrollHeight + 2, {
+        width: viewport?.width ?? window.innerWidth,
+        height: viewport?.height ?? window.innerHeight,
+        left: viewport?.offsetLeft,
+        top: viewport?.offsetTop,
+      }, placement)
+      for (const [key, value] of Object.entries(position)) {
+        popover.style.setProperty(key === 'maxHeight' ? 'max-height' : key, `${value}px`)
+      }
+    }
+    updatePosition()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition)
+    observer?.observe(anchor)
+    observer?.observe(popover)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    viewport?.addEventListener('resize', updatePosition)
+    viewport?.addEventListener('scroll', updatePosition)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+      viewport?.removeEventListener('resize', updatePosition)
+      viewport?.removeEventListener('scroll', updatePosition)
+    }
+  }, [effectiveOpen, placement, rootRef, viewDate])
 
   const days = useMemo(() => {
     if (mode === 'month') return []
@@ -72,32 +104,26 @@ export function LocalizedDatePicker({
     }
   }
 
-  function selectMonth(monthIndex: number) {
-    const nextValue = `${viewDate.getFullYear()}-${String(monthIndex + 1).padStart(2, '0')}`
-    onChange(nextValue)
-    setPickerState({ sourceValue: nextValue, sourceMode: mode, draft: formatLocalizedValue(nextValue, mode), viewDate: new Date(viewDate.getFullYear(), monthIndex, 1) })
+  function closeCalendar() {
     setOpen(false)
+    triggerRef.current?.focus()
   }
 
-  function selectDay(day: number) {
-    const nextValue = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  function selectDate(date: Date) {
+    const nextValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}${mode === 'date' ? `-${String(date.getDate()).padStart(2, '0')}` : ''}`
     onChange(nextValue)
-    setPickerState({ sourceValue: nextValue, sourceMode: mode, draft: formatLocalizedValue(nextValue, mode), viewDate: new Date(viewDate.getFullYear(), viewDate.getMonth(), day) })
-    setOpen(false)
-  }
-
-  function selectCurrentPeriod() {
-    const today = new Date()
-    const nextValue = mode === 'date'
-      ? `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-    onChange(nextValue)
-    setPickerState({ sourceValue: nextValue, sourceMode: mode, draft: formatLocalizedValue(nextValue, mode), viewDate: new Date(today.getFullYear(), today.getMonth(), mode === 'date' ? today.getDate() : 1) })
-    setOpen(false)
+    setPickerState({ sourceValue: nextValue, sourceMode: mode, draft: formatLocalizedValue(nextValue, mode), viewDate: date })
+    closeCalendar()
   }
 
   return (
-    <div className="localized-date-picker" ref={rootRef}>
+    <div className="localized-date-picker" ref={rootRef} onKeyDown={(event) => {
+      if (effectiveOpen && event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        closeCalendar()
+      }
+    }}>
       <input
         aria-label={ariaLabel}
         inputMode="numeric"
@@ -127,7 +153,7 @@ export function LocalizedDatePicker({
         <CalendarDays size={17} aria-hidden="true" />
       </button>
       {effectiveOpen ? (
-        <div className={`localized-date-picker__popover${placement === 'above' ? ' localized-date-picker__popover--above' : ''}`} role="dialog" aria-label={`${ariaLabel}: календарь`}>
+        <div ref={popoverRef} className={`localized-date-picker__popover${placement === 'above' ? ' localized-date-picker__popover--above' : ''}`} role="dialog" aria-label={`${ariaLabel}: календарь`}>
           <div className="localized-date-picker__heading">
             <button type="button" aria-label={mode === 'date' ? 'Предыдущий месяц' : 'Предыдущий год'} onClick={() => setPickerState((current) => ({ ...current, viewDate: new Date(viewDate.getFullYear() - (mode === 'month' ? 1 : 0), viewDate.getMonth() - (mode === 'date' ? 1 : 0), 1) }))}>
               <ChevronLeft size={17} aria-hidden="true" />
@@ -140,7 +166,7 @@ export function LocalizedDatePicker({
           {mode === 'month' ? (
             <div className="localized-date-picker__months">
               {monthNames.map((month, index) => (
-                <button className={isSelectedMonth(value, viewDate.getFullYear(), index) ? 'is-selected' : ''} type="button" aria-pressed={isSelectedMonth(value, viewDate.getFullYear(), index)} key={month} onClick={() => selectMonth(index)}>{month.slice(0, 3)}</button>
+                <button className={isSelectedMonth(value, viewDate.getFullYear(), index) ? 'is-selected' : ''} type="button" aria-pressed={isSelectedMonth(value, viewDate.getFullYear(), index)} key={month} onClick={() => selectDate(new Date(viewDate.getFullYear(), index, 1))}>{month.slice(0, 3)}</button>
               ))}
             </div>
           ) : (
@@ -148,12 +174,12 @@ export function LocalizedDatePicker({
               {weekDayNames.map((day) => <span key={day}>{day}</span>)}
               {days.map((day, index) => day === null
                 ? <i key={`empty-${index}`} />
-                : <button className={isSelectedDay(value, viewDate, day) ? 'is-selected' : ''} type="button" aria-pressed={isSelectedDay(value, viewDate, day)} key={day} onClick={() => selectDay(day)}>{day}</button>)}
+                : <button className={isSelectedDay(value, viewDate, day) ? 'is-selected' : ''} type="button" aria-pressed={isSelectedDay(value, viewDate, day)} key={day} onClick={() => selectDate(new Date(viewDate.getFullYear(), viewDate.getMonth(), day))}>{day}</button>)}
             </div>
           )}
           <div className="localized-date-picker__actions">
-            <button className="localized-date-picker__clear" type="button" onClick={() => { onChange(''); setPickerState((current) => ({ ...current, sourceValue: '', sourceMode: mode, draft: '' })); setOpen(false) }}>Очистить</button>
-            <button className="localized-date-picker__current" type="button" onClick={selectCurrentPeriod}>{mode === 'date' ? 'Сегодня' : 'Текущий месяц'}</button>
+            <button className="localized-date-picker__clear" type="button" onClick={() => { onChange(''); setPickerState((current) => ({ ...current, sourceValue: '', sourceMode: mode, draft: '' })); closeCalendar() }}>Очистить</button>
+            <button className="localized-date-picker__current" type="button" onClick={() => selectDate(new Date())}>{mode === 'date' ? 'Сегодня' : 'Текущий месяц'}</button>
           </div>
         </div>
       ) : null}
@@ -173,20 +199,14 @@ function parseIsoValue(value: string, mode: 'date' | 'month') {
 }
 
 function formatLocalizedValue(value: string, mode: 'date' | 'month') {
-  const match = mode === 'date' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : /^(\d{4})-(\d{2})$/.exec(value)
-  if (!match || !parseIsoValue(value, mode)) return ''
-  return mode === 'date' ? `${match[3]}.${match[2]}.${match[1]}` : `${match[2]}.${match[1]}`
+  return parseIsoValue(value, mode) ? value.split('-').reverse().join('.') : ''
 }
 
 function parseLocalizedValue(value: string, mode: 'date' | 'month') {
   const match = mode === 'date' ? /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(value) : /^(\d{2})\.(\d{4})$/.exec(value)
   if (!match) return null
-  const day = mode === 'date' ? Number(match[1]) : 1
-  const month = Number(mode === 'date' ? match[2] : match[1])
-  const year = Number(mode === 'date' ? match[3] : match[2])
-  const date = new Date(year, month - 1, day)
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
-  return mode === 'date' ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` : `${year}-${String(month).padStart(2, '0')}`
+  const iso = match.slice(1).reverse().join('-')
+  return parseIsoValue(iso, mode) ? iso : null
 }
 
 function isSelectedMonth(value: string, year: number, monthIndex: number) {

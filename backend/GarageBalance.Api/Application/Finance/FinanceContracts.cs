@@ -477,7 +477,7 @@ public sealed record ReplaceMeterDeviceRequest(
 
 public sealed record MeterDeviceReplacementDto(MeterDeviceDto Device, MeterReadingDto Reading);
 
-public sealed record MeterReadingYearGarageDto(Guid Id, string Number);
+public sealed record MeterReadingYearGarageDto(Guid Id, string Number, DateOnly? InitialReadingMonth = null, decimal? InitialReadingValue = null);
 
 public sealed record MeterReadingYearValueDto(
     Guid Id,
@@ -584,7 +584,9 @@ public sealed record GarageOverdueDebtRowDto(
     DateOnly? OverdueFromDate,
     decimal OriginalAmount,
     decimal PaidAmount,
-    decimal OutstandingAmount);
+    decimal OutstandingAmount,
+    Guid? AccrualId = null,
+    string? ChargeName = null);
 
 public sealed record GarageOverdueDebtDto(
     Guid GarageId,

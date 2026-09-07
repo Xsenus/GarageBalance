@@ -39,6 +39,7 @@ type FundEditorDraft = {
 
 type FundDeleteDraft = {
   fundId: string
+  version?: string
   fundName: string
   balance: number
   reason: string
@@ -348,6 +349,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     setFundDelete({
       fundId: fundEditor.fundId,
       fundName: fundEditor.originalName,
+      version: fundEditor.version,
       balance: fundEditor.balance,
       reason: '',
     })
@@ -377,14 +379,15 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     setDeletingFund(true)
     setFundDeleteError(null)
     try {
-      await fundsClient.deleteFund(auth.accessToken, fundDelete.fundId, { reason })
+      await fundsClient.deleteFund(auth.accessToken, fundDelete.fundId, { reason, version: fundDelete.version })
       setRows((current) => current.filter((fund) => fund.id !== fundDelete.fundId))
       setAvailableToDistribute((current) => current === null ? null : current + fundDelete.balance)
-      setFundMessage(fundDelete.balance > 0
-        ? `Фонд «${fundDelete.fundName}» удален. Остаток ${formatMoney(fundDelete.balance)} руб. возвращен в нераспределенную сумму.`
-        : `Фонд «${fundDelete.fundName}» удален.`)
+      setFundMessage(`Фонд «${fundDelete.fundName}» удален.${fundDelete.balance > 0
+        ? ` Остаток ${formatMoney(fundDelete.balance)} руб. возвращен в нераспределенную сумму.`
+        : ''}`)
       setFundDelete(null)
       setFundEditor(null)
+      refreshFundsPanelAfterMutation()
     } catch (error: unknown) {
       setFundDeleteError(error instanceof Error ? error.message : 'Не удалось удалить фонд.')
     } finally {
@@ -890,7 +893,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                     <h4 id="fund-linked-services-title">Услуги, оплачиваемые из фонда</h4>
                     <span>{fundEditor.linkedServices.length}</span>
                   </div>
-                  <p>Список приведён справочно. Привязка изменяется в карточке услуги.</p>
+                  <p>Привязка изменяется в карточке поставщика.</p>
                   {fundEditor.linkedServices.length > 0 ? (
                     <ul>
                       {fundEditor.linkedServices.map((service) => <li key={service.id}>{service.name}</li>)}
@@ -898,10 +901,10 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   ) : (
                     <p className="fund-linked-services-empty">К фонду пока не привязано ни одной услуги.</p>
                   )}
-                  {fundEditor.linkedServices.length > 0 ? (
-                    <p className="fund-delete-restriction">Чтобы удалить фонд, сначала переназначьте все перечисленные услуги.</p>
-                  ) : fundEditor.balance !== 0 ? (
-                    <p className="fund-delete-transfer-note">При удалении остаток {formatMoney(fundEditor.balance)} руб. автоматически вернется в нераспределенную сумму.</p>
+                  {fundEditor.balance < 0 ? (
+                    <p className="fund-delete-restriction">Перед удалением погасите отрицательный остаток фонда.</p>
+                  ) : fundEditor.balance > 0 ? (
+                    <p className="fund-delete-transfer-note">Остаток {formatMoney(fundEditor.balance)} руб. будет возвращен в нераспределенную сумму.</p>
                   ) : null}
                 </section>
               ) : null}
@@ -917,7 +920,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                     className="ghost-button danger-button"
                     type="button"
                     onClick={openFundDelete}
-                    disabled={savingFund || fundEditor.linkedServices.length > 0}
+                    disabled={savingFund || fundEditor.balance < 0}
                   >
                     <Trash2 size={16} aria-hidden="true" />
                     <span>Удалить фонд</span>
@@ -942,7 +945,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </button>
             </div>
             <p id="fund-delete-description">
-              Фонд исчезнет из рабочего списка. История операций сохранится в учете и аудите.
+              История сохранится. Связи поступлений и поставщиков снимаются.
+              Новые поступления останутся нераспределёнными; для выплат выберите фонд.
               {fundDelete.balance > 0
                 ? ` Остаток ${formatMoney(fundDelete.balance)} руб. будет возвращен в нераспределенную сумму.`
                 : ''}

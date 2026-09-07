@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Users;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.ShowcaseSeed;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,21 @@ public sealed class PostgreSqlStagingWorkingDataResetIntegrationTests
 
         var seeder = new ShowcaseDataSeeder(context);
         Assert.True((await seeder.PrepareAsync(CancellationToken.None)).IsReady);
+        var batch = new ExpensePaymentBatch
+        {
+            Id = Guid.NewGuid(),
+            ActorUserId = user.Id,
+            RequestHash = new string('a', 64)
+        };
+        batch.Operations.Add(new ExpensePaymentBatchOperation
+        {
+            BatchId = batch.Id,
+            OperationId = await context.FinancialOperations.Select(item => item.Id).FirstAsync()
+        });
+        context.ExpensePaymentBatches.Add(batch);
+        await context.SaveChangesAsync();
+        var supplierServiceIds = await context.SupplierServices.OrderBy(item => item.Id)
+            .Select(item => item.Id).ToArrayAsync();
         await context.Database.ExecuteSqlRawAsync(
             """
             INSERT INTO form_states ("Id", "CreatedAtUtc", "PayloadJson", "Scope", "UpdatedAtUtc")
@@ -83,6 +99,11 @@ public sealed class PostgreSqlStagingWorkingDataResetIntegrationTests
         Assert.All(await context.Funds.AsNoTracking().ToArrayAsync(), item => Assert.Equal(0m, item.Balance));
 
         Assert.Empty(await context.Owners.AsNoTracking().ToArrayAsync());
+        Assert.Empty(await context.ExpensePaymentBatches.AsNoTracking().ToArrayAsync());
+        Assert.Empty(await context.Set<ExpensePaymentBatchOperation>().AsNoTracking().ToArrayAsync());
+        Assert.Empty(await context.GaragePeopleCountPeriods.AsNoTracking().ToArrayAsync());
+        Assert.Equal(supplierServiceIds, await context.SupplierServices.OrderBy(item => item.Id)
+            .Select(item => item.Id).ToArrayAsync());
         Assert.Empty(await context.Garages.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.Suppliers.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.SupplierGroups.AsNoTracking().ToArrayAsync());
@@ -107,5 +128,6 @@ public sealed class PostgreSqlStagingWorkingDataResetIntegrationTests
         await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM form_states;";
         Assert.Equal(0L, Convert.ToInt64(await command.ExecuteScalarAsync()));
+        Assert.True((await seeder.ResetWorkingDataAsync(CancellationToken.None)).IsClean);
     }
 }

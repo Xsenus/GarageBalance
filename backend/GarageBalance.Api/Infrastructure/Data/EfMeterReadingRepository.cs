@@ -207,7 +207,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .ThenBy(garage => garage.Id)
             .Skip(offset)
             .Take(limit)
-            .Select(garage => new MeterReadingYearGarageData(garage.Id, garage.Number))
+            .Select(garage => new MeterReadingYearGarageData(garage.Id, garage.Number, garage.InitialMeterReadingMonth,
+                meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : meterKind == MeterKinds.Electricity ? garage.InitialElectricityMeterValue : null))
             .ToListAsync(cancellationToken);
 
         if (garages.Count == 0)
@@ -257,6 +258,10 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 SELECT
                     garage."Id" AS "GarageId",
                     garage."Number" AS "GarageNumber",
+                    garage."InitialMeterReadingMonth" AS "InitialReadingMonth",
+                    CASE WHEN {{meterKind}} = 'water' THEN garage."InitialWaterMeterValue"
+                         WHEN {{meterKind}} = 'electricity' THEN garage."InitialElectricityMeterValue"
+                         ELSE NULL END AS "InitialReadingValue",
                     ROW_NUMBER() OVER (
                         ORDER BY LENGTH(garage."Number"), garage."Number", garage."Id") AS "GarageOrdinal",
                     COUNT(*) OVER () AS "TotalCount"
@@ -270,6 +275,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 1 AS "Category",
                 paged_garage."GarageId",
                 paged_garage."GarageNumber",
+                paged_garage."InitialReadingMonth",
+                paged_garage."InitialReadingValue",
                 paged_garage."GarageOrdinal",
                 reading."Id" AS "ReadingId",
                 reading."AccountingMonth",
@@ -296,6 +303,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 2 AS "Category",
                 NULL::uuid AS "GarageId",
                 NULL::text AS "GarageNumber",
+                NULL::date AS "InitialReadingMonth",
+                NULL::numeric AS "InitialReadingValue",
                 NULL::bigint AS "GarageOrdinal",
                 NULL::uuid AS "ReadingId",
                 NULL::date AS "AccountingMonth",
@@ -312,9 +321,9 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         var totalCount = checked((int)(rows.FirstOrDefault()?.TotalCount ?? 0));
         var garages = rows
             .Where(row => row.Category == 1)
-            .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal })
+            .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal, row.InitialReadingMonth, row.InitialReadingValue })
             .OrderBy(group => group.Key.GarageOrdinal)
-            .Select(group => new MeterReadingYearGarageData(group.Key.GarageId!.Value, group.Key.GarageNumber!))
+            .Select(group => new MeterReadingYearGarageData(group.Key.GarageId!.Value, group.Key.GarageNumber!, group.Key.InitialReadingMonth, group.Key.InitialReadingValue))
             .ToList();
         var readings = rows
             .Where(row => row.Category == 1 && row.ReadingId is not null)
@@ -338,6 +347,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         public int Category { get; set; }
         public Guid? GarageId { get; set; }
         public string? GarageNumber { get; set; }
+        public DateOnly? InitialReadingMonth { get; set; }
+        public decimal? InitialReadingValue { get; set; }
         public long? GarageOrdinal { get; set; }
         public Guid? ReadingId { get; set; }
         public DateOnly? AccountingMonth { get; set; }

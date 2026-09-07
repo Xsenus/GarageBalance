@@ -187,10 +187,16 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('height: 36px;\n  min-height: 36px;\n  box-sizing: border-box;')
   })
 
+  it('anchors report filters to their disclosure instead of inheriting the fixed calendar position', () => {
+    expect(normalizedAppCss).toContain('.report-garage-filter-disclosure {\n  position: relative;\n  z-index: 2;')
+    expect(normalizedAppCss).toContain('.report-garage-filter-panel {\n  position: absolute;\n  top: calc(100% + 8px);\n  left: 0;')
+    expect(normalizedAppCss).toContain('.report-garage-filter-panel {\n    position: static;\n    width: 100%;')
+  })
+
   it('keeps audit controls and event details readable at every supported width', () => {
     expect(normalizedAppCss).toContain('.select-control__trigger,\n.localized-date-picker input {\n  width: 100%;')
     expect(normalizedAppCss).toContain('.select-control__list {\n  position: absolute;')
-    expect(normalizedAppCss).toContain('.localized-date-picker__popover {\n  position: absolute;')
+    expect(normalizedAppCss).toContain('.localized-date-picker__popover {\n  position: fixed;')
     expect(normalizedAppCss).toContain('.audit-detail-dialog {\n  width: min(1120px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.audit-detail-grid {\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.audit-detail-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
@@ -275,7 +281,6 @@ describe('responsive layout styles', () => {
 
   it('keeps the expense month calendar within the worksheet and narrow viewport', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-sheet {\n  overflow: visible;')
-    expect(normalizedAppCss).toContain('.payments-prototype-period-row .localized-date-picker__popover {\n  right: auto;\n  left: 0;\n  width: min(292px, calc(100vw - 44px));\n  box-sizing: border-box;')
   })
 
   it('keeps payment history actions compact and horizontal', () => {
@@ -485,7 +490,7 @@ describe('responsive layout styles', () => {
   it('keeps the supplier editor wide, compact and responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--supplier {\n  width: min(1280px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.contractors-dialog--supplier .contractors-modal-form {\n  gap: 9px;')
-    expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);')
+    expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid > .form-field {\n  align-content: start;')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid .form-field > input,\n.contractors-supplier-footer-grid .form-field > textarea {\n  box-sizing: border-box;\n  height: 76px;\n  min-height: 76px;')
@@ -503,7 +508,7 @@ describe('responsive layout styles', () => {
   it('keeps long supplier values inside readable table columns', () => {
     expect(contractorsPanel).toContain("{ key: 'name', label: 'Поставщик', defaultWidth: 220, minWidth: 170 }")
     expect(contractorsPanel).toContain("{ key: 'phone', label: 'Телефон', defaultWidth: 180, minWidth: 168 }")
-    expect(contractorsPanel).toContain("{ key: 'debt', label: 'Задолженность', defaultWidth: 160, minWidth: 150 }")
+    expect(contractorsPanel).toContain("{ key: 'debt', label: 'Баланс', defaultWidth: 160, minWidth: 150 }")
     expect(normalizedAppCss).toContain('.contractors-directory-table--suppliers .contractors-directory-row {\n  grid-template-columns: var(--supplier-col-name, 220px) var(--supplier-col-service, 180px) var(--supplier-col-contactPerson, 210px) var(--supplier-col-phone, 180px) var(--supplier-col-email, 210px) var(--supplier-col-debt, 160px) var(--supplier-col-actions, 132px);')
     expect(normalizedAppCss).toContain('.contractors-supplier-cell {\n  align-self: stretch;\n  line-height: 1.35;\n  overflow-wrap: anywhere;\n  word-break: normal;')
     expect(normalizedAppCss).toContain('.contractors-supplier-cell--phone {\n  overflow-wrap: normal;\n  white-space: nowrap;')

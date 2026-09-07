@@ -16,6 +16,9 @@ public interface IGarageRepository
     Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken);
     Task<GarageOpeningDataLock> GetOpeningDataLockAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveNumberExistsAsync(Guid? ignoredId, string number, CancellationToken cancellationToken);
+    Task<GaragePeopleCountPeriod?> FindLatestPeopleCountPeriodAsync(Guid garageId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<GaragePeopleCountPeriod>> GetPeopleCountPeriodsAsync(IReadOnlyCollection<Guid> garageIds, DateOnly from, DateOnly to, CancellationToken cancellationToken);
+    void AddPeopleCountPeriod(GaragePeopleCountPeriod period);
     void Add(Garage garage);
 }
 

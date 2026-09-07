@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -14,7 +15,8 @@ public sealed record RegularAccrualSegmentDefinition(
     string? CalculationBase,
     decimal Rate,
     string UnitName,
-    IReadOnlyList<RegularAccrualTariffTier> Tiers);
+    IReadOnlyList<RegularAccrualTariffTier> Tiers,
+    int? PeopleCount = null);
 
 public sealed record AccrualCalculationTierDto(
     decimal From,
@@ -37,7 +39,8 @@ public sealed record AccrualCalculationLineDto(
     IReadOnlyList<AccrualCalculationTierDto> Tiers,
     string Formula,
     bool HasTariff,
-    IReadOnlyList<RegularAccrualTariffTier>? TierDefinitions = null);
+    IReadOnlyList<RegularAccrualTariffTier>? TierDefinitions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? PeopleCount = null);
 
 public sealed record AccrualCalculationDetailsDto(
     int Version,
@@ -74,7 +77,8 @@ public static class RegularAccrualCalculator
         Garage garage,
         DateOnly accountingMonth,
         MeterReading? meterReading,
-        IReadOnlyList<RegularAccrualSegmentDefinition> definitions)
+        IReadOnlyList<RegularAccrualSegmentDefinition> definitions,
+        IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null)
     {
         var month = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);
         var monthEnd = month.AddMonths(1).AddDays(-1);
@@ -113,6 +117,11 @@ public static class RegularAccrualCalculator
         }
 
         var calculationBase = calculationBases.SingleOrDefault();
+        if (calculationBase == TariffCalculationBases.People &&
+            (peopleCountPeriods is { Count: > 0 } || ordered.Any(definition => definition.PeopleCount.HasValue)))
+        {
+            return CalculatePeoplePeriods(garage, month, ordered, peopleCountPeriods ?? []);
+        }
         var monthlyQuantity = calculationBase switch
         {
             TariffCalculationBases.Fixed => 1m,
@@ -259,8 +268,75 @@ public static class RegularAccrualCalculator
             line.UnitName,
             line.TierDefinitions is { Count: > 0 }
                 ? line.TierDefinitions
-                : line.Tiers.Select(tier => new RegularAccrualTariffTier(tier.To, tier.Rate)).ToArray()))
+                : line.Tiers.Select(tier => new RegularAccrualTariffTier(tier.To, tier.Rate)).ToArray(),
+            line.PeopleCount))
             .ToArray();
+
+    private static RegularAccrualCalculationResult CalculatePeoplePeriods(
+        Garage garage,
+        DateOnly month,
+        IReadOnlyList<RegularAccrualSegmentDefinition> definitions,
+        IReadOnlyList<GaragePeopleCountPeriod> periods)
+    {
+        var monthDays = DateTime.DaysInMonth(month.Year, month.Month);
+        var history = periods.Where(period => period.GarageId == garage.Id)
+            .OrderBy(period => period.EffectiveFrom).ToArray();
+        if (history.Any(period => period.PeopleCount is < 0 or > 1000) ||
+            history.GroupBy(period => period.EffectiveFrom).Any(group => group.Count() > 1) ||
+            definitions.Any(definition => definition.PeopleCount is < 0 or > 1000 || definition.Rate < 0m))
+        {
+            return RegularAccrualCalculationResult.Failure("история числа людей или ставка содержит недопустимые значения.");
+        }
+
+        var parts = new List<PeopleContribution>();
+        foreach (var definition in definitions)
+        {
+            var boundaries = history.Where(period => period.EffectiveFrom > definition.EffectiveFrom && period.EffectiveFrom <= definition.EffectiveTo)
+                .Select(period => period.EffectiveFrom).Prepend(definition.EffectiveFrom).ToArray();
+            for (var index = 0; index < boundaries.Length; index++)
+            {
+                var from = boundaries[index];
+                var to = index + 1 < boundaries.Length ? boundaries[index + 1].AddDays(-1) : definition.EffectiveTo;
+                var count = definition.PeopleCount ?? history.LastOrDefault(period => period.EffectiveFrom <= from)?.PeopleCount ?? garage.PeopleCount;
+                var days = to.DayNumber - from.DayNumber + 1;
+                var rawAmount = definition.CalculationBase is null ? 0m : count * definition.Rate * days / monthDays;
+                parts.Add(new PeopleContribution(from, to, days, count, definition, rawAmount));
+            }
+        }
+
+        var total = MoneyMath.RoundMoney(parts.Sum(part => part.RawAmount));
+        var amounts = parts.Select(part => Math.Floor(part.RawAmount * 100m) / 100m).ToArray();
+        var remainingCents = (int)((total - amounts.Sum()) * 100m);
+        foreach (var index in Enumerable.Range(0, parts.Count)
+                     .OrderByDescending(index => parts[index].RawAmount - amounts[index]).ThenBy(index => index).Take(remainingCents))
+        {
+            amounts[index] += 0.01m;
+        }
+
+        var lines = parts.Select((part, index) => new AccrualCalculationLineDto(
+            part.From, part.To, part.Days, monthDays,
+            part.Definition.CalculationBase, part.Definition.CalculationBase is null ? "no_tariff" : "people",
+            part.Definition.UnitName, part.Definition.CalculationBase is null ? 0m : part.Definition.Rate,
+            part.Definition.CalculationBase is null ? 0m : MoneyMath.RoundMeterValue(part.PeopleCount * (decimal)part.Days / monthDays),
+            amounts[index], [],
+            part.Definition.CalculationBase is null
+                ? "Тариф на этот участок не задан: дни участка дают нулевое начисление."
+                : BuildSegmentFormula("people", part.PeopleCount, part.Definition.Rate, part.Days, monthDays, amounts[index], []),
+            part.Definition.CalculationBase is not null,
+            part.Definition.Tiers,
+            part.PeopleCount)).ToArray();
+        var activeParts = parts.Where(part => part.Definition.CalculationBase is not null).ToArray();
+        var averagePeople = parts.Sum(part => part.PeopleCount * (decimal)part.Days) / monthDays;
+        var formulaParts = activeParts.Select(part =>
+            $"{part.PeopleCount} × {part.Definition.Rate.ToString("0.####", RussianCulture)} × {part.Days}/{monthDays}");
+        var formula = $"Расчёт по дням: {string.Join(" + ", formulaParts)} = {total.ToString("0.00", RussianCulture)}. Среднее число людей за месяц: {averagePeople.ToString("0.####", RussianCulture)}.";
+        return RegularAccrualCalculationResult.Success(new AccrualCalculationDetailsDto(
+            5, month, null, null, null, false, null, lines, total,
+            RateAveragingRule: "Для каждого участка месяца число людей умножается на действующую ставку и долю календарных дней. Суммы участков складываются; округление выполняется для общей суммы месяца.",
+            MonthlyCalculationFormula: formula));
+    }
+
+    private sealed record PeopleContribution(DateOnly From, DateOnly To, int Days, int PeopleCount, RegularAccrualSegmentDefinition Definition, decimal RawAmount);
 
     private static bool IsMetered(RegularAccrualSegmentDefinition definition) =>
         definition.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity;

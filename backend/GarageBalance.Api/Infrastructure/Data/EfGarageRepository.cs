@@ -356,6 +356,28 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
 
     public void Add(Garage garage) => dbContext.Garages.Add(garage);
 
+    public Task<GaragePeopleCountPeriod?> FindLatestPeopleCountPeriodAsync(Guid garageId, CancellationToken cancellationToken) =>
+        dbContext.GaragePeopleCountPeriods.Where(period => period.GarageId == garageId)
+            .OrderByDescending(period => period.EffectiveFrom).FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<GaragePeopleCountPeriod>> GetPeopleCountPeriodsAsync(
+        IReadOnlyCollection<Guid> garageIds, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    {
+        if (garageIds.Count == 0 || from > to)
+        {
+            return [];
+        }
+
+        return await dbContext.GaragePeopleCountPeriods.AsNoTracking()
+            .Where(period => garageIds.Contains(period.GarageId) && period.EffectiveFrom <= to &&
+                (period.EffectiveFrom >= from || !dbContext.GaragePeopleCountPeriods.Any(later =>
+                    later.GarageId == period.GarageId && later.EffectiveFrom > period.EffectiveFrom && later.EffectiveFrom <= from)))
+            .OrderBy(period => period.GarageId).ThenBy(period => period.EffectiveFrom)
+            .ToListAsync(cancellationToken);
+    }
+
+    public void AddPeopleCountPeriod(GaragePeopleCountPeriod period) => dbContext.GaragePeopleCountPeriods.Add(period);
+
     private IQueryable<Garage> ApplyArchiveFilter(bool includeArchived) =>
         dbContext.Garages.AsNoTracking()
             .Where(garage => includeArchived || !garage.IsArchived);

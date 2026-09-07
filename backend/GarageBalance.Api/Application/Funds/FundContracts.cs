@@ -36,7 +36,8 @@ public sealed record UpsertFundRequest(
     Guid? Version = null);
 
 public sealed record DeleteFundRequest(
-    [ActionComment, MaxLength(1000)] string? Reason);
+    [ActionComment, MaxLength(1000)] string? Reason,
+    Guid? Version = null);
 
 public sealed record FundOperationDto(
     Guid Id,

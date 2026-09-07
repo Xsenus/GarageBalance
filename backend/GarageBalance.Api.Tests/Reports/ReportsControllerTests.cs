@@ -309,6 +309,7 @@ public sealed class ReportsControllerTests
     [Fact]
     public async Task GetFundChangeReport_ReturnsOk()
     {
+        Guid[] fundIds = [Guid.NewGuid(), Guid.NewGuid()];
         var report = CreateFundChangeReport();
         var service = new FakeReportService
         {
@@ -327,10 +328,11 @@ public sealed class ReportsControllerTests
             "Электро",
             16,
             8,
-            CancellationToken.None);
+            CancellationToken.None, fundIds: fundIds);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
+        Assert.Equal(fundIds, service.FundChangeRequest?.FundIds);
         Assert.Equal(16, service.FundChangeRequest?.Limit);
         Assert.Equal(8, service.FundChangeRequest?.Offset);
         Assert.Equal("Электро", service.FundChangeRequest?.Search);
@@ -355,6 +357,7 @@ public sealed class ReportsControllerTests
     [Fact]
     public async Task ExportFundChangeReportXlsx_ReturnsFile()
     {
+        Guid[] fundIds = [Guid.NewGuid()];
         var content = new byte[] { 25, 26, 27 };
         var export = new ReportExportFileDto(
             "garagebalance-fund-changes-20260601-20260630.xlsx",
@@ -371,12 +374,13 @@ public sealed class ReportsControllerTests
             User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())]))
         };
 
-        var result = await controller.ExportFundChangeReportXlsx(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", CancellationToken.None);
+        var result = await controller.ExportFundChangeReportXlsx(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "электро", CancellationToken.None, fundIds: fundIds);
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal(export.FileName, file.FileDownloadName);
         Assert.Equal(export.ContentType, file.ContentType);
         Assert.Same(content, file.FileContents);
+        Assert.Equal(fundIds, service.FundChangeRequest?.FundIds);
         Assert.Equal("электро", service.FundChangeRequest?.Search);
         Assert.Equal(actorUserId, service.FundChangeRequest?.ActorUserId);
     }

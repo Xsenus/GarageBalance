@@ -53,7 +53,7 @@ public interface IMeterReadingRepository
 
 public sealed record MeterReadingPageData(IReadOnlyList<MeterReading> Items, int TotalCount);
 
-public sealed record MeterReadingYearGarageData(Guid Id, string Number);
+public sealed record MeterReadingYearGarageData(Guid Id, string Number, DateOnly? InitialReadingMonth = null, decimal? InitialReadingValue = null);
 
 public sealed record MeterReadingYearValueData(
     Guid Id,

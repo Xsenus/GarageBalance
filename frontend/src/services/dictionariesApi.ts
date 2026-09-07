@@ -54,6 +54,15 @@ export type SupplierGroupDto = {
   isArchived: boolean
 }
 
+export type SupplierServiceDto = {
+  id: string
+  name: string
+  isArchived: boolean
+  version: string
+}
+
+export type UpsertSupplierServiceRequest = { name: string; version?: string }
+
 export type SupplierDto = {
   id: string
   name: string
@@ -67,8 +76,8 @@ export type SupplierDto = {
   startingBalance: number
   startingDebt?: number
   debt: number
-  chargeServiceSettingId?: string | null
-  chargeServiceSettingName?: string | null
+  supplierServiceId?: string | null
+  supplierServiceName?: string | null
   expenseTypeId?: string | null
   expenseTypeName?: string | null
   expenseFundId?: string | null
@@ -257,7 +266,7 @@ export type UpsertSupplierRequest = {
   startingBalance: number
   startingDebt?: number | null
   comment?: string
-  chargeServiceSettingId?: string | null
+  supplierServiceId?: string | null
   expenseTypeId?: string | null
   expenseFundId?: string | null
   version?: string
@@ -432,6 +441,9 @@ export type DictionaryClient = {
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
   adjustGarageOpeningBalance?(accessToken: string, id: string, request: CreateOpeningBalanceAdjustmentRequest): Promise<unknown>
   getSupplierGroups(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<SupplierGroupDto[]>
+  getSupplierServicesPage(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<SupplierServiceDto>>
+  createSupplierService(accessToken: string, request: UpsertSupplierServiceRequest): Promise<SupplierServiceDto>
+  updateSupplierService(accessToken: string, id: string, request: UpsertSupplierServiceRequest): Promise<SupplierServiceDto>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   updateSupplierGroup(accessToken: string, id: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   archiveSupplierGroup(accessToken: string, id: string, reason: string): Promise<void>
@@ -610,6 +622,15 @@ export const dictionariesApi: DictionaryClient = {
   },
   getSupplierGroups(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
     return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups', { search, limit, includeArchived: includeArchived || undefined }), { signal })
+  },
+  getSupplierServicesPage(accessToken, search, offset = 0, limit = 25, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-services', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
+  },
+  createSupplierService(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/supplier-services', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateSupplierService(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/supplier-services/${id}`, { method: 'PUT', body: JSON.stringify(request) })
   },
   createSupplierGroup(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/supplier-groups', { method: 'POST', body: JSON.stringify(request) })

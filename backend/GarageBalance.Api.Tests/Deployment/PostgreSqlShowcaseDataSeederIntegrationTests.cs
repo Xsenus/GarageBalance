@@ -117,6 +117,8 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
             .Where(item => !item.IsArchived)
             .ToDictionaryAsync(item => item.IncomeType!.Code!);
         Assert.Equal(TariffCalculationBases.MeterWater, settings["water"].Tariff!.CalculationBase);
+        Assert.True(settings["water"].IsMetered);
+        Assert.False(settings["water"].HasTieredTariff);
         Assert.Equal(TariffCalculationBases.People, settings["trash"].Tariff!.CalculationBase);
         Assert.Equal(TariffCalculationBases.Fixed, settings["membership"].Tariff!.CalculationBase);
         Assert.True(settings["electricity"].IsMetered);

@@ -44,6 +44,7 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 
 const FinancialJournalPanel = lazy(() => import('./FinancialJournalPanel').then((module) => ({ default: module.FinancialJournalPanel })))
+const ExpenseBatchPaymentDialog = lazy(() => import('./ExpenseBatchPaymentDialog'))
 const advancedFinanceToolsVisible = false
 
 const regularAccrualRecalculationActionLabels: Record<RegularAccrualRecalculationPreviewDto['rows'][number]['action'], string> = {
@@ -3150,6 +3151,7 @@ function PaymentsPrototypePanel({
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [expenseCashAmount, setExpenseCashAmount] = useState(0)
   const [expenseWorksheetRefreshRevision, setExpenseWorksheetRefreshRevision] = useState(0)
+  const [expenseBatchDialogOpen, setExpenseBatchDialogOpen] = useState<boolean | null>(null)
   const [expandedExpenseSupplierRows, setExpandedExpenseSupplierRows] = useState<Record<string, boolean>>({})
   const [expenseSupplierBreakdowns, setExpenseSupplierBreakdowns] = useState<Record<string, ExpenseSupplierBreakdownState>>({})
   const expenseSupplierBreakdownControllersRef = useRef(new Map<string, AbortController>())
@@ -3259,6 +3261,8 @@ function PaymentsPrototypePanel({
       return
     }
 
+    setGarageSearchLoading(true)
+    setGarageSearchError(null)
     return scheduleDebouncedRequest({
       delay: 250,
       requestTimeout: garageSearchTimeoutMs,
@@ -5055,6 +5059,7 @@ function PaymentsPrototypePanel({
               placeholder="Введите номер гаража или ФИО владельца"
               value={garageSearch}
               onFocus={() => setGarageSearchOpen(true)}
+              onClick={() => setGarageSearchOpen(true)}
               onChange={(event) => {
                 setGarageSearch(event.target.value)
                 setGarageSearchOpen(true)
@@ -5074,7 +5079,7 @@ function PaymentsPrototypePanel({
           </label>
           {shouldShowGarageResults ? (
             <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи" aria-busy={garageSearchLoading}>
-              {garageSearchLoading && garageSearchResults.length === 0 ? <span className="payments-prototype-search-empty" role="status">Ищем гаражи...</span> : null}
+              {garageSearchLoading && garageSearchResults.length === 0 ? <LoadingSkeleton className="payments-prototype-search-empty" label="Ищем гаражи..." rows={3} columns={2} /> : null}
               {garageSearchError ? <ForegroundDialogError><span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span></ForegroundDialogError> : null}
               {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
                 <button
@@ -5227,8 +5232,8 @@ function PaymentsPrototypePanel({
                       </thead>
                       <tbody>
                         {overdueDebtDetails.rows.map((row, index) => (
-                          <tr key={`${row.rowKind}-${row.incomeTypeId ?? 'opening'}-${row.accountingMonth ?? index}`}>
-                            <td>{row.incomeTypeName}</td>
+                          <tr key={row.accrualId ?? `${row.rowKind}-${index}`}>
+                            <td>{row.chargeName ?? row.incomeTypeName}</td>
                             <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
                             <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
                             <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
@@ -5529,9 +5534,13 @@ function PaymentsPrototypePanel({
               <FileText size={16} aria-hidden="true" />
               <span>Добавить начисление</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openExpenseDialog(event, { expensePaymentSource: 'bank' })}>
+            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openExpenseDialog(event, { expensePaymentSource: 'cash' })}>
               <WalletCards size={16} aria-hidden="true" />
               <span>Добавить выплату</span>
+            </button>
+            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments || !isEditableExpenseWorksheetPeriod || expenseWorksheetLoading} title="Оплата задолженности за один текущий или будущий месяц" onClick={(event) => { event.currentTarget.focus(); setExpenseBatchDialogOpen(true) }}>
+              <WalletCards size={16} aria-hidden="true" />
+              <span>Оплатить все</span>
             </button>
             <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffPaymentDialog(event)}>
               <UserRound size={16} aria-hidden="true" />
@@ -5803,6 +5812,9 @@ function PaymentsPrototypePanel({
           </div>
         </>
       )}
+      {expenseBatchDialogOpen !== null ? <Suspense fallback={<LoadingSkeleton label="Открываем общую выплату" rows={5} columns={4} />}>
+        <ExpenseBatchPaymentDialog key={auth.user.id} accessToken={auth.accessToken} open={expenseBatchDialogOpen} accountingMonth={`${expenseWorksheetMonthTo}-01`} canPay={canWritePayments} onClose={() => setExpenseBatchDialogOpen(false)} onPaid={() => refreshExpenseWorksheetAfterSave(`${expenseWorksheetMonthTo}-01`)} />
+      </Suspense> : null}
       {payoutContextMenu ? (
         <div
           className="context-menu"

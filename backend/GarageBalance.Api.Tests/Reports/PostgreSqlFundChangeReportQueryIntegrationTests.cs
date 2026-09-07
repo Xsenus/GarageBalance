@@ -12,6 +12,49 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class PostgreSqlFundChangeReportQueryIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task FundFilter_AppliesBeforeTotalsSearchAndPagination()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var month = new DateOnly(2043, 2, 1);
+        var first = new Fund { Name = "Первый", NormalizedName = Guid.NewGuid().ToString(), SortOrder = 901 };
+        var second = new Fund { Name = "Второй", NormalizedName = Guid.NewGuid().ToString(), SortOrder = 902 };
+        context.AddRange(first, second);
+        context.FundOperations.AddRange(
+            CreateOperation(first, null, month, 100m, 0m, 100m, FundOperationKinds.Deposit, "Общий комментарий"),
+            CreateOperation(first, null, month.AddDays(1), 30m, 100m, 70m, FundOperationKinds.Withdraw, "Общий комментарий"),
+            CreateOperation(second, null, month, 900m, 0m, 900m, FundOperationKinds.Deposit, "Общий комментарий"),
+            CreateOperation(first, null, month, 800m, 0m, 800m, FundOperationKinds.Deposit, "Отмена", true),
+            CreateOperation(first, null, month.AddMonths(-1), 700m, 0m, 700m, FundOperationKinds.Deposit, "Прошлый месяц"));
+        await context.SaveChangesAsync();
+        var query = new EfFundChangeReportQuery(context);
+
+        var page = await query.GetFundChangesAsync(month, month.AddMonths(1).AddDays(-1), "Общий", 1, 1,
+            new ReportSort("date", false), CancellationToken.None, [first.Id, first.Id]);
+        Assert.Equal(2, page.RowCount);
+        Assert.Equal(100m, page.DepositTotal);
+        Assert.Equal(30m, page.WithdrawalTotal);
+        Assert.Equal(first.Id, Assert.Single(page.Rows).FundId);
+        Assert.Equal(30m, page.Rows[0].Amount);
+
+        foreach (var ids in new Guid[][] { [], [first.Id, second.Id] })
+        {
+            var all = await query.GetFundChangesAsync(month, month.AddMonths(1).AddDays(-1), null, 0, 25,
+                new ReportSort("date", false), CancellationToken.None, ids);
+            Assert.Equal(3, all.RowCount);
+            Assert.Equal(1000m, all.DepositTotal);
+            Assert.Equal(30m, all.WithdrawalTotal);
+        }
+
+        var missing = await query.GetFundChangesAsync(month, month.AddMonths(1).AddDays(-1), null, 0, 25,
+            new ReportSort("date", false), CancellationToken.None, [Guid.NewGuid()]);
+        Assert.Empty(missing.Rows);
+        Assert.Equal(0, missing.RowCount);
+        Assert.Equal(0m, missing.DepositTotal);
+        Assert.Equal(0m, missing.WithdrawalTotal);
+    }
+
+    [PostgreSqlFact]
     public async Task FundChangePageUsesOneCommandAndPreservesTotalsSearchActorAndProjection()
     {
         var month = new DateOnly(2042, 9, 1);

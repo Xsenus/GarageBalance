@@ -18,7 +18,7 @@ public sealed class PostgreSqlSupplierPrimaryContactIntegrationTests
         var expenseType = new ExpenseType { Name = "Коммунальные расходы" };
         var expenseFund = new Fund { Name = "Основной", NormalizedName = "основной", Balance = 1234m };
         var serviceSettings = Enumerable.Range(1, 3)
-            .Select(index => new ChargeServiceSetting { Name = $"Услуга {4 - index}" })
+            .Select(index => new SupplierService { Name = $"Услуга {4 - index}" })
             .ToArray();
         var suppliers = Enumerable.Range(1, 3)
             .Select(index => new Supplier
@@ -32,7 +32,7 @@ public sealed class PostgreSqlSupplierPrimaryContactIntegrationTests
                 Email = $"fallback{index}@example.test",
                 StartingBalance = index * 100m,
                 Comment = $"Комментарий {index}",
-                ChargeServiceSetting = serviceSettings[index - 1],
+                SupplierService = serviceSettings[index - 1],
                 ExpenseType = expenseType,
                 ExpenseFund = expenseFund
             })
@@ -107,7 +107,7 @@ public sealed class PostgreSqlSupplierPrimaryContactIntegrationTests
             Assert.StartsWith("Б Основной", item.PrimaryContact.FullName, StringComparison.Ordinal);
             Assert.StartsWith("+7 900 000-00-0", item.PrimaryContact.Phone, StringComparison.Ordinal);
             Assert.StartsWith("primary", item.PrimaryContact.Email, StringComparison.Ordinal);
-            Assert.NotNull(item.Supplier.ChargeServiceSetting);
+            Assert.NotNull(item.Supplier.SupplierService);
             Assert.Equal("Коммунальные расходы", item.Supplier.ExpenseType?.Name);
             Assert.Equal("Основной", item.Supplier.ExpenseFund?.Name);
             Assert.Equal(1234m, item.Supplier.ExpenseFund?.Balance);

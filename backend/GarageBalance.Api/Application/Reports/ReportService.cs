@@ -583,7 +583,7 @@ public sealed class ReportService(
 
         var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
-        var data = await fundChangeReportQuery.GetFundChangesAsync(dateFrom, dateTo, request.Search, offset, limit, sort, cancellationToken);
+        var data = await fundChangeReportQuery.GetFundChangesAsync(dateFrom, dateTo, request.Search, offset, limit, sort, cancellationToken, request.FundIds);
         var rows = data.Rows
             .Select(row => new FundChangeReportRowDto(
                 row.Id,
@@ -613,6 +613,7 @@ public sealed class ReportService(
             new Dictionary<string, object?>
             {
                 ["reportType"] = "fund_changes",
+                ["fundIds"] = request.FundIds,
                 ["visibleRowCount"] = report.Rows.Count,
                 ["depositTotal"] = report.DepositTotal,
                 ["withdrawalTotal"] = report.WithdrawalTotal,

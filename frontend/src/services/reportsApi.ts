@@ -361,16 +361,16 @@ export type ReportClient = {
   ): Promise<ExpenseReportDto>
   getFundChangeReport(
     accessToken: string,
-    params?: DatedOperationReportQuery,
+    params?: DatedOperationReportQuery & { fundIds?: string[] },
     signal?: AbortSignal,
   ): Promise<FundChangeReportDto>
   exportFundChangeReportXlsx(
     accessToken: string,
-    params?: DatedOperationReportExportQuery,
+    params?: DatedOperationReportExportQuery & { fundIds?: string[] },
   ): Promise<Blob>
   exportFundChangeReportPdf(
     accessToken: string,
-    params?: DatedOperationReportExportQuery,
+    params?: DatedOperationReportExportQuery & { fundIds?: string[] },
   ): Promise<Blob>
   getCashPaymentReport(
     accessToken: string,
@@ -487,164 +487,45 @@ function appendReportSort(searchParams: URLSearchParams, params: { sortBy?: stri
   }
 }
 
+function buildReportQuery(
+  params: Record<string, string | number | boolean | string[] | undefined>,
+  keys: string[],
+) {
+  const query = new URLSearchParams()
+  for (const key of keys) {
+    const value = params[key]
+    if (Array.isArray(value)) {
+      for (const id of value) query.append(key, id)
+    } else if (value || value === false || (key === 'offset' && value === 0)) {
+      query.set(key, String(value))
+    }
+  }
+  appendReportSort(query, params)
+  return query.toString()
+}
+
 function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.dateFrom) {
-    searchParams.set('dateFrom', params.dateFrom)
-  }
-  if (params.dateTo) {
-    searchParams.set('dateTo', params.dateTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.rowMode) {
-    searchParams.set('rowMode', params.rowMode)
-  }
-  if (params.groupPayments !== undefined) {
-    searchParams.set('groupPayments', String(params.groupPayments))
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  for (const garageId of params.garageIds ?? []) {
-    searchParams.append('garageIds', garageId)
-  }
-  for (const ownerId of params.ownerIds ?? []) {
-    searchParams.append('ownerIds', ownerId)
-  }
-  for (const incomeTypeId of params.incomeTypeIds ?? []) {
-    searchParams.append('incomeTypeIds', incomeTypeId)
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
+  return buildReportQuery(params, ['dateFrom', 'dateTo', 'search', 'rowMode', 'groupPayments', 'limit', 'offset', 'garageIds', 'ownerIds', 'incomeTypeIds'])
 }
 
 function buildConsolidatedReportQuery(params: Parameters<ReportClient['getConsolidatedReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.monthFrom) {
-    searchParams.set('monthFrom', params.monthFrom)
-  }
-  if (params.monthTo) {
-    searchParams.set('monthTo', params.monthTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
+  return buildReportQuery(params, ['monthFrom', 'monthTo', 'search', 'limit', 'offset'])
 }
 
 function buildGarageReportQuery(params: Parameters<ReportClient['getGarageReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.monthFrom) {
-    searchParams.set('monthFrom', params.monthFrom)
-  }
-  if (params.monthTo) {
-    searchParams.set('monthTo', params.monthTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.groupAccruals !== undefined) {
-    searchParams.set('groupAccruals', String(params.groupAccruals))
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  for (const garageId of params.garageIds ?? []) {
-    searchParams.append('garageIds', garageId)
-  }
-  for (const ownerId of params.ownerIds ?? []) {
-    searchParams.append('ownerIds', ownerId)
-  }
-  for (const incomeTypeId of params.incomeTypeIds ?? []) {
-    searchParams.append('incomeTypeIds', incomeTypeId)
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
+  return buildReportQuery(params, ['monthFrom', 'monthTo', 'search', 'groupAccruals', 'offset', 'limit', 'garageIds', 'ownerIds', 'incomeTypeIds'])
 }
 
 function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.dateFrom) {
-    searchParams.set('dateFrom', params.dateFrom)
-  }
-  if (params.dateTo) {
-    searchParams.set('dateTo', params.dateTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.rowMode) {
-    searchParams.set('rowMode', params.rowMode)
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  for (const supplierId of params.supplierIds ?? []) {
-    searchParams.append('supplierIds', supplierId)
-  }
-  for (const staffMemberId of params.staffMemberIds ?? []) {
-    searchParams.append('staffMemberIds', staffMemberId)
-  }
-  for (const expenseTypeId of params.expenseTypeIds ?? []) {
-    searchParams.append('expenseTypeIds', expenseTypeId)
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
+  return buildReportQuery(params, ['dateFrom', 'dateTo', 'search', 'rowMode', 'limit', 'offset', 'supplierIds', 'staffMemberIds', 'expenseTypeIds'])
 }
 
-function buildDatedOperationReportQuery(params: DatedOperationReportQuery = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.dateFrom) {
-    searchParams.set('dateFrom', params.dateFrom)
-  }
-  if (params.dateTo) {
-    searchParams.set('dateTo', params.dateTo)
-  }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
+function buildDatedOperationReportQuery(params: DatedOperationReportQuery & { fundIds?: string[] } = {}) {
+  return buildReportQuery(params, ['dateFrom', 'dateTo', 'search', 'offset', 'limit', 'fundIds'])
 }
 
 function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1] = {}) {
-  const searchParams = new URLSearchParams()
-  if (params.variation) {
-    searchParams.set('variation', params.variation)
-  }
-  params.feeEntryIds?.forEach((feeEntryId) => searchParams.append('feeEntryIds', feeEntryId))
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  appendReportSort(searchParams, params)
-  return searchParams.toString()
+  return buildReportQuery(params, ['search', 'feeEntryIds', 'limit', 'offset'])
 }
 
 export const reportsApi: ReportClient = {

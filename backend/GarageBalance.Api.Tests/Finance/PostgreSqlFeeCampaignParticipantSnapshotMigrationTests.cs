@@ -75,7 +75,9 @@ public sealed class PostgreSqlFeeCampaignParticipantSnapshotMigrationTests
                 CreatedAtUtc = announcedAt,
                 UpdatedAtUtc = announcedAt
             });
+            await PostgreSqlLegacyModelCompatibility.AddGarageInitialMeterMonthAsync(setupContext);
             await setupContext.SaveChangesAsync();
+            await PostgreSqlLegacyModelCompatibility.RemoveGarageInitialMeterMonthAsync(setupContext);
             await setupContext.Database.MigrateAsync();
         }
 

@@ -658,6 +658,10 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync(
             "20260831014500_OptimizeMeterReadingYearGrid");
+        await using (var compatibilityContext = database.CreateContext())
+        {
+            await PostgreSqlLegacyModelCompatibility.AddGarageInitialMeterMonthAsync(compatibilityContext);
+        }
         var ledger = await SeedLedgerAsync(
             database,
             "PG-SELECTED-MONTH-MIGRATION",
@@ -668,6 +672,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         await using (var legacyContext = database.CreateContext())
         {
             await PostgreSqlLegacyModelCompatibility.AddFinancialOperationVersionAsync(legacyContext);
+            await PostgreSqlLegacyModelCompatibility.AddGarageInitialMeterMonthAsync(legacyContext);
             var payment = new FinancialOperation
             {
                 OperationKind = FinancialOperationKinds.Income,
@@ -695,6 +700,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         await using (var migrationContext = database.CreateContext())
         {
             await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationVersionAsync(migrationContext);
+            await PostgreSqlLegacyModelCompatibility.RemoveGarageInitialMeterMonthAsync(migrationContext);
             await migrationContext.Database.MigrateAsync();
         }
 

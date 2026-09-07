@@ -20,6 +20,7 @@ const cacheDependencies: Record<string, string[]> = {
   owners: ['owners', 'garages'],
   garages: ['garages'],
   'supplier-groups': ['supplier-groups', 'suppliers'],
+  'supplier-services': ['supplier-services', 'suppliers'],
   suppliers: ['suppliers', 'supplier-contacts'],
   'supplier-contacts': ['supplier-contacts'],
   'staff-departments': ['staff-departments', 'staff-members'],

@@ -635,8 +635,8 @@ public sealed class EfExpenseWorksheetQuery(
             .AsNoTracking()
             .Where(supplier =>
                 !supplier.IsArchived &&
-                supplier.ChargeServiceSetting != null &&
-                !supplier.ChargeServiceSetting.IsArchived &&
+                supplier.SupplierService != null &&
+                !supplier.SupplierService.IsArchived &&
                 supplier.ExpenseTypeId != null &&
                 supplier.ExpenseFundId != null &&
                 !supplier.ExpenseFund!.IsArchived)

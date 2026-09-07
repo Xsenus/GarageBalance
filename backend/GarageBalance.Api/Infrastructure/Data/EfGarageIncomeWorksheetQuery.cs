@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
@@ -268,6 +269,9 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 !setting.IsArchived &&
                 setting.IsRegular &&
                 setting.IsMetered &&
+                (setting.Tariff == null ||
+                 setting.Tariff.CalculationBase == TariffCalculationBases.MeterWater ||
+                 setting.Tariff.CalculationBase == TariffCalculationBases.MeterElectricity) &&
                 setting.IncomeType != null &&
                 !setting.IncomeType.IsArchived)
             .Select(setting => new

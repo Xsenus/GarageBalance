@@ -61,7 +61,8 @@ public sealed record FundChangeReportRequest(
     int? Offset = null,
     Guid? ActorUserId = null,
     string? SortBy = null,
-    string? SortDirection = null);
+    string? SortDirection = null,
+    IReadOnlyCollection<Guid>? FundIds = null);
 
 public sealed record CashPaymentReportRequest(
     DateOnly? DateFrom,

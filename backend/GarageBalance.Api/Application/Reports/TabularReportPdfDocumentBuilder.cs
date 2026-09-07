@@ -131,13 +131,21 @@ internal static class TabularReportPdfDocumentBuilder
             foreach (var row in section.Rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                for (var index = 0; index < section.Columns.Count; index++)
+                table.Cell().ColumnSpan((uint)section.Columns.Count).PreventPageBreak().Table(rowTable =>
                 {
-                    var cell = table.Cell().Element(BodyCell);
-                    cell = AlignCell(cell, section.Columns[index]);
-
-                    cell.Text(index < row.Count ? row[index] : string.Empty);
-                }
+                    rowTable.ColumnsDefinition(columns =>
+                    {
+                        foreach (var column in section.Columns)
+                        {
+                            columns.RelativeColumn(Math.Max(column.RelativeWidth, 0.2f));
+                        }
+                    });
+                    for (var index = 0; index < section.Columns.Count; index++)
+                    {
+                        var cell = AlignCell(rowTable.Cell().Element(BodyCell), section.Columns[index]);
+                        cell.Text(index < row.Count ? row[index] : string.Empty);
+                    }
+                });
             }
         }
 

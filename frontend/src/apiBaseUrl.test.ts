@@ -11,13 +11,16 @@ describe('frontend API base URL', () => {
 
     expect(serviceFiles.length).toBeGreaterThan(0)
     expect(readFileSync(join(servicesDir, 'authenticatedApiFetch.ts'), 'utf8')).toContain("import.meta.env.VITE_API_BASE_URL ?? ''")
+    const financeSource = readFileSync(join(servicesDir, 'financeApi.ts'), 'utf8')
+    expect(financeSource).toContain("from './authenticatedApiFetch'")
 
     for (const file of serviceFiles) {
       const content = readFileSync(join(servicesDir, file), 'utf8')
 
       expect(
         content.includes("import.meta.env.VITE_API_BASE_URL ?? ''") ||
-        content.includes("from './authenticatedApiFetch'"),
+        content.includes("from './authenticatedApiFetch'") ||
+        (content.includes("import { requestFinanceJson } from './financeApi'") && content.includes('return requestFinanceJson<')),
       ).toBe(true)
       expect(content).not.toContain('http://127.0.0.1:5080')
       expect(content).not.toContain('http://localhost:5080')

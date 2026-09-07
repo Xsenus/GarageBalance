@@ -144,7 +144,7 @@ public sealed class FundsControllerTests
     }
 
     [Theory]
-    [InlineData("fund_has_linked_services", 409)]
+    [InlineData("fund_negative_balance", 409)]
     [InlineData("fund_not_found", 404)]
     public async Task DeleteFund_MapsServiceErrors(string errorCode, int expectedStatusCode)
     {

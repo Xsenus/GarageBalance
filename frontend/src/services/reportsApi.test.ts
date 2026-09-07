@@ -4,6 +4,36 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { reportsApi } from './reportsApi'
 
 describe('reportsApi', () => {
+  it('preserves false grouping and zero offset while omitting empty filters', async () => {
+    const fetchMock = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockImplementation(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await reportsApi.getIncomeReport('token', { search: '', groupPayments: false, offset: 0, limit: 0, garageIds: [] })
+    await reportsApi.getGarageReport('token', { groupAccruals: false, offset: 0, ownerIds: ['one', 'two'] })
+    await reportsApi.getFundChangeReport('token', { fundIds: [], offset: 0 })
+    await reportsApi.getFeeReport('token', { feeEntryIds: [], offset: 0 })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/reports/income?groupPayments=false&offset=0',
+      '/api/reports/garages?groupAccruals=false&offset=0&ownerIds=one&ownerIds=two',
+      '/api/reports/fund-changes?offset=0',
+      '/api/reports/fees?offset=0',
+    ])
+  })
+
+  it('sends selected funds to the report and both exports', async () => {
+    const fetchMock = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>().mockImplementation(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const params = { fundIds: ['fund-first', 'fund-second'] }
+    await reportsApi.getFundChangeReport('token', params)
+    await reportsApi.exportFundChangeReportXlsx('token', params)
+    await reportsApi.exportFundChangeReportPdf('token', params)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/reports/fund-changes?fundIds=fund-first&fundIds=fund-second',
+      '/api/reports/fund-changes/export/xlsx?fundIds=fund-first&fundIds=fund-second',
+      '/api/reports/fund-changes/export/pdf?fundIds=fund-first&fundIds=fund-second',
+    ])
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })

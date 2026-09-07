@@ -234,7 +234,7 @@ export const Workspace = memo(function Workspace({
         )
       case 'reports':
         return canReadReports && canReadDictionaries ? (
-          <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} />
+          <ReportPanel auth={auth} dictionaryClient={dictionaryClient} reportClient={reportClient} fundsClient={fundsClient} />
         ) : (
           <AccessNotice
             label="Отчеты недоступны"

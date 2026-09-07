@@ -348,6 +348,11 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 AccrualId = accrual.Id,
                 accrual.IncomeTypeId,
                 IncomeTypeName = accrual.IncomeType.Name,
+                ChargeName = accrual.FeeCampaignId != null || accrual.Source == AccrualSources.FeeCampaign
+                    ? (accrual.Basis != null && accrual.Basis.Trim() != string.Empty
+                        ? accrual.Basis
+                        : accrual.FeeCampaign != null ? accrual.FeeCampaign.Name : accrual.IncomeType.Name)
+                    : accrual.IncomeType.Name,
                 accrual.AccountingMonth,
                 accrual.DueDate,
                 accrual.OverdueFromDate,
@@ -360,6 +365,12 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                     .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
             });
 
+        // PostgreSQL excludes fully paid rows before materialization. SQLite's decimal
+        // comparison fallback is kept only for the isolated test provider.
+        if (!IsSqliteProvider())
+        {
+            query = query.Where(row => row.Amount > row.PaidAmount);
+        }
         var rows = await query.ToListAsync(cancellationToken);
         return rows
             .Select(row => new OverdueAccrualDebtData(
@@ -371,7 +382,8 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 row.OverdueFromDate,
                 row.Amount,
                 row.PaidAmount,
-                Math.Max(row.Amount - row.PaidAmount, 0m)))
+                Math.Max(row.Amount - row.PaidAmount, 0m),
+                row.ChargeName))
             .Where(row => row.OutstandingAmount > 0m)
             .OrderBy(row => row.OverdueFromDate)
             .ThenBy(row => row.DueDate)

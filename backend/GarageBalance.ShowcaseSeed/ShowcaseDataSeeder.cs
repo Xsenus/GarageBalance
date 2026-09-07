@@ -997,13 +997,26 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var trashExpense = await context.ExpenseTypes.SingleAsync(item => item.Code == "trash_removal", cancellationToken);
         var waterExpense = await context.ExpenseTypes.SingleAsync(item => item.Code == "water_supply", cancellationToken);
         var fund = await context.Funds.OrderBy(item => item.SortOrder).FirstAsync(cancellationToken);
+        var serviceNames = new[] { services["electricity"].Name, services["trash"].Name, services["water"].Name };
+        var supplierServices = await context.SupplierServices
+            .Where(item => serviceNames.Contains(item.Name) && !item.IsArchived)
+            .ToDictionaryAsync(item => item.Name, cancellationToken);
+        foreach (var name in serviceNames.Distinct())
+        {
+            if (!supplierServices.ContainsKey(name))
+            {
+                var independent = new SupplierService { Name = name };
+                context.SupplierServices.Add(independent);
+                supplierServices.Add(name, independent);
+            }
+        }
         var group = new SupplierGroup { Id = DeterministicGuid("supplier-group"), Name = "Коммунальные поставщики" };
         var supplier = new Supplier
         {
             Id = DeterministicGuid("supplier"),
             Name = "ДЕМО Энергосбыт — задолженность",
             Group = group,
-            ChargeServiceSettingId = services["electricity"].Id,
+            SupplierService = supplierServices[services["electricity"].Name],
             ExpenseTypeId = expense.Id,
             ExpenseFundId = fund.Id,
             StartingBalance = 3000m,
@@ -1017,7 +1030,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             Id = DeterministicGuid("supplier-paid"),
             Name = "ДЕМО Вывоз — расчёт закрыт",
             Group = group,
-            ChargeServiceSettingId = services["trash"].Id,
+            SupplierService = supplierServices[services["trash"].Name],
             ExpenseTypeId = trashExpense.Id,
             StartingBalance = 0m,
             Comment = Marker,
@@ -1030,7 +1043,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             Id = DeterministicGuid("supplier-advance"),
             Name = "ДЕМО Водоканал — аванс",
             Group = group,
-            ChargeServiceSettingId = services["water"].Id,
+            SupplierService = supplierServices[services["water"].Name],
             ExpenseTypeId = waterExpense.Id,
             StartingBalance = -2000m,
             Comment = Marker,

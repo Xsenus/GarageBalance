@@ -1554,8 +1554,8 @@ public sealed class FinanceServiceTests
         {
             Name = "Teploset",
             GroupId = fixtures.Supplier.GroupId,
-            ChargeServiceSettingId = fixtures.Supplier.ChargeServiceSettingId,
-            ChargeServiceSetting = fixtures.Supplier.ChargeServiceSetting,
+            SupplierServiceId = fixtures.Supplier.SupplierServiceId,
+            SupplierService = fixtures.Supplier.SupplierService,
             ExpenseTypeId = fixtures.Supplier.ExpenseTypeId,
             ExpenseFundId = fixtures.Supplier.ExpenseFundId
         };
@@ -5562,8 +5562,8 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        fixtures.Supplier.ChargeServiceSettingId = null;
-        fixtures.Supplier.ChargeServiceSetting = null;
+        fixtures.Supplier.SupplierServiceId = null;
+        fixtures.Supplier.SupplierService = null;
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
 
@@ -5896,7 +5896,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
-        var secondService = new ChargeServiceSetting
+        var secondService = new SupplierService
         {
             Name = "Теплоснабжение"
         };
@@ -5904,7 +5904,7 @@ public sealed class FinanceServiceTests
         {
             Name = "Teploset",
             GroupId = fixtures.Supplier.GroupId,
-            ChargeServiceSetting = secondService,
+            SupplierService = secondService,
             ExpenseType = fixtures.ExpenseType,
             ExpenseFund = fixtures.ExpenseFund
         };
@@ -12173,11 +12173,11 @@ public sealed class FinanceServiceTests
         var unmatchedIncomeType = new IncomeType { Name = "Пожертвование" };
         var salaryExpenseType = new ExpenseType { Name = "Зарплата", Code = "salary" };
         var expenseOnlyType = new ExpenseType { Name = "Ремонт", Code = "repair" };
-        var repairService = new ChargeServiceSetting { Name = "Ремонт" };
-        var repairSupplier = new Supplier { Name = "Ремонтная организация", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = repairService, ExpenseType = expenseOnlyType, ExpenseFund = fixtures.ExpenseFund };
+        var repairService = new SupplierService { Name = "Ремонт" };
+        var repairSupplier = new Supplier { Name = "Ремонтная организация", GroupId = fixtures.Supplier.GroupId, SupplierService = repairService, ExpenseType = expenseOnlyType, ExpenseFund = fixtures.ExpenseFund };
         var accrualOnlyType = new ExpenseType { Name = "Охрана", Code = "security" };
-        var securityService = new ChargeServiceSetting { Name = "Охрана" };
-        var securitySupplier = new Supplier { Name = "Охранная организация", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = securityService, ExpenseType = accrualOnlyType, ExpenseFund = fixtures.ExpenseFund };
+        var securityService = new SupplierService { Name = "Охрана" };
+        var securitySupplier = new Supplier { Name = "Охранная организация", GroupId = fixtures.Supplier.GroupId, SupplierService = securityService, ExpenseType = accrualOnlyType, ExpenseFund = fixtures.ExpenseFund };
         var staffDepartment = new StaffDepartment { Name = "Бухгалтерия" };
         var staffMember = new StaffMember
         {
@@ -14025,17 +14025,16 @@ public sealed class FinanceServiceTests
                 Reason = "Тестовое наполнение фонда",
                 CreatedAtUtc = new DateTimeOffset(1999, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var chargeService = new ChargeServiceSetting
+            var chargeService = new SupplierService
             {
                 Name = "Вода",
-                IsRegular = false
             };
             var supplier = new Supplier
             {
                 Name = "Vodokanal",
                 Group = group,
-                ChargeServiceSettingId = chargeService.Id,
-                ChargeServiceSetting = chargeService,
+                SupplierServiceId = chargeService.Id,
+                SupplierService = chargeService,
                 ExpenseTypeId = expenseType.Id,
                 ExpenseType = expenseType,
                 ExpenseFundId = expenseFund.Id,

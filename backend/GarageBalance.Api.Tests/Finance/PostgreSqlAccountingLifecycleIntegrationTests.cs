@@ -100,7 +100,7 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
         {
             Name = $"{marker}-Энергосбыт",
             Group = supplierGroup,
-            ChargeServiceSetting = serviceSetting,
+            SupplierService = new SupplierService { Name = serviceSetting.Name },
             ExpenseType = expenseType,
             ExpenseFund = electricityFund
         };

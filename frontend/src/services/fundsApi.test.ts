@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearFundsResponseCache, fundsApi } from './fundsApi'
+import { clearDictionaryResponseCache, getDictionaryCacheContext, storeDictionaryResponse } from './dictionaryResponseCache'
 
 const emptyFundsResponse = () => new Response(JSON.stringify([]), {
   status: 200,
@@ -10,10 +11,35 @@ const emptyFundsResponse = () => new Response(JSON.stringify([]), {
 describe('fundsApi response cache', () => {
   beforeEach(() => {
     clearFundsResponseCache()
+    clearDictionaryResponseCache()
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it.each([true, false])('invalidates linked dictionaries only after successful fund deletion: %s', async (succeeds) => {
+    for (const tag of ['suppliers', 'income-types']) {
+      for (const token of ['token', 'other-token']) {
+        const context = getDictionaryCacheContext(token, `/api/dictionaries/${tag}`, true)
+        storeDictionaryResponse(token, tag, context.cacheKey, Promise.resolve([{ id: 'cached' }]))
+      }
+    }
+    const fetchMock = vi.fn(async () => succeeds
+      ? new Response(null, { status: 204 })
+      : new Response(JSON.stringify({ detail: 'Фонд изменён' }), { status: 409 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = { reason: 'Закрытие', version: 'fund-version' }
+    if (succeeds) await fundsApi.deleteFund('token', 'fund-1', request)
+    else await expect(fundsApi.deleteFund('token', 'fund-1', request)).rejects.toThrow('Фонд изменён')
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/funds/fund-1'), expect.objectContaining({
+      method: 'DELETE', body: JSON.stringify(request),
+    }))
+    for (const tag of ['suppliers', 'income-types']) {
+      const cached = getDictionaryCacheContext('token', `/api/dictionaries/${tag}`, true).cachedResponse
+      expect(cached === null).toBe(succeeds)
+      expect(getDictionaryCacheContext('other-token', `/api/dictionaries/${tag}`, true).cachedResponse).not.toBeNull()
+    }
   })
 
   it('deduplicates concurrent and repeated fund reads in one authenticated session', async () => {

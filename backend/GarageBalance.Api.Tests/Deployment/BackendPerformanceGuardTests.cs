@@ -363,7 +363,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".ThenBy(garage => garage.Number)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
-        Assert.Contains("new MeterReadingYearGarageData(garage.Id, garage.Number)", source, StringComparison.Ordinal);
+        Assert.Contains("new MeterReadingYearGarageData(garage.Id, garage.Number, garage.InitialMeterReadingMonth,", source, StringComparison.Ordinal);
         Assert.Contains("new MeterReadingYearValueData(", source, StringComparison.Ordinal);
         Assert.Contains("garageIds.Contains(reading.GarageId)", source, StringComparison.Ordinal);
         Assert.Contains("GetPostgresYearPageAsync(year, meterKind, offset, limit, cancellationToken)", source, StringComparison.Ordinal);

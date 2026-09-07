@@ -25,7 +25,7 @@ public sealed class EfApplicationUnitOfWork(GarageBalanceDbContext dbContext) : 
             throw new ApplicationPersistenceConflictException(exception);
         }
         catch (DbUpdateException exception) when (
-            exception.Entries.Any(entry => entry.Entity is AppReleaseRecord) &&
+            exception.Entries.Any(entry => entry.Entity is AppReleaseRecord or ExpensePaymentBatch or ExpensePaymentBatchOperation) &&
             exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             throw new ApplicationPersistenceConflictException(exception);

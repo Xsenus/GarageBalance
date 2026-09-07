@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react'
+import type { FundsClient } from '../../services/fundsApi'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
@@ -54,6 +55,7 @@ type ReportColumn = {
 type GarageQuickListEditor = {
   id: string | null
   name: string
+  garageIds: string[]
 }
 
 function ReportCheckboxMultiSelect({
@@ -91,6 +93,7 @@ function ReportCheckboxMultiSelect({
   const [remoteLoading, setRemoteLoading] = useState(false)
   const [remoteError, setRemoteError] = useState<string | null>(null)
   const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU')
+  const openSearch = () => setSearchOpen(openOnFocus || !!normalizedSearch)
   const availableOptions = Array.from(new Map([...options, ...remoteOptions].map((option) => [option.value, option])).values())
   const filteredOptions = normalizedSearch
     ? filterAndRankReportOptions(availableOptions, normalizedSearch).slice(0, 20)
@@ -151,14 +154,16 @@ function ReportCheckboxMultiSelect({
             aria-describedby={statusId}
             placeholder={placeholder}
             value={search}
-            onFocus={() => setSearchOpen(openOnFocus || search.trim().length > 0)}
+            onFocus={openSearch}
+            onClick={openSearch}
             onChange={(event) => {
               setSearch(event.target.value)
-              setSearchOpen(openOnFocus || event.target.value.trim().length > 0)
+              setSearchOpen(openOnFocus || !!event.target.value.trim())
             }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault()
+                if (searchOpen) event.stopPropagation()
                 setSearchOpen(false)
               } else if (event.key === 'Enter') {
                 event.preventDefault()
@@ -238,9 +243,8 @@ function getReportMonthStart(monthValue: string) {
 }
 
 function getReportMonthEnd(monthValue: string) {
-  const [yearText, monthText] = monthValue.split('-')
-  const endDate = new Date(Number(yearText), Number(monthText), 0)
-  return `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+  const [year, month] = monthValue.split('-').map(Number)
+  return getLocalDateInputValue(new Date(year, month, 0))
 }
 
 function getReportView<T extends object>(report: T | null, loading: boolean, error: string | null, reportQueries: WeakMap<object, string>, currentQuery: string) {
@@ -256,7 +260,7 @@ function renderReportLoadingState(primaryLoading: boolean, refreshing: boolean) 
   return primaryLoading ? <TableLoadingState label="Загружаем отчёт" /> : null
 }
 
-export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
+export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient; fundsClient: FundsClient }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
@@ -273,7 +277,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     bankDeposits: { dateFrom: today, dateTo: today },
     funds: { dateFrom: today, dateTo: today },
   })
+  const [selectedFundIds, setSelectedFundIds] = useState<string[]>([])
+  const [fundFilterOptions, setFundFilterOptions] = useState<ReportFilterOption[]>([])
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
+  const [garageFiltersOpen, setGarageFiltersOpen] = useState(false)
   const garageFilterPanelStorageKey = `garagebalance.reports.garageFilterPanelSize.${auth.user.id}`
   const [garageFilterPanelSize] = useState<ReportGarageFilterPanelSize>(() => {
     try {
@@ -336,6 +343,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const garageQuickListDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(garageQuickListDeleteTarget !== null)
   useEscapeKey(garageQuickListEditor !== null && !garageQuickListSaving, () => setGarageQuickListEditor(null))
   useEscapeKey(garageQuickListDeleteTarget !== null && !garageQuickListSaving, () => setGarageQuickListDeleteTarget(null))
+  const garageFiltersRef = useCloseOnOutsidePointer<HTMLDetailsElement>(garageFiltersOpen && !garageQuickListEditor && !garageQuickListDeleteTarget, setGarageFiltersOpen)
+  useEscapeKey(garageFiltersOpen && !garageQuickListEditor && !garageQuickListDeleteTarget, () => {
+    setGarageFiltersOpen(false)
+    garageFiltersRef.current?.querySelector('summary')?.focus()
+  })
 
   const activeReportIndex = reportWorkbookTabs.findIndex((tab) => tab.key === activeReportTab)
   const reportQueryCriteria = [
@@ -346,9 +358,16 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     [dateFilters.cashPayments, reportSorts.cashPayments],
     [dateFilters.bankDeposits, reportSorts.bankDeposits],
     [selectedFeeEntryIds, reportSorts.fees],
-    [dateFilters.funds, reportSorts.funds],
+    [dateFilters.funds, selectedFundIds, reportSorts.funds],
   ][activeReportIndex]
   const currentReportQuery = JSON.stringify([auth.accessToken, reportQueryCriteria])
+
+  const loadFundFilterOptions = useCallback(async (_search: string, signal: AbortSignal) => {
+    const funds = await fundsClient.getFunds(auth.accessToken, signal)
+    const options = funds.map((fund) => ({ value: fund.id, label: fund.name }))
+    if (!signal.aborted) setFundFilterOptions(options)
+    return options
+  }, [auth.accessToken, fundsClient])
 
   const loadGarageFilterOptions = useCallback(async (search: string, signal: AbortSignal) => {
     const resultLimit = search ? reportDictionarySearchLimit : reportGarageBrowseLimit
@@ -755,8 +774,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const filter = dateFilters.funds
         const sort = reportSorts.funds
         const report = await reportClient.getFundChangeReport(auth.accessToken, {
-          dateFrom: filter.dateFrom,
-          dateTo: filter.dateTo,
+          ...filter,
+          fundIds: selectedFundIds,
           offset: 0,
           limit: reportFullViewLimit,
           sortBy: sort?.field,
@@ -783,7 +802,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, currentReportQuery, dateFilters.funds, reportClient, reportQueries, reportReloadRevision, reportSorts.funds])
+  }, [activeReportTab, auth.accessToken, currentReportQuery, dateFilters.funds, reportClient, reportQueries, reportReloadRevision, reportSorts.funds, selectedFundIds])
 
   const selectedTab = reportWorkbookTabs[activeReportIndex]
   const feeVariationLabel = selectedFeeEntryIds.length === 0 ? 'Все сборы' : `Выбрано сборов: ${selectedFeeEntryIds.length}`
@@ -910,7 +929,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   function openGarageQuickListCreate() {
     setGarageQuickListError(null)
     setGarageQuickListMessage(null)
-    setGarageQuickListEditor({ id: null, name: '' })
+    setGarageQuickListEditor({ id: null, name: '', garageIds: [...selectedGarageIds] })
   }
 
   function openGarageQuickListEdit() {
@@ -921,7 +940,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     setGarageQuickListError(null)
     setGarageQuickListMessage(null)
-    setGarageQuickListEditor({ id: quickList.id, name: quickList.name })
+    setGarageQuickListEditor({ id: quickList.id, name: quickList.name, garageIds: [...selectedGarageIds] })
   }
 
   async function saveGarageQuickList() {
@@ -934,7 +953,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       setGarageQuickListError('Укажите название быстрого списка.')
       return
     }
-    if (selectedGarageIds.length === 0) {
+    if (garageQuickListEditor.garageIds.length === 0) {
       setGarageQuickListError('Выберите хотя бы один гараж.')
       return
     }
@@ -943,13 +962,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     setGarageQuickListError(null)
     setGarageQuickListMessage(null)
     try {
-      const request = { name, garageIds: selectedGarageIds }
+      const request = { name, garageIds: garageQuickListEditor.garageIds }
       const saved = garageQuickListEditor.id
         ? await reportClient.updateGarageReportQuickList(auth.accessToken, garageQuickListEditor.id, request)
         : await reportClient.createGarageReportQuickList(auth.accessToken, request)
       setGarageQuickLists((current) => [...current.filter((item) => item.id !== saved.id), saved]
         .sort((left, right) => left.name.localeCompare(right.name, 'ru-RU')))
       setSelectedGarageQuickListId(saved.id)
+      setSelectedGarageIds(saved.garages.filter((garage) => !garage.isArchived).map((garage) => garage.garageId))
       setGarageQuickListEditor(null)
       setGarageQuickListMessage(garageQuickListEditor.id ? 'Быстрый список обновлён.' : 'Быстрый список создан.')
     } catch (error) {
@@ -1045,23 +1065,27 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }
   }
 
-  async function downloadCashOrBankReport(type: 'cashPayments' | 'bankDeposits', extension: 'xlsx' | 'pdf') {
+  async function downloadDatedReport(type: 'cashPayments' | 'bankDeposits' | 'funds', extension: 'xlsx' | 'pdf') {
     const filter = dateFilters[type]
     const sort = reportSorts[type]
-    const params = { ...filter, sortBy: sort?.field, sortDirection: sort?.direction }
+    const params = { ...filter, fundIds: type === 'funds' ? selectedFundIds : undefined, sortBy: sort?.field, sortDirection: sort?.direction }
     const exportKey = `${type}-${extension}`
     setReportExporting(exportKey)
     setReportExportMessage(null)
     setReportDataError(null)
     try {
-      const blob = type === 'cashPayments'
+      const blob = type === 'funds'
         ? extension === 'xlsx'
-          ? await reportClient.exportCashPaymentReportXlsx(auth.accessToken, params)
-          : await reportClient.exportCashPaymentReportPdf(auth.accessToken, params)
-        : extension === 'xlsx'
-          ? await reportClient.exportBankDepositReportXlsx(auth.accessToken, params)
-          : await reportClient.exportBankDepositReportPdf(auth.accessToken, params)
-      const reportType = type === 'cashPayments' ? 'cash-payments' : 'bank-deposits'
+          ? await reportClient.exportFundChangeReportXlsx(auth.accessToken, params)
+          : await reportClient.exportFundChangeReportPdf(auth.accessToken, params)
+        : type === 'cashPayments'
+          ? extension === 'xlsx'
+            ? await reportClient.exportCashPaymentReportXlsx(auth.accessToken, params)
+            : await reportClient.exportCashPaymentReportPdf(auth.accessToken, params)
+          : extension === 'xlsx'
+            ? await reportClient.exportBankDepositReportXlsx(auth.accessToken, params)
+            : await reportClient.exportBankDepositReportPdf(auth.accessToken, params)
+      const reportType = type === 'funds' ? 'fund-changes' : type === 'cashPayments' ? 'cash-payments' : 'bank-deposits'
       downloadBlob(blob, buildReportFileName(reportType, filter.dateFrom, filter.dateTo, extension))
       setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
@@ -1082,26 +1106,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         ? await reportClient.exportFeeReportXlsx(auth.accessToken, params)
         : await reportClient.exportFeeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildSnapshotReportFileName('fees', extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
-    } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
-    } finally {
-      setReportExporting(null)
-    }
-  }
-
-  async function downloadFundChangeReport(extension: 'xlsx' | 'pdf') {
-    const filter = dateFilters.funds
-    const params = { ...filter, sortBy: reportSorts.funds?.field, sortDirection: reportSorts.funds?.direction }
-    const exportKey = `funds-${extension}`
-    setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
-    try {
-      const blob = extension === 'xlsx'
-        ? await reportClient.exportFundChangeReportXlsx(auth.accessToken, params)
-        : await reportClient.exportFundChangeReportPdf(auth.accessToken, params)
-      downloadBlob(blob, buildReportFileName('fund-changes', filter.dateFrom, filter.dateTo, extension))
       setReportExportMessage(getReportExportSuccessMessage(extension))
     } catch (caught) {
       setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
@@ -1358,11 +1362,22 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </>
             ),
             extra: (
-              <details className="report-garage-filter-disclosure">
+              <details className="report-garage-filter-disclosure" ref={garageFiltersRef} open={garageFiltersOpen}>
                 <summary
                   className="ghost-button report-garage-filter-toggle"
                   role="button"
                   aria-controls="garage-report-personal-filters"
+                  aria-expanded={garageFiltersOpen}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    setGarageFiltersOpen((current) => !current)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setGarageFiltersOpen((current) => !current)
+                    }
+                  }}
                 >
                   Гаражи и личные фильтры
                 </summary>
@@ -1411,8 +1426,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                         <button
                           className="secondary-button create-action-button"
                           type="button"
-                          disabled={selectedGarageIds.length === 0 || garageQuickListsLoading}
-                          title={selectedGarageIds.length === 0 ? 'Сначала выберите гаражи' : undefined}
+                          disabled={garageQuickListsLoading}
                           onClick={openGarageQuickListCreate}
                         >
                           <FileSpreadsheet size={16} aria-hidden="true" />
@@ -1622,7 +1636,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
-          {renderDateFilter('cashPayments', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}{renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}</> })}
+          {renderDateFilter('cashPayments', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadDatedReport('cashPayments', 'xlsx'))}{renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadDatedReport('cashPayments', 'pdf'))}</> })}
           {renderReportLoadingState(primaryLoading, refreshing)}
           {cashPaymentReportError ? <AsyncErrorState message={cashPaymentReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={cashPaymentReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single">
@@ -1649,7 +1663,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ]) ?? []
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
-          {renderDateFilter('bankDeposits', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}{renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}</> })}
+          {renderDateFilter('bankDeposits', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadDatedReport('bankDeposits', 'xlsx'))}{renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadDatedReport('bankDeposits', 'pdf'))}</> })}
           {renderReportLoadingState(primaryLoading, refreshing)}
           {bankDepositReportError ? <AsyncErrorState message={bankDepositReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={bankDepositReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single">
@@ -1794,7 +1808,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     ]) ?? []
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
-        {renderDateFilter('funds', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}{renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}</> })}
+        {renderDateFilter('funds', { from: 'С', to: 'По', extra: <ReportCheckboxMultiSelect label="Фонды" ariaLabel="Фонды отчета" allLabel="Все фонды" placeholder="Выберите фонды" resultsAriaLabel="Доступные фонды" selectedAriaLabel="Выбранные фонды" options={fundFilterOptions} loadOptions={loadFundFilterOptions} selectedValues={selectedFundIds} onChange={setSelectedFundIds} openOnFocus />, actions: <>{renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadDatedReport('funds', 'xlsx'))}{renderReportExportButton('pdf', 'funds-pdf', () => void downloadDatedReport('funds', 'pdf'))}</> })}
         {renderReportLoadingState(primaryLoading, refreshing)}
         {fundChangeReportError ? <AsyncErrorState message={fundChangeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={fundChangeReportLoading} /> : null}
         {report ? (
@@ -1868,7 +1882,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <p id="garage-quick-list-editor-description">В список войдут выбранные сейчас гаражи: {selectedGarageIds.length}. Список будет доступен всем пользователям отчётов.</p>
+            <p id="garage-quick-list-editor-description">Выбрано гаражей: {garageQuickListEditor.garageIds.length}. Список будет доступен всем пользователям отчётов.</p>
             <form onSubmit={(event) => {
               event.preventDefault()
               void saveGarageQuickList()
@@ -1888,6 +1902,24 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   }}
                 />
               </label>
+              <fieldset disabled={garageQuickListSaving} className="report-quick-list-garages">
+                <ReportCheckboxMultiSelect
+                  label="Гаражи списка"
+                  ariaLabel="Гаражи списка"
+                  allLabel="Гаражи не выбраны"
+                  placeholder="Номер гаража или ФИО владельца"
+                  resultsAriaLabel="Найденные гаражи списка"
+                  selectedAriaLabel="Выбранные гаражи списка"
+                  options={garageFilterOptions}
+                  loadOptions={loadGarageFilterOptions}
+                  selectedValues={garageQuickListEditor.garageIds}
+                  openOnFocus
+                  onChange={(garageIds) => {
+                    setGarageQuickListEditor({ ...garageQuickListEditor, garageIds })
+                    setGarageQuickListError(null)
+                  }}
+                />
+              </fieldset>
               {garageQuickListError ? <FormError>{garageQuickListError}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => setGarageQuickListEditor(null)}>Отмена</button>

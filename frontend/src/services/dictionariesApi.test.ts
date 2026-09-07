@@ -11,6 +11,61 @@ describe('dictionariesApi response cache', () => {
     vi.unstubAllGlobals()
   })
 
+  it('uses the independent supplier service contract and invalidates supplier names without invalidating tariffs', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'service', name: 'Уборка', version: 'v1', isArchived: false }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const readReferences = () => Promise.all([
+      dictionariesApi.getSupplierServicesPage('token', ' Уборка ', 25, 50, true),
+      dictionariesApi.getSuppliers('token'),
+      dictionariesApi.getTariffs('token'),
+    ])
+    await readReferences()
+    const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost')
+    expect(url.pathname).toBe('/api/dictionaries/supplier-services')
+    expect(url.searchParams.get('search')).toBe(' Уборка ')
+    expect(url.searchParams.get('offset')).toBe('25')
+    expect(url.searchParams.get('limit')).toBe('50')
+    expect(url.searchParams.get('includeArchived')).toBe('true')
+    await dictionariesApi.createSupplierService('token', { name: 'Уборка' })
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ name: 'Уборка' }) })
+    await readReferences()
+    expect(fetchMock).toHaveBeenCalledTimes(6)
+    await dictionariesApi.updateSupplierService('token', 'service', { name: 'Вывоз', version: 'v1' })
+    expect(fetchMock.mock.calls[6][0]).toContain('/api/dictionaries/supplier-services/service')
+    expect(fetchMock.mock.calls[6][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ name: 'Вывоз', version: 'v1' }) })
+    await readReferences()
+    expect(fetchMock).toHaveBeenCalledTimes(9)
+  })
+
+  it('keeps supplier service errors available and does not cache a failed read', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'supplier_service_duplicate', title: 'Услуга уже существует' }), { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'supplier_service_not_found', title: 'Услуга не найдена' }), { status: 404 }))
+      .mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], totalCount: 0, offset: 0, limit: 25 }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(dictionariesApi.createSupplierService('token', { name: 'Уборка' })).rejects.toMatchObject({ code: 'supplier_service_duplicate' })
+    await expect(dictionariesApi.updateSupplierService('token', 'missing', { name: 'Уборка', version: 'old' })).rejects.toMatchObject({ code: 'supplier_service_not_found' })
+    await expect(dictionariesApi.getSupplierServicesPage('token')).rejects.toThrow('Network unavailable')
+    await expect(dictionariesApi.getSupplierServicesPage('token')).resolves.toEqual({ items: [], totalCount: 0, offset: 0, limit: 25 })
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('cancels an independent supplier service search through its abort signal', async () => {
+    let requestSignal: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation((_url, init: RequestInit) => new Promise((_resolve, reject) => {
+      requestSignal = init.signal ?? undefined
+      requestSignal?.addEventListener('abort', () => reject(new DOMException('Canceled', 'AbortError')), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    const pending = dictionariesApi.getSupplierServicesPage('token', 'Уборка', 0, 25, false, controller.signal)
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await rejected
+    expect(requestSignal?.aborted).toBe(true)
+  })
+
   it('deduplicates concurrent and repeated dictionary reads', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), {
       status: 200,

@@ -4,6 +4,12 @@ import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto } from 
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createGarageFormFromDto, createOwnerFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseLabel, getTariffCalculationBaseOptions, getTariffCalculationUnitName, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
+  it('explains the business date and protection of paid people-based charges', () => {
+    expect(getDictionaryEditorFieldMeta('garagePeopleCount').hint).toContain('с рабочей даты сохранения')
+    expect(getDictionaryEditorFieldMeta('garagePeopleCount').hint).toContain('по календарным дням')
+    expect(getDictionaryEditorFieldMeta('garagePeopleCount').hint).toContain('оплаченные суммы сохраняются')
+  })
+
   it('keeps dictionary groups in the expected order', () => {
     expect(dictionarySectionGroups).toEqual([
       { key: 'counterparties', label: 'Контрагенты' },
