@@ -57,10 +57,12 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
         AuditEvent auditEvent,
         IReadOnlyDictionary<Guid, AuditActorInfo> actors)
     {
-        var maskedSummary = AuditTextMasker.Mask(auditEvent.Summary) ?? string.Empty;
+        var metadata = RestoreStoredTechnicalIds(ParseMetadata(auditEvent.MetadataJson), auditEvent);
+        var (restoredSummary, restoredMetadata) = RestoreLegacyCancelReason(auditEvent.Action, auditEvent.Summary, metadata);
+        metadata = restoredMetadata;
+        var maskedSummary = AuditTextMasker.Mask(restoredSummary) ?? string.Empty;
         var beforeAfter = ExtractBeforeAfter(maskedSummary);
         var legacyBeforeAfter = ExtractLegacyBeforeAfter(maskedSummary);
-        var metadata = RestoreStoredTechnicalIds(ParseMetadata(auditEvent.MetadataJson), auditEvent);
         var actionKind = MaskStoredValue(auditEvent.ActionKind) ?? GetActionKind(auditEvent.Action);
         var actor = auditEvent.ActorUserId is { } actorUserId && actors.TryGetValue(actorUserId, out var actorInfo)
             ? actorInfo
@@ -323,8 +325,32 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
 
     private static string? ExtractReason(string summary)
     {
-        var match = Regex.Match(summary, @"(?:Причина|Комментарий):\s*(?<reason>.+?)(?:\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var match = Regex.Match(summary, @"(?:Причина|Комментарий):\s*(?<reason>.+)\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
         return match.Success ? NormalizeExtractedValue(match.Groups["reason"].Value) : null;
+    }
+
+    private static (string Summary, IReadOnlyDictionary<string, string>? Metadata) RestoreLegacyCancelReason(
+        string action, string summary, IReadOnlyDictionary<string, string>? metadata)
+    {
+        const string genericReason = "Отмена финансовой записи.";
+        if (action is not ("finance.operation_canceled" or "finance.accrual_canceled" or "finance.supplier_accrual_canceled" or "finance.meter_reading_canceled") ||
+            ExtractMetadataValue(metadata, "reason") != genericReason)
+        {
+            return (summary, metadata);
+        }
+        var marker = summary.LastIndexOf(". Причина: " + genericReason, StringComparison.Ordinal);
+        if (marker < 0 || summary[(marker + (". Причина: " + genericReason).Length)..].Trim('.').Trim().Length != 0)
+        {
+            return (summary, metadata);
+        }
+        var originalSummary = summary[..(marker + 1)];
+        var reason = ExtractReason(originalSummary);
+        if (reason is null)
+        {
+            return (summary, metadata);
+        }
+        var restored = new Dictionary<string, string>(metadata!, StringComparer.Ordinal) { ["reason"] = AuditTextMasker.Mask(reason) ?? string.Empty };
+        return (originalSummary, restored);
     }
 
     private static string? NormalizeExtractedValue(string value)

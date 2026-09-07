@@ -50,6 +50,25 @@ import type { AppReleaseDto, AppReleasePageDto, ReleaseClient } from './services
 import type { ManagedRoleDto, ManagedUserDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
+  it.each(['create', 'cancel'] as const)('shows full audit reason with abbreviations and decimal values for %s', async (actionKind) => {
+    const user = userEvent.setup()
+    const reason = 'Возврат за сен.26. Проверена сумма 100.60'
+    const event = createAuditEvent({ id: 'full-audit-reason', action: `finance.operation_${actionKind === 'cancel' ? 'canceled' : 'created'}`, actionKind, reason, metadata: { reason }, summary: `Запись. Причина: ${reason}.` })
+    const auditClient = createAuditClient({ getEvents: async () => [event], getEvent: async () => event })
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = await screen.findByRole('region', { name: 'История изменений' })
+    expect(await within(panel).findByText(reason)).toBeInTheDocument()
+    const label = actionKind === 'cancel' ? 'Отмена' : 'Создание'
+    await user.click(within(panel).getByRole('button', { name: `Открыть карточку события ${label}` }))
+    const dialog = await screen.findByRole('dialog', { name: label })
+    expect(within(dialog).getAllByText(reason).length).toBeGreaterThan(0)
+    expect(within(dialog).queryByText('Отмена финансовой записи.')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Возврат за сен')).not.toBeInTheDocument()
+  })
+
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))

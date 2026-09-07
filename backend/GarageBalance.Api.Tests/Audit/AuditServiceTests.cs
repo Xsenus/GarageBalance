@@ -14,6 +14,97 @@ namespace GarageBalance.Api.Tests.Audit;
 
 public sealed class AuditServiceTests
 {
+    [Fact]
+    public async Task LegacyCancelReasonRecoveryRetainsMasking()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var audit = new AuditEvent
+        {
+            Action = "finance.operation_canceled",
+            EntityType = "financial_operation",
+            Summary = "Отменена запись. Причина: Возврат за сен.26: owner@example.test, password=Secret123. Причина: Отмена финансовой записи..",
+            MetadataJson = "{\"reason\":\"Отмена финансовой записи.\"}"
+        };
+        database.Context.AuditEvents.Add(audit);
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var result = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("owner@example.test", json);
+        Assert.DoesNotContain("Secret123", json);
+        Assert.Contains("Возврат за сен.26", result.Reason);
+        Assert.Contains("[email скрыт]", result.Reason);
+        Assert.Contains("[секрет скрыт]", result.Reason);
+        Assert.Equal(audit.Summary, (await database.Context.AuditEvents.AsNoTracking().SingleAsync()).Summary);
+    }
+
+    [Theory]
+    [InlineData("finance.operation_canceled", null, "Отменена запись.", null)]
+    [InlineData("finance.operation_canceled", "Другая причина", "Отменена запись. Причина: Исходная. Причина: Отмена финансовой записи..", "Другая причина")]
+    [InlineData("other.operation_canceled", "Отмена финансовой записи.", "Отменена запись. Причина: Исходная. Причина: Отмена финансовой записи..", "Отмена финансовой записи.")]
+    [InlineData("finance.operation_canceled", "Отмена финансовой записи.", "Отменена запись. Причина: Отмена финансовой записи..", "Отмена финансовой записи.")]
+    [InlineData("finance.operation_canceled", "Отмена финансовой записи.", "Отменена запись без маркера", "Отмена финансовой записи.")]
+    [InlineData("finance.operation_canceled", "Отмена финансовой записи.", "Отменена запись. Причина: Исходная. Причина: Отмена финансовой записи. Дополнение", "Отмена финансовой записи.")]
+    [InlineData("finance.operation_canceled", null, "Отменена запись. Причина:   ", null)]
+    public async Task LegacyReasonRecoveryDoesNotGuessForUnrecognizedRecords(string action, string? storedReason, string summary, string? expected)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var metadata = storedReason is null ? null : System.Text.Json.JsonSerializer.Serialize(new { reason = storedReason });
+        database.Context.AuditEvents.Add(new AuditEvent { Action = action, EntityType = "financial_operation", Summary = summary, MetadataJson = metadata });
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var result = Assert.Single(await service.GetEventsAsync(new AuditEventListRequest(null, null, null, null), CancellationToken.None));
+        Assert.Equal(expected, result.Reason);
+        Assert.Equal(summary, result.Summary);
+    }
+
+    [Theory]
+    [InlineData("Полная оплата Мусор сен.26: Контроль полного погашения")]
+    [InlineData("Тариф 100.60, действует с 01.01.2026")]
+    [InlineData("Первое предложение. Второе предложение\nТретья строка")]
+    [InlineData("Комментарий: вложенная подпись. Полный текст")]
+    public async Task LegacyReasonPreservesFullTextAndStoredHistory(string comment)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var summary = "Создана запись. Комментарий: " + comment + ".";
+        var audit = new AuditEvent { Action = "finance.income_created", EntityType = "financial_operation", Summary = summary };
+        database.Context.AuditEvents.Add(audit);
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var request = new AuditEventListRequest(null, null, null, null);
+        Assert.Equal(comment, Assert.Single(await service.GetEventsAsync(request, CancellationToken.None)).Reason);
+        Assert.Contains(comment, Encoding.UTF8.GetString((await service.ExportEventsCsvAsync(request, CancellationToken.None)).Content));
+        Assert.Equal(summary, (await database.Context.AuditEvents.AsNoTracking().SingleAsync()).Summary);
+    }
+
+    [Theory]
+    [InlineData("finance.operation_canceled")]
+    [InlineData("finance.accrual_canceled")]
+    [InlineData("finance.supplier_accrual_canceled")]
+    [InlineData("finance.meter_reading_canceled")]
+    public async Task LegacyCancelReasonProjectionRecoversUserTextWithoutRewritingHistory(string action)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        const string reason = "Возврат за сен.26. Проверена сумма 100.60";
+        const string metadata = "{\"reason\":\"Отмена финансовой записи.\"}";
+        var summary = $"Отменена запись. Причина: {reason}. Причина: Отмена финансовой записи..";
+        database.Context.AuditEvents.Add(new AuditEvent { Action = action, EntityType = "financial_operation", Summary = summary, MetadataJson = metadata });
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        var request = new AuditEventListRequest(null, null, null, null);
+        var result = Assert.Single(await service.GetEventsAsync(request, CancellationToken.None));
+        Assert.Equal(reason, result.Reason);
+        Assert.Equal(reason, result.Metadata!["reason"]);
+        Assert.Equal($"Отменена запись. Причина: {reason}.", result.Summary);
+        Assert.Equal(reason, (await service.GetEventAsync(result.Id, CancellationToken.None))!.Reason);
+        Assert.Equal(reason, Assert.Single((await service.GetEventsPageAsync(request, CancellationToken.None)).Items).Reason);
+        var csv = Encoding.UTF8.GetString((await service.ExportEventsCsvAsync(request, CancellationToken.None)).Content);
+        Assert.DoesNotContain("Отмена финансовой записи", csv);
+        var stored = await database.Context.AuditEvents.AsNoTracking().SingleAsync();
+        Assert.Equal(summary, stored.Summary);
+        Assert.Equal(metadata, stored.MetadataJson);
+    }
+
     [Theory]
     [InlineData("garage", true)]
     [InlineData("supplier", false)]

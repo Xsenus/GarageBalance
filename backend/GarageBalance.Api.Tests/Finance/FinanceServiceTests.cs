@@ -905,7 +905,8 @@ public sealed class FinanceServiceTests
         Assert.Contains("duplicate document", cancelAudit.Summary, StringComparison.Ordinal);
         using var cancelMetadata = JsonDocument.Parse(cancelAudit.MetadataJson!);
         Assert.Equal("financial_operation", cancelMetadata.RootElement.GetProperty("financeEntityType").GetString());
-        Assert.Equal("Отмена финансовой записи.", cancelMetadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("duplicate document", cancelMetadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(1, cancelAudit.Summary.Split("Причина:", StringSplitOptions.None).Length - 1);
     }
 
     [Fact]
@@ -5425,6 +5426,9 @@ public sealed class FinanceServiceTests
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Причина: Начислено не тому гаражу", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Начислено не тому гаражу", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(1, audit.Summary.Split("Причина:", StringSplitOptions.None).Length - 1);
     }
 
     [Fact]
@@ -5830,6 +5834,9 @@ public sealed class FinanceServiceTests
         Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ INV-cancel", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Причина: Счет заменен", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Счет заменен", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(1, audit.Summary.Split("Причина:", StringSplitOptions.None).Length - 1);
     }
 
     [Fact]
@@ -11323,6 +11330,9 @@ public sealed class FinanceServiceTests
         Assert.Contains("дата 20.06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("расход 5,5", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Причина: Ошибочное показание", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Ошибочное показание", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal(1, audit.Summary.Split("Причина:", StringSplitOptions.None).Length - 1);
     }
 
     [Fact]

@@ -3974,7 +3974,7 @@ public sealed class FinanceService(
                 operation.Id,
                 cancellationToken);
         }
-        AddAudit(actorUserId, "finance.operation_canceled", operation, FormatOperationCanceledAuditSummary(operation, reason));
+        AddAudit(actorUserId, "finance.operation_canceled", operation, FormatOperationCanceledAuditSummary(operation), reason: reason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -4197,7 +4197,7 @@ public sealed class FinanceService(
             "Отмена начисления",
             accrual.Id,
             cancellationToken);
-        AddAudit(actorUserId, "finance.accrual_canceled", accrual, FormatAccrualCanceledAuditSummary(accrual, reason));
+        AddAudit(actorUserId, "finance.accrual_canceled", accrual, FormatAccrualCanceledAuditSummary(accrual), reason: reason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -4854,7 +4854,7 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
-        AddAudit(actorUserId, "finance.supplier_accrual_canceled", accrual, FormatSupplierAccrualCanceledAuditSummary(accrual, reason));
+        AddAudit(actorUserId, "finance.supplier_accrual_canceled", accrual, FormatSupplierAccrualCanceledAuditSummary(accrual), reason: reason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
@@ -6871,7 +6871,7 @@ public sealed class FinanceService(
         reading.Comment = AppendCancelReason(reading.Comment, reason);
         reading.Version = Guid.NewGuid();
         reading.UpdatedAtUtc = timeProvider.GetUtcNow();
-        AddAudit(actorUserId, "finance.meter_reading_canceled", reading, FormatMeterReadingCanceledAuditSummary(reading, reason));
+        AddAudit(actorUserId, "finance.meter_reading_canceled", reading, FormatMeterReadingCanceledAuditSummary(reading), reason: reason);
         await RebuildPaymentAllocationsAsync(
             allocationKeys,
             actorUserId,
@@ -7525,18 +7525,18 @@ public sealed class FinanceService(
         return $"{amount} сотруднику {operation.StaffMember?.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; отдел {operation.StaffMember?.Department?.Name}; вид {operation.ExpenseType?.Name}; документ {document}";
     }
 
-    private static string FormatOperationCanceledAuditSummary(FinancialOperation operation, string reason)
+    private static string FormatOperationCanceledAuditSummary(FinancialOperation operation)
     {
         var amount = MoneyFormatting.Format(operation.Amount);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
-            return $"Отменено поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}. Причина: {reason}";
+            return $"Отменено поступление {amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}.";
         }
 
         return operation.StaffMember is not null
-            ? $"Отменена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}"
-            : $"Отменена выплата {amount} получателю {GetExpenseCounterpartyName(operation)} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}. Причина: {reason}";
+            ? $"Отменена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}."
+            : $"Отменена выплата {amount} получателю {GetExpenseCounterpartyName(operation)} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}.";
     }
 
     private static string FormatOperationRestoredAuditSummary(FinancialOperation operation)
@@ -7567,11 +7567,11 @@ public sealed class FinanceService(
         return $"Изменено начисление: было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.";
     }
 
-    private static string FormatAccrualCanceledAuditSummary(Accrual accrual, string reason)
+    private static string FormatAccrualCanceledAuditSummary(Accrual accrual)
     {
         var amount = MoneyFormatting.Format(accrual.Amount);
         var accountingYear = accrual.AccountingYear.HasValue ? $"; учетный год {accrual.AccountingYear.Value}" : null;
-        return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}{accountingYear}; вид {accrual.IncomeType.Name}; источник {accrual.Source}. Причина: {reason}";
+        return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}{accountingYear}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
     }
 
     private static string FormatAccrualRestoredAuditSummary(Accrual accrual)
@@ -7613,11 +7613,11 @@ public sealed class FinanceService(
         return comment is null ? summary : $"{summary}; комментарий {comment}";
     }
 
-    private static string FormatSupplierAccrualCanceledAuditSummary(SupplierAccrual accrual, string reason)
+    private static string FormatSupplierAccrualCanceledAuditSummary(SupplierAccrual accrual)
     {
         var amount = MoneyFormatting.Format(accrual.Amount);
         var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
-        return $"Отменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}. Причина: {reason}";
+        return $"Отменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
     }
 
     private static string FormatSupplierAccrualRestoredAuditSummary(SupplierAccrual accrual)
@@ -7627,9 +7627,9 @@ public sealed class FinanceService(
         return $"Восстановлено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
     }
 
-    private static string FormatMeterReadingCanceledAuditSummary(MeterReading reading, string reason)
+    private static string FormatMeterReadingCanceledAuditSummary(MeterReading reading)
     {
-        return $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; расход {reading.Consumption.ToString("0.####", RussianCulture)}. Причина: {reason}";
+        return $"Отменено показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; расход {reading.Consumption.ToString("0.####", RussianCulture)}.";
     }
 
     private static string FormatMeterReadingRestoredAuditSummary(MeterReading reading)
@@ -7991,7 +7991,8 @@ public sealed class FinanceService(
         FinancialOperation operation,
         string summary,
         IReadOnlyDictionary<string, object?>? oldValues = null,
-        IReadOnlyDictionary<string, object?>? newValues = null)
+        IReadOnlyDictionary<string, object?>? newValues = null,
+        string? reason = null)
     {
         var relatedGarageId = operation.GarageId?.ToString();
         var relatedGarageNumber = operation.Garage?.Number;
@@ -8028,7 +8029,8 @@ public sealed class FinanceService(
             relatedCounterpartyName,
             metadata,
             oldValues,
-            newValues);
+            newValues,
+            reason);
     }
 
     private void AddAudit(
@@ -8072,7 +8074,8 @@ public sealed class FinanceService(
         SupplierAccrual accrual,
         string summary,
         IReadOnlyDictionary<string, object?>? oldValues = null,
-        IReadOnlyDictionary<string, object?>? newValues = null)
+        IReadOnlyDictionary<string, object?>? newValues = null,
+        string? reason = null)
     {
         AddAudit(
             actorUserId,
@@ -8096,7 +8099,8 @@ public sealed class FinanceService(
                 ["amount"] = accrual.Amount
             },
             oldValues,
-            newValues);
+            newValues,
+            reason);
     }
 
     private void AddAudit(
