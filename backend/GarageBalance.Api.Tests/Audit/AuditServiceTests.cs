@@ -15,6 +15,44 @@ namespace GarageBalance.Api.Tests.Audit;
 public sealed class AuditServiceTests
 {
     [Theory]
+    [InlineData("garage", true)]
+    [InlineData("supplier", false)]
+    [InlineData("staff_member", false)]
+    [InlineData("owner", false)]
+    public async Task RelatedFilterFindsTheDictionaryObjectByIdAndName(string entityType, bool garage)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var audit = new AuditEvent
+        {
+            Action = "dictionary.updated",
+            EntityType = entityType,
+            EntityId = "object-902",
+            EntityDisplayName = "Control 902",
+            Summary = "Synthetic related dictionary"
+        };
+        database.Context.AuditEvents.Add(audit);
+        database.Context.AuditEvents.Add(new AuditEvent
+        {
+            Action = "dictionary.updated",
+            EntityType = "service",
+            EntityId = "object-902",
+            EntityDisplayName = "Control 902",
+            Summary = "Unrelated object"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = new AuditService(new EfAuditEventRepository(database.Context));
+        foreach (var search in new[] { " OBJECT-902 ", "902", "Control" })
+        {
+            var request = new AuditEventListRequest(null, null, null, null,
+                RelatedGarage: garage ? search : null, RelatedCounterparty: garage ? null : search);
+            Assert.Equal(audit.Id, Assert.Single(await service.GetEventsAsync(request, CancellationToken.None)).Id);
+            var page = await service.GetEventsPageAsync(request, CancellationToken.None);
+            Assert.Equal(1, page.TotalCount);
+            Assert.Equal(audit.Id, Assert.Single(page.Items).Id);
+        }
+    }
+
+    [Theory]
     [InlineData(null, "relatedDocumentId", "[документ скрыт]", false)]
     [InlineData("not-a-uuid", "relatedDocumentId", "[документ скрыт]", false)]
     [InlineData("00000000-0000-0000-0000-000000000000", "relatedDocumentId", "[документ скрыт]", false)]

@@ -358,13 +358,19 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
                 var pattern = $"%{EscapeLikePattern(garage)}%";
                 query = query.Where(auditEvent =>
                     (auditEvent.RelatedGarageId != null && EF.Functions.ILike(auditEvent.RelatedGarageId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
-                    (auditEvent.RelatedGarageNumber != null && EF.Functions.ILike(auditEvent.RelatedGarageNumber, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
+                    (auditEvent.RelatedGarageNumber != null && EF.Functions.ILike(auditEvent.RelatedGarageNumber, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (auditEvent.EntityType == "garage" &&
+                        ((auditEvent.EntityId != null && EF.Functions.ILike(auditEvent.EntityId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                         (auditEvent.EntityDisplayName != null && EF.Functions.ILike(auditEvent.EntityDisplayName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")))));
             }
             else
             {
                 query = query.Where(auditEvent =>
                     (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(garage)) ||
-                    (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(garage)));
+                    (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(garage)) ||
+                    (auditEvent.EntityType == "garage" &&
+                        ((auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(garage)) ||
+                         (auditEvent.EntityDisplayName != null && auditEvent.EntityDisplayName.ToLower().Contains(garage)))));
             }
         }
 
@@ -384,13 +390,19 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
                 var pattern = $"%{EscapeLikePattern(counterparty)}%";
                 query = query.Where(auditEvent =>
                     (auditEvent.RelatedCounterpartyId != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
-                    (auditEvent.RelatedCounterpartyName != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
+                    (auditEvent.RelatedCounterpartyName != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    ((auditEvent.EntityType == "supplier" || auditEvent.EntityType == "staff_member" || auditEvent.EntityType == "owner") &&
+                        ((auditEvent.EntityId != null && EF.Functions.ILike(auditEvent.EntityId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                         (auditEvent.EntityDisplayName != null && EF.Functions.ILike(auditEvent.EntityDisplayName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")))));
             }
             else
             {
                 query = query.Where(auditEvent =>
                     (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(counterparty)) ||
-                    (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(counterparty)));
+                    (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(counterparty)) ||
+                    ((auditEvent.EntityType == "supplier" || auditEvent.EntityType == "staff_member" || auditEvent.EntityType == "owner") &&
+                        ((auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(counterparty)) ||
+                         (auditEvent.EntityDisplayName != null && auditEvent.EntityDisplayName.ToLower().Contains(counterparty)))));
             }
         }
 

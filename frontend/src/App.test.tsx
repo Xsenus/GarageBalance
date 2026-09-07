@@ -4957,8 +4957,9 @@ describe('App', () => {
         id: `audit-${params?.relatedCounterparty ?? 'none'}`,
         action: 'dictionary.supplier_updated',
         entityType: params?.relatedCounterparty === staffMemberId ? 'staff_member' : 'supplier',
-        relatedCounterpartyId: params?.relatedCounterparty ?? null,
-        relatedCounterpartyName: params?.relatedCounterparty === staffMemberId ? staffMember.fullName : supplier.name,
+        entityId: params?.relatedCounterparty ?? null,
+        relatedCounterpartyId: null,
+        relatedCounterpartyName: null,
         summary: params?.relatedCounterparty === staffMemberId ? 'Изменена ставка сотрудника.' : 'Изменен контакт поставщика.',
         reason: 'Проверка карточки',
       }),
@@ -5048,6 +5049,7 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Петрова Ольга' })).not.toBeInTheDocument()
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
     await waitFor(() => expect(within(auditPanel).getByLabelText('Связанный контрагент истории изменений')).toHaveValue(staffMemberId))
+    expect(await within(auditPanel).findByText('Изменена ставка сотрудника.')).toBeInTheDocument()
     await waitFor(() => expect(getEvents).toHaveBeenCalledWith('token', expect.objectContaining({
       section: 'dictionary',
       entityType: 'staff_member',
