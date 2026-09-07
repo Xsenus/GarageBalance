@@ -100,7 +100,8 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var hasSearch = !string.IsNullOrWhiteSpace(search);
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var useClientSearch = hasSearch && !(dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false);
-        var fetchLimit = useClientSearch ? null : GetFetchLimit(offset, limit);
+        // This fallback is SQLite-only; debt must be calculated before selecting its page.
+        var fetchLimit = useClientSearch || (rowMode == PaymentRows && sort.Field == "debt") ? null : GetFetchLimit(offset, limit);
         var aggregateQuery = dbContext.Accruals.AsNoTracking()
             .Where(_ => false)
             .Select(_ => new { Category = 0, Total = 0m, Count = 0 });
@@ -345,7 +346,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         }
 
         var visibleRows = ApplyPage(
-                ApplySort(rows, sort)
+                ApplySort(rows, sort, rowMode == PaymentRows)
                     .ThenByDescending(row => row.CreatedAtUtc)
                     .ThenBy(row => row.GarageNumber, StringComparer.Ordinal)
                     .ThenBy(row => row.GarageId),
@@ -449,7 +450,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
             debtAfterPayments.GetValueOrDefault(payment.Representative.Id)))
             .ToList();
         var visibleRows = ApplyPage(
-                ApplySort(rows, sort)
+                ApplySort(rows, sort, true)
                     .ThenByDescending(row => row.CreatedAtUtc)
                     .ThenBy(row => row.GarageNumber, StringComparer.Ordinal)
                     .ThenBy(row => row.GarageId),
@@ -938,7 +939,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
             "incomeTypeName" => "income_type_name",
             "accrualAmount" => "accrual_amount",
             "incomeAmount" => "income_amount",
-            "debt" => "debt",
+            "debt" => "sort_debt",
             "documentNumber" => "document_number",
             _ => "operation_date"
         };
@@ -1031,6 +1032,35 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                   FROM filtered_rows
               )
               """;
+        var debtSortCte = sort.Field == "debt" ? """
+            , debt_payment_totals AS MATERIALIZED (
+                SELECT payment."Id" AS id,
+                       SUM(payment."Amount") OVER (
+                           PARTITION BY payment."GarageId"
+                           ORDER BY payment."OperationDate", payment."CreatedAtUtc", payment."Id"
+                           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS amount
+                FROM financial_operations payment
+                WHERE payment."IsCanceled" = FALSE
+                  AND payment."OperationKind" = 'income'
+                  AND payment."GarageId" IN (SELECT garage_id FROM report_rows)
+                  AND payment."OperationDate" <= @date_to::date
+            ), debt_sort_rows AS (
+                SELECT target.*,
+                       garage."StartingBalance" + COALESCE(accrual_total.amount, 0)
+                           - COALESCE(payment_total.amount, 0) AS sort_debt
+                FROM report_rows target
+                INNER JOIN garages garage ON garage."Id" = target.garage_id
+                INNER JOIN debt_payment_totals payment_total ON payment_total.id = target.id
+                LEFT JOIN LATERAL (
+                    SELECT SUM(accrual."Amount") AS amount
+                    FROM accruals accrual
+                    WHERE accrual."IsCanceled" = FALSE
+                      AND accrual."GarageId" = target.garage_id
+                      AND accrual."AccountingMonth" <= target.accounting_month
+                ) accrual_total ON TRUE
+            )
+            """ : string.Empty;
+        var pageSource = sort.Field == "debt" ? "debt_sort_rows" : "report_rows";
         var sql = $$"""
             WITH filtered_rows AS (
                 SELECT operation."Id" AS id,
@@ -1064,11 +1094,11 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                   {{ownerClause}}
                   {{incomeTypeClause}}
                   {{searchClause}}
-            ), {{reportRowsCte}}, page_rows AS (
+            ), {{reportRowsCte}}{{debtSortCte}}, page_rows AS (
                 SELECT filtered_rows.*,
                        ROW_NUMBER() OVER (
                            ORDER BY {{sortColumn}} {{direction}}, created_at_utc DESC, garage_number, id)::int AS row_order
-                FROM report_rows filtered_rows
+                FROM {{pageSource}} filtered_rows
                 ORDER BY {{sortColumn}} {{direction}}, created_at_utc DESC, garage_number, id
                 OFFSET @offset
                 {{limitClause}}
@@ -1397,7 +1427,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         operation.ReceiptBatchId is null &&
         operation.Comment?.StartsWith("Полная оплата ", StringComparison.Ordinal) == true;
 
-    private static IOrderedEnumerable<IncomeReportRowDto> ApplySort(IEnumerable<IncomeReportRowDto> rows, ReportSort sort) =>
+    private static IOrderedEnumerable<IncomeReportRowDto> ApplySort(IEnumerable<IncomeReportRowDto> rows, ReportSort sort, bool paymentRows) =>
         sort.Field switch
         {
             "accountingMonth" => sort.Descending ? rows.OrderByDescending(row => row.AccountingMonth) : rows.OrderBy(row => row.AccountingMonth),
@@ -1406,7 +1436,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
             "incomeTypeName" => sort.Descending ? rows.OrderByDescending(row => row.IncomeTypeName, StringComparer.Ordinal) : rows.OrderBy(row => row.IncomeTypeName, StringComparer.Ordinal),
             "accrualAmount" => sort.Descending ? rows.OrderByDescending(row => row.AccrualAmount) : rows.OrderBy(row => row.AccrualAmount),
             "incomeAmount" => sort.Descending ? rows.OrderByDescending(row => row.IncomeAmount) : rows.OrderBy(row => row.IncomeAmount),
-            "debt" => sort.Descending ? rows.OrderByDescending(row => row.Debt) : rows.OrderBy(row => row.Debt),
+            "debt" => sort.Descending ? rows.OrderByDescending(row => paymentRows ? row.DebtAfterPayment ?? row.Debt : row.Debt) : rows.OrderBy(row => paymentRows ? row.DebtAfterPayment ?? row.Debt : row.Debt),
             "documentNumber" => sort.Descending ? rows.OrderByDescending(row => row.DocumentNumber, StringComparer.Ordinal) : rows.OrderBy(row => row.DocumentNumber, StringComparer.Ordinal),
             _ => sort.Descending ? rows.OrderByDescending(row => row.Date) : rows.OrderBy(row => row.Date)
         };

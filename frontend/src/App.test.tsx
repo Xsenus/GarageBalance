@@ -17339,11 +17339,18 @@ describe('App', () => {
   it('opens user edit and delete operations from context menu modals', async () => {
     const user = userEvent.setup()
     async function clickAndExpectToast(button: HTMLElement, text: string) {
-      // Observe the toast as it appears, before slower dialog queries can outlive it.
-      await Promise.all([
-        screen.findByText(text).then((toast) => expect(toast.closest('[role="status"]')).toBeInTheDocument()),
-        user.click(button),
-      ])
+      // Capture its actual appearance even if user-event finishes after auto-dismiss.
+      let appeared = false
+      const observer = new MutationObserver(() => {
+        appeared ||= [...document.querySelectorAll('[role="status"]')].some((status) => status.isConnected && status.textContent?.includes(text))
+      })
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+      try {
+        await user.click(button)
+        await waitFor(() => expect(appeared).toBe(true))
+      } finally {
+        observer.disconnect()
+      }
     }
     const statefulUserClient = createStatefulUserClient()
     let deactivationReason: string | null = null
@@ -25214,6 +25221,82 @@ describe('App', () => {
     expect(within(reportsPanel).getByLabelText('Выбранные гаражи отчёта по поступлениям')).toHaveTextContent('Гараж 205')
   })
 
+  it('shows all twelve consolidated months and preserves the annual export period', async () => {
+    const user = userEvent.setup()
+    const getConsolidatedReport = vi.fn<ReportClient['getConsolidatedReport']>(async (_token, params) => {
+      const year = params?.monthFrom?.slice(0, 4) ?? '2026'
+      const rows = Array.from({ length: 12 }, (_, index) => ({
+        ...createConsolidatedReport().monthlyRows[0], accountingMonth: `${year}-${String(index + 1).padStart(2, '0')}-01`,
+        incomeTotal: index === 8 ? 2172.95 : 0, expenseTotal: index === 8 ? 20650 : 0,
+        incomeBreakdown: [], expenseBreakdown: [],
+      }))
+      if (params?.sortDirection !== 'asc') rows.reverse()
+      return createConsolidatedReport({ monthlyRows: rows.slice(0, params?.limit ?? rows.length) })
+    })
+    const exportConsolidatedReportXlsx = vi.fn(async () => new Blob(['annual']))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getConsolidatedReport, exportConsolidatedReportXlsx })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    for (const quickPeriod of ['Текущий год', 'Предыдущий год']) {
+      await user.click(within(panel).getByRole('button', { name: quickPeriod, exact: true }))
+      await waitFor(() => expect(getConsolidatedReport.mock.calls.at(-1)?.[1]).toEqual(expect.objectContaining({ monthFrom: expect.stringMatching(/-01-01$/), monthTo: expect.stringMatching(/-12-01$/) })))
+      const table = within(panel).getByRole('table', { name: 'Консолидированный отчет' })
+      await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(13))
+      expect(table).toHaveTextContent('2 172.95')
+      expect(table).toHaveTextContent('20 650.00')
+      await user.click(within(panel).getByRole('button', { name: /Сортировать Месяц/ }))
+      await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(13))
+      const request = getConsolidatedReport.mock.calls.at(-1)![1]!
+      await user.click(within(panel).getByRole('button', { name: 'Скачать XLSX' }))
+      await waitFor(() => expect(exportConsolidatedReportXlsx).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ monthFrom: request.monthFrom, monthTo: request.monthTo, sortDirection: request.sortDirection })))
+    }
+  })
+
+  it('keeps fee totals unavailable during loading and failure and shows real zero totals after retry', async () => {
+    const user = userEvent.setup()
+    const pending: { resolve: (report: FeeReportDto) => void; reject: (error: Error) => void }[] = []
+    const getFeeReport = vi.fn(async () => new Promise<FeeReportDto>((resolve, reject) => pending.push({ resolve, reject })))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getFeeReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, panel, 'Сборы')
+    const summary = within(panel).getByLabelText('Детализация сбора')
+    await waitFor(() => expect(pending).toHaveLength(1))
+    expect(summary).not.toHaveTextContent('0.00')
+    expect(within(summary).getByRole('status', { name: 'Загружаем итоги сбора' })).toBeInTheDocument()
+    await act(async () => pending[0].resolve(createFeeReport()))
+    expect(summary).toHaveTextContent('500.00')
+    await user.click(within(panel).getByRole('button', { name: 'Показать должников' }))
+    await user.click(within(panel).getByRole('button', { name: /Сортировать Задолженность/ }))
+    await waitFor(() => expect(pending).toHaveLength(2))
+    expect(summary).not.toHaveTextContent('500.00')
+    expect(summary).not.toHaveTextContent('0.00')
+    await act(async () => pending[1].reject(new Error('Отчёт недоступен')))
+    expect(await within(panel).findByText('Отчёт недоступен')).toBeInTheDocument()
+    expect(summary).not.toHaveTextContent('0.00')
+    await user.click(within(panel).getByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(pending).toHaveLength(3))
+    expect(summary).not.toHaveTextContent('0.00')
+    await act(async () => pending[2].resolve(createFeeReport({ accruedTotal: 0, collectedTotal: 0, debtTotal: 0, summaryRows: [], garageRows: [], rowCount: 0 })))
+    expect(within(summary).getAllByText('0.00')).toHaveLength(3)
+    expect(within(panel).queryByText('Отчёт недоступен')).not.toBeInTheDocument()
+    await openReportTab(user, panel, 'Консолидированный')
+    await openReportTab(user, panel, 'Сборы')
+    await waitFor(() => expect(pending).toHaveLength(4))
+    await act(async () => pending[3].reject(new Error('Повторное обновление недоступно')))
+    expect(within(panel).getByText('Итоги не обновлены.')).toBeInTheDocument()
+    expect(within(within(panel).getByLabelText('Детализация сбора')).getAllByText('0.00')).toHaveLength(3)
+    await user.click(within(panel).getByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(pending).toHaveLength(5))
+    await act(async () => pending[4].resolve(createFeeReport()))
+    expect(within(panel).getByLabelText('Детализация сбора')).toHaveTextContent('500.00')
+    expect(within(panel).queryByText('Итоги не обновлены.')).not.toBeInTheDocument()
+  })
+
   it('sorts every server report from accessible headers, shows direction and resets to default order', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
@@ -25288,6 +25371,14 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Поступления')
     await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Сумма платежа/ }))
     await waitFor(() => expect(requests.income).toContainEqual(expect.objectContaining({ sortBy: 'incomeAmount', sortDirection: 'asc' })))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Остаток долга после платежа/ }))
+    await waitFor(() => expect(requests.income.at(-1)).toEqual(expect.objectContaining({ sortBy: 'debt', sortDirection: 'asc' })))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' }))
+    await waitFor(() => expect(requests.income.at(-1)).toEqual(expect.objectContaining({ sortBy: 'debt', sortDirection: 'asc', groupPayments: false })))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Остаток долга после платежа/ }))
+    await waitFor(() => expect(requests.income.at(-1)).toEqual(expect.objectContaining({ sortBy: 'debt', sortDirection: 'desc' })))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать платежи' }))
+    await waitFor(() => expect(requests.income.at(-1)).toEqual(expect.objectContaining({ sortBy: 'debt', sortDirection: 'desc', groupPayments: true })))
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Наличие чека/ }))
@@ -25704,6 +25795,21 @@ describe('App', () => {
     }
   })
 
+  it('shows a readable fallback for a non-Error rejection in every report', async () => {
+    const user = userEvent.setup()
+    const reject = () => Promise.reject(null)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getConsolidatedReport: reject, getGarageReport: reject, getExpenseReport: reject, getIncomeReport: reject, getCashPaymentReport: reject, getBankDepositReport: reject, getFeeReport: reject, getFundChangeReport: reject })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const panel = await screen.findByRole('region', { name: 'Отчеты' })
+    for (const tab of ['Консолидированный', 'По гаражам', 'По выплатам', 'Поступления', 'Оплаты из кассы', 'Сдача кассы в банк', 'Сборы', 'Изменение фондов']) {
+      await openReportTab(user, panel, tab)
+      expect(await within(panel).findByText('Не удалось загрузить отчёт.')).toHaveAttribute('role', 'alert')
+      expect(within(panel).getByRole('button', { name: 'Повторить загрузку' })).toBeEnabled()
+    }
+  })
+
   it('shows permission denied errors inside every report and does not leak them between tabs', async () => {
     const user = userEvent.setup()
     const denied = (reportName: string) => async () => {
@@ -25855,7 +25961,7 @@ describe('App', () => {
 
     for (const scenario of staleTabs) {
       await openReportTab(user, reportsPanel, scenario.tab)
-      await waitFor(() => expect(within(reportsPanel).getByRole('status', { name: /Загружаем/ })).toBeInTheDocument())
+      await waitFor(() => expect(within(reportsPanel).getByRole('status', { name: 'Загружаем отчёт' })).toBeInTheDocument())
       await openReportTab(user, reportsPanel, 'Консолидированный')
       await openReportTab(user, reportsPanel, scenario.tab)
       expect((await within(reportsPanel).findAllByText(scenario.latestText)).length).toBeGreaterThan(0)

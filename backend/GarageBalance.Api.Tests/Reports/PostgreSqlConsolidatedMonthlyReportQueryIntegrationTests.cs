@@ -116,6 +116,15 @@ public sealed class PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests
             Assert.Contains("date_trunc('month', movement_date)", reportCommand, StringComparison.Ordinal);
             Assert.Contains("FROM bank_balance_buckets", reportCommand, StringComparison.Ordinal);
 
+            foreach (var descending in new[] { false, true })
+            {
+                var annual = await new EfConsolidatedMonthlyReportQuery(context).GetMonthlyDataAsync(
+                    january, january.AddMonths(11), new ReportSort("accountingMonth", descending), 0, 120, CancellationToken.None);
+                var months = Enumerable.Range(0, 12).Select(january.AddMonths);
+                Assert.Equal(descending ? months.Reverse() : months, annual.MonthlyRows.Select(row => row.AccountingMonth));
+                Assert.Equal(80m, annual.MonthlyRows.Sum(row => row.IncomeTotal));
+                Assert.Equal(30m, annual.MonthlyRows.Sum(row => row.ExpenseTotal));
+            }
             capture.Commands.Clear();
             using var cancellation = new CancellationTokenSource();
             cancellation.Cancel();

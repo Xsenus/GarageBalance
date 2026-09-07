@@ -878,6 +878,65 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task AnnualConsolidatedScreenAndExportsContainEveryMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var january = new DateOnly(2026, 1, 1);
+        foreach (var month in new[] { 0, 5, 8 })
+        {
+            var payment = await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, january.AddMonths(month).AddDays(5), january.AddMonths(month), 100m, $"ANNUAL-{month}", null), null, CancellationToken.None);
+            Assert.True(payment.Succeeded, payment.ErrorMessage);
+        }
+        var service = CreateService(database.Context);
+        var request = new ConsolidatedReportRequest(january, january.AddMonths(11), null, Limit: 120, SortBy: "accountingMonth", SortDirection: "asc");
+        var screen = await service.GetConsolidatedReportAsync(request, CancellationToken.None);
+        Assert.True(screen.Succeeded, screen.ErrorMessage);
+        Assert.Equal(12, screen.Value!.MonthlyRows.Count);
+        Assert.Equal(300m, screen.Value.MonthlyRows.Sum(row => row.IncomeTotal));
+        var xlsx = await service.ExportConsolidatedReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportConsolidatedReportPdfAsync(request, CancellationToken.None);
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        var pdfText = ReadPdfText(pdf.Value!.Content);
+        foreach (var month in Enumerable.Range(0, 12).Select(january.AddMonths))
+        {
+            AssertWorkbookContains(xlsx.Value!.Content, month.ToString("MM.yyyy"));
+            Assert.Contains(month.ToString("MM.yyyy"), pdfText);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IncomeDebtSortIsPreservedInXlsxAndPdf(bool descending)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.FirstGarage.StartingBalance = 1000m;
+        var month = new DateOnly(2026, 6, 1);
+        foreach (var (day, amount, document) in new[] { (1, 100m, "SORT-FIRST"), (2, 300m, "SORT-SECOND"), (3, 50m, "SORT-THIRD") })
+        {
+            database.Context.FinancialOperations.Add(new FinancialOperation { Garage = fixtures.FirstGarage, IncomeType = fixtures.IncomeType, OperationKind = FinancialOperationKinds.Income, OperationDate = month.AddDays(day), AccountingMonth = month, Amount = amount, DocumentNumber = document });
+        }
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context);
+        var request = new IncomeReportRequest(month, month.AddMonths(1).AddDays(-1), null, [fixtures.FirstGarage.Id], [], [], "payments", SortBy: "debt", SortDirection: descending ? "desc" : "asc");
+        var expected = new[] { "SORT-THIRD", "SORT-SECOND", "SORT-FIRST" };
+        if (descending) Array.Reverse(expected);
+        var xlsx = await service.ExportIncomeReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportIncomeReportPdfAsync(request, CancellationToken.None);
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        Assert.Equal(expected, ReadFirstWorksheetRows(xlsx.Value!.Content).Skip(1).Select(row => row[10]));
+        var pdfText = string.Concat(ReadPdfText(pdf.Value!.Content).Where(character => !char.IsWhiteSpace(character)));
+        var positions = expected.Select(value => pdfText.IndexOf(value, StringComparison.Ordinal)).ToArray();
+        Assert.All(positions, position => Assert.True(position >= 0));
+        Assert.True(positions[0] < positions[1] && positions[1] < positions[2]);
+    }
+
+    [Fact]
     public async Task ExportConsolidatedReportXlsxAsync_ReturnsCustomerMonthlyLayout()
     {
         await using var database = await TestDatabase.CreateAsync();

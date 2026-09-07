@@ -5,7 +5,7 @@ import type { FundsClient } from '../../services/fundsApi'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
-import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
@@ -248,6 +248,14 @@ function getReportMonthEnd(monthValue: string) {
   return getLocalDateInputValue(new Date(year, month, 0))
 }
 
+function formatReportAmount(value: number | undefined) {
+  return value === undefined ? '—' : formatMoney(value)
+}
+
+function getReportLoadError(error: unknown) {
+  return error instanceof Error ? error.message : 'Не удалось загрузить отчёт.'
+}
+
 function getReportView<T extends object>(report: T | null, loading: boolean, error: string | null, reportQueries: WeakMap<object, string>, currentQuery: string) {
   const data = report && reportQueries.get(report) === currentQuery ? report : null
   return [data, !data && !error, loading && !!data] as const
@@ -434,47 +442,35 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-
-    async function loadConsolidatedReport() {
-      setConsolidatedReportLoading(true)
-      setConsolidatedReportError(null)
-      try {
+    return scheduleDebouncedRequest({
+      delay: 0,
+      onStart: () => {
+        setConsolidatedReportLoading(true)
+        setConsolidatedReportError(null)
+      },
+      request: (signal) => {
         const consolidatedFilter = monthlyFilters.consolidated
         const monthFrom = getReportMonthStart(consolidatedFilter.monthFrom)
         const monthTo = getReportMonthStart(consolidatedFilter.monthTo)
         const sort = reportSorts.consolidated
-        const loadedConsolidated = await reportClient.getConsolidatedReport(auth.accessToken, {
+        return reportClient.getConsolidatedReport(auth.accessToken, {
           monthFrom,
           monthTo,
-          limit: 1,
+          limit: 120,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-
-        if (ignore) {
-          return
-        }
-
-        reportQueries.set(loadedConsolidated, queryKey)
+        }, signal)
+      },
+      onSuccess: (loadedConsolidated) => {
+        reportQueries.set(loadedConsolidated, currentReportQuery)
         setConsolidatedReport(loadedConsolidated)
         setConsolidatedReportLoading(false)
-      } catch (caught) {
-        if (!ignore) {
-          setConsolidatedReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
-          setConsolidatedReportLoading(false)
-        }
-      }
-    }
-
-    void loadConsolidatedReport()
-
-    return () => {
-      ignore = true
-      controller.abort()
-    }
+      },
+      onError: (caught) => {
+        setConsolidatedReportError(getReportLoadError(caught))
+        setConsolidatedReportLoading(false)
+      },
+    })
   }, [activeReportTab, auth.accessToken, currentReportQuery, monthlyFilters.consolidated, reportClient, reportQueries, reportReloadRevision, reportSorts.consolidated])
 
   useEffect(() => {
@@ -482,45 +478,36 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       return
     }
 
-    let ignore = false
-    const controller = new AbortController()
-    const queryKey = currentReportQuery
-    async function loadFeeReport() {
-      setFeeReportLoading(true)
-      setFeeReportError(null)
-      try {
+    return scheduleDebouncedRequest({
+      delay: 0,
+      onStart: () => {
+        setFeeReportLoading(true)
+        setFeeReportError(null)
+      },
+      request: (signal) => {
         const sort = reportSorts.fees
-        const report = await reportClient.getFeeReport(auth.accessToken, {
+        return reportClient.getFeeReport(auth.accessToken, {
           feeEntryIds: selectedFeeEntryIds.length > 0 ? selectedFeeEntryIds : undefined,
           offset: 0,
           limit: reportFullViewLimit,
           sortBy: sort?.field,
           sortDirection: sort?.direction,
-        }, controller.signal)
-        if (!ignore) {
-          reportQueries.set(report, queryKey)
-          setFeeReport(report)
-          setFeeFilterOptions((current) => Array.from(new Map([
-            ...current,
-            ...report.summaryRows.map((row) => ({ value: row.incomeTypeId, label: row.name, description: row.goal })),
-          ].map((option) => [option.value, option])).values()))
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setFeeReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сборам.')
-        }
-      } finally {
-        if (!ignore) {
-          setFeeReportLoading(false)
-        }
-      }
-    }
-
-    void loadFeeReport()
-    return () => {
-      ignore = true
-      controller.abort()
-    }
+        }, signal)
+      },
+      onSuccess: (report) => {
+        reportQueries.set(report, currentReportQuery)
+        setFeeReport(report)
+        setFeeFilterOptions((current) => Array.from(new Map([
+          ...current,
+          ...report.summaryRows.map((row) => ({ value: row.incomeTypeId, label: row.name, description: row.goal })),
+        ].map((option) => [option.value, option])).values()))
+        setFeeReportLoading(false)
+      },
+      onError: (caught) => {
+        setFeeReportError(getReportLoadError(caught))
+        setFeeReportLoading(false)
+      },
+    })
   }, [activeReportTab, auth.accessToken, currentReportQuery, reportClient, reportQueries, reportReloadRevision, reportSorts.fees, selectedFeeEntryIds])
 
   useEffect(() => {
@@ -554,7 +541,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         }
       } catch (caught) {
         if (!ignore) {
-          setGarageReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по гаражам.')
+          setGarageReportError(getReportLoadError(caught))
         }
       } finally {
         if (!ignore) {
@@ -604,7 +591,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         }
       } catch (caught) {
         if (!ignore) {
-          setPayoutReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по выплатам.')
+          setPayoutReportError(getReportLoadError(caught))
         }
       } finally {
         if (!ignore) {
@@ -653,7 +640,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         }
       } catch (caught) {
         if (!ignore) {
-          setIncomeReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по поступлениям.')
+          setIncomeReportError(getReportLoadError(caught))
         }
       } finally {
         if (!ignore) {
@@ -699,7 +686,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         }
       } catch (caught) {
         if (!ignore) {
-          setCashPaymentReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по оплатам из кассы.')
+          setCashPaymentReportError(getReportLoadError(caught))
         }
       } finally {
         if (!ignore) {
@@ -745,7 +732,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         }
       } catch (caught) {
         if (!ignore) {
-          setBankDepositReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сдаче кассы в банк.')
+          setBankDepositReportError(getReportLoadError(caught))
         }
       } finally {
         if (!ignore) {
@@ -791,7 +778,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         }
       } catch (caught) {
         if (!ignore) {
-          setFundChangeReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по изменению фондов.')
+          setFundChangeReportError(getReportLoadError(caught))
         }
       } finally {
         if (!ignore) {
@@ -1525,9 +1512,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {renderReportLoadingState(primaryLoading, refreshing)}
           {garageReportError ? <AsyncErrorState message={garageReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={garageReportLoading} /> : null}
           <div className="report-workbook-summary-row">
-            <span><strong>ИТОГО начислений</strong><b>{report ? formatMoney(report.accrualTotal) : '—'}</b></span>
-            <span><strong>ИТОГО поступлений</strong><b>{report ? formatMoney(report.incomeTotal) : '—'}</b></span>
-            <span><strong>Разница</strong><b>{report ? formatMoney(report.difference) : '—'}</b></span>
+            <span><strong>ИТОГО начислений</strong><b>{formatReportAmount(report?.accrualTotal)}</b></span>
+            <span><strong>ИТОГО поступлений</strong><b>{formatReportAmount(report?.incomeTotal)}</b></span>
+            <span><strong>Разница</strong><b>{formatReportAmount(report?.difference)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по гаражам',
@@ -1576,9 +1563,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {renderReportLoadingState(primaryLoading, refreshing)}
           {payoutReportError ? <AsyncErrorState message={payoutReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={payoutReportLoading} /> : null}
           <div className="report-workbook-summary-row">
-            <span><strong>ИТОГО начислений</strong><b>{report ? formatMoney(report.accrualTotal) : '—'}</b></span>
-            <span><strong>ИТОГО выплат</strong><b>{report ? formatMoney(report.expenseTotal) : '—'}</b></span>
-            <span><strong>Разница</strong><b>{report ? formatMoney(report.difference) : '—'}</b></span>
+            <span><strong>ИТОГО начислений</strong><b>{formatReportAmount(report?.accrualTotal)}</b></span>
+            <span><strong>ИТОГО выплат</strong><b>{formatReportAmount(report?.expenseTotal)}</b></span>
+            <span><strong>Разница</strong><b>{formatReportAmount(report?.difference)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по выплатам',
@@ -1646,7 +1633,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {renderReportLoadingState(primaryLoading, refreshing)}
           {incomeReportError ? <AsyncErrorState message={incomeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={incomeReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single">
-            <span><strong>ИТОГО поступлений</strong><b>{report ? formatMoney(report.incomeTotal) : '—'}</b></span>
+            <span><strong>ИТОГО поступлений</strong><b>{formatReportAmount(report?.incomeTotal)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по поступлениям',
@@ -1675,7 +1662,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {renderReportLoadingState(primaryLoading, refreshing)}
           {cashPaymentReportError ? <AsyncErrorState message={cashPaymentReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={cashPaymentReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single">
-            <span><strong>ИТОГО оплачено</strong><b>{report ? formatMoney(report.total) : '—'}</b></span>
+            <span><strong>ИТОГО оплачено</strong><b>{formatReportAmount(report?.total)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по оплатам из кассы',
@@ -1702,7 +1689,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {renderReportLoadingState(primaryLoading, refreshing)}
           {bankDepositReportError ? <AsyncErrorState message={bankDepositReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={bankDepositReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single">
-            <span><strong>ИТОГО сдано в банк</strong><b>{report ? formatMoney(report.total) : '—'}</b></span>
+            <span><strong>ИТОГО сдано в банк</strong><b>{formatReportAmount(report?.total)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
@@ -1782,11 +1769,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
               primaryLoading || feeReportError ? undefined : 'Данных по сбору нет',
             )}
             <div className="report-workbook-side-summary" aria-label="Детализация сбора">
-              <dl>
-                <div><dt>{report?.variation ?? feeVariationLabel}</dt><dd>{formatMoney(report?.accruedTotal ?? 0)}</dd></div>
-                <div><dt>Собрано</dt><dd>{formatMoney(report?.collectedTotal ?? 0)}</dd></div>
-                <div><dt>Задолженность</dt><dd>{formatMoney(report?.debtTotal ?? 0)}</dd></div>
-              </dl>
+              {feeReportError && report ? <p className="form-hint">Итоги не обновлены.</p> : null}
+              {primaryLoading ? <LoadingSkeleton label="Загружаем итоги сбора" rows={3} /> : (
+                <dl>
+                  {[report?.variation ?? feeVariationLabel, 'Собрано', 'Задолженность'].map((label, index) => (
+                    <div key={index}><dt>{label}</dt><dd>{formatReportAmount(report ? [report.accruedTotal, report.collectedTotal, report.debtTotal][index] : undefined)}</dd></div>
+                  ))}
+                </dl>
+              )}
               <button
                 aria-controls="fee-debtors-report"
                 aria-expanded={feeDebtorsVisible}

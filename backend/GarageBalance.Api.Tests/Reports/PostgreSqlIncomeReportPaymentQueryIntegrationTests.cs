@@ -78,6 +78,16 @@ public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
         Assert.DoesNotContain(capture.Commands, command =>
             command.Contains("WHERE f.\"Id\" = ANY", StringComparison.OrdinalIgnoreCase) ||
             command.Contains("WHERE \"f\".\"Id\" = ANY", StringComparison.OrdinalIgnoreCase));
+        capture.Commands.Clear();
+        var debtPage = await new EfIncomeReportQuery(context).GetRowsAsync(
+            month, month.AddMonths(1).AddDays(-1), "payments", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(),
+            null, 1, 0, new ReportSort("debt", false), CancellationToken.None);
+        Assert.Equal(300m, Assert.Single(debtPage.Rows).DebtAfterPayment);
+        Assert.Equal(2, capture.Commands.Count);
+        Assert.Contains("debt_payment_totals AS MATERIALIZED", capture.Commands[0], StringComparison.Ordinal);
+        Assert.Contains("ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW", capture.Commands[0], StringComparison.Ordinal);
+        Assert.Contains("ORDER BY sort_debt ASC", capture.Commands[0], StringComparison.Ordinal);
+        Assert.Contains("LIMIT @limit", capture.Commands[0], StringComparison.Ordinal);
     }
 
     [PostgreSqlFact]
