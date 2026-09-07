@@ -2943,7 +2943,7 @@ export function FinancePanel({
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <p className="confirmation-text" id="finance-edit-confirmation-description">Изменения сохранятся в истории.</p>
+            <p className="confirmation-text" id="finance-edit-confirmation-description">Изменения — в истории.</p>
             <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingFinanceEditConfirmation.changes} />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={financeEditConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingFinanceEditConfirmation(null)}>Отмена</button>
@@ -6149,6 +6149,7 @@ function GaragePaymentHistoryEditDialog({
   const [pendingChanges, setPendingChanges] = useState<ChangePreview[] | null>(null)
   const dialogRef = useFocusTrap<HTMLElement>(!pendingChanges)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useRestoreFocusOnClose(Boolean(pendingChanges))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingChanges))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingChanges))
   useEscapeKey(!saving && !pendingChanges, onClose)
@@ -6257,7 +6258,7 @@ function GaragePaymentHistoryEditDialog({
               <X size={18} aria-hidden="true" />
             </button>
           </div>
-          <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Изменения сохранятся в истории.</p>
+          <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Изменения — в истории.</p>
           <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingChanges} />
           <div className="detail-dialog-actions contractors-dialog-actions">
             <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingChanges(null)} disabled={saving}>Отмена</button>
@@ -7450,7 +7451,7 @@ function FullPaymentPrototypeDialog({
         <div className="detail-dialog-header">
           <div>
             <h3 id="full-payment-title">Полная оплата</h3>
-            <p>Выберите расчетный период и укажите сумму оплаты задолженности.</p>
+            <p>Выберите период и сумму.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть полную оплату" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />

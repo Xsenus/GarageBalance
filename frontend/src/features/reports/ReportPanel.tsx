@@ -9,7 +9,7 @@ import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, 
 import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
-import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
+import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatCount, formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
@@ -366,8 +366,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   const [reportReloadRevision, setReportReloadRevision] = useState(0)
   const [reportQueries] = useState(() => new WeakMap<object, string>())
   const garageQuickListDialogRef = useFocusTrap<HTMLElement>(garageQuickListEditor !== null)
+  useRestoreFocusOnClose(garageQuickListEditor !== null)
   const garageQuickListNameRef = useFocusOnOpen<HTMLInputElement>(garageQuickListEditor !== null)
   const garageQuickListDeleteDialogRef = useFocusTrap<HTMLElement>(garageQuickListDeleteTarget !== null)
+  useRestoreFocusOnClose(garageQuickListDeleteTarget !== null)
   const garageQuickListDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(garageQuickListDeleteTarget !== null)
   useEscapeKey(garageQuickListEditor !== null && !garageQuickListSaving, () => setGarageQuickListEditor(null))
   useEscapeKey(garageQuickListDeleteTarget !== null && !garageQuickListSaving, () => setGarageQuickListDeleteTarget(null))

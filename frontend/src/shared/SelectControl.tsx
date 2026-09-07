@@ -105,6 +105,7 @@ export function SelectControl({
         onClick={() => effectiveOpen ? setOpen(false) : openList()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
+            event.stopPropagation()
             setOpen(false)
             return
           }
