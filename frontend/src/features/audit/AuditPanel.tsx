@@ -291,16 +291,14 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
   const [loadedPageState, setLoadedPageState] = useState(() => ({
     accessToken: auth.accessToken,
     client: auditClient,
-    loaded: false,
+    filterKey: '',
   }))
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<AuditPanelError | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [detailState, setDetailState] = useState<{ event: AuditEventDto; loading: boolean; error: string | null } | null>(null)
-  const hasLoadedPage = loadedPageState.accessToken === auth.accessToken
-    && loadedPageState.client === auditClient
-    && loadedPageState.loaded
+
   const detailRequestIdRef = useRef(0)
   const detailRequestControllerRef = useRef<AbortController | null>(null)
   useRestoreFocusOnClose(Boolean(detailState))
@@ -333,7 +331,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
       resetAuditPageOffset()
     }, 350)
   }, [actorUserId, appliedTextFilters, relatedCounterparty, relatedDocument, relatedGarage, resetAuditPageOffset, search])
-  const auditQuery = useMemo(() => ({
+  const auditExportQuery = useMemo(() => ({
     search: appliedTextFilters.search.trim() || undefined,
     section: section || undefined,
     actionKind: actionKind || undefined,
@@ -346,23 +344,13 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
     relatedAccountingMonth: relatedAccountingMonth || undefined,
     relatedCounterparty: appliedTextFilters.relatedCounterparty.trim() || undefined,
     relatedDocument: appliedTextFilters.relatedDocument.trim() || undefined,
-    offset: page.offset,
-    limit: page.limit,
-  }), [actionKind, appliedTextFilters, dateFrom, dateTo, entityType, page.limit, page.offset, quickFilter, relatedAccountingMonth, section])
-  const auditExportQuery = useMemo(() => ({
-    search: auditQuery.search,
-    section: auditQuery.section,
-    actionKind: auditQuery.actionKind,
-    entityType: auditQuery.entityType,
-    actorUserId: auditQuery.actorUserId,
-    quickFilter: auditQuery.quickFilter,
-    dateFrom: auditQuery.dateFrom,
-    dateTo: auditQuery.dateTo,
-    relatedGarage: auditQuery.relatedGarage,
-    relatedAccountingMonth: auditQuery.relatedAccountingMonth,
-    relatedCounterparty: auditQuery.relatedCounterparty,
-    relatedDocument: auditQuery.relatedDocument,
-  }), [auditQuery])
+  }), [actionKind, appliedTextFilters, dateFrom, dateTo, entityType, quickFilter, relatedAccountingMonth, section])
+  const auditQuery = useMemo(() => ({ ...auditExportQuery, offset: page.offset, limit: page.limit }), [auditExportQuery, page.offset, page.limit])
+  const filterKey = JSON.stringify(auditExportQuery)
+  const hasLoadedPage = loadedPageState.accessToken === auth.accessToken
+    && loadedPageState.client === auditClient
+    && loadedPageState.filterKey === filterKey
+
 
   function closeAuditEventDetail() {
     detailRequestIdRef.current += 1
@@ -427,7 +415,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
         const loadedPage = await auditClient.getEventsPage(auth.accessToken, auditQuery, controller.signal)
         if (!ignore) {
           setPage(loadedPage)
-          setLoadedPageState({ accessToken: auth.accessToken, client: auditClient, loaded: true })
+          setLoadedPageState({ accessToken: auth.accessToken, client: auditClient, filterKey })
         }
       } catch (caught) {
         if (!ignore) {
@@ -448,7 +436,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
       ignore = true
       controller.abort()
     }
-  }, [auditValidationErrors, auth.accessToken, auditClient, auditQuery, reloadToken])
+  }, [auditValidationErrors, auth.accessToken, auditClient, auditQuery, filterKey, reloadToken])
 
   async function exportCurrentEventsCsv() {
     if (auditValidationErrors.length > 0) {
@@ -593,16 +581,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
 
       <div className="operation-list audit-event-table" role="table" aria-label="События истории изменений" aria-busy={loading}>
         <div className="audit-event-row header" role="row">
-          <span role="columnheader">Время</span>
-          <span role="columnheader">Кто</span>
-          <span role="columnheader">Раздел</span>
-          <span role="columnheader">Объект</span>
-          <span role="columnheader">Действие</span>
-          <span role="columnheader">Поле</span>
-          <span role="columnheader">Было</span>
-          <span role="columnheader">Стало</span>
-          <span role="columnheader">Причина</span>
-          <span role="columnheader">Карточка</span>
+          {['Время', 'Кто', 'Раздел', 'Объект', 'Действие', 'Поле', 'Было', 'Стало', 'Причина', 'Карточка'].map((label) => <span role="columnheader" key={label}>{label}</span>)}
         </div>
         {loading && !hasLoadedPage ? <TableLoadingState label="Загружаем историю изменений" /> : null}
         {loading && hasLoadedPage ? <BackgroundRefreshStatus label="Обновляем историю изменений" /> : null}
@@ -640,7 +619,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           )
         }) : null}
       </div>
-      <TablePagination
+      {hasLoadedPage ? <TablePagination
         ariaLabel="Пагинация истории изменений"
         totalCount={page.totalCount}
         offset={page.offset}
@@ -650,7 +629,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
         pageSizeLabel="Количество строк истории изменений"
         onPageChange={(pageNumber) => setPage((current) => ({ ...current, offset: (pageNumber - 1) * current.limit }))}
         onPageSizeChange={(limit) => setPage(createEmptyPage<AuditEventDto>(limit))}
-      />
+      /> : null}
       {detailState ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeAuditEventDetail}>
           <section ref={detailDialogRef} className="detail-dialog audit-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="audit-detail-title" aria-describedby="audit-detail-description" onMouseDown={(event) => event.stopPropagation()}>

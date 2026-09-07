@@ -82,6 +82,12 @@ describe('core API clients', () => {
     expect(urls[2]).toBe('/api/audit/events/event%2F1')
     expect(urls[3]).toContain('/api/audit/events/export?')
     expect(urls[4]).toContain('/api/audit/events/export/xlsx?')
+    for (const url of [urls[0], urls[1], urls[3], urls[4]]) {
+      const query = new URL(url, 'http://localhost').searchParams
+      for (const [key, value] of Object.entries(filters)) {
+        if (key !== 'dateFrom' && key !== 'dateTo') expect(query.get(key)).toBe(String(value))
+      }
+    }
     for (const [, init] of fetchMock.mock.calls) {
       expect(init?.headers).toEqual({ Authorization: 'Bearer token' })
     }

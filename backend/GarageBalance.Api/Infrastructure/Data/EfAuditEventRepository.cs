@@ -229,12 +229,14 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
     {
         if (request.DateFrom is not null)
         {
-            query = query.Where(auditEvent => auditEvent.CreatedAtUtc >= request.DateFrom.Value);
+            var dateFromUtc = request.DateFrom.Value.ToUniversalTime();
+            query = query.Where(auditEvent => auditEvent.CreatedAtUtc >= dateFromUtc);
         }
 
         if (request.DateTo is not null)
         {
-            query = query.Where(auditEvent => auditEvent.CreatedAtUtc <= request.DateTo.Value);
+            var dateToUtc = request.DateTo.Value.ToUniversalTime();
+            query = query.Where(auditEvent => auditEvent.CreatedAtUtc <= dateToUtc);
         }
 
         return query;

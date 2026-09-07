@@ -66,53 +66,26 @@ async function requestBlob(accessToken: string, path: string): Promise<Blob> {
   return response.blob()
 }
 
+function getAuditDateBoundary(value: string, end: boolean) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const instant = new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`).toISOString()
+  // Include the final microsecond stored by PostgreSQL, preserving the local calendar day.
+  return end ? instant.replace('.999Z', '.999999Z') : instant
+}
+
 function buildQuery(params: AuditEventQuery = {}) {
   const searchParams = new URLSearchParams()
   if (params.dateFrom) {
-    searchParams.set('dateFrom', params.dateFrom)
+    searchParams.set('dateFrom', getAuditDateBoundary(params.dateFrom, false))
   }
   if (params.dateTo) {
-    searchParams.set('dateTo', params.dateTo)
+    searchParams.set('dateTo', getAuditDateBoundary(params.dateTo, true))
   }
-  if (params.action) {
-    searchParams.set('action', params.action)
+  for (const key of ['action', 'search', 'limit', 'section', 'actionKind', 'entityType', 'actorUserId', 'quickFilter', 'relatedGarage', 'relatedAccountingMonth', 'relatedCounterparty', 'relatedDocument'] as const) {
+    const value = params[key]
+    if (value) searchParams.set(key, String(value))
   }
-  if (params.search) {
-    searchParams.set('search', params.search)
-  }
-  if (params.offset !== undefined) {
-    searchParams.set('offset', String(params.offset))
-  }
-  if (params.limit) {
-    searchParams.set('limit', String(params.limit))
-  }
-  if (params.section) {
-    searchParams.set('section', params.section)
-  }
-  if (params.actionKind) {
-    searchParams.set('actionKind', params.actionKind)
-  }
-  if (params.entityType) {
-    searchParams.set('entityType', params.entityType)
-  }
-  if (params.actorUserId) {
-    searchParams.set('actorUserId', params.actorUserId)
-  }
-  if (params.quickFilter) {
-    searchParams.set('quickFilter', params.quickFilter)
-  }
-  if (params.relatedGarage) {
-    searchParams.set('relatedGarage', params.relatedGarage)
-  }
-  if (params.relatedAccountingMonth) {
-    searchParams.set('relatedAccountingMonth', params.relatedAccountingMonth)
-  }
-  if (params.relatedCounterparty) {
-    searchParams.set('relatedCounterparty', params.relatedCounterparty)
-  }
-  if (params.relatedDocument) {
-    searchParams.set('relatedDocument', params.relatedDocument)
-  }
+  if (params.offset !== undefined) searchParams.set('offset', String(params.offset))
   return searchParams.toString()
 }
 

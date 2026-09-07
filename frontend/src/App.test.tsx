@@ -23309,6 +23309,54 @@ describe('App', () => {
     expect(within(auditTable).getByText('Сводный отчет XLSX')).toBeInTheDocument()
   })
 
+  it('hides audit rows from previous date filters during loading and failure and ignores canceled responses', async () => {
+    const user = userEvent.setup()
+    type AuditPage = Awaited<ReturnType<AuditClient['getEventsPage']>>
+    const pending: Array<{ query: Parameters<AuditClient['getEventsPage']>[1]; signal?: AbortSignal; resolve: (page: AuditPage) => void; reject: (error: Error) => void }> = []
+    const event = createAuditEvent({ summary: 'Событие исходного периода' })
+    const auditClient = createAuditClient({
+      getEventsPage: (_token, query, signal) => new Promise<AuditPage>((resolve, reject) => pending.push({ query, signal, resolve, reject })),
+    })
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const panel = await screen.findByRole('region', { name: 'История изменений' })
+    await waitFor(() => expect(pending.length).toBe(1))
+    await act(async () => pending[0].resolve({ items: [event], totalCount: 1, offset: 0, limit: 25 }))
+    expect(within(panel).getByText(event.summary)).toBeInTheDocument()
+
+    fireEvent.change(within(panel).getByLabelText('Начало периода истории изменений'), { target: { value: '06.09.2026' } })
+    await waitFor(() => expect(pending.length).toBe(2))
+    expect(within(panel).queryByText(event.summary)).not.toBeInTheDocument()
+    expect(within(panel).getByRole('status', { name: 'Загружаем историю изменений' })).toBeInTheDocument()
+    await act(async () => pending[1].reject(new Error('История временно недоступна.')))
+    expect(await within(panel).findByText('История временно недоступна.')).toBeInTheDocument()
+    expect(within(panel).queryByText(event.summary)).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Событий пока нет')).not.toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(pending.length).toBe(3))
+    fireEvent.change(within(panel).getByLabelText('Конец периода истории изменений'), { target: { value: '06.09.2026' } })
+    await waitFor(() => expect(pending.length).toBe(4))
+    expect(pending[2].signal?.aborted).toBe(true)
+    await act(async () => pending[3].resolve({ items: [], totalCount: 0, offset: 0, limit: 25 }))
+    expect(await within(panel).findByText('Событий пока нет')).toBeInTheDocument()
+    await act(async () => pending[2].resolve({ items: [event], totalCount: 1, offset: 0, limit: 25 }))
+    expect(within(panel).queryByText(event.summary)).not.toBeInTheDocument()
+
+    fireEvent.change(within(panel).getByLabelText('Начало периода истории изменений'), { target: { value: '' } })
+    await waitFor(() => expect(pending.length).toBe(5))
+    expect(pending[4].query).toMatchObject({ dateFrom: undefined, dateTo: '2026-09-06' })
+    await act(async () => pending[4].resolve({ items: [event], totalCount: 1, offset: 0, limit: 25 }))
+    expect(await within(panel).findByText(event.summary)).toBeInTheDocument()
+    fireEvent.change(within(panel).getByLabelText('Конец периода истории изменений'), { target: { value: '' } })
+    await waitFor(() => expect(pending.length).toBe(6))
+    expect(pending[5].query).toMatchObject({ dateFrom: undefined, dateTo: undefined })
+    await act(async () => pending[5].resolve({ items: [event], totalCount: 1, offset: 0, limit: 25 }))
+    expect(await within(panel).findByText(event.summary)).toBeInTheDocument()
+  })
+
   it('does not call audit APIs when the date range is invalid', async () => {
     const user = userEvent.setup()
     let pageCalls = 0
