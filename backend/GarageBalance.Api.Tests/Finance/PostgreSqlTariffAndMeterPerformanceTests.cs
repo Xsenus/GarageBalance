@@ -29,7 +29,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             TariffCalculationBases.MeterElectricity,
             new DateOnly(2026, 1, 1));
         var firstWaterService = CreateService("A — вода перед лимитом", incomeType, activeTariff);
-        var electricityService = CreateService("Z — электроэнергия после воды", electricityIncomeType, electricityTariff);
+        var electricityService = CreateService("000 — электроэнергия после воды", electricityIncomeType, electricityTariff);
         var longHistoryService = CreateService("История из 240 периодов", incomeType, activeTariff);
         longHistoryService.IsRegular = false;
 
