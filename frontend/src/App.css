@@ -3270,36 +3270,17 @@ h1 {
 
 .meter-readings-control {
   width: 100%;
-  min-height: 34px;
-  border: 1px solid #d0d5dd;
-  border-radius: 7px;
-  background: #ffffff;
-  color: #101828;
-  font: inherit;
-  padding: 6px 8px;
-  font-size: 13px;
 }
 
-.meter-readings-control:hover {
-  border-color: #98a2b3;
-}
-
-.meter-readings-control:focus {
-  border-color: #111827;
-  outline: 0;
-  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
-}
-
-.meter-readings-control[aria-invalid='true'] {
-  border-color: #f04438;
-  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.08);
+input.meter-readings-control {
+  box-sizing: border-box;
+  height: 40px;
 }
 
 .meter-readings-table-shell {
   min-height: 0;
   flex: 1 1 0;
   overflow: auto;
-  max-height: none;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #ffffff;
@@ -3307,15 +3288,14 @@ h1 {
 }
 
 .meter-readings-table {
-  width: 100%;
-  min-width: 1368px;
+  min-width: 1344px;
 }
 
 .meter-readings-title-row,
 .meter-readings-month-row,
 .meter-readings-data-row {
   display: grid;
-  grid-template-columns: 96px repeat(12, minmax(106px, 1fr));
+  grid-template-columns: minmax(240px, 4fr) repeat(12, minmax(92px, 1fr));
 }
 
 .meter-readings-title-row {
@@ -3369,10 +3349,11 @@ h1 {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-height: 32px;
-  padding: 5px;
+  padding: 5px 4px;
   color: #344054;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .meter-readings-month-row span:first-child {
@@ -3385,22 +3366,21 @@ h1 {
 
 .meter-readings-month-row small {
   color: #667085;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: right;
 }
 
 .meter-readings-data-row > span:first-child {
   position: sticky;
   left: 0;
   z-index: 2;
-  display: grid;
+  display: flex;
   min-height: 32px;
-  place-items: center;
+  align-items: center;
+  padding: 0 12px;
   background: #ffffff;
   color: #344054;
   font-size: 12px;
   font-weight: 750;
+  white-space: nowrap;
 }
 
 .meter-readings-data-row > span:not(:first-child) {

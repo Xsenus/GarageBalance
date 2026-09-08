@@ -153,10 +153,10 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
               const baselineMonth = garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
               const initialReading = baselineMonth === `${appliedYear}-${month.key}`
-              const beforeInitialReading = Boolean(baselineMonth && `${appliedYear}-${month.key}` < baselineMonth)
+              const beforeInitialReading = !!baselineMonth && `${appliedYear}-${month.key}` < baselineMonth
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
               const outsideCurrentMonth = `${appliedYear}-${month.key}` !== currentMonth
-              const hasSavedReading = Boolean(savedReadings[cellKey]?.trim())
+              const hasSavedReading = !!savedReadings[cellKey]?.trim()
               const outsideMonthUnavailable = (futureMonth && !canEditOutsideCurrentMonth) ||
                 (outsideCurrentMonth && hasSavedReading && !historicalCorrectionEnabled)
               const replacementSerial = savedReadingReplacements[cellKey]
@@ -235,7 +235,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(yearDraft)
   const [currentMonth, setCurrentMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const pendingReadingSaving = Boolean(pendingReadingChange && savingReadingKey === pendingReadingChange.cellKey)
+  const pendingReadingSaving = !!pendingReadingChange && savingReadingKey === pendingReadingChange.cellKey
   const hasLoadedCurrentDataset = confirmedPage?.[0] === auth.accessToken
 
   function cancelPendingReadingChange() {
@@ -322,10 +322,10 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     }
   }
 
-  useRestoreFocusOnClose(Boolean(pendingReadingChange))
-  const readingChangeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingReadingChange))
-  const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingReadingChange))
-  useEscapeKey(Boolean(pendingReadingChange) && !pendingReadingSaving, () => cancelPendingReadingChange())
+  useRestoreFocusOnClose(!!pendingReadingChange)
+  const readingChangeDialogRef = useFocusTrap<HTMLElement>(!!pendingReadingChange)
+  const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(!!pendingReadingChange)
+  useEscapeKey(!!pendingReadingChange && !pendingReadingSaving, () => cancelPendingReadingChange())
 
   useEffect(() => {
     let isMounted = true
@@ -492,7 +492,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     setError(null)
     setReadingChangeError(null)
     try {
-      const isHistoricalCorrection = Boolean(readingId && request.accountingMonth.slice(0, 7) !== currentMonth)
+      const isHistoricalCorrection = !!readingId && request.accountingMonth.slice(0, 7) !== currentMonth
       const savedReading = isHistoricalCorrection
         ? await financeClient.correctHistoricalMeterReading!(auth.accessToken, readingId!, {
             readingDate: request.readingDate,
@@ -616,7 +616,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
             <input
               aria-label="Год показаний"
               aria-invalid={!yearIsValid}
-              className="meter-readings-control"
+              className="contractors-editable-input meter-readings-control"
               inputMode="numeric"
               maxLength={4}
               value={yearDraft}

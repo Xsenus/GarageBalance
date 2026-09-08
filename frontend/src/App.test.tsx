@@ -7834,7 +7834,7 @@ describe('App', () => {
       getChargeServiceSettings: async () => [
         createChargeServiceSetting({ id: 'meter-electricity-setting', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', unitName: 'Вт·ч' }),
         createChargeServiceSetting({ id: 'meter-water-setting', isRegular: true, isMetered: true, tariffId: waterTariff.id, tariffCalculationBase: 'meter_water', unitName: 'гал.' }),
-        createChargeServiceSetting({ id: 'meter-security-setting', name: 'Охрана', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', meterKind: securityMeterKind, unitName: 'ч' }),
+        createChargeServiceSetting({ id: 'meter-security-setting', name: 'Охрана', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', meterKind: securityMeterKind, unitName: 'моточасы' }),
       ],
     })
     const financeClient = createFinanceClient({
@@ -8052,8 +8052,9 @@ describe('App', () => {
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
 
     await user.click(meterTypeSelect)
-    await user.click(within(readingsPanel).getByRole('option', { name: 'Охрана, ч' }))
+    await user.click(within(readingsPanel).getByRole('option', { name: 'Охрана, моточасы' }))
     await waitFor(() => expect(meterReadingYearPageRequests.at(-1)).toEqual({ year: 2026, meterKind: securityMeterKind, offset: 0, limit: 25 }))
+    expect(within(readingsPanel).getByRole('columnheader', { name: /Сентябрьмоточасы/i })).toBeInTheDocument()
 
     await user.click(meterTypeSelect)
     await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, гал.' }))
