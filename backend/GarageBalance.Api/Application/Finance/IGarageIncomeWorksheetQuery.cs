@@ -88,4 +88,5 @@ public sealed record GarageIncomeWorksheetReasonData(
     Guid IncomeTypeId,
     string IncomeTypeName,
     string Reason,
-    Guid? FeeCampaignId = null);
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);

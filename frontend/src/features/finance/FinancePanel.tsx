@@ -3513,6 +3513,7 @@ function PaymentsPrototypePanel({
     monthTo = incomeWorksheetMonthTo,
     preservedMeter?: Pick<GarageIncomePrototypeRow, 'meterKind' | 'month' | 'meterDraft' | 'meterError'>,
     resolveAvailablePeriod = false,
+    minimumAccrualTotal?: number,
   ) {
     incomeWorksheetRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -3544,6 +3545,13 @@ function PaymentsPrototypePanel({
         ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
         : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+        return
+      }
+
+      // A save response can race with a worksheet request that started just
+      // before the transaction committed. Do not let that older snapshot
+      // erase the optimistic accrual already shown to the operator.
+      if (minimumAccrualTotal !== undefined && worksheet.accrualTotal + 0.01 < minimumAccrualTotal) {
         return
       }
 
@@ -3884,6 +3892,9 @@ function PaymentsPrototypePanel({
   function refreshGarageAfterAccrualSave(garage: PaymentsPrototypeGarage, accrual: AccrualDto, incomeTypeCode: string) {
     if (selectedGarageIdRef.current !== garage.id) return
     const amount = accrual.amount
+    const minimumAccrualTotal = garageWorksheetSummary
+      ? roundPaymentMoney(garageWorksheetSummary.accrualTotal + amount)
+      : undefined
     setGarageRows((rows) => mergeSavedGarageAccrual(rows, accrual, incomeTypeCode))
     setGarageWorksheetSummary((summary) => summary ? {
       ...summary,
@@ -3896,7 +3907,7 @@ function PaymentsPrototypePanel({
       : current)
     void Promise.all([
       refreshGarageOverdueDebt(garage),
-      loadGarageIncomeWorksheet(garage),
+      loadGarageIncomeWorksheet(garage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, undefined, false, minimumAccrualTotal),
       paymentHistoryOpen ? loadGaragePaymentHistory(garage) : Promise.resolve(),
     ]).then(([overdueDebtRefreshed]) => {
       if (!overdueDebtRefreshed && selectedGarageIdRef.current === garage.id) {

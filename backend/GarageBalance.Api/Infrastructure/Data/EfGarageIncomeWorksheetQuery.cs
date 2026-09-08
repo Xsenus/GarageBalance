@@ -7,6 +7,7 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContext) : IGarageIncomeWorksheetQuery
 {
+    private const string OtherPaymentsIncomeTypeCode = "other_payments";
     private const int GarageCategory = 0;
     private const int PreviousAccrualCategory = 1;
     private const int PreviousIncomeCategory = 2;
@@ -163,7 +164,11 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 IncomeTypeId = (Guid?)group.Key.IncomeTypeId,
-                IncomeTypeName = (string?)(group.Key.IrregularPaymentName ?? group.Key.Basis ?? group.Key.Name),
+                // Freeform manual accruals share the stable accounting type and
+                // month. Their individual bases are retained in Comment below,
+                // while catalog accruals remain separated by ID.
+                IncomeTypeName = (string?)(group.Key.IrregularPaymentName ??
+                    (group.Key.Code == OtherPaymentsIncomeTypeCode ? group.Key.Name : group.Key.Basis ?? group.Key.Name)),
                 IncomeTypeCode = group.Key.Code,
                 group.Key.IrregularPaymentId,
                 group.Key.IrregularPaymentIsAvailable,
@@ -179,7 +184,13 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
-                group.Key.Comment,
+                Comment = group.Key.Code == OtherPaymentsIncomeTypeCode
+                    ? group.Key.Basis == null
+                        ? group.Key.Comment
+                        : group.Key.Comment == null
+                            ? group.Key.Basis
+                            : group.Key.Basis + "; " + group.Key.Comment
+                    : group.Key.Comment,
                 group.Key.CalculationDetailsJson,
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
@@ -405,7 +416,9 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccountingMonth = (DateOnly?)allocation.Accrual.AccountingMonth,
                 IncomeTypeId = (Guid?)allocation.Accrual.IncomeTypeId,
                 IncomeTypeName = (string?)(allocation.Accrual.IrregularPayment == null
-                    ? allocation.Accrual.Basis ?? allocation.Accrual.IncomeType.Name
+                    ? allocation.Accrual.IncomeType.Code == OtherPaymentsIncomeTypeCode
+                        ? allocation.Accrual.IncomeType.Name
+                        : allocation.Accrual.Basis ?? allocation.Accrual.IncomeType.Name
                     : allocation.Accrual.IrregularPayment.Name),
                 IncomeTypeCode = allocation.Accrual.IncomeType.Code,
                 allocation.Accrual.IrregularPaymentId,
@@ -482,7 +495,6 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
-
         var rows = await garageQuery
             .Concat(previousAccrualQuery)
             .Concat(previousIncomeQuery)
@@ -494,6 +506,29 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Concat(allocationQuery)
             .Concat(advanceQuery)
             .ToListAsync(cancellationToken);
+        var accrualRows = rows.Where(row => row.Category == AccrualBucketCategory).ToList();
+        var accrualBuckets = accrualRows
+            .GroupBy(row => new
+            {
+                row.AccountingMonth,
+                row.IncomeTypeId,
+                row.IncomeTypeName,
+                row.IncomeTypeCode,
+                row.IrregularPaymentId,
+                row.IrregularPaymentIsAvailable,
+                row.FeeCampaignId,
+                row.CalculationDetailsJson
+            })
+            .Select(group => new GarageIncomeWorksheetBucketData(
+                group.Key.AccountingMonth!.Value,
+                group.Key.IncomeTypeId!.Value,
+                group.Key.IncomeTypeName!,
+                group.Key.IncomeTypeCode,
+                group.Sum(row => row.Amount),
+                group.Key.IrregularPaymentId,
+                group.Key.IrregularPaymentIsAvailable,
+                group.Key.FeeCampaignId))
+            .ToList();
         var garage = rows.SingleOrDefault(row => row.Category == GarageCategory);
         if (garage is null)
         {
@@ -510,17 +545,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             garage.Amount,
             rows.Where(row => row.Category == PreviousAccrualCategory).Sum(row => row.Amount),
             rows.Where(row => row.Category == PreviousIncomeCategory).Sum(row => row.Amount),
-            rows.Where(row => row.Category == AccrualBucketCategory)
-                .Select(row => new GarageIncomeWorksheetBucketData(
-                    row.AccountingMonth!.Value,
-                    row.IncomeTypeId!.Value,
-                    row.IncomeTypeName!,
-                    row.IncomeTypeCode,
-                    row.Amount,
-                    row.IrregularPaymentId,
-                    row.IrregularPaymentIsAvailable,
-                    row.FeeCampaignId))
-                .ToList(),
+            accrualBuckets,
             rows.Where(row => row.Category == IncomeBucketCategory)
                 .Select(row => new GarageIncomeWorksheetBucketData(
                     row.AccountingMonth!.Value,
@@ -574,22 +599,30 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.IncomeTypeId!.Value,
                     row.Amount))
                 .ToList(),
-            rows.Where(row => row.Category == AccrualBucketCategory && row.CalculationDetailsJson != null)
-                .Select(row => new GarageIncomeWorksheetCalculationData(
-                    row.AccountingMonth!.Value,
-                    row.IncomeTypeId!.Value,
-                    row.IncomeTypeName!,
-                    row.CalculationDetailsJson!,
-                    row.FeeCampaignId))
+            accrualRows
+                .Where(row => row.CalculationDetailsJson != null)
+                .GroupBy(row => new { row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.CalculationDetailsJson, row.FeeCampaignId })
+                .Select(group => new GarageIncomeWorksheetCalculationData(
+                    group.Key.AccountingMonth!.Value,
+                    group.Key.IncomeTypeId!.Value,
+                    group.Key.IncomeTypeName!,
+                    group.Key.CalculationDetailsJson!,
+                    group.Key.FeeCampaignId))
                 .ToList(),
-            rows.Where(row => row.Category == AccrualBucketCategory && row.Comment != null)
-                .GroupBy(row => new { row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.FeeCampaignId })
+            accrualRows
+                .Where(row => !string.IsNullOrWhiteSpace(row.Comment))
+                .GroupBy(row => new { row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.IrregularPaymentId, row.FeeCampaignId })
                 .Select(group => new GarageIncomeWorksheetReasonData(
                     group.Key.AccountingMonth!.Value,
                     group.Key.IncomeTypeId!.Value,
                     group.Key.IncomeTypeName!,
-                    string.Join("; ", group.Select(row => row.Comment!.Trim()).Where(reason => reason.Length > 0).Distinct()),
-                    group.Key.FeeCampaignId))
+                    string.Join("; ", group
+                        .Select(row => row.Comment)
+                        .Where(reason => !string.IsNullOrWhiteSpace(reason))
+                        .Select(reason => reason!.Trim())
+                        .Distinct()),
+                    group.Key.FeeCampaignId,
+                    group.Key.IrregularPaymentId))
                 .Where(row => row.Reason.Length > 0)
                 .ToList());
     }

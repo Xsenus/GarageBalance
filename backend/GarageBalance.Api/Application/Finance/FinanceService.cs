@@ -466,7 +466,7 @@ public sealed class FinanceService(
             .ToDictionary(group => group.Key, group => group.First().MeterKind);
 
         var accrualLookup = worksheetData.AccrualBuckets
-            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName, bucket.FeeCampaignId))
+            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName, bucket.IrregularPaymentId, bucket.FeeCampaignId))
             .ToDictionary(
                 group => group.Key,
                 group => group.First() with { Amount = MoneyMath.RoundMoney(group.Sum(bucket => bucket.Amount)) });
@@ -476,7 +476,7 @@ public sealed class FinanceService(
                 group => group.Key,
                 group => RegularAccrualCalculator.Deserialize(group.First().CalculationDetailsJson));
         var reasonLookup = (worksheetData.Reasons ?? [])
-            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName, item.FeeCampaignId))
+            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName, item.IrregularPaymentId, item.FeeCampaignId))
             .ToDictionary(group => group.Key, group => string.Join("; ", group.Select(item => item.Reason).Distinct()));
         var appliedIncomeLookup = worksheetData.Allocations
             .Where(allocation =>
@@ -487,6 +487,7 @@ public sealed class FinanceService(
                 allocation.AccrualAccountingMonth,
                 allocation.IncomeTypeId,
                 allocation.IncomeTypeName,
+                allocation.IrregularPaymentId,
                 allocation.FeeCampaignId))
             .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
         var appliedPaymentLookup = worksheetData.Allocations
@@ -536,9 +537,9 @@ public sealed class FinanceService(
         var rows = keys.Select(key =>
         {
             var accrualAmount = MoneyMath.RoundMoney(accrualLookup
-                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId))?.Amount ?? 0m);
+                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.IrregularPaymentId, key.FeeCampaignId))?.Amount ?? 0m);
             var incomeAmount = appliedIncomeLookup
-                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId));
+                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.IrregularPaymentId, key.FeeCampaignId));
             var advanceAmount = advanceDisplayKeys.Contains((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName))
                 ? advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))
                 : 0m;
@@ -569,7 +570,7 @@ public sealed class FinanceService(
                 IrregularPaymentId: key.IrregularPaymentId,
                 IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
                 CalculationDetails: calculationDetails,
-                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId)),
+                Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.IrregularPaymentId, key.FeeCampaignId)),
                 IncomeTypeCode: key.IncomeTypeCode);
         }).ToList();
 
