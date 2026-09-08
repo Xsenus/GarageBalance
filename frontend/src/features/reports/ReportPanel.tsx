@@ -18,7 +18,9 @@ import type { RankableReportFilterOption } from '../../shared/reportFilters'
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
 import { SelectControl } from '../../shared/SelectControl'
+import { ToastViewport } from '../../shared/Toast'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { useToast } from '../../shared/useToast'
 import { getReportDateRangeValidationErrors } from '../../shared/validation'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
@@ -289,6 +291,7 @@ function renderReportLoadingState(primaryLoading: boolean, refreshing: boolean) 
 
 export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient; fundsClient: FundsClient }) {
   const [actionCommentsRequired] = useActionCommentSettings()
+  const { toast, showToast, dismissToast } = useToast()
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
   const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
@@ -304,7 +307,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     bankDeposits: { dateFrom: today, dateTo: today },
     funds: { dateFrom: today, dateTo: today },
   })
-  const reportPeriodErrorId = useId()
   const activeMonthRange = monthlyFilters[activeReportTab as ReportMonthlyFilterKey]
   const activeDateRange = dateFilters[activeReportTab as ReportDateFilterKey]
   const reportPeriodError = activeMonthRange || activeDateRange
@@ -313,6 +315,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       activeMonthRange ? getReportMonthStart(activeMonthRange.monthTo) : activeDateRange.dateTo,
       'периода отчета',
     ).join(' ') : ''
+  useEffect(() => {
+    if (reportPeriodError) showToast(reportPeriodError, 'error')
+    else dismissToast()
+  }, [dismissToast, reportPeriodError, showToast])
   const [selectedFundIds, setSelectedFundIds] = useState<string[]>([])
   const [fundFilterOptions, setFundFilterOptions] = useState<ReportFilterOption[]>([])
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
@@ -368,9 +374,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   const [feeDetailMode, setFeeDetailMode] = useState<'debtors' | 'all'>('debtors')
   const [garageAccrualsGrouped, setGarageAccrualsGrouped] = useState(false)
   const [incomePaymentsGrouped, setIncomePaymentsGrouped] = useState(true)
-  const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [reportExporting, setReportExporting] = useState<string | null>(null)
-  const [reportExportMessage, setReportExportMessage] = useState<string | null>(null)
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
@@ -661,16 +665,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
     const exportKey = `consolidated-${extension}`
     setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
         ? await reportClient.exportConsolidatedReportXlsx(auth.accessToken, params)
         : await reportClient.exportConsolidatedReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('consolidated', params.monthFrom, params.monthTo, extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
+      showToast(getReportExportSuccessMessage(extension))
     } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+      showToast(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.', 'error')
     } finally {
       setReportExporting(null)
     }
@@ -688,16 +690,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
     const exportKey = `garages-${extension}`
     setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
         ? await reportClient.exportGarageReportXlsx(auth.accessToken, params)
         : await reportClient.exportGarageReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('garages', params.monthFrom, params.monthTo, extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
+      showToast(getReportExportSuccessMessage(extension))
     } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+      showToast(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.', 'error')
     } finally {
       setReportExporting(null)
     }
@@ -864,16 +864,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
     const exportKey = `payouts-${extension}`
     setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
         ? await reportClient.exportExpenseReportXlsx(auth.accessToken, params)
         : await reportClient.exportExpenseReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('expense', params.dateFrom, params.dateTo, extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
+      showToast(getReportExportSuccessMessage(extension))
     } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+      showToast(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.', 'error')
     } finally {
       setReportExporting(null)
     }
@@ -891,16 +889,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     }
     const exportKey = `income-${extension}`
     setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
         ? await reportClient.exportIncomeReportXlsx(auth.accessToken, params)
         : await reportClient.exportIncomeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('income', filter.dateFrom, filter.dateTo, extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
+      showToast(getReportExportSuccessMessage(extension))
     } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+      showToast(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.', 'error')
     } finally {
       setReportExporting(null)
     }
@@ -912,8 +908,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     const params = { ...filter, fundIds: type === 'funds' ? selectedFundIds : undefined, sortBy: sort?.field, sortDirection: sort?.direction }
     const exportKey = `${type}-${extension}`
     setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
     try {
       const blob = type === 'funds'
         ? extension === 'xlsx'
@@ -928,9 +922,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             : await reportClient.exportBankDepositReportPdf(auth.accessToken, params)
       const reportType = type === 'funds' ? 'fund-changes' : type === 'cashPayments' ? 'cash-payments' : 'bank-deposits'
       downloadBlob(blob, buildReportFileName(reportType, filter.dateFrom, filter.dateTo, extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
+      showToast(getReportExportSuccessMessage(extension))
     } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+      showToast(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.', 'error')
     } finally {
       setReportExporting(null)
     }
@@ -940,16 +934,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     const exportKey = `fees-${extension}`
     const params = { feeEntryIds: selectedFeeEntryIds.length > 0 ? selectedFeeEntryIds : undefined, sortBy: reportSorts.fees?.field, sortDirection: reportSorts.fees?.direction }
     setReportExporting(exportKey)
-    setReportExportMessage(null)
-    setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
         ? await reportClient.exportFeeReportXlsx(auth.accessToken, params)
         : await reportClient.exportFeeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildSnapshotReportFileName('fees', extension))
-      setReportExportMessage(getReportExportSuccessMessage(extension))
+      showToast(getReportExportSuccessMessage(extension))
     } catch (caught) {
-      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+      showToast(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.', 'error')
     } finally {
       setReportExporting(null)
     }
@@ -991,12 +983,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {(['from', 'to'] as const).map((bound) => (
             <label key={bound}>
               <span>{labels[bound]}</span>
-              <LocalizedDatePicker ariaLabel={labels[bound]} mode={mode} value={bound === 'from' ? from : to} aria-invalid={!(bound === 'from' ? from : to) || Boolean(to && from > to)} aria-describedby={reportPeriodError ? reportPeriodErrorId : undefined} onChange={(value) => updateRange(bound === 'from' ? value : from, bound === 'to' ? value : to)} required />
+              <LocalizedDatePicker ariaLabel={labels[bound]} mode={mode} value={bound === 'from' ? from : to} aria-invalid={!(bound === 'from' ? from : to) || Boolean(to && from > to)} onChange={(value) => updateRange(bound === 'from' ? value : from, bound === 'to' ? value : to)} required />
             </label>
           ))}
           <ReportPeriodQuickSelect mode={mode} valueFrom={from} valueTo={to} referenceDate={today} onSelect={(range) => updateRange(month ? range.monthFrom : range.dateFrom, month ? range.monthTo : range.dateTo)} />
         </div>
-        {reportPeriodError ? <FormError id={reportPeriodErrorId}>{reportPeriodError}</FormError> : null}
         {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
         {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}
       </div>
@@ -1656,10 +1647,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
         </div>
       </div>
 
-      {reportDataError ? <FormError>{reportDataError}</FormError> : null}
-      {reportExportMessage ? <p className="form-success">{reportExportMessage}</p> : null}
-
-
       <div className="report-tabs report-tabs--workbook" role="tablist" aria-label="Разделы отчетов">
         {reportWorkbookTabs.map((tab) => (
           <button
@@ -1695,6 +1682,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       <div className="report-tab-panel" role="tabpanel" id={`report-panel-${activeReportTab}`} aria-labelledby={`report-tab-${activeReportTab}`}>
         {renderActiveReport()}
       </div>
+
+      <ToastViewport toast={toast} onDismiss={dismissToast} />
 
       {garageQuickListEditor ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => {

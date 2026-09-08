@@ -25517,7 +25517,9 @@ describe('App', () => {
     for (const [field, message] of [[from, 'Укажите начало периода отчета.'], [to, 'Укажите конец периода отчета.']] as const) {
       const callCount = read.mock.calls.length
       fireEvent.change(field, { target: { value: '' } })
-      expect(await within(panel).findByText(message)).toBeInTheDocument()
+      const validationMessage = await within(panel).findByText(message)
+      expect(validationMessage.closest('[role="alert"]')).toHaveClass('toast-message', 'toast-message--error')
+      expect(from.closest('.report-workbook-filter')?.querySelector('.form-error')).not.toBeInTheDocument()
       expect(field).toHaveAttribute('aria-invalid', 'true')
       expect(read).toHaveBeenCalledTimes(callCount)
       expect(within(panel).getByRole('button', { name: 'Скачать XLSX', exact: true })).toBeDisabled()
@@ -25531,7 +25533,8 @@ describe('App', () => {
     }
     fireEvent.change(to, { target: { value: mode === 'month' ? '08.2026' : '31.08.2026' } })
     fireEvent.change(from, { target: { value: mode === 'month' ? '10.2026' : '01.10.2026' } })
-    expect(await within(panel).findByText('Начало периода отчета не может быть позже конца.')).toBeInTheDocument()
+    const reversedPeriodMessage = await within(panel).findByText('Начало периода отчета не может быть позже конца.')
+    expect(reversedPeriodMessage.closest('[role="alert"]')).toHaveClass('toast-message', 'toast-message--error')
     expect(from).toHaveAttribute('aria-invalid', 'true')
     expect(to).toHaveAttribute('aria-invalid', 'true')
     await user.click(within(panel).getByRole('button', { name: 'Текущий месяц', exact: true }))
@@ -26877,19 +26880,22 @@ describe('App', () => {
     const cashXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     await user.click(cashXlsxButton)
 
-    expect(await within(reportsPanel).findByText('XLSX отчета временно недоступен')).toHaveAttribute('role', 'alert')
+    const exportError = await within(reportsPanel).findByText('XLSX отчета временно недоступен')
+    expect(exportError.closest('[role="alert"]')).toHaveClass('toast-message', 'toast-message--error')
     expect(within(reportsPanel).queryByText('Отчет XLSX готов.')).not.toBeInTheDocument()
     expect(exportCashPaymentReportXlsx).toHaveBeenCalledTimes(1)
 
     await user.click(cashXlsxButton)
 
-    expect(await within(reportsPanel).findByText('Отчет XLSX готов.')).toBeInTheDocument()
+    const xlsxSuccess = await within(reportsPanel).findByText('Отчет XLSX готов.')
+    expect(xlsxSuccess.closest('[role="status"]')).toHaveClass('toast-message')
     expect(within(reportsPanel).queryByText('XLSX отчета временно недоступен')).not.toBeInTheDocument()
     expect(exportCashPaymentReportXlsx).toHaveBeenCalledTimes(2)
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
 
-    expect(await within(reportsPanel).findByText('Отчет PDF готов.')).toBeInTheDocument()
+    const pdfSuccess = await within(reportsPanel).findByText('Отчет PDF готов.')
+    expect(pdfSuccess.closest('[role="status"]')).toHaveClass('toast-message')
     expect(exportCashPaymentReportPdf).toHaveBeenCalledTimes(1)
   })
 

@@ -7721,17 +7721,6 @@ button.operation-row:focus-visible {
   flex-direction: column;
 }
 
-.reports-workbook-panel > .section-heading,
-.reports-workbook-panel > .form-error,
-.reports-workbook-panel > .form-success,
-.reports-workbook-panel > .report-tabs--workbook {
-  flex: 0 0 auto;
-}
-
-.reports-workbook-panel > .report-tab-panel {
-  display: block;
-}
-
 .report-workbook-sheet {
   display: flex;
   flex-direction: column;
