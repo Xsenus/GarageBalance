@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ExpenseBatchPreview } from '../../services/expenseBatchesApi'
@@ -96,13 +96,12 @@ describe('ExpenseBatchPaymentDialog', () => {
     expect(client.pay).not.toHaveBeenCalled()
   })
 
-  it('displays load errors and reloads the calculation', async () => {
-    const user = userEvent.setup()
+  it('displays load errors without the manual calculation refresh control', async () => {
     const { props, client } = setup()
     client.preview.mockRejectedValueOnce(new Error('Сервис недоступен'))
     render(<ExpenseBatchPaymentDialog {...props} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Сервис недоступен')
-    await user.click(screen.getByRole('button', { name: 'Обновить расчёт' }))
-    await waitFor(() => expect(screen.getByRole('table')).toBeVisible())
+    expect(screen.queryByRole('button', { name: 'Обновить расчёт' })).not.toBeInTheDocument()
+    expect(client.preview).toHaveBeenCalledOnce()
   })
 })

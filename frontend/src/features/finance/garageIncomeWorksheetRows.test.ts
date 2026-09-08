@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
-import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
+
+describe('normalizeGarageDebtAfterForHistory', () => {
+  it('shows zero remaining debt after an overpayment instead of a negative debt', () => {
+    expect(normalizeGarageDebtAfterForHistory(-125.456)).toBe(0)
+    expect(normalizeGarageDebtAfterForHistory(125.456)).toBe(125.46)
+    expect(normalizeGarageDebtAfterForHistory(null)).toBe(0)
+  })
+})
 
 describe('formatPaymentPrototypeMonthLabel', () => {
   it('formats an accounting month and a date through the same compact label', () => {
@@ -106,8 +114,8 @@ describe('getAccrualCalculationSummary', () => {
 describe('shouldShowAccrualReason', () => {
   const row = (incomeTypeCode: string | null, reason: string | null) => ({ incomeTypeCode, reason }) as GarageIncomePrototypeRow
 
-  it('shows only penalty reasons in the default mode', () => {
-    expect(shouldShowAccrualReason(row('penalty', 'Пеня за просрочку'), 'penalties_only')).toBe(true)
+  it('does not repeat a penalty reason that is included in the row title', () => {
+    expect(shouldShowAccrualReason(row('penalty', 'Пеня за просрочку'), 'penalties_only')).toBe(false)
     expect(shouldShowAccrualReason(row('water', 'Повторный расчёт'), 'penalties_only')).toBe(false)
   })
 
@@ -118,5 +126,14 @@ describe('shouldShowAccrualReason', () => {
 
   it('hides every reason in the hidden mode', () => {
     expect(shouldShowAccrualReason(row('penalty', 'Пеня за просрочку'), 'hidden')).toBe(false)
+  })
+})
+
+describe('getGarageIncomeRowTitle', () => {
+  it('shows the business meaning instead of the destination fund for penalties and irregular accruals', () => {
+    expect(getGarageIncomeRowTitle({ incomeTypeCode: 'penalty', reason: 'Просрочка оплаты' } as GarageIncomePrototypeRow))
+      .toBe('Штраф: Просрочка оплаты')
+    expect(getGarageIncomeRowTitle({ incomeTypeCode: 'other_income', irregularPaymentId: 'one', reason: 'Ремонт ворот', service: 'Прочее' } as GarageIncomePrototypeRow))
+      .toBe('Основание: Ремонт ворот')
   })
 })

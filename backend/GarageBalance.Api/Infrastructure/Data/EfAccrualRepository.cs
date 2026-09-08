@@ -348,7 +348,9 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             {
                 AccrualId = accrual.Id,
                 accrual.IncomeTypeId,
-                IncomeTypeName = accrual.IncomeType.Name,
+                IncomeTypeName = accrual.FeeCampaignId != null
+                    ? "Сбор: " + (accrual.FeeCampaign != null ? accrual.FeeCampaign.Name : accrual.IncomeType.Name)
+                    : accrual.IncomeType.Name,
                 ChargeName = accrual.FeeCampaignId != null || accrual.Source == AccrualSources.FeeCampaign
                     ? (accrual.Basis != null && accrual.Basis.Trim() != string.Empty
                         ? accrual.Basis
@@ -404,7 +406,9 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             {
                 AccrualId = accrual.Id,
                 accrual.IncomeTypeId,
-                IncomeTypeName = accrual.IncomeType.Name,
+                IncomeTypeName = accrual.FeeCampaignId != null
+                    ? "Сбор: " + (accrual.FeeCampaign != null ? accrual.FeeCampaign.Name : accrual.IncomeType.Name)
+                    : accrual.IncomeType.Name,
                 accrual.AccountingMonth,
                 accrual.DueDate,
                 accrual.Amount,

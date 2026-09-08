@@ -547,8 +547,7 @@ public sealed class FinanceService(
             var meterKind = calculationDetails is { RequiresMeter: false }
                 ? null
                 : meterKindByIncomeTypeId.GetValueOrDefault(key.IncomeTypeId)
-                  ?? (calculationDetails is null ? null : ResolveMeterKind(calculationDetails.Lines.Select(line => line.CalculationBase)))
-                  ?? InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
+                  ?? (calculationDetails is null ? null : ResolveMeterKind(calculationDetails.Lines.Select(line => line.CalculationBase)));
             meterReadingByMonthKind.TryGetValue((key.AccountingMonth, meterKind ?? string.Empty), out var reading);
             return new GarageIncomeWorksheetRowDto(
                 key.AccountingMonth,
@@ -662,7 +661,7 @@ public sealed class FinanceService(
             rows.Add(new GarageIncomeWorksheetRowDto(
                 monthTo,
                 accrual.IncomeTypeId,
-                campaign.Name,
+                $"Сбор: {campaign.Name}",
                 null,
                 null,
                 null,
@@ -2578,7 +2577,7 @@ public sealed class FinanceService(
         }
 
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
-        var allowNegativeFundBalance = !isCashExpense && request.ConfirmNegativeFundBalance;
+        var allowNegativeFundBalance = request.ConfirmNegativeFundBalance;
         var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
@@ -2619,11 +2618,9 @@ public sealed class FinanceService(
                     "Выплата должна использовать фонд настроенной услуги поставщика.");
             }
         }
-        else if (request.ExpenseFundId.HasValue)
+        else
         {
-            return FinanceResult<FinancialOperationDto>.Failure(
-                "episodic_expense_fund_not_allowed",
-                "Эпизодическая выплата из кассы не списывает средства из фонда.");
+            expenseFundId = request.ExpenseFundId;
         }
 
         await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
@@ -2743,7 +2740,7 @@ public sealed class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        if (operation.SupplierId.HasValue || operation.ExpenseFundId.HasValue)
+        if (operation.SupplierId.HasValue)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "episodic_expense_conversion_not_supported",
@@ -2770,6 +2767,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(FinanceBalanceAccounts.Cash, cancellationToken);
         var amount = MoneyMath.RoundMoney(request.Amount);
         var availableCashAmount = MoneyMath.RoundMoney(await CalculateAvailableCashAmountAsync(cancellationToken) + operation.Amount);
@@ -2781,6 +2779,7 @@ public sealed class FinanceService(
         }
 
         var previousSnapshot = FormatExpenseOperationSnapshot(operation);
+        var previousExpenseFundId = operation.ExpenseFundId;
         var oldValues = new Dictionary<string, object?>
         {
             ["operationDate"] = operation.OperationDate,
@@ -2788,6 +2787,7 @@ public sealed class FinanceService(
             ["amount"] = operation.Amount,
             ["counterpartyName"] = operation.CounterpartyName,
             ["expenseType"] = operation.ExpenseType?.Name,
+            ["expenseFund"] = operation.ExpenseFund?.Name,
             ["documentNumber"] = operation.DocumentNumber,
             ["comment"] = operation.Comment
         };
@@ -2802,7 +2802,54 @@ public sealed class FinanceService(
         operation.Comment = NormalizeOptional(request.Comment);
         operation.ExpenseTypeId = expenseType.Id;
         operation.ExpenseType = expenseType;
+        operation.ExpenseFundId = request.ExpenseFundId;
+        operation.ExpenseFund = null;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        ExpenseFundDisbursementResult fundDisbursementResult;
+        if (previousExpenseFundId.HasValue && !request.ExpenseFundId.HasValue)
+        {
+            fundDisbursementResult = await expenseFundDisbursementService.CancelAsync(
+                operation,
+                "Выплата перенесена в общий нераспределённый пул.",
+                actorUserId,
+                cancellationToken);
+            operation.ExpenseFundId = null;
+            operation.ExpenseFund = null;
+        }
+        else if (previousExpenseFundId.HasValue && request.ExpenseFundId.HasValue)
+        {
+            fundDisbursementResult = await expenseFundDisbursementService.UpdateAsync(
+                operation,
+                request.ExpenseFundId.Value,
+                operation.CounterpartyName ?? "получатель",
+                expenseType.Name,
+                amount,
+                actorUserId,
+                request.ConfirmNegativeFundBalance,
+                cancellationToken);
+        }
+        else if (request.ExpenseFundId.HasValue)
+        {
+            fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+                operation,
+                operation.CounterpartyName ?? "получатель",
+                actorUserId,
+                request.ConfirmNegativeFundBalance,
+                cancellationToken);
+        }
+        else
+        {
+            fundDisbursementResult = ExpenseFundDisbursementResult.Success();
+        }
+
+        if (!fundDisbursementResult.Succeeded)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                fundDisbursementResult.ErrorCode!,
+                fundDisbursementResult.ErrorMessage!);
+        }
+
+        operation.NegativeFundBalanceConfirmed = fundDisbursementResult.NegativeBalanceConfirmed;
         var newValues = new Dictionary<string, object?>
         {
             ["operationDate"] = operation.OperationDate,
@@ -2810,6 +2857,7 @@ public sealed class FinanceService(
             ["amount"] = operation.Amount,
             ["counterpartyName"] = operation.CounterpartyName,
             ["expenseType"] = expenseType.Name,
+            ["expenseFundId"] = operation.ExpenseFundId,
             ["documentNumber"] = operation.DocumentNumber,
             ["comment"] = operation.Comment
         };
@@ -4244,15 +4292,7 @@ public sealed class FinanceService(
                 accrual.IrregularPaymentId.Value,
                 accrual.AccountingMonth,
                 cancellationToken)
-            : accrual.FeeCampaignId.HasValue
-                ? await accrualRepository.ActiveFeeCampaignDuplicateExistsAsync(
-                    accrual.Id,
-                    accrual.GarageId,
-                    accrual.FeeCampaignId.Value,
-                    cancellationToken)
-            : accrual.Basis is not null
-                ? false
-            : await accrualRepository.ActiveDuplicateExistsAsync(
+            : accrual.Source == AccrualSources.Regular && await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 accrual.GarageId,
                 accrual.IncomeTypeId,
@@ -4414,7 +4454,8 @@ public sealed class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
-        if (await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
+        if (source == AccrualSources.Regular &&
+            await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
         {
             var duplicateMessage = source == AccrualSources.Regular && accountingYear.HasValue
                 ? $"Регулярное годовое начисление за {accountingYear.Value} год уже внесено."
@@ -4619,7 +4660,7 @@ public sealed class FinanceService(
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
         var duplicateExists = accrual.IrregularPaymentId.HasValue
             ? await accrualRepository.ActiveIrregularDuplicateExistsAsync(accrual.Id, garage.Id, accrual.IrregularPaymentId.Value, month, cancellationToken)
-            : !isIrregular && await accrualRepository.ActiveDuplicateExistsAsync(
+            : !isIrregular && source == AccrualSources.Regular && await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 garage.Id,
                 incomeType.Id,
@@ -4724,7 +4765,8 @@ public sealed class FinanceService(
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
-        if (await supplierAccrualRepository.ActiveDuplicateExistsAsync(null, supplier.Id, expenseType.Id, month, source, documentNumber, cancellationToken))
+        if (source == AccrualSources.Regular &&
+            await supplierAccrualRepository.ActiveDuplicateExistsAsync(null, supplier.Id, expenseType.Id, month, source, documentNumber, cancellationToken))
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
         }
@@ -4789,7 +4831,8 @@ public sealed class FinanceService(
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
-        if (await supplierAccrualRepository.ActiveDuplicateExistsAsync(accrual.Id, supplier.Id, expenseType.Id, month, source, documentNumber, cancellationToken))
+        if (source == AccrualSources.Regular &&
+            await supplierAccrualRepository.ActiveDuplicateExistsAsync(accrual.Id, supplier.Id, expenseType.Id, month, source, documentNumber, cancellationToken))
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_duplicate", "Такое начисление поставщику за месяц уже внесено.");
         }
@@ -4881,7 +4924,7 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_not_canceled", "Начисление поставщику уже активно.");
         }
 
-        if (await supplierAccrualRepository.ActiveDuplicateExistsAsync(
+        if (accrual.Source == AccrualSources.Regular && await supplierAccrualRepository.ActiveDuplicateExistsAsync(
             accrual.Id,
             accrual.SupplierId,
             accrual.ExpenseTypeId,
@@ -8682,22 +8725,6 @@ public sealed class FinanceService(
             operation.Version,
             operation.FeeCampaignId,
             operation.IrregularPaymentId);
-    }
-
-    private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)
-    {
-        var normalized = $"{incomeTypeCode ?? string.Empty} {incomeTypeName}".ToLower(RussianCulture);
-        if (normalized.Contains("electric", StringComparison.Ordinal) || normalized.Contains("электр", StringComparison.Ordinal))
-        {
-            return MeterKinds.Electricity;
-        }
-
-        if (normalized.Contains("water", StringComparison.Ordinal) || normalized.Contains("вод", StringComparison.Ordinal))
-        {
-            return MeterKinds.Water;
-        }
-
-        return null;
     }
 
     private static FinanceResult<SupplierAccrualDto>? ValidateSupplierExpenseTypeLink(Supplier supplier, ExpenseType expenseType)

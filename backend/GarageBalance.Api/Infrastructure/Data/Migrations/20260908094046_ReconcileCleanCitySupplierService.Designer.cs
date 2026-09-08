@@ -3,6 +3,7 @@ using System;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GarageBalanceDbContext))]
-    partial class GarageBalanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908094046_ReconcileCleanCitySupplierService")]
+    partial class ReconcileCleanCitySupplierService
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1212,7 +1215,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
 
                     b.HasIndex("GarageId", "IncomeTypeId", "AccountingMonth", "Source")
                         .IsUnique()
-                        .HasFilter("\"IsCanceled\" = false AND \"Source\" = 'regular' AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL AND \"Basis\" IS NULL");
+                        .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL AND \"Basis\" IS NULL");
 
                     b.HasIndex("GarageId", "IncomeTypeId", "AccountingYear", "IsCanceled");
 
@@ -1995,7 +1998,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
 
                     b.HasIndex("SupplierId", "ExpenseTypeId", "AccountingMonth", "Source", "DocumentNumber")
                         .IsUnique()
-                        .HasFilter("\"IsCanceled\" = false AND \"Source\" = 'regular'");
+                        .HasFilter("\"IsCanceled\" = false");
 
                     b.ToTable("supplier_accruals", (string)null);
                 });

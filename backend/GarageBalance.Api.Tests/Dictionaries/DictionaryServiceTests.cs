@@ -326,7 +326,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task ArchiveSupplierAsync_RejectsSupplierWithActiveContact()
+    public async Task ArchiveSupplierAsync_KeepsActiveContactsForHistory()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -339,10 +339,10 @@ public sealed class DictionaryServiceTests
 
         var result = await service.ArchiveSupplierAsync(supplier.Value.Id, "Поставщик больше не используется", null, CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("supplier_has_active_contacts", result.ErrorCode);
-        Assert.False(database.Context.Suppliers.Single().IsArchived);
-        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_archived");
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(database.Context.Suppliers.Single().IsArchived);
+        Assert.False(database.Context.SupplierContacts.Single().IsArchived);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_archived");
     }
 
     [Fact]

@@ -77,11 +77,31 @@ export function isFeePaymentClosed(row: Pick<GarageIncomePrototypeRow, 'feeCampa
 }
 
 export function shouldShowAccrualReason(row: GarageIncomePrototypeRow, mode: AccrualReasonDisplayMode) {
+  if (row.irregularPaymentId || row.incomeTypeCode === 'penalty') {
+    return false
+  }
+
   if (!row.reason || mode === 'hidden') {
     return false
   }
 
   return mode === 'all' || row.incomeTypeCode === 'penalty'
+}
+
+export function getGarageIncomeRowTitle(row: GarageIncomePrototypeRow) {
+  if (row.incomeTypeCode === 'penalty') {
+    return row.reason ? `Штраф: ${row.reason}` : 'Штраф'
+  }
+
+  if (row.irregularPaymentId) {
+    return `Основание: ${row.reason || row.service}`
+  }
+
+  return row.service
+}
+
+export function normalizeGarageDebtAfterForHistory(value: number | null | undefined) {
+  return Math.max(Math.round((value ?? 0) * 100) / 100, 0)
 }
 
 export function formatPaymentPrototypeMonthLabel(value: string) {

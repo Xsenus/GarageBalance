@@ -94,8 +94,13 @@ public sealed class FeeCampaignOverdueNameTests
         Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.Equal(700m, result.Value!.Total);
         Assert.Equal(6, result.Value.Rows.Count);
-        Assert.All(result.Value.Rows, row => Assert.Equal(income.Name, row.IncomeTypeName));
         var rows = result.Value.Rows.ToDictionary(row => row.AccrualId!.Value);
+        Assert.Equal($"Сбор: {first.Name}", rows[snapshot.Id].IncomeTypeName);
+        Assert.Equal($"Сбор: {second.Name}", rows[liveName.Id].IncomeTypeName);
+        Assert.Equal($"Сбор: {third.Name}", rows[blankSnapshot.Id].IncomeTypeName);
+        Assert.Equal(income.Name, rows[legacy.Id].IncomeTypeName);
+        Assert.Equal(income.Name, rows[unknownLegacy.Id].IncomeTypeName);
+        Assert.Equal(income.Name, rows[regular.Id].IncomeTypeName);
         Assert.Equal("Ремонт ворот", rows[snapshot.Id].ChargeName);
         Assert.Equal(300m, rows[snapshot.Id].OriginalAmount);
         Assert.Equal(100m, rows[snapshot.Id].PaidAmount);

@@ -676,7 +676,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .HasFilter("\"IsCanceled\" = false");
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source })
                 .IsUnique()
-                .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL AND \"Basis\" IS NULL");
+                .HasFilter("\"IsCanceled\" = false AND \"Source\" = 'regular' AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL AND \"Basis\" IS NULL");
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IrregularPaymentId, accrual.AccountingMonth })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NOT NULL");
@@ -754,7 +754,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .HasFilter("\"IsCanceled\" = false");
             entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber })
                 .IsUnique()
-                .HasFilter("\"IsCanceled\" = false");
+                .HasFilter("\"IsCanceled\" = false AND \"Source\" = 'regular'");
             entity.HasOne(accrual => accrual.Supplier)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.SupplierId)

@@ -1011,13 +1011,6 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Поставщик не найден.");
         }
 
-        if (await supplierRepository.HasActiveContactsAsync(id, cancellationToken))
-        {
-            return DictionaryResult<SupplierDto>.Failure(
-                "supplier_has_active_contacts",
-                "Сначала архивируйте все контакты этого поставщика.");
-        }
-
         supplier.IsArchived = true;
         supplier.UpdatedAtUtc = DateTimeOffset.UtcNow;
 

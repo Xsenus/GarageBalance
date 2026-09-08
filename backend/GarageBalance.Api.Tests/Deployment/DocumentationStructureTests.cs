@@ -23,6 +23,7 @@ public sealed partial class DocumentationStructureTests
         "performance/report-query-baseline.md",
         "postgres-backup-restore.md",
         "reports-guide.md",
+        "roadmaps/comments-080926-implementation-roadmap.md",
         "roadmaps/customer-comments-2026-07-22-roadmap.md",
         "roadmaps/customer-comments-2026-07-27-roadmap.md",
         "roadmaps/customer-comments-2026-08-24-roadmap.md",

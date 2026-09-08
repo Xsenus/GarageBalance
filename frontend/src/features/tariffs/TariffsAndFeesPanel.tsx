@@ -29,6 +29,7 @@ import { usePointerResize } from '../../shared/useColumnResize'
 import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
+import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
 const dictionaryScreenRequestLimit = 100
@@ -746,7 +747,7 @@ function getFeeCampaignChangePreview(
   const formatIncomeType = (incomeTypeId: string) => incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.name ?? incomeTypeId
 
   appendChangePreview(changes, 'Наименование', formatChangeText(campaign.name), formatChangeText(request.name))
-  appendChangePreview(changes, 'Назначение поступления', formatIncomeType(campaign.incomeTypeId), formatIncomeType(request.incomeTypeId))
+  appendChangePreview(changes, 'Фонд', formatIncomeType(campaign.incomeTypeId), formatIncomeType(request.incomeTypeId))
   appendChangePreview(changes, 'Цель', formatChangeText(campaign.goal), formatChangeText(request.goal))
   appendChangePreview(changes, 'Сумма взноса', formatTariffDecimal(campaign.contributionAmount), formatTariffDecimal(request.contributionAmount))
   appendChangePreview(changes, 'Сумма сбора', formatTariffDecimal(campaign.targetAmount), formatTariffDecimal(request.targetAmount))
@@ -4127,7 +4128,7 @@ export function AddServicePrototypeDialog({
                               type="button"
                               aria-label="Удалить период тарифа"
                               disabled={scheduleDraft.length <= 1 || dialogBusy}
-                              onClick={() => setScheduleDraft((current) => current.filter((item) => item.key !== period.key))}
+                              onClick={() => setScheduleDraft((current) => removeTariffSchedulePeriod(current, period.key))}
                             ><Trash2 size={16} aria-hidden="true" /></button>
                           </span>
                         </div>
@@ -4416,11 +4417,17 @@ function AddFeePrototypeDialog({
     ? 'target'
     : 'contribution'
   const [name, setName] = useState(initialCampaign?.name ?? '')
+  const fundIncomeTypes = incomeTypes.filter((incomeType) => incomeType.destinationFundId && incomeType.destinationFundName)
   const defaultIncomeTypeId = initialCampaign?.incomeTypeId
-    ?? incomeTypes.find((incomeType) => incomeType.code === 'other_income')?.id
-    ?? incomeTypes[0]?.id
+    ?? fundIncomeTypes.find((incomeType) => incomeType.code === 'other_income')?.id
+    ?? fundIncomeTypes[0]?.id
     ?? ''
   const [incomeTypeId, setIncomeTypeId] = useState(defaultIncomeTypeId)
+  const selectedFundId = incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.destinationFundId ?? ''
+  const fundOptions = Array.from(new Map(fundIncomeTypes.map((incomeType) => [
+    incomeType.destinationFundId!,
+    { value: incomeType.destinationFundId!, label: incomeType.destinationFundName! },
+  ])).values()).sort((left, right) => left.label.localeCompare(right.label, 'ru-RU'))
   const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
   const [contributionAmount, setContributionAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.contributionAmount) : '')
   const [targetAmountInput, setTargetAmountInput] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.targetAmount) : '')
@@ -4481,8 +4488,8 @@ function AddFeePrototypeDialog({
       return
     }
 
-    if (!incomeTypeId) {
-      setError('Выберите назначение поступления.')
+    if (!incomeTypeId || !selectedFundId) {
+      setError('Выберите фонд сбора.')
       return
     }
 
@@ -4586,22 +4593,21 @@ function AddFeePrototypeDialog({
                 <FormField label="Наименование сбора">
                   <input aria-label="Наименование сбора" value={name} disabled={formBusy} onChange={(event) => setName(event.target.value)} />
                 </FormField>
-                <FormField
-                  label="Назначение поступления"
-                  help="Деньги сбора будут учтены в фонде, который назначен выбранному виду поступления."
-                >
+                <FormField label="Фонд" help="В этот фонд будут зачисляться оплаты по сбору.">
                   <SelectControl
-                    aria-label="Назначение поступления для сбора"
-                    value={incomeTypeId}
-                    options={incomeTypes.map((incomeType) => ({
-                      value: incomeType.id,
-                      label: incomeType.destinationFundName
-                        ? `${incomeType.name} → фонд «${incomeType.destinationFundName}»`
-                        : `${incomeType.name} → фонд не назначен`,
-                    }))}
+                    aria-label="Фонд сбора"
+                    value={selectedFundId}
+                    options={fundOptions.length > 0 ? fundOptions : [{ value: '', label: 'Нет доступных фондов' }]}
                     maxVisibleOptions={6}
                     disabled={formBusy}
-                    onChange={setIncomeTypeId}
+                    onChange={(nextFundId) => {
+                      const currentIncomeType = incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)
+                      const nextIncomeType = currentIncomeType?.destinationFundId === nextFundId
+                        ? currentIncomeType
+                        : fundIncomeTypes.find((incomeType) => incomeType.destinationFundId === nextFundId)
+                      setIncomeTypeId(nextIncomeType?.id ?? '')
+                      setError(null)
+                    }}
                   />
                 </FormField>
                 <FormField label="Цель">

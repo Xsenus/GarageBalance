@@ -4,6 +4,27 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
+import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
+
+describe('removeTariffSchedulePeriod', () => {
+  const periods = [
+    { key: 'one', effectiveFrom: '2026-01-01', effectiveTo: '2026-04-30' },
+    { key: 'two', effectiveFrom: '2026-05-01', effectiveTo: '2026-08-31' },
+    { key: 'three', effectiveFrom: '2026-09-01', effectiveTo: null },
+  ]
+
+  it('extends the previous interval when a middle or final period is removed', () => {
+    expect(removeTariffSchedulePeriod(periods, 'two')).toEqual([
+      { key: 'one', effectiveFrom: '2026-01-01', effectiveTo: '2026-08-31' },
+      periods[2],
+    ])
+    expect(removeTariffSchedulePeriod(periods, 'three')[1].effectiveTo).toBeNull()
+  })
+
+  it('extends the next interval backwards when the first period is removed', () => {
+    expect(removeTariffSchedulePeriod(periods, 'one')[0].effectiveFrom).toBe('2026-01-01')
+  })
+})
 
 describe('редактор тарифной сетки услуги', () => {
   it('keeps a new irregular service compact and places the regularity switch on the left side of the action row', () => {

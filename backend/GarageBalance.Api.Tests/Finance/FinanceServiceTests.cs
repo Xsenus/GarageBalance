@@ -1759,6 +1759,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.Garage.StartingBalance = 900m;
+        fixtures.Garage.StartingOverdueDebt = 900m;
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
@@ -4347,6 +4348,96 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_AllowsSupplierlessCashExpenseFromSelectedFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.ExpenseFund.Balance = 500m;
+        database.Context.Add(OpeningCashBalance(SeededBankAmount + 1000m));
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 10),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 1000m,
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                null,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                "CASH-FUND",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id,
+                "Разовый исполнитель"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(fixtures.ExpenseFund.Id, result.Value!.ExpenseFundId);
+        var withdrawal = Assert.Single(database.Context.FundOperations, operation => operation.SourceFinancialOperationId == result.Value.Id);
+        Assert.Equal(300m, withdrawal.Amount);
+        Assert.Equal(200m, withdrawal.BalanceAfter);
+        Assert.Equal(200m, fixtures.ExpenseFund.Balance);
+
+        var movedToPool = await service.UpdateExpenseAsync(
+            result.Value.Id,
+            new CreateExpenseOperationRequest(
+                null,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 21),
+                new DateOnly(2026, 6, 1),
+                250m,
+                "CASH-FUND-EDIT",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                null,
+                "Разовый исполнитель",
+                ExpectedVersion: result.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(movedToPool.Succeeded, movedToPool.ErrorMessage);
+        Assert.Null(movedToPool.Value!.ExpenseFundId);
+        Assert.True(withdrawal.IsCanceled);
+        Assert.Equal(500m, fixtures.ExpenseFund.Balance);
+
+        var movedBackToFund = await service.UpdateExpenseAsync(
+            result.Value.Id,
+            new CreateExpenseOperationRequest(
+                null,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 22),
+                new DateOnly(2026, 6, 1),
+                200m,
+                "CASH-FUND-EDIT-2",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id,
+                "Разовый исполнитель",
+                ExpectedVersion: movedToPool.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(movedBackToFund.Succeeded, movedBackToFund.ErrorMessage);
+        Assert.Equal(fixtures.ExpenseFund.Id, movedBackToFund.Value!.ExpenseFundId);
+        Assert.False(withdrawal.IsCanceled);
+        Assert.Equal(200m, withdrawal.Amount);
+        Assert.Equal(300m, fixtures.ExpenseFund.Balance);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsSupplierlessCashExpenseWithoutCounterpartyName()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -5395,6 +5486,61 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateAccrualAsync_AllowsSeveralManualAccrualsAndWorksheetSumsThem()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "manual_other";
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+
+        var first = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, month, 700m, "manual", "Первая сумма"),
+            null,
+            CancellationToken.None);
+        var second = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, month, 800m, "manual", "Дополнительная сумма"),
+            null,
+            CancellationToken.None);
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(month, month),
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(second.Succeeded, second.ErrorMessage);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.IncomeTypeId == fixtures.IncomeType.Id);
+        Assert.Equal(1500m, row.AccrualAmount);
+        Assert.Equal(2, await database.Context.Accruals.CountAsync(item => !item.IsCanceled));
+    }
+
+    [Fact]
+    public async Task GarageIncomeWorksheet_DoesNotRequireMeterFromAnIncomeTypeName()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Name = "Вода в ошибочной карточке вывоза мусора";
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+        var created = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, month, 128m, "manual", null),
+            null,
+            CancellationToken.None);
+
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(month, month),
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Null(Assert.Single(worksheet.Value!.Rows, item => item.IncomeTypeId == fixtures.IncomeType.Id).MeterKind);
+    }
+
+    [Fact]
     public async Task AnnualRegularAccrualDuplicateValidation_UsesAccountingYearForCreateUpdateAndRestore()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -5644,6 +5790,31 @@ public sealed class FinanceServiceTests
         Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ INV-1", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Счет за воду", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAccrualAsync_AllowsSeveralManualAccrualsForSamePeriodAndDocument()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+
+        var first = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, month, 700m, "manual", "ACT-06", "Первая часть"),
+            null,
+            CancellationToken.None);
+        var second = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, month, 500m, "manual", "ACT-06", "Вторая часть"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(second.Succeeded, second.ErrorMessage);
+        Assert.Equal(1200m, await database.Context.SupplierAccruals
+            .Where(item => item.SupplierId == fixtures.Supplier.Id && item.AccountingMonth == month && !item.IsCanceled)
+            .SumAsync(item => item.Amount));
+        Assert.Equal(2, await database.Context.AuditEvents.CountAsync(item => item.Action == "finance.supplier_accrual_created"));
     }
 
     [Fact]

@@ -28,6 +28,19 @@ public sealed class ExpenseFundDisbursementService(
         var existing = await repository.FindIncomeAssignmentForUpdateAsync(sourceOperation.Id, cancellationToken);
         if (existing is not null)
         {
+            if (existing.IsCanceled)
+            {
+                return await UpdateAsync(
+                    sourceOperation,
+                    sourceOperation.ExpenseFundId.Value,
+                    supplierName,
+                    sourceOperation.ExpenseType?.Name ?? "Без названия",
+                    sourceOperation.Amount,
+                    actorUserId,
+                    allowNegativeBalance,
+                    cancellationToken);
+            }
+
             return ExpenseFundDisbursementResult.Failure(
                 "expense_fund_disbursement_duplicate",
                 "Для выплаты уже существует операция списания из фонда.");
@@ -141,6 +154,7 @@ public sealed class ExpenseFundDisbursementService(
         disbursement.FundId = destinationFund.Id;
         disbursement.Fund = destinationFund;
         disbursement.Amount = normalizedAmount;
+        disbursement.IsCanceled = false;
         disbursement.Reason = BuildReason(supplierName, expenseTypeName);
         disbursement.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
