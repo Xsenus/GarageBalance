@@ -89,6 +89,7 @@ export default function ExpenseBatchPaymentDialog({ accessToken, open, accountin
             </> : null}
             <div className="detail-dialog-actions">
               <button type="button" className="ghost-button" disabled={flow.saving} onClick={close}>{flow.result ? 'Закрыть' : 'Отмена'}</button>
+              {flow.error && !flow.preview && !flow.result && !flow.loading && !locked ? <button type="button" className="secondary-button" onClick={() => { setConfirmed(false); setOffset(0); flow.reload() }}>Повторить расчёт</button> : null}
               {!flow.result ? <button type="submit" className="secondary-button" disabled={flow.saving || flow.loading || settingsLoading || !!settingsError || (!flow.uncertain && !flow.preview?.canSubmit)} aria-busy={flow.saving}>
                 {flow.saving ? <LoaderCircle size={17} className="financial-report-button__spinner" aria-hidden="true" /> : <WalletCards size={17} aria-hidden="true" />}
                 <span>{flow.saving ? 'Проводим выплаты…' : flow.uncertain ? 'Проверить результат' : 'Подтвердить выплаты'}</span>

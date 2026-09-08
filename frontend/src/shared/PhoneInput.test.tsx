@@ -19,4 +19,20 @@ describe('PhoneInput', () => {
     expect(screen.getByRole('textbox', { name: 'Телефон' })).toHaveAttribute('placeholder', '+7 (___) ___-__-__')
     expect(screen.getByRole('textbox', { name: 'Телефон' })).toHaveAttribute('inputmode', 'tel')
   })
+
+  it('preserves all digits when pasting a national number beginning with 8', async () => {
+    const user = userEvent.setup()
+    function TestHarness() {
+      const [value, setValue] = useState('')
+      return <PhoneInput aria-label="Телефон" value={value} onValueChange={setValue} />
+    }
+    render(<TestHarness />)
+    const input = screen.getByRole('textbox', { name: 'Телефон' })
+    await user.click(input)
+    await user.paste('8123456789')
+    expect(input).toHaveValue('+7 (812) 345-67-89')
+    await user.clear(input)
+    await user.type(input, '88123456789')
+    expect(input).toHaveValue('+7 (812) 345-67-89')
+  })
 })

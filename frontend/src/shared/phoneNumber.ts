@@ -6,7 +6,9 @@ export function formatRussianPhoneInput(value: string | null | undefined) {
   }
 
   const digits = value.replace(/\D/g, '')
-  const nationalDigits = (digits.startsWith('7') || digits.startsWith('8') ? digits.slice(1) : digits).slice(0, 10)
+  const hasPrefix = (digits.startsWith('7') || digits.startsWith('8'))
+    && (digits.length !== 10 || value.trimStart().startsWith('+'))
+  const nationalDigits = (hasPrefix ? digits.slice(1) : digits).slice(0, 10)
   if (nationalDigits.length === 0) {
     return digits.length > 0 ? '+7 (' : ''
   }

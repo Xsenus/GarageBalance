@@ -6,10 +6,32 @@ import { describe, expect, it } from 'vitest'
 
 describe('responsive layout styles', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
+  const indexCss = readFileSync(resolve(process.cwd(), 'src', 'index.css'), 'utf8')
   const contractorsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const tariffsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const settingsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
+
+  it('allows the page to fit a 320px viewport with a classic vertical scrollbar', () => {
+    const bodyRules = indexCss.match(/body\s*\{([^}]+)\}/)?.[1]
+    expect(bodyRules).toMatch(/min-width:\s*0;/)
+    expect(bodyRules).not.toMatch(/min-width:\s*320px;/)
+  })
+
+  it('keeps mobile header actions beside a wrapping user name in one compact row', () => {
+    const mobileCss = normalizedAppCss.slice(normalizedAppCss.lastIndexOf('@media (max-width: 640px) {'))
+    expect(mobileCss).toContain('.topbar {\n    position: relative;\n    display: grid;\n    grid-template-columns: auto minmax(0, 1fr);\n    gap: 8px;')
+    expect(mobileCss).toContain('.topbar--dashboard {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(mobileCss).toContain('.user-panel {\n    display: grid;\n    grid-template-columns: minmax(0, 1fr) auto auto;\n    gap: 8px;')
+    expect(mobileCss).toContain('.user-panel > div:first-child {\n    min-width: 0;\n    overflow-wrap: anywhere;')
+    expect(mobileCss).not.toMatch(/\.topbar,\s*\.user-panel\s*\{[^}]*flex-direction:\s*column;/)
+  })
+
+  it('anchors mobile notifications to the header width instead of overflowing beside the bell', () => {
+    const mobileCss = normalizedAppCss.slice(normalizedAppCss.lastIndexOf('@media (max-width: 640px) {'))
+    expect(mobileCss).toContain('.notifications-control {\n    position: static;')
+    expect(mobileCss).toContain('.notifications-popover {\n    width: min(320px, 100%);')
+  })
 
   it('gives the supplier service editor room for its options without exceeding the viewport', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.supplier-service-edit-dialog {\n  display: flex;\n  flex-direction: column;\n  min-height: min(620px, calc(100dvh - 48px));\n}')
@@ -384,9 +406,19 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  min-height: 100dvh;\n  flex-direction: column;\n  overflow: visible;\n  box-sizing: border-box;')
     expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  flex: 0 0 auto;\n  flex-direction: column;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
-    expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 150px;')
+    expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 auto;')
     expect(normalizedAppCss).toContain('.report-workbook-sheet > .report-workbook-table {\n  flex: 0 0 auto;\n  overflow-x: auto;\n  overflow-y: visible;')
     expect(normalizedAppCss).not.toContain('.report-workbook-sheet > .dictionary-pagination {')
+  })
+
+  it('contains wide report tables without stretching their filters beyond the viewport', () => {
+    expect(normalizedAppCss).toContain('.report-tab-panel {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr);\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.report-workbook-sheet {\n  display: flex;\n  min-width: 0;')
+  })
+
+  it('keeps history details reachable through horizontal scrolling on mobile', () => {
+    const tableRules = normalizedAppCss.match(/\.operation-list\.audit-event-table\s*\{([^}]+)\}/)?.[1]
+    expect(tableRules).toMatch(/overflow-x:\s*auto;/)
   })
 
   it('keeps fund operations in the right column with visible pagination', () => {
@@ -431,6 +463,33 @@ describe('responsive layout styles', () => {
     expect(settingsPanel).not.toContain('className="dialog-actions dialog-actions--start"')
     expect(settingsPanel.match(/className="detail-dialog-header"/g)).toHaveLength(5)
     expect(settingsPanel.match(/className="detail-dialog-actions"/g)).toHaveLength(5)
+  })
+
+  it('keeps working-date inputs and salary actions within shrinking settings grids', () => {
+    const formRules = normalizedAppCss.match(/\.settings-card-form\s*\{([^}]+)\}/)?.[1]
+    expect(formRules).toMatch(/min-width:\s*0;/)
+    expect(formRules).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\);/)
+    expect(normalizedAppCss).toContain('.settings-card-form .form-field {\n  grid-template-columns: minmax(0, 1fr);')
+    const mobileCss = normalizedAppCss.slice(normalizedAppCss.lastIndexOf('@media (max-width: 640px) {'))
+    expect(mobileCss).toContain('.settings-card--business-date .summary-strip,\n  .summary-strip.cash-bank-summary,\n  .cash-bank-adjustment-grid,\n  .cash-bank-action-groups {\n    grid-template-columns: 1fr;')
+  })
+
+  it('scrolls cash and bank history locally instead of widening settings on tablets', () => {
+    const historyRules = normalizedAppCss.match(/\.cash-bank-history-shell\s*\{([^}]+)\}/)?.[1]
+    expect(historyRules).toMatch(/min-width:\s*0;/)
+    expect(historyRules).toMatch(/overflow-x:\s*auto;/)
+    expect(historyRules).not.toMatch(/overflow(?:-x)?:\s*hidden;/)
+    expect(normalizedAppCss).toContain('.cash-bank-history-table {\n  width: 100%;\n  min-width: 780px;')
+  })
+
+  it('fits backup actions to the card while long paths wrap and the table scrolls locally', () => {
+    const backupBodyRules = normalizedAppCss.match(/\.settings-card--backups \.settings-card-body\s*\{([^}]+)\}/)?.[1]
+    expect(backupBodyRules).toMatch(/align-self:\s*stretch;/)
+    expect(backupBodyRules).toMatch(/overflow-wrap:\s*anywhere;/)
+    const backupTableRules = normalizedAppCss.match(/\.settings-backup-table-shell\s*\{([^}]+)\}/)?.[1]
+    expect(backupTableRules).toMatch(/overflow:\s*auto;/)
+    expect(normalizedAppCss).toContain('.settings-card-body > button {\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n  .settings-card--diagnostics .summary-strip {\n    grid-template-columns: 1fr;')
   })
 
   it('stretches and centers cash and bank balance groups', () => {

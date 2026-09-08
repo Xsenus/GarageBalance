@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ExpenseBatchPreview } from '../../services/expenseBatchesApi'
+import { FinanceApiError } from '../../services/financeApi'
 import ExpenseBatchPaymentDialog from './ExpenseBatchPaymentDialog'
 
 const preview: ExpenseBatchPreview = {
@@ -97,11 +98,42 @@ describe('ExpenseBatchPaymentDialog', () => {
   })
 
   it('displays load errors without the manual calculation refresh control', async () => {
+    const user = userEvent.setup()
     const { props, client } = setup()
     client.preview.mockRejectedValueOnce(new Error('Сервис недоступен'))
     render(<ExpenseBatchPaymentDialog {...props} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Сервис недоступен')
     expect(screen.queryByRole('button', { name: 'Обновить расчёт' })).not.toBeInTheDocument()
     expect(client.preview).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole('button', { name: 'Повторить расчёт' }))
+    expect(await screen.findByRole('table')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Повторить расчёт' })).not.toBeInTheDocument()
+    expect(client.preview).toHaveBeenCalledTimes(2)
+    expect(client.pay).not.toHaveBeenCalled()
+  })
+
+  it('recovers from a changed balance without losing the comment and requires renewed fund confirmation', async () => {
+    const user = userEvent.setup()
+    const { props, client } = setup()
+    client.pay.mockRejectedValueOnce(new FinanceApiError('expense_batch_preview_changed', 'Остатки изменились', 409))
+    render(<ExpenseBatchPaymentDialog {...props} />)
+    await screen.findByRole('table')
+    await user.type(screen.getByRole('textbox', { name: 'Комментарий к общей выплате' }), 'Общая выплата')
+    await user.click(screen.getByRole('checkbox', { name: 'Подтверждаю выплату сверх остатка фонда' }))
+    await user.click(screen.getByRole('button', { name: 'Подтвердить выплаты' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Остатки изменились')
+    expect(screen.getByRole('button', { name: 'Подтвердить выплаты' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Повторить расчёт' }))
+    await screen.findByRole('table')
+    expect(screen.getByRole('textbox', { name: 'Комментарий к общей выплате' })).toHaveValue('Общая выплата')
+    expect(screen.getByRole('checkbox', { name: 'Подтверждаю выплату сверх остатка фонда' })).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Подтвердить выплаты' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Подтвердите выплату сверх остатка фонда')
+    expect(client.pay).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole('checkbox', { name: 'Подтверждаю выплату сверх остатка фонда' }))
+    await user.click(screen.getByRole('button', { name: 'Подтвердить выплаты' }))
+    expect(await screen.findByText('Выплаты проведены: 2. Форма выплат обновляется.')).toBeVisible()
+    expect(client.pay).toHaveBeenCalledTimes(2)
+    expect(client.pay.mock.calls[1][1].requestId).not.toBe(client.pay.mock.calls[0][1].requestId)
   })
 })

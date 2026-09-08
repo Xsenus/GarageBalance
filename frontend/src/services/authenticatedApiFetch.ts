@@ -3,15 +3,10 @@ import { apiFetch } from './apiFetch'
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
-  if (!headers) {
-    return {}
-  }
-
-  if (headers instanceof Headers || Array.isArray(headers)) {
-    return Object.fromEntries(new Headers(headers).entries())
-  }
-
-  return headers
+  return Object.fromEntries([...new Headers(headers)].map(([name, value]) => [
+    name === 'authorization' ? 'Authorization' : name === 'content-type' ? 'Content-Type' : name,
+    value,
+  ]))
 }
 
 export function authenticatedApiFetch(accessToken: string, path: string, init?: RequestInit): Promise<Response> {

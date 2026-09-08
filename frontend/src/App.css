@@ -945,6 +945,8 @@ h1 {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  align-self: stretch;
+  overflow-wrap: anywhere;
 }
 
 .settings-card--backups .summary-strip,
@@ -1064,6 +1066,7 @@ h1 {
 
 .cash-bank-history-shell {
   min-width: 0;
+  overflow-x: auto;
 }
 
 .cash-bank-history-table {
@@ -1130,11 +1133,17 @@ h1 {
 }
 
 .settings-card-form {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   align-self: start;
   padding: 14px;
   border: 1px solid #e1e7ef;
   border-radius: 8px;
   background: #fbfcfe;
+}
+
+.settings-card-form .form-field {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-card-body {
@@ -7243,7 +7252,7 @@ input.meter-readings-control {
   background: #fcfcfd;
 }
 
-.audit-event-table {
+.operation-list.audit-event-table {
   overflow-x: auto;
 }
 
@@ -7486,11 +7495,13 @@ button.operation-row:focus-visible {
 
 .report-tabs--workbook button {
   min-width: 150px;
-  flex: 1 0 150px;
+  flex: 1 0 auto;
 }
 
 .report-tab-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 14px;
 }
 
@@ -7700,6 +7711,7 @@ button.operation-row:focus-visible {
 
 .report-workbook-sheet {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 14px;
   overflow: visible;
@@ -9171,6 +9183,7 @@ button.operation-row:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .settings-card--business-date .summary-strip,
   .summary-strip.cash-bank-summary,
   .cash-bank-adjustment-grid,
   .cash-bank-action-groups {
@@ -9377,10 +9390,34 @@ button.operation-row:focus-visible {
     font-size: 26px;
   }
 
-  .topbar,
+  .topbar {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .topbar--dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .user-panel {
-    align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .user-panel > div:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .notifications-control {
+    position: static;
+  }
+
+  .notifications-popover {
+    width: min(320px, 100%);
   }
 
   .operation-list {
