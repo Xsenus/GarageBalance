@@ -54,7 +54,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
                 item.GarageId == garage.Id &&
                 item.IncomeTypeId == waterType.Id &&
                 item.AccountingMonth == month);
-            Assert.Equal(100.60m, accrual.Amount);
+            Assert.Equal(month < new DateOnly(2026, 10, 1) ? 100.60m : 112.48m, accrual.Amount);
             waterAccrualIds.Add(accrual.Id);
         }
 
@@ -129,11 +129,19 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
 
         var waterAllocations = await context.AccrualPaymentAllocations
             .Where(allocation => allocation.IsActive && waterAccrualIds.Contains(allocation.AccrualId))
-            .GroupBy(allocation => allocation.AccrualId)
-            .Select(group => group.Sum(allocation => allocation.Amount))
+            .GroupBy(allocation => allocation.Accrual.AccountingMonth)
+            .Select(group => new
+            {
+                AccountingMonth = group.Key,
+                Amount = group.Sum(allocation => allocation.Amount)
+            })
+            .OrderBy(item => item.AccountingMonth)
             .ToArrayAsync();
         Assert.Equal(14, waterAllocations.Length);
-        Assert.All(waterAllocations, amount => Assert.Equal(100.60m, amount));
+        Assert.All(waterAllocations[..9], item => Assert.Equal(100.60m, item.Amount));
+        Assert.All(waterAllocations[9..12], item => Assert.Equal(112.48m, item.Amount));
+        Assert.Equal(94.68m, waterAllocations[12].Amount);
+        Assert.Equal(112.48m, waterAllocations[^1].Amount);
         var membershipAllocation = await context.AccrualPaymentAllocations
             .Where(allocation => allocation.IsActive && allocation.AccrualId == membership2026.Value.Id)
             .SumAsync(allocation => allocation.Amount);
@@ -141,7 +149,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
         var waterIncomeTotal = await context.FinancialOperations
             .Where(operation => !operation.IsCanceled && operation.IncomeTypeId == waterType.Id)
             .SumAsync(operation => operation.Amount);
-        Assert.Equal(41.60m, waterIncomeTotal - waterAllocations.Sum());
+        Assert.Equal(0m, waterIncomeTotal - waterAllocations.Sum(item => item.Amount));
 
         var worksheet = await service.GetGarageIncomeWorksheetAsync(
             garage.Id,
@@ -149,9 +157,9 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             CancellationToken.None);
         Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
         Assert.Equal(14, worksheet.Value!.Rows.Count(row => row.IncomeTypeId == waterType.Id));
-        Assert.Equal(2908.40m, worksheet.Value.AccrualTotal);
+        Assert.Equal(2967.80m, worksheet.Value.AccrualTotal);
         Assert.Equal(1750m, worksheet.Value.IncomeTotal);
-        Assert.Equal(1158.40m, worksheet.Value.ClosingDebt);
+        Assert.Equal(1217.80m, worksheet.Value.ClosingDebt);
         var lastWaterRow = Assert.Single(worksheet.Value.Rows, row =>
             row.IncomeTypeId == waterType.Id && row.AccountingMonth == lastMonth);
         Assert.Equal(114m, lastWaterRow.MeterValue);
@@ -170,9 +178,9 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             CancellationToken.None);
         Assert.True(history.Succeeded, history.ErrorMessage);
         Assert.Equal(14, history.Value!.Rows.Count);
-        Assert.Equal(2908.40m, history.Value.AccrualTotal);
+        Assert.Equal(2967.80m, history.Value.AccrualTotal);
         Assert.Equal(1750m, history.Value.IncomeTotal);
-        Assert.Equal(1158.40m, history.Value.Debt);
+        Assert.Equal(1217.80m, history.Value.Debt);
 
         var overdue = await FinanceServiceTestFactory.Create(
                 context,
@@ -183,9 +191,9 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
         Assert.Equal(membershipType.Id, overdueMembership.IncomeTypeId);
         Assert.Equal(firstMonth, overdueMembership.AccountingMonth);
         Assert.Equal(700m, overdueMembership.OriginalAmount);
-        Assert.Equal(341.60m, overdueMembership.PaidAmount);
-        Assert.Equal(358.40m, overdueMembership.OutstandingAmount);
-        Assert.Equal(358.40m, overdue.Value.Total);
+        Assert.Equal(300m, overdueMembership.PaidAmount);
+        Assert.Equal(400m, overdueMembership.OutstandingAmount);
+        Assert.Equal(400m, overdue.Value.Total);
 
         Assert.Equal(14, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.meter_reading_created"));
         Assert.Equal(14, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.metered_accrual_created_from_reading"));

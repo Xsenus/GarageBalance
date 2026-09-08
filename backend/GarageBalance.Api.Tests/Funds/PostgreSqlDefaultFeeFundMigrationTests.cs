@@ -9,6 +9,7 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class PostgreSqlDefaultFeeFundMigrationTests
 {
     private const string PreviousMigration = "20260905122505_AddGaragePeopleCountHistory";
+    private const string DefaultFeeMigration = "20260905214500_RouteUnusedDefaultFeeFundsToOther";
     private static readonly Guid MembershipFundId = Guid.Parse("718b671d-9133-4ffd-a130-3f2f03a8d150");
     private static readonly Guid TargetFundId = Guid.Parse("edc66ae5-29a3-4dbd-921e-4a1958612760");
     private static readonly Guid OtherFundId = Guid.Parse("58bc1538-5f77-46ce-9edf-8ed6aa73a701");
@@ -34,9 +35,9 @@ public sealed class PostgreSqlDefaultFeeFundMigrationTests
         await using var database = await PostgreSqlTestDatabase.CreateAsync(PreviousMigration);
         await using var context = database.CreateContext();
         var expectedTariffs = System.Text.Json.JsonSerializer.Serialize(await context.Tariffs.AsNoTracking().OrderBy(item => item.Id).ToListAsync());
-        await context.Database.MigrateAsync();
+        await context.Database.MigrateAsync(DefaultFeeMigration);
         await context.Database.MigrateAsync(PreviousMigration);
-        await context.Database.MigrateAsync();
+        await context.Database.MigrateAsync(DefaultFeeMigration);
 
         Assert.Equal(expectedTariffs, System.Text.Json.JsonSerializer.Serialize(await context.Tariffs.AsNoTracking().OrderBy(item => item.Id).ToListAsync()));
         Assert.All(await context.IncomeTypes.Where(item => item.Code == "membership" || item.Code == "target").ToListAsync(),

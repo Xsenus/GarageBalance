@@ -2512,7 +2512,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   const tieredTariffIds = new Set(tariffRows
-    .filter((row) => row.calculationBase?.startsWith('meter_') && Boolean(row.group) && row.tiered && row.backendTariffId)
+    .filter((row) => row.calculationBase?.startsWith('meter_') && !!row.group && row.tiered && row.backendTariffId)
     .map((row) => row.backendTariffId!))
   const archivedServiceCount = backendChargeServices.filter((setting) => setting.isArchived).length
   const visibleTariffRows = tariffRows.filter((row) => (
@@ -2521,9 +2521,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     && row.serviceSettingKind !== 'start-date'
     && row.serviceSettingKind !== 'periodicity'
     && row.title !== 'Перенос долга в просроченный'
-    && (!row.threshold || Boolean(row.group) || Boolean(row.backendTariffId && tieredTariffIds.has(row.backendTariffId)))
+    && (!row.threshold || row.group || row.backendTariffId && tieredTariffIds.has(row.backendTariffId))
     && (chargeServiceView === 'deleted'
-      ? Boolean(row.backendServiceSettingId && row.isDeleted)
+      ? row.backendServiceSettingId && row.isDeleted
       : !row.isDeleted)
   ))
   const tariffTableLabel = chargeServiceView === 'deleted' ? 'Удалённые услуги' : 'Тарифы и сборы'
@@ -2623,7 +2623,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               setTariffPageNumber(1)
             }}
           >
-            Действующие услуги
+            Действующие услуги ({backendChargeServices.length - archivedServiceCount})
           </button>
           <button
             className={chargeServiceView === 'deleted' ? 'is-active' : ''}
@@ -4063,7 +4063,7 @@ export function AddServicePrototypeDialog({
                       }])}
                     >
                       <FileSpreadsheet size={16} aria-hidden="true" />
-                      <span>Добавить период</span>
+                      Добавить период
                     </button>
                   </div>
                   {tariffScheduleLoading ? (
@@ -4310,7 +4310,7 @@ export function AddServicePrototypeDialog({
                         )
                       })}
                       <button
-                        className="ghost-button contractors-threshold-add"
+                        className="secondary-button create-action-button contractors-threshold-add"
                         type="button"
                         disabled={dialogBusy || tariffTiers.length >= 20}
                         onClick={() => {
@@ -4330,7 +4330,10 @@ export function AddServicePrototypeDialog({
                             return finalTier ? [...current.slice(0, -1), nextTier, finalTier] : [...current, nextTier]
                           })
                         }}
-                      >Добавить порог</button>
+                      >
+                        <FileSpreadsheet size={16} aria-hidden="true" />
+                        Добавить порог
+                      </button>
                     </div>
                   ) : (
                     <p className="form-hint">Добавьте порог и последнюю ступень без верхней границы.</p>

@@ -20,6 +20,13 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
     public static readonly DateOnly BusinessDate = AccountingMonth.AddMonths(1).AddDays(-1);
     private static readonly DateTimeOffset CreatedAtUtc = new(2026, 8, 14, 4, 0, 0, TimeSpan.Zero);
     private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly IReadOnlyDictionary<string, Guid> RegulatedCurrentTariffIds =
+        new Dictionary<string, Guid>(StringComparer.Ordinal)
+        {
+            ["water"] = Guid.Parse("d0010000-0000-4000-8000-000000000012"),
+            ["electricity"] = Guid.Parse("e0010000-0000-4000-8000-000000000012"),
+            ["trash"] = Guid.Parse("a0010000-0000-4000-8000-000000000008")
+        };
     private static readonly string[] GarageNumbers =
     [
         "101-БЕЗ-ДОЛГА",
@@ -326,28 +333,32 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             setting.Version = DeterministicGuid($"setting-version-{setting.IncomeType.Code}");
         }
 
-        Configure(services["water"], TariffCalculationBases.MeterWater, 101m, true, false, MeterKinds.Water, "м³");
-        Configure(services["trash"], TariffCalculationBases.People, 130m, false, false, null, "чел.");
+        Configure(services["water"], TariffCalculationBases.MeterWater, 100.60m, true, false, MeterKinds.Water, "м³");
+        Configure(services["trash"], TariffCalculationBases.People, 128.69m, false, false, null, "чел.");
         Configure(services["outdoor_lighting"], TariffCalculationBases.Fixed, 300m, false, false, null, "руб.");
         Configure(services["target"], TariffCalculationBases.Fixed, 1200m, false, false, null, "руб.");
         Configure(services["membership"], TariffCalculationBases.Fixed, 500m, false, false, null, "руб.");
-        Configure(services["electricity"], TariffCalculationBases.MeterElectricity, 7.5m, true, true, MeterKinds.Electricity, "кВт·ч");
+        Configure(services["electricity"], TariffCalculationBases.MeterElectricity, 7.47m, true, true, MeterKinds.Electricity, "кВт·ч");
+
+        services["water"].Tariff!.Comment = "Геленджик, питьевая вода для населения с НДС; решение Думы от 19.12.2025 №304.";
+        services["trash"].Tariff!.Comment = "Новороссийская зона, МКД, ООО «Южный региональный оператор»; тариф действует с 01.01.2026.";
+        services["electricity"].Tariff!.Comment = "Краснодарский край, ГСК на один гараж: диапазоны 100/155 кВт·ч; приказ №18/2025-э.";
 
         var electricity = services["electricity"].Tariff!;
-        electricity.ElectricityFirstThreshold = 1100m;
-        electricity.ElectricitySecondThreshold = 1700m;
-        electricity.ElectricityFirstRate = 7.5m;
-        electricity.ElectricitySecondRate = 10m;
-        electricity.ElectricityThirdRate = 15m;
+        electricity.ElectricityFirstThreshold = 100m;
+        electricity.ElectricitySecondThreshold = 155m;
+        electricity.ElectricityFirstRate = 7.47m;
+        electricity.ElectricitySecondRate = 10.17m;
+        electricity.ElectricityThirdRate = 14.88m;
         electricity.ElectricityTiersJson = CreateRepresentativeElectricityTiersJson();
     }
 
     internal static string CreateRepresentativeElectricityTiersJson() => JsonSerializer.Serialize(
         new ShowcaseElectricityTier[]
         {
-            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-1"), "0–1100 кВт·ч", 1100m, 7.5m, false),
-            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-2"), "1101–1700 кВт·ч", 1700m, 10m, false),
-            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-3"), "1701+ кВт·ч", null, 15m, false)
+            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-1"), "0–100 кВт·ч", 100m, 7.47m, false),
+            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-2"), "101–155 кВт·ч", 155m, 10.17m, false),
+            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-3"), "156+ кВт·ч", null, 14.88m, false)
         });
 
     private async Task<bool> HasValidElectricityTiersAsync(CancellationToken cancellationToken)
@@ -368,9 +379,9 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             var tiers = JsonSerializer.Deserialize<ShowcaseElectricityTier[]>(tiersJson, PersistedJsonOptions);
             return tiers is
                 [
-                { UpperBound: 1100m, Rate: 7.5m },
-                { UpperBound: 1700m, Rate: 10m },
-                { UpperBound: null, Rate: 15m }
+                { UpperBound: 100m, Rate: 7.47m },
+                { UpperBound: 155m, Rate: 10.17m },
+                { UpperBound: null, Rate: 14.88m }
                 ]
             && tiers.All(item => item.Id != Guid.Empty && !string.IsNullOrWhiteSpace(item.Name));
         }
@@ -421,17 +432,19 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["water"] = "ДЕМО Вода",
-            ["trash"] = "ДЕМО Мусор",
+            ["water"] = "Вода — 01.01.2026",
+            ["trash"] = "Мусор — 01.01.2026",
             ["outdoor_lighting"] = "ДЕМО Наружное освещение",
             ["target"] = "ДЕМО Целевой взнос",
             ["membership"] = "ДЕМО Членский взнос",
-            ["electricity"] = "ДЕМО Электроэнергия"
+            ["electricity"] = "Электроэнергия — 01.01.2026"
         };
 
         foreach (var (code, name) in names)
         {
-            var tariffId = DeterministicGuid($"current-tariff-{code}");
+            var tariffId = RegulatedCurrentTariffIds.GetValueOrDefault(
+                code,
+                DeterministicGuid($"current-tariff-{code}"));
             var tariff = await context.Tariffs
                 .SingleOrDefaultAsync(item => item.Id == tariffId, cancellationToken);
             if (tariff is null)
@@ -460,9 +473,20 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         IReadOnlyDictionary<string, ChargeServiceSetting> services,
         CancellationToken cancellationToken)
     {
-        await context.ChargeServiceTariffVersions.ExecuteDeleteAsync(cancellationToken);
+        var regulatedSettingIds = services
+            .Where(item => RegulatedCurrentTariffIds.ContainsKey(item.Key))
+            .Select(item => item.Value.Id)
+            .ToArray();
+        await context.ChargeServiceTariffVersions
+            .Where(item => !regulatedSettingIds.Contains(item.ChargeServiceSettingId))
+            .ExecuteDeleteAsync(cancellationToken);
         foreach (var (code, setting) in services)
         {
+            if (RegulatedCurrentTariffIds.ContainsKey(code))
+            {
+                continue;
+            }
+
             if (code == "membership")
             {
                 var previousTariffId = DeterministicGuid("membership-previous-tariff");

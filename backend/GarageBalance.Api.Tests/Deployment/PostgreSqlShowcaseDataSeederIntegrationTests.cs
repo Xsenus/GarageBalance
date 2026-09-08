@@ -21,9 +21,9 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
 
         Assert.Collection(
             Assert.IsType<ShowcaseElectricityTier[]>(electricityTiers),
-            tier => AssertTier(tier, 1100m, 7.5m),
-            tier => AssertTier(tier, 1700m, 10m),
-            tier => AssertTier(tier, null, 15m));
+            tier => AssertTier(tier, 100m, 7.47m),
+            tier => AssertTier(tier, 155m, 10.17m),
+            tier => AssertTier(tier, null, 14.88m));
     }
 
     [PostgreSqlFact]
@@ -72,7 +72,7 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
             """;
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
-        Assert.True((await seeder.AuditAsync(CancellationToken.None)).IsReady);
+        Assert.False((await seeder.AuditAsync(CancellationToken.None)).IsReady);
         var second = await seeder.PrepareAsync(CancellationToken.None);
 
         Assert.True(first.IsReady);
@@ -117,14 +117,22 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
             .Where(item => !item.IsArchived)
             .ToDictionaryAsync(item => item.IncomeType!.Code!);
         Assert.Equal(TariffCalculationBases.MeterWater, settings["water"].Tariff!.CalculationBase);
+        Assert.Equal(100.60m, settings["water"].Tariff!.Rate);
         Assert.True(settings["water"].IsMetered);
         Assert.False(settings["water"].HasTieredTariff);
         Assert.Equal(TariffCalculationBases.People, settings["trash"].Tariff!.CalculationBase);
+        Assert.Equal(128.69m, settings["trash"].Tariff!.Rate);
         Assert.Equal(TariffCalculationBases.Fixed, settings["membership"].Tariff!.CalculationBase);
         Assert.True(settings["electricity"].IsMetered);
         Assert.True(settings["electricity"].HasTieredTariff);
         Assert.Equal(2, await context.ChargeServiceTariffVersions
             .CountAsync(item => item.ChargeServiceSettingId == settings["membership"].Id));
+        Assert.Equal(17, await context.ChargeServiceTariffVersions
+            .CountAsync(item => item.ChargeServiceSettingId == settings["water"].Id));
+        Assert.Equal(13, await context.ChargeServiceTariffVersions
+            .CountAsync(item => item.ChargeServiceSettingId == settings["electricity"].Id));
+        Assert.Equal(8, await context.ChargeServiceTariffVersions
+            .CountAsync(item => item.ChargeServiceSettingId == settings["trash"].Id));
         Assert.Empty(await context.AuditEvents.AsNoTracking().ToListAsync());
         Assert.Equal(1, await context.Tariffs
             .Where(item => item.Id == settings["electricity"].TariffId)
@@ -135,9 +143,9 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
             settings["electricity"].Tariff!.ElectricityTiersJson!);
         Assert.Collection(
             Assert.IsType<ShowcaseElectricityTier[]>(electricityTiers),
-            tier => AssertTier(tier, 1100m, 7.5m),
-            tier => AssertTier(tier, 1700m, 10m),
-            tier => AssertTier(tier, null, 15m));
+            tier => AssertTier(tier, 100m, 7.47m),
+            tier => AssertTier(tier, 155m, 10.17m),
+            tier => AssertTier(tier, null, 14.88m));
         Assert.All(
             await context.Accruals.Where(item => item.Source == "regular").ToListAsync(),
             item => Assert.False(string.IsNullOrWhiteSpace(item.CalculationDetailsJson)));
