@@ -1,7 +1,54 @@
 import { describe, expect, it } from 'vitest'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
-import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
+import type { AccrualDto } from '../../services/financeApi'
+
+describe('mergeSavedGarageAccrual', () => {
+  const saved = (overrides: Partial<AccrualDto> = {}) => ({
+    id: 'accrual-new', incomeTypeId: 'other', incomeTypeName: 'Прочие оплаты', accountingMonth: '2026-09-01',
+    amount: 150, basis: 'Ремонт ворот', irregularPaymentId: 'repair', irregularPaymentName: 'Ремонт ворот',
+    accountingYear: null, comment: null, ...overrides,
+  }) as AccrualDto
+
+  it('preserves the saved catalog identity and basis before the worksheet refresh', () => {
+    const [row] = mergeSavedGarageAccrual([], saved(), 'other_payments')
+    expect(row).toMatchObject({ irregularPaymentId: 'repair', incomeTypeId: 'other', reason: 'Ремонт ворот', accrued: 150, payable: 150, debt: 150 })
+    expect(getGarageIncomeRowTitle(row)).toBe('Основание: Ремонт ворот')
+  })
+
+  it('keeps a same-named fee separate and sums repeated accruals with the same identity', () => {
+    const [fee] = mergeSavedGarageAccrual([], saved(), 'other_payments')
+    fee.irregularPaymentId = null
+    fee.feeCampaignId = 'fee-repair'
+    const rows = mergeSavedGarageAccrual([fee], saved(), 'other_payments')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toBe(fee)
+    const nextRows = mergeSavedGarageAccrual(rows, saved({ id: 'next', amount: 0.15 }), 'other_payments')
+    expect(nextRows).toHaveLength(2)
+    expect(nextRows[1]).toMatchObject({ accrued: 150.15, payable: 150.15, debt: 150.15 })
+  })
+
+  it('aggregates custom bases in one row matching the shared FIFO payment target', () => {
+    const rows = mergeSavedGarageAccrual([], saved({ irregularPaymentId: null }), 'other_payments')
+    const nextRows = mergeSavedGarageAccrual(rows, saved({ irregularPaymentId: null, basis: 'Другая работа' }), 'other_payments')
+    expect(nextRows).toHaveLength(1)
+    expect(getGarageIncomeRowTitle(rows[0])).toBe('Основание: Ремонт ворот')
+    expect(getGarageIncomeRowTitle(nextRows[0])).toBe('Основание: Ремонт ворот; Другая работа')
+    expect(nextRows[0]).toMatchObject({ service: 'Прочие оплаты', accrued: 300, debt: 300 })
+  })
+
+  it('combines distinct penalty reasons in the same period without losing the earlier reason', () => {
+    const first = saved({ incomeTypeId: 'penalty', incomeTypeName: 'Штраф', irregularPaymentId: null, basis: null, comment: 'Просрочка' })
+    const rows = mergeSavedGarageAccrual([], first, 'penalty')
+    const nextRows = mergeSavedGarageAccrual(rows, { ...first, id: 'penalty-next', comment: 'Нарушение' }, 'penalty')
+    expect(nextRows).toHaveLength(1)
+    expect(getGarageIncomeRowTitle(nextRows[0])).toBe('Штраф: Просрочка; Нарушение')
+    expect(nextRows[0].accrued).toBe(300)
+    const repeatedReason = mergeSavedGarageAccrual(nextRows, { ...first, id: 'penalty-third' }, 'penalty')
+    expect(getGarageIncomeRowTitle(repeatedReason[0])).toBe('Штраф: Просрочка; Нарушение')
+  })
+})
 
 describe('normalizeGarageDebtAfterForHistory', () => {
   it('shows zero remaining debt after an overpayment instead of a negative debt', () => {
@@ -130,10 +177,15 @@ describe('shouldShowAccrualReason', () => {
 })
 
 describe('getGarageIncomeRowTitle', () => {
+  it('uses the catalog name rather than a legacy migration comment for a catalog accrual', () => {
+    expect(getGarageIncomeRowTitle({ incomeTypeCode: 'other_payments', irregularPaymentId: 'entry-fee', reason: 'migration-seed', service: 'Вступительный взнос' } as GarageIncomePrototypeRow))
+      .toBe('Основание: Вступительный взнос')
+  })
+
   it('shows the business meaning instead of the destination fund for penalties and irregular accruals', () => {
     expect(getGarageIncomeRowTitle({ incomeTypeCode: 'penalty', reason: 'Просрочка оплаты' } as GarageIncomePrototypeRow))
       .toBe('Штраф: Просрочка оплаты')
-    expect(getGarageIncomeRowTitle({ incomeTypeCode: 'other_income', irregularPaymentId: 'one', reason: 'Ремонт ворот', service: 'Прочее' } as GarageIncomePrototypeRow))
+    expect(getGarageIncomeRowTitle({ incomeTypeCode: 'other_income', irregularPaymentId: 'one', reason: 'Заметка оператора', service: 'Ремонт ворот' } as GarageIncomePrototypeRow))
       .toBe('Основание: Ремонт ворот')
   })
 })

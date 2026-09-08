@@ -148,6 +148,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 accrual.Comment,
                 accrual.CalculationDetailsJson,
                 accrual.IrregularPaymentId,
+                IrregularPaymentName = accrual.IrregularPayment == null ? null : accrual.IrregularPayment.Name,
                 accrual.FeeCampaignId,
                 IrregularPaymentIsAvailable = accrual.IrregularPayment == null ||
                     (accrual.IrregularPayment.IsActive && !accrual.IrregularPayment.IsArchived)
@@ -162,7 +163,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 IncomeTypeId = (Guid?)group.Key.IncomeTypeId,
-                IncomeTypeName = (string?)(group.Key.Basis ?? group.Key.Name),
+                IncomeTypeName = (string?)(group.Key.IrregularPaymentName ?? group.Key.Basis ?? group.Key.Name),
                 IncomeTypeCode = group.Key.Code,
                 group.Key.IrregularPaymentId,
                 group.Key.IrregularPaymentIsAvailable,
@@ -403,7 +404,9 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)allocation.Accrual.AccountingMonth,
                 IncomeTypeId = (Guid?)allocation.Accrual.IncomeTypeId,
-                IncomeTypeName = (string?)(allocation.Accrual.Basis ?? allocation.Accrual.IncomeType.Name),
+                IncomeTypeName = (string?)(allocation.Accrual.IrregularPayment == null
+                    ? allocation.Accrual.Basis ?? allocation.Accrual.IncomeType.Name
+                    : allocation.Accrual.IrregularPayment.Name),
                 IncomeTypeCode = allocation.Accrual.IncomeType.Code,
                 allocation.Accrual.IrregularPaymentId,
                 IrregularPaymentIsAvailable = allocation.Accrual.IrregularPayment == null ||

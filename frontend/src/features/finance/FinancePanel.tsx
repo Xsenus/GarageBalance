@@ -5,7 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, ExpenseWorksheetSupplierBreakdownEntryDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialJournalEntryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualRecalculationPreviewDto, StaffSalaryAdjustmentDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
-import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
+import type { FundsClient } from '../../services/fundsApi'
 import { fundsApi } from '../../services/fundsApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
@@ -25,6 +25,7 @@ import { fitContextMenuToViewport, focusAfterDomUpdate, handleMenuArrowNavigatio
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { NegativeFundBalanceConfirmation } from './NegativeFundBalanceConfirmation'
+import { useExpenseFundOptions } from './useExpenseFundOptions'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
@@ -36,7 +37,7 @@ import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toS
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
-import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, isFeePaymentClosed, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, isFeePaymentClosed, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -313,38 +314,6 @@ type ExpensePrototypeSubmitRequest = {
   rowIndex?: number
 }
 
-type ExpenseFundOption = {
-  id: string
-  name: string
-  balance: number
-}
-
-function getExpenseFundOptions(funds: FundOptionDto[], suppliers: SupplierDto[]): ExpenseFundOption[] {
-  const options = new Map<string, ExpenseFundOption>()
-
-  funds
-    .filter((fund) => fund.allowOperations)
-    .forEach((fund) => {
-      options.set(fund.id, {
-        id: fund.id,
-        name: fund.name,
-        balance: suppliers.find((supplier) => supplier.expenseFundId === fund.id)?.expenseFundBalance ?? 0,
-      })
-    })
-
-  suppliers.forEach((supplier) => {
-    if (supplier.expenseFundId && supplier.expenseFundName && !options.has(supplier.expenseFundId)) {
-      options.set(supplier.expenseFundId, {
-        id: supplier.expenseFundId,
-        name: supplier.expenseFundName,
-        balance: supplier.expenseFundBalance ?? 0,
-      })
-    }
-  })
-
-  return [...options.values()].sort((left, right) => left.name.localeCompare(right.name, 'ru-RU'))
-}
-
 type StaffPaymentPrototypeSubmitRequest = {
   staffMemberId: string
   operationDate: string
@@ -441,7 +410,6 @@ export function FinancePanel({
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [irregularPayments, setIrregularPayments] = useState<IrregularPaymentDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const [expenseFunds, setExpenseFunds] = useState<FundOptionDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
   const [accruals, setAccruals] = useState<AccrualDto[]>([])
   const [supplierAccruals, setSupplierAccruals] = useState<SupplierAccrualDto[]>([])
@@ -462,7 +430,6 @@ export function FinancePanel({
     documentNumber: '',
     comment: '',
   })
-  const expenseFundOptions = useMemo(() => getExpenseFundOptions(expenseFunds, suppliers), [expenseFunds, suppliers])
   const selectedExpenseSupplier = suppliers.find((supplier) => supplier.id === expenseForm.supplierId)
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', comment: '' })
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
@@ -666,14 +633,6 @@ export function FinancePanel({
       setFinanceReferenceLoading((value) => value | 1)
       setError(null)
 
-      void fundsClient.getFundOptions(auth.accessToken, controller.signal)
-        .then((loadedFunds) => {
-          if (!controller.signal.aborted && generation === financeReferenceBundleGenerationRef.current) {
-            setExpenseFunds(loadedFunds)
-          }
-        })
-        .catch(() => undefined)
-
       financeReferenceBundlePromiseRef.current = Promise.all([
         dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
         dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit, false, controller.signal),
@@ -743,7 +702,7 @@ export function FinancePanel({
         }
       }
     }
-  }, [auth.accessToken, dictionaryClient, fundsClient])
+  }, [auth.accessToken, dictionaryClient])
 
   const ensureFinanceGarageReferences = useCallback(async () => {
     if (financeGarageReferencesRef.current) {
@@ -1057,7 +1016,7 @@ export function FinancePanel({
       changes,
       'Фонд расходования',
       formatChangeText(record.expenseFundName),
-      formatChangeText(expenseFundOptions.find((fund) => fund.id === request.expenseFundId)?.name ?? request.expenseFundId),
+      formatChangeText(suppliers.find((supplier) => supplier.expenseFundId === request.expenseFundId)?.expenseFundName ?? request.expenseFundId),
     )
     appendChangePreview(changes, 'Дата выплаты', formatChangeDate(record.operationDate), formatChangeDate(request.operationDate))
     appendChangePreview(changes, 'Месяц выплаты', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
@@ -2354,7 +2313,7 @@ export function FinancePanel({
         payoutDeleteEnabled={payoutDeleteEnabled}
         dictionaryClient={dictionaryClient}
         expenseTypes={expenseTypes}
-        fundOptions={expenseFundOptions}
+        fundsClient={fundsClient}
         financeClient={financeClient}
         garages={garages}
         incomeTypes={incomeTypes}
@@ -3102,7 +3061,7 @@ function PaymentsPrototypePanel({
   payoutDeleteEnabled,
   dictionaryClient,
   expenseTypes,
-  fundOptions,
+  fundsClient,
   financeClient,
   garages,
   incomeTypes,
@@ -3123,7 +3082,7 @@ function PaymentsPrototypePanel({
   payoutDeleteEnabled: boolean
   dictionaryClient: DictionaryClient
   expenseTypes: AccountingTypeDto[]
-  fundOptions: ExpenseFundOption[]
+  fundsClient: FundsClient
   financeClient: FinanceClient
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
@@ -3922,12 +3881,22 @@ function PaymentsPrototypePanel({
     })
   }
 
-  function refreshGarageAfterAccrualSave(garage: PaymentsPrototypeGarage, amount: number) {
+  function refreshGarageAfterAccrualSave(garage: PaymentsPrototypeGarage, accrual: AccrualDto, incomeTypeCode: string) {
+    if (selectedGarageIdRef.current !== garage.id) return
+    const amount = accrual.amount
+    setGarageRows((rows) => mergeSavedGarageAccrual(rows, accrual, incomeTypeCode))
+    setGarageWorksheetSummary((summary) => summary ? {
+      ...summary,
+      accrualTotal: roundPaymentMoney(summary.accrualTotal + amount),
+      closingBalance: roundPaymentMoney(summary.closingBalance + amount),
+      closingDebt: Math.max(roundPaymentMoney(summary.closingBalance + amount), 0),
+    } : summary)
     setSelectedGarage((current) => current?.id === garage.id
       ? { ...current, balance: roundPaymentMoney(current.balance + amount) }
       : current)
     void Promise.all([
       refreshGarageOverdueDebt(garage),
+      loadGarageIncomeWorksheet(garage),
       paymentHistoryOpen ? loadGaragePaymentHistory(garage) : Promise.resolve(),
     ]).then(([overdueDebtRefreshed]) => {
       if (!overdueDebtRefreshed && selectedGarageIdRef.current === garage.id) {
@@ -4566,55 +4535,7 @@ function PaymentsPrototypePanel({
       accountingMonth: request.accountingMonth,
       comment: request.comment.trim() || undefined,
     })
-    const month = savedAccrual.accountingMonth.slice(0, 7)
-    const monthLabel = formatPaymentPrototypeMonthLabel(savedAccrual.accountingMonth)
-
-    setGarageRows((currentRows) => {
-      const serviceName = savedAccrual.basis ?? savedAccrual.irregularPaymentName ?? request.basis.trim()
-      const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
-      if (existingRow) {
-        return currentRows.map((row) => row.id === existingRow.id
-          ? { ...row, accrued: row.accrued + savedAccrual.amount, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
-          : row)
-      }
-
-      return [
-        ...currentRows,
-        {
-          id: `garage-accrual-${savedAccrual.id}`,
-          month,
-          monthLabel,
-          service: serviceName,
-          incomeTypeId: savedAccrual.incomeTypeId,
-          incomeTypeCode: incomeTypes.find((incomeType) => incomeType.id === savedAccrual.incomeTypeId)?.code ?? null,
-          annualAccrualId: savedAccrual.accountingYear ? savedAccrual.id : null,
-          meterKind: null,
-          meterReadingId: null,
-          meterReadingVersion: null,
-          meterReadingDate: null,
-          meter: null,
-          meterDraft: '',
-          meterError: null,
-          difference: null,
-          accrued: savedAccrual.amount,
-          payable: savedAccrual.amount,
-          paymentDraft: '',
-          paid: 0,
-          advance: 0,
-          debt: savedAccrual.amount,
-        },
-      ]
-    })
-    setGarageWorksheetSummary((currentSummary) => currentSummary
-      ? {
-          ...currentSummary,
-          accrualTotal: currentSummary.accrualTotal + savedAccrual.amount,
-          closingBalance: currentSummary.closingBalance + savedAccrual.amount,
-          closingDebt: currentSummary.closingDebt + savedAccrual.amount,
-        }
-      : currentSummary)
-
-    refreshGarageAfterAccrualSave(selectedGarage, savedAccrual.amount)
+    refreshGarageAfterAccrualSave(selectedGarage, savedAccrual, 'other_payments')
     return null
   }
 
@@ -4636,56 +4557,7 @@ function PaymentsPrototypePanel({
       source: 'manual',
       comment: request.reason.trim(),
     })
-    const month = savedAccrual.accountingMonth.slice(0, 7)
-    const monthLabel = formatPaymentPrototypeMonthLabel(savedAccrual.accountingMonth)
-    const serviceName = savedAccrual.incomeTypeName || penaltyIncomeType.name
-
-    setGarageRows((currentRows) => {
-      const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
-      if (existingRow) {
-        return currentRows.map((row) => row.id === existingRow.id
-          ? { ...row, accrued: row.accrued + savedAccrual.amount, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
-          : row)
-      }
-
-      return [
-        ...currentRows,
-        {
-          id: `garage-penalty-${savedAccrual.id}`,
-          month,
-          monthLabel,
-          service: serviceName,
-          incomeTypeId: savedAccrual.incomeTypeId,
-          incomeTypeCode: 'penalty',
-          annualAccrualId: null,
-          meterKind: null,
-          meterReadingId: null,
-          meterReadingVersion: null,
-          meterReadingDate: null,
-          meter: null,
-          meterDraft: '',
-          meterError: null,
-          difference: null,
-          accrued: savedAccrual.amount,
-          payable: savedAccrual.amount,
-          paymentDraft: '',
-          paid: 0,
-          advance: 0,
-          debt: savedAccrual.amount,
-          reason: request.reason.trim(),
-        },
-      ]
-    })
-    setGarageWorksheetSummary((currentSummary) => currentSummary
-      ? {
-          ...currentSummary,
-          accrualTotal: currentSummary.accrualTotal + savedAccrual.amount,
-          closingBalance: currentSummary.closingBalance + savedAccrual.amount,
-          closingDebt: currentSummary.closingDebt + savedAccrual.amount,
-        }
-      : currentSummary)
-
-    refreshGarageAfterAccrualSave(selectedGarage, savedAccrual.amount)
+    refreshGarageAfterAccrualSave(selectedGarage, savedAccrual, 'penalty')
     return null
   }
 
@@ -6004,7 +5876,8 @@ function PaymentsPrototypePanel({
             expenseCashAmount + (expenseDialogPreset.record?.expensePaymentSource === 'cash' ? expenseDialogPreset.record.amount : 0),
           ]}
           expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
-          fundOptions={fundOptions}
+          fundsClient={fundsClient}
+          accessToken={auth.accessToken}
           preset={expenseDialogPreset}
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
           onClose={closeExpenseDialog}
@@ -6423,7 +6296,8 @@ function BankDepositPrototypeDialog({
 export function NewExpensePrototypeDialog({
   availableAmounts,
   expenseTypes,
-  fundOptions,
+  fundsClient,
+  accessToken,
   preset,
   suppliers,
   onClose,
@@ -6431,7 +6305,8 @@ export function NewExpensePrototypeDialog({
 }: {
   availableAmounts: [number, number]
   expenseTypes: AccountingTypeDto[]
-  fundOptions: ExpenseFundOption[]
+  fundsClient: Pick<FundsClient, 'getFundOptions'>
+  accessToken: string
   preset: ExpensePrototypeDialogPreset
   suppliers: SupplierDto[]
   onClose: () => void
@@ -6452,6 +6327,7 @@ export function NewExpensePrototypeDialog({
   const initialPaymentSource = editedRecord?.expensePaymentSource ?? preset.expensePaymentSource
   const [expensePaymentSource, setExpensePaymentSource] = useState<ExpensePaymentSource>(initialPaymentSource)
   const isCashExpense = expensePaymentSource === 'cash'
+  const funds = useExpenseFundOptions(fundsClient, accessToken, isCashExpense)
   const [supplierId, setSupplierId] = useState(editedRecord?.supplierId ?? initialSupplier?.id ?? '')
   const [expenseTypeId, setExpenseTypeId] = useState(
     (editedRecord?.expensePaymentSource ?? preset.expensePaymentSource) === 'cash'
@@ -6462,6 +6338,7 @@ export function NewExpensePrototypeDialog({
   const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>(editedRecord?.expensePaymentType ?? 'with_receipt')
   const [counterpartyName, setCounterpartyName] = useState(editedRecord?.counterpartyName ?? '')
   const [confirmNegativeFundBalance, setConfirmNegativeFundBalance] = useState(false)
+  const [serverFundConfirmationRequired, setServerFundConfirmationRequired] = useState(false)
   const [operationDate, setOperationDate] = useState(editedRecord?.operationDate ?? getLocalDateInputValue())
   const [accountingMonth, setAccountingMonth] = useState((editedRecord?.accountingMonth ?? getLocalDateInputValue()).slice(0, 7))
   const [amount, setAmount] = useState(editedRecord ? String(editedRecord.amount) : preset.amount ? String(preset.amount) : '')
@@ -6470,6 +6347,12 @@ export function NewExpensePrototypeDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
+  const knownFundBalance = isCashExpense ? null : selectedSupplier?.expenseFundBalance ?? null
+  const needsFundConfirmation = serverFundConfirmationRequired || (knownFundBalance !== null && (parsePaymentMoney(amount) ?? 0) > knownFundBalance)
+  function resetFundConfirmation() {
+    setConfirmNegativeFundBalance(false)
+    setServerFundConfirmationRequired(false)
+  }
   useEscapeKey(!saving, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -6499,10 +6382,6 @@ export function NewExpensePrototypeDialog({
       setError('Укажите сумму выплаты больше нуля.')
       return
     }
-    const availableFundBalance = isCashExpense
-      ? fundOptions.find((fund) => fund.id === expenseFundId)?.balance ?? Number.POSITIVE_INFINITY
-      : selectedSupplier?.expenseFundBalance ?? 0
-
     setSaving(true)
     setError(null)
     try {
@@ -6513,7 +6392,7 @@ export function NewExpensePrototypeDialog({
         expensePaymentType,
         expensePaymentSource,
         expenseFundId: expenseFundId || undefined,
-        confirmNegativeFundBalance: Number.isFinite(availableFundBalance) && parsedAmount > availableFundBalance && confirmNegativeFundBalance,
+        confirmNegativeFundBalance: needsFundConfirmation && confirmNegativeFundBalance,
         operationDate,
         accountingMonth: `${accountingMonth}-01`,
         amount: parsedAmount,
@@ -6527,6 +6406,7 @@ export function NewExpensePrototypeDialog({
       }
       onClose()
     } catch (submitError) {
+      if (submitError instanceof FinanceApiError && submitError.code === 'fund_balance_insufficient') setServerFundConfirmationRequired(true)
       setError(submitError instanceof Error ? submitError.message : 'Не удалось провести выплату. Повторите попытку позже.')
     } finally {
       setSaving(false)
@@ -6557,7 +6437,7 @@ export function NewExpensePrototypeDialog({
               onChange={(nextSource) => {
                 const source = nextSource as ExpensePaymentSource
                 setExpensePaymentSource(source)
-                setConfirmNegativeFundBalance(false)
+                resetFundConfirmation()
                 if (source === 'bank') {
                   const nextSupplier = suppliers.find((supplier) => supplier.id === supplierId) ?? initialSupplier
                   setSupplierId(nextSupplier?.id ?? '')
@@ -6586,7 +6466,7 @@ export function NewExpensePrototypeDialog({
                 const nextSupplier = suppliers.find((supplier) => supplier.id === nextSupplierId)
                 setExpenseTypeId(getSupplierAccrualExpenseType(nextSupplier, expenseTypes)?.id ?? '')
                 setExpenseFundId(nextSupplier?.expenseFundId ?? '')
-                setConfirmNegativeFundBalance(false)
+                resetFundConfirmation()
                 setError(null)
               }} />
           </FormField> : (
@@ -6615,24 +6495,26 @@ export function NewExpensePrototypeDialog({
               ? ` · доступно в фонде ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
               : ''}
           </p> : null}
-          {isCashExpense ? (
+          {isCashExpense ? <>
+            {funds.loading ? <LoadingSkeleton label="Загружаем фонды расходования" rows={1} columns={1} /> : null}
+            {funds.error ? <AsyncErrorState message={funds.error} onRetry={funds.reload} retrying={funds.loading} /> : null}
             <FormField label="Фонд расходования" help="Если фонд не выбран, выплата учитывается в общем нераспределённом пуле.">
               <SelectControl
                 aria-label="Фонд расходования"
                 value={expenseFundId}
                 options={[
                   { value: '', label: 'Общий нераспределённый пул' },
-                  ...fundOptions.map((fund) => ({ value: fund.id, label: `${fund.name} · ${formatMoney(fund.balance)}` })),
+                  ...funds.options.map((fund) => ({ value: fund.id, label: fund.name })),
                 ]}
-                disabled={saving}
+                disabled={saving || funds.loading}
                 onChange={(nextFundId) => {
                   setExpenseFundId(nextFundId)
-                  setConfirmNegativeFundBalance(false)
+                  resetFundConfirmation()
                   setError(null)
                 }}
               />
             </FormField>
-          ) : null}
+          </> : null}
           {isCashExpense ? (
             <FormField className="full-payment-field" label="Тип выплаты">
               <SelectControl
@@ -6661,14 +6543,12 @@ export function NewExpensePrototypeDialog({
           <FormField label="Сумма">
             <MoneyTextInput aria-label="Сумма выплаты" value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
-              setConfirmNegativeFundBalance(false)
+              resetFundConfirmation()
               setError(null)
             }} />
           </FormField>
           <NegativeFundBalanceConfirmation
-            visible={Boolean(expenseFundId) && (parsePaymentMoney(amount) ?? 0) > (isCashExpense
-              ? fundOptions.find((fund) => fund.id === expenseFundId)?.balance ?? 0
-              : selectedSupplier?.expenseFundBalance ?? 0)}
+            visible={Boolean(expenseFundId) && needsFundConfirmation}
             checked={confirmNegativeFundBalance}
             disabled={saving}
             onChange={(checked) => { setConfirmNegativeFundBalance(checked); setError(null) }} />

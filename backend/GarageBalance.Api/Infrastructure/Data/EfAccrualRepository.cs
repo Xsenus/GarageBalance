@@ -32,6 +32,13 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                         !allocation.FinancialOperation.IsCanceled)
                     .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
             })
+            .GroupBy(accrual => accrual.IsAvailable)
+            .Select(group => new
+            {
+                IsAvailable = group.Key,
+                Amount = group.Sum(accrual => accrual.Amount),
+                PaidAmount = group.Sum(accrual => accrual.PaidAmount)
+            })
             .SingleOrDefaultAsync(cancellationToken);
         return row is null
             ? null
@@ -745,6 +752,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         CancellationToken cancellationToken) =>
         dbContext.Accruals.AsNoTracking().AnyAsync(accrual =>
             !accrual.IsCanceled &&
+            accrual.Source == AccrualSources.Regular &&
             (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
             accrual.GarageId == garageId &&
             accrual.IrregularPaymentId == irregularPaymentId &&

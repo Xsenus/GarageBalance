@@ -11401,6 +11401,43 @@ describe('App', () => {
     expect(within(panel).getByRole('region', { name: 'Финансы' })).toHaveTextContent(response === 'stale' ? 'Баланс-700.00' : 'Баланс-1 250.00')
   })
 
+  it.each(['catalog', 'custom', 'penalty'] as const)('keeps a new %s accrual identifiable and refreshes its worksheet automatically', async (kind) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-new-accrual', number: '109' })
+    const incomeType = createAccountingType({ id: kind === 'penalty' ? 'penalty' : 'other', code: kind === 'penalty' ? 'penalty' : 'other_payments', name: kind === 'penalty' ? 'Штраф' : 'Прочие оплаты', isSystem: true })
+    const basis = 'Ремонт ворот'
+    const savedAccrual = createAccrual({ id: 'saved-new-accrual', garageId: garage.id, incomeTypeId: incomeType.id, incomeTypeName: incomeType.name, accountingYear: null, accountingMonth: '2026-09-01', amount: 150, basis: kind === 'penalty' ? null : basis, comment: kind === 'penalty' ? basis : null, irregularPaymentId: kind === 'catalog' ? 'catalog-repair' : null })
+    let saved = false
+    let resolveWorksheet!: (worksheet: GarageIncomeWorksheetDto) => void
+    const worksheet = createGarageIncomeWorksheet({ garageId: garage.id, rows: [], accrualTotal: 0, incomeTotal: 0, debtTotal: 0, closingBalance: 0, closingDebt: 0 })
+    const getGarageIncomeWorksheet = vi.fn(async () => saved ? await new Promise<GarageIncomeWorksheetDto>((resolve) => { resolveWorksheet = resolve }) : worksheet)
+    const save = vi.fn(async () => { saved = true; return savedAccrual })
+    const createIncome = vi.fn(async () => createFinancialOperation({ id: 'new-targeted-payment', amount: 50 }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], getIncomeTypes: async () => [incomeType], getIrregularPayments: async () => kind === 'catalog' ? [createIrregularPayment({ id: 'catalog-repair', name: basis, amount: 150 })] : [] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, createAccrual: save, createIrregularAccrual: save, createIncome })} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(panel).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(panel).findByRole('option', { name: /Гараж\s*109/ }))
+    await user.click(within(panel).getByRole('button', { name: kind === 'penalty' ? 'Начислить штраф' : 'Добавить начисление гаражу' }))
+    const dialog = await screen.findByRole('dialog', { name: kind === 'penalty' ? 'Начислить штраф' : 'Новое начисление' })
+    await user.type(within(dialog).getByLabelText(kind === 'penalty' ? 'Причина начисления штрафа' : 'Основание начисления гаража'), basis)
+    const amountInput = within(dialog).getByLabelText(kind === 'penalty' ? 'Сумма штрафа' : 'Сумма нерегулярного начисления гаража')
+    await user.clear(amountInput)
+    await user.type(amountInput, '150')
+    await user.click(within(dialog).getByRole('button', { name: kind === 'penalty' ? 'Начислить' : 'Ок', exact: true }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(within(panel).getByText(`${kind === 'penalty' ? 'Штраф' : 'Основание'}: ${basis}`)).toBeInTheDocument()
+    await waitFor(() => expect(resolveWorksheet).toBeTypeOf('function'))
+    await act(async () => resolveWorksheet({ ...worksheet, accrualTotal: 175, closingBalance: 175, closingDebt: 175, rows: [{ accountingMonth: savedAccrual.accountingMonth, incomeTypeId: incomeType.id, incomeTypeCode: incomeType.code, incomeTypeName: kind === 'penalty' ? incomeType.name : basis, irregularPaymentId: savedAccrual.irregularPaymentId, reason: basis, meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 175, incomeAmount: 0, debt: 175 }] }))
+    const row = within(panel).getByText(`${kind === 'penalty' ? 'Штраф' : 'Основание'}: ${basis}`).closest('tr')!
+    expect(within(row).getAllByText('175.00').length).toBeGreaterThan(0)
+    await user.type(within(row).getByRole('textbox', { name: /^Платеж / }), '50')
+    await user.click(within(row).getByRole('button', { name: /^Сохранить платеж / }))
+    await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({ incomeTypeId: incomeType.id, irregularPaymentId: savedAccrual.irregularPaymentId ?? undefined, amount: 50 })))
+  })
+
   it('saves the April trash payment and removes the paid overdue debt without reloading the page', async () => {
     const user = userEvent.setup()
     const garage = createGarage({

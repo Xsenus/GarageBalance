@@ -21,6 +21,16 @@ function worksheet(rows: GarageIncomeWorksheetDto['rows']): GarageIncomeWorkshee
 }
 
 describe('irregular payment worksheet mapping', () => {
+  it('keeps an aggregate row identity stable when its label or combined reasons change', () => {
+    const rows = ['Прочие оплаты', 'Новое название'].map((name) => createGarageIncomeRowsFromWorksheet(worksheet([{
+      accountingMonth: '2026-08-01', incomeTypeId: 'other-payments', incomeTypeCode: 'other_payments',
+      incomeTypeName: name, reason: 'Ремонт ворот; Замена замка', meterKind: null, meterValue: null, meterConsumption: null,
+      accrualAmount: 100, incomeAmount: 0, debt: 100,
+    }]))[0])
+    expect(rows[0].id).toBe(rows[1].id)
+    expect(rows.every((row) => !/\s/.test(row.id))).toBe(true)
+  })
+
   it.each([
     [null, 0, 0, false],
     ['fee', 100, 100, false],

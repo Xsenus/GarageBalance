@@ -5010,7 +5010,7 @@ public sealed class FinanceServiceTests
             new CreateIrregularAccrualRequest(fixtures.Garage.Id, lockRepair.Id, lockRepair.Name, lockRepair.Amount, new DateOnly(2026, 8, 1), null),
             null,
             CancellationToken.None);
-        var duplicate = await service.CreateIrregularAccrualAsync(
+        var repeated = await service.CreateIrregularAccrualAsync(
             new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, parkingCard.Name, parkingCard.Amount, new DateOnly(2026, 8, 1), null),
             null,
             CancellationToken.None);
@@ -5024,8 +5024,10 @@ public sealed class FinanceServiceTests
         Assert.Equal("Карта доступа", first.Value.IrregularPaymentName);
         Assert.Equal("Карта доступа", first.Value.Basis);
         Assert.Equal(new DateOnly(2026, 8, 1), first.Value.AccountingMonth);
-        Assert.False(duplicate.Succeeded);
-        Assert.Equal("accrual_duplicate", duplicate.ErrorCode);
+        Assert.True(repeated.Succeeded, repeated.ErrorMessage);
+        Assert.NotEqual(first.Value.Id, repeated.Value!.Id);
+        Assert.Equal(2501.12m, await database.Context.Accruals
+            .Where(item => item.IrregularPaymentId == parkingCard.Id && !item.IsCanceled).SumAsync(item => item.Amount));
         var stored = await database.Context.Accruals.SingleAsync(item => item.Id == first.Value.Id);
         Assert.Equal(otherPayments.Id, stored.IncomeTypeId);
         Assert.Equal(parkingCard.Id, stored.IrregularPaymentId);
@@ -5187,7 +5189,10 @@ public sealed class FinanceServiceTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
             CancellationToken.None);
         Assert.True(worksheet.Succeeded);
-        Assert.Equal(result.Value.Basis, Assert.Single(worksheet.Value!.Rows).IncomeTypeName);
+        var unpaidRow = Assert.Single(worksheet.Value!.Rows);
+        Assert.Equal(otherPayments.Name, unpaidRow.IncomeTypeName);
+        Assert.Contains(result.Value.Basis!, unpaidRow.Reason);
+        Assert.Contains("Выдан новый пульт", unpaidRow.Reason);
         var income = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(
                 fixtures.Garage.Id,
@@ -5205,10 +5210,10 @@ public sealed class FinanceServiceTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
             CancellationToken.None);
         Assert.True(paidWorksheet.Succeeded);
-        var customRow = Assert.Single(paidWorksheet.Value!.Rows, row => row.IncomeTypeName == result.Value.Basis);
-        Assert.Equal((915.26m, 0m), (customRow.IncomeAmount, customRow.AdvanceAmount));
-        var advanceRow = Assert.Single(paidWorksheet.Value.Rows, row => row.IncomeTypeName == otherPayments.Name);
-        Assert.Equal((0m, 84.74m), (advanceRow.IncomeAmount, advanceRow.AdvanceAmount));
+        var customRow = Assert.Single(paidWorksheet.Value!.Rows);
+        Assert.Equal(otherPayments.Name, customRow.IncomeTypeName);
+        Assert.Contains(result.Value.Basis!, customRow.Reason);
+        Assert.Equal((915.26m, 84.74m, 0m), (customRow.IncomeAmount, customRow.AdvanceAmount, customRow.Debt));
         Assert.Equal(84.74m, paidWorksheet.Value.AdvanceTotal);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.irregular_accrual_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
@@ -5254,7 +5259,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task UpdateAccrualAsync_RejectsChangedIrregularIdentityAndTemplateDuplicate()
+    public async Task UpdateAccrualAsync_RejectsChangedIrregularIdentityAndAllowsSameTemplateMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -5274,7 +5279,7 @@ public sealed class FinanceServiceTests
             new CreateAccrualRequest(fixtures.Garage.Id, otherPayments.Id, first.Value.AccountingMonth, 76m, AccrualSources.Manual, null),
             null,
             CancellationToken.None);
-        var duplicate = await service.UpdateAccrualAsync(
+        var moved = await service.UpdateAccrualAsync(
             second.Value!.Id,
             new CreateAccrualRequest(fixtures.Garage.Id, otherPayments.Id, first.Value.AccountingMonth, 76m, AccrualSources.Manual, null, template.Id, template.Name),
             null,
@@ -5282,9 +5287,11 @@ public sealed class FinanceServiceTests
 
         Assert.False(identityMismatch.Succeeded);
         Assert.Equal("irregular_accrual_identity_mismatch", identityMismatch.ErrorCode);
-        Assert.False(duplicate.Succeeded);
-        Assert.Equal("accrual_duplicate", duplicate.ErrorCode);
-        Assert.Equal(new DateOnly(2026, 9, 1), second.Value.AccountingMonth);
+        Assert.True(moved.Succeeded, moved.ErrorMessage);
+        Assert.Equal(first.Value.AccountingMonth, moved.Value!.AccountingMonth);
+        Assert.Equal(151m, await database.Context.Accruals
+            .Where(item => item.IrregularPaymentId == template.Id && item.AccountingMonth == first.Value.AccountingMonth)
+            .SumAsync(item => item.Amount));
     }
 
     [Theory]

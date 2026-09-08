@@ -2111,6 +2111,7 @@ h1 {
   display: grid;
   min-width: 0;
   gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
   border: 1px solid #dce3ee;
   border-radius: 12px;
   background: #f8fafc;
@@ -2137,7 +2138,8 @@ h1 {
   line-height: 16px;
 }
 
-.contractors-fee-participant-switch {
+.contractors-fee-card .contractors-fee-participant-switch {
+  grid-template-columns: minmax(0, 1fr) max-content;
   justify-content: flex-start;
 }
 
@@ -2147,7 +2149,7 @@ h1 {
 
 .contractors-fee-participant-list {
   grid-column: 1 / -1;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   width: 100%;
   box-sizing: border-box;
 }

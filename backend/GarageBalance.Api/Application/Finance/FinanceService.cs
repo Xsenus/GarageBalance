@@ -4293,21 +4293,22 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_not_canceled", "Начисление уже активно.");
         }
 
-        var duplicateExists = accrual.IrregularPaymentId.HasValue
-            ? await accrualRepository.ActiveIrregularDuplicateExistsAsync(
+        var duplicateExists = accrual.Source == AccrualSources.Regular &&
+            (accrual.IrregularPaymentId.HasValue
+                ? await accrualRepository.ActiveIrregularDuplicateExistsAsync(
                 accrual.Id,
                 accrual.GarageId,
                 accrual.IrregularPaymentId.Value,
                 accrual.AccountingMonth,
                 cancellationToken)
-            : accrual.Source == AccrualSources.Regular && await accrualRepository.ActiveDuplicateExistsAsync(
+                : await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 accrual.GarageId,
                 accrual.IncomeTypeId,
                 accrual.AccountingMonth,
                 accrual.AccountingYear,
                 accrual.Source,
-                cancellationToken);
+                cancellationToken));
         if (duplicateExists)
         {
             var duplicateMessage = accrual.Source == AccrualSources.Regular && accrual.AccountingYear.HasValue
@@ -4370,19 +4371,6 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        if (irregularPayment is not null &&
-            await accrualRepository.ActiveIrregularDuplicateExistsAsync(
-                null,
-                garage.Id,
-                irregularPayment.Id,
-                month,
-                cancellationToken))
-        {
-            return FinanceResult<AccrualDto>.Failure(
-                "accrual_duplicate",
-                "Этот нерегулярный платёж за выбранный месяц уже начислен гаражу.");
-        }
-
         var amount = MoneyMath.RoundMoney(irregularPayment?.Amount ?? request.Amount);
         if (amount <= 0)
         {
@@ -4666,9 +4654,7 @@ public sealed class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
-        var duplicateExists = accrual.IrregularPaymentId.HasValue
-            ? await accrualRepository.ActiveIrregularDuplicateExistsAsync(accrual.Id, garage.Id, accrual.IrregularPaymentId.Value, month, cancellationToken)
-            : !isIrregular && source == AccrualSources.Regular && await accrualRepository.ActiveDuplicateExistsAsync(
+        var duplicateExists = !isIrregular && source == AccrualSources.Regular && await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 garage.Id,
                 incomeType.Id,

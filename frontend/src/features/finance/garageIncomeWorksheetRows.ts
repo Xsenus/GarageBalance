@@ -1,6 +1,7 @@
-import type { GarageIncomeWorksheetDto } from '../../services/financeApi'
+import type { AccrualDto, GarageIncomeWorksheetDto } from '../../services/financeApi'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
 import type { AccrualReasonDisplayMode } from '../../services/settingsApi'
+import { roundPaymentMoney } from './fullPaymentPlan'
 
 const paymentPrototypeMonthLabels = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
@@ -72,12 +73,60 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
   })
 }
 
+export function mergeSavedGarageAccrual(rows: GarageIncomePrototypeRow[], accrual: AccrualDto, incomeTypeCode: string | null) {
+  const month = accrual.accountingMonth.slice(0, 7)
+  const service = accrual.irregularPaymentId ? accrual.irregularPaymentName ?? accrual.basis ?? accrual.incomeTypeName : accrual.incomeTypeName
+  const reason = accrual.basis ?? accrual.comment
+  const existing = rows.find((row) => row.month === month && !row.feeCampaignId
+    && row.incomeTypeId === accrual.incomeTypeId
+    && (accrual.irregularPaymentId
+      ? row.irregularPaymentId === accrual.irregularPaymentId
+      : !row.irregularPaymentId && (incomeTypeCode === 'penalty' || incomeTypeCode === 'other_payments' || row.service === service)))
+  if (existing) {
+    return rows.map((row) => row === existing ? {
+      ...row,
+      reason: [...new Set([...(row.reason?.split('; ') ?? []), reason].filter(Boolean))].join('; '),
+      accrued: roundPaymentMoney(row.accrued + accrual.amount),
+      payable: roundPaymentMoney(row.payable + accrual.amount),
+      debt: roundPaymentMoney(row.debt + accrual.amount),
+      irregularPaymentRemainingAmount: accrual.irregularPaymentId ? roundPaymentMoney(row.debt + accrual.amount) : null,
+      calculationDetails: null,
+    } : row)
+  }
+  return [...rows, {
+    id: `garage-${accrual.garageId}-${month}-${accrual.irregularPaymentId ?? accrual.incomeTypeId}`,
+    month,
+    monthLabel: formatPaymentPrototypeMonthLabel(accrual.accountingMonth),
+    service,
+    incomeTypeId: accrual.incomeTypeId,
+    incomeTypeCode,
+    annualAccrualId: incomeTypeCode !== 'penalty' && accrual.accountingYear ? accrual.id : null,
+    irregularPaymentId: accrual.irregularPaymentId,
+    irregularPaymentRemainingAmount: accrual.irregularPaymentId ? accrual.amount : null,
+    reason,
+    meterKind: null,
+    meterReadingId: null,
+    meterReadingVersion: null,
+    meterReadingDate: null,
+    meter: null,
+    meterDraft: '',
+    meterError: null,
+    difference: null,
+    accrued: accrual.amount,
+    payable: accrual.amount,
+    paymentDraft: '',
+    paid: 0,
+    advance: 0,
+    debt: accrual.amount,
+  }]
+}
+
 export function isFeePaymentClosed(row: Pick<GarageIncomePrototypeRow, 'feeCampaignId' | 'feeCampaignRemainingAmount' | 'debt'>) {
   return Boolean(row.feeCampaignId && (row.debt <= 0 || row.feeCampaignRemainingAmount === 0))
 }
 
 export function shouldShowAccrualReason(row: GarageIncomePrototypeRow, mode: AccrualReasonDisplayMode) {
-  if (row.irregularPaymentId || row.incomeTypeCode === 'penalty') {
+  if (row.irregularPaymentId || row.incomeTypeCode === 'other_payments' || row.incomeTypeCode === 'penalty') {
     return false
   }
 
@@ -93,8 +142,8 @@ export function getGarageIncomeRowTitle(row: GarageIncomePrototypeRow) {
     return row.reason ? `Штраф: ${row.reason}` : 'Штраф'
   }
 
-  if (row.irregularPaymentId) {
-    return `Основание: ${row.reason || row.service}`
+  if (row.irregularPaymentId || (row.incomeTypeCode === 'other_payments' && row.reason)) {
+    return `Основание: ${row.irregularPaymentId ? row.service : row.reason}`
   }
 
   return row.service
