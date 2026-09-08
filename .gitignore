@@ -40,6 +40,8 @@ imports/raw/
 import-queue/
 artifacts/
 .deploy/
+/.playwright-mcp/
+/tmp/
 
 # OS/editor
 .DS_Store
