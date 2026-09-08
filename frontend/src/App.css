@@ -1335,7 +1335,8 @@ h1 {
 }
 
 .contractors-editable-input[aria-invalid='true'],
-.contractors-editable-select[aria-invalid='true'] {
+.contractors-editable-select[aria-invalid='true'],
+.meter-readings-control[aria-invalid='true'] {
   border-color: #f04438;
   box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.12);
 }
@@ -3435,10 +3436,6 @@ input.meter-readings-control {
 }
 
 .meter-readings-data-row:nth-child(even) > span {
-  background: #fcfcfd;
-}
-
-.meter-readings-data-row:nth-child(even) > span:first-child {
   background: #fcfcfd;
 }
 
