@@ -1197,6 +1197,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }, {})
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
+  const canWriteContractors = hasPermission(auth, permissions.dictionariesWrite)
   const canManageSupplierServices = hasPermission(auth, permissions.dictionariesWrite)
   const canAdjustOpeningData = hasPermission(auth, permissions.openingDataAdjust)
   const canUseGarageColumnFilters = isAdministrator(auth)
@@ -2242,7 +2243,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           {activeSection === 'garages' ? (
             <>
               <button className="secondary-button" type="button" aria-busy={contractorPageLoading.garages} onClick={toggleGarageDebtorsFilter}>{debtorsButtonLabel}</button>
-              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'garages'} disabled={contractorReferenceLoading === 'garages'} onClick={() => void openGarageCreator()}>
+              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'garages'} disabled={!canWriteContractors || contractorReferenceLoading === 'garages'} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => void openGarageCreator()}>
                 <Gauge size={17} aria-hidden="true" />
                 <span>Добавить гараж</span>
               </button>
@@ -2250,7 +2251,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           ) : null}
           {activeSection === 'suppliers' ? (
             <>
-              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'suppliers'} disabled={contractorReferenceLoading === 'suppliers'} onClick={() => void openSupplierCreator()}>
+              <button className="secondary-button create-action-button" type="button" aria-busy={contractorReferenceLoading === 'suppliers'} disabled={!canWriteContractors || contractorReferenceLoading === 'suppliers'} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => void openSupplierCreator()}>
                 <UsersRound size={17} aria-hidden="true" />
                 <span>Добавить поставщика</span>
               </button>
@@ -2266,11 +2267,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           ) : null}
           {activeSection === 'staff' ? (
             <>
-              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'department' })}>
+              <button className="secondary-button create-action-button" type="button" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => setModal({ type: 'department' })}>
                 <UsersRound size={17} aria-hidden="true" />
                 <span>Добавить отдел</span>
               </button>
-              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'employee' })}>
+              <button className="secondary-button create-action-button" type="button" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => setModal({ type: 'employee' })}>
                 <UserPlus size={17} aria-hidden="true" />
                 <span>Добавить сотрудника</span>
               </button>
@@ -2278,6 +2279,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           ) : null}
         </div>
       </div>
+      {!canWriteContractors ? <p className="form-hint">Режим просмотра: для добавления, изменения и удаления контрагентов нужно право dictionaries.write.</p> : null}
       {formStateError && !modal ? (
         <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || contractorReferenceLoading !== null || supplierEditorLoadingId !== null} />
       ) : null}
@@ -2378,18 +2380,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
                 <span role="cell" className="contractors-row-actions table-actions-column">
                   {row.isDeleted ? (
-                    <button className="icon-button" type="button" aria-label={`Восстановить гараж ${row.number}`} title="Восстановить" onClick={() => restoreGarage(row)}>
+                    <button className="icon-button" type="button" aria-label={`Восстановить гараж ${row.number}`} title={canWriteContractors ? 'Восстановить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => restoreGarage(row)}>
                       <RotateCcw size={16} />
                     </button>
                   ) : (
                     <>
-                      <button className="icon-button" type="button" aria-label={`Изменить гараж ${row.number}`} title="Изменить" aria-busy={contractorReferenceLoading === 'garages'} disabled={contractorReferenceLoading === 'garages'} onClick={() => void openGarageEditor(row)}>
+                      <button className="icon-button" type="button" aria-label={`Изменить гараж ${row.number}`} title={canWriteContractors ? 'Изменить' : 'Нужно право изменения справочников'} aria-busy={contractorReferenceLoading === 'garages'} disabled={!canWriteContractors || contractorReferenceLoading === 'garages'} onClick={() => void openGarageEditor(row)}>
                         <Pencil size={16} />
                       </button>
                       <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет гаража ${row.number}`} title="Финансовый отчет" onClick={() => openGarageFinancialReport(row)}>
                         <FileText size={16} />
                       </button>
-                      <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить гараж ${row.number}`} title="Удалить" onClick={() => openGarageDeleteDialog(row)}>
+                      <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить гараж ${row.number}`} title={canWriteContractors ? 'Удалить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => openGarageDeleteDialog(row)}>
                         <Trash2 size={16} />
                       </button>
                     </>
@@ -2457,18 +2459,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </span>
                   <span role="cell" className="contractors-row-actions table-actions-column">
                     {row.isDeleted ? (
-                      <button className="icon-button" type="button" aria-label={`Восстановить поставщика ${row.name}`} title="Восстановить" onClick={() => restoreSupplier(row)}>
+                      <button className="icon-button" type="button" aria-label={`Восстановить поставщика ${row.name}`} title={canWriteContractors ? 'Восстановить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => restoreSupplier(row)}>
                         <RotateCcw size={16} />
                       </button>
                     ) : (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить поставщика ${row.name}`} title="Изменить" aria-busy={supplierEditorLoadingId === row.id} disabled={supplierEditorLoadingId === row.id} onClick={() => void openSupplierEditor(row)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить поставщика ${row.name}`} title={canWriteContractors ? 'Изменить' : 'Нужно право изменения справочников'} aria-busy={supplierEditorLoadingId === row.id} disabled={!canWriteContractors || supplierEditorLoadingId === row.id} onClick={() => void openSupplierEditor(row)}>
                           {supplierEditorLoadingId === row.id ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Pencil size={16} />}
                         </button>
                         <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет поставщика ${row.name}`} title="Финансовый отчет" onClick={() => openSupplierFinancialReport(row)}>
                           <FileText size={16} />
                         </button>
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить поставщика ${row.name}`} title="Удалить" onClick={() => openSupplierDeleteDialog(row)}>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить поставщика ${row.name}`} title={canWriteContractors ? 'Удалить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => openSupplierDeleteDialog(row)}>
                           <Trash2 size={16} />
                         </button>
                       </>
@@ -2532,18 +2534,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   <span role="cell" className="contractors-directory-cell--right contractors-staff-rate-cell">{row.isDeleted ? 'Удален' : formatStaffRate(row.rate)}</span>
                   <span role="cell" className="contractors-row-actions table-actions-column">
                     {row.isDeleted ? (
-                      <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
+                      <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title={canWriteContractors ? 'Восстановить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => restoreEmployee(row)}>
                         <RotateCcw size={16} />
                       </button>
                     ) : (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить сотрудника ${row.fullName}`} title="Изменить" onClick={() => openEmployeeEditor(row)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить сотрудника ${row.fullName}`} title={canWriteContractors ? 'Изменить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => openEmployeeEditor(row)}>
                           <Pencil size={16} />
                         </button>
                         <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет сотрудника ${row.fullName}`} title="Финансовый отчет" onClick={() => openEmployeeFinancialReport(row)}>
                           <FileText size={16} />
                         </button>
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title="Удалить" onClick={() => openEmployeeDeleteDialog(row)}>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title={canWriteContractors ? 'Удалить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => openEmployeeDeleteDialog(row)}>
                           <Trash2 size={16} />
                         </button>
                       </>
@@ -2586,15 +2588,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   <span role="cell">{department.name}</span>
                   <span role="cell" className="contractors-row-actions table-actions-column">
                     {department.isDeleted ? (
-                      <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>
+                      <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title={canWriteContractors ? 'Восстановить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => restoreDepartment(department)}>
                         <RotateCcw size={16} />
                       </button>
                     ) : (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить отдел ${department.name}`} title="Изменить" onClick={() => openDepartmentEditor(department)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить отдел ${department.name}`} title={canWriteContractors ? 'Изменить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => openDepartmentEditor(department)}>
                           <Pencil size={16} />
                         </button>
-                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить отдел ${department.name}`} title={canWriteContractors ? 'Удалить' : 'Нужно право изменения справочников'} disabled={!canWriteContractors} onClick={() => openDepartmentDeleteDialog(department)}>
                           <Trash2 size={16} />
                         </button>
                       </>
@@ -2637,7 +2639,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           >
             {garageContextMenu.row.isDeleted ? (
               <div className="context-menu-group" role="group">
-                <button type="button" role="menuitem" onClick={() => restoreGarage(garageContextMenu.row)}>
+                <button type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => restoreGarage(garageContextMenu.row)}>
                   <RotateCcw size={16} />
                   <span>Восстановить</span>
                 </button>
@@ -2645,11 +2647,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             ) : (
               <>
                 <div className="context-menu-group" role="group">
-                  <button type="button" role="menuitem" aria-busy={contractorReferenceLoading === 'garages'} disabled={contractorReferenceLoading === 'garages'} onClick={() => void openGarageEditor(garageContextMenu.row)}>
+                  <button type="button" role="menuitem" aria-busy={contractorReferenceLoading === 'garages'} disabled={!canWriteContractors || contractorReferenceLoading === 'garages'} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => void openGarageEditor(garageContextMenu.row)}>
                     <Pencil size={16} />
                     <span>Изменить</span>
                   </button>
-                  <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openGarageDeleteDialog(garageContextMenu.row)}>
+                  <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => openGarageDeleteDialog(garageContextMenu.row)}>
                     <Trash2 size={16} />
                     <span>Удалить</span>
                   </button>
@@ -2678,7 +2680,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           >
             {supplierContextMenu.row.isDeleted ? (
               <div className="context-menu-group" role="group">
-                <button type="button" role="menuitem" onClick={() => restoreSupplier(supplierContextMenu.row)}>
+                <button type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => restoreSupplier(supplierContextMenu.row)}>
                   <RotateCcw size={16} />
                   <span>Восстановить</span>
                 </button>
@@ -2686,11 +2688,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             ) : (
               <>
                 <div className="context-menu-group" role="group">
-                  <button type="button" role="menuitem" aria-busy={supplierEditorLoadingId === supplierContextMenu.row.id} disabled={supplierEditorLoadingId === supplierContextMenu.row.id} onClick={() => void openSupplierEditor(supplierContextMenu.row)}>
+                  <button type="button" role="menuitem" aria-busy={supplierEditorLoadingId === supplierContextMenu.row.id} disabled={!canWriteContractors || supplierEditorLoadingId === supplierContextMenu.row.id} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => void openSupplierEditor(supplierContextMenu.row)}>
                     {supplierEditorLoadingId === supplierContextMenu.row.id ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Pencil size={16} />}
                     <span>Изменить</span>
                   </button>
-                  <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openSupplierDeleteDialog(supplierContextMenu.row)}>
+                  <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => openSupplierDeleteDialog(supplierContextMenu.row)}>
                     <Trash2 size={16} />
                     <span>Удалить</span>
                   </button>
@@ -2719,7 +2721,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           >
             {employeeContextMenu.row.isDeleted ? (
               <div className="context-menu-group" role="group">
-                <button type="button" role="menuitem" onClick={() => restoreEmployee(employeeContextMenu.row)}>
+                <button type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => restoreEmployee(employeeContextMenu.row)}>
                   <RotateCcw size={16} />
                   <span>Восстановить</span>
                 </button>
@@ -2727,11 +2729,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             ) : (
               <>
                 <div className="context-menu-group" role="group">
-                  <button type="button" role="menuitem" onClick={() => openEmployeeEditor(employeeContextMenu.row)}>
+                  <button type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => openEmployeeEditor(employeeContextMenu.row)}>
                     <Pencil size={16} />
                     <span>Изменить</span>
                   </button>
-                  <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openEmployeeDeleteDialog(employeeContextMenu.row)}>
+                  <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => openEmployeeDeleteDialog(employeeContextMenu.row)}>
                     <Trash2 size={16} />
                     <span>Удалить</span>
                   </button>
@@ -2760,18 +2762,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           >
             {departmentContextMenu.row.isDeleted ? (
               <div className="context-menu-group" role="group">
-                <button type="button" role="menuitem" onClick={() => restoreDepartment(departmentContextMenu.row)}>
+                <button type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => restoreDepartment(departmentContextMenu.row)}>
                   <RotateCcw size={16} />
                   <span>Восстановить</span>
                 </button>
               </div>
             ) : (
               <div className="context-menu-group" role="group">
-                <button type="button" role="menuitem" onClick={() => openDepartmentEditor(departmentContextMenu.row)}>
+                <button type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => openDepartmentEditor(departmentContextMenu.row)}>
                   <Pencil size={16} />
                   <span>Изменить</span>
                 </button>
-                <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openDepartmentDeleteDialog(departmentContextMenu.row)}>
+                <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteContractors} title={!canWriteContractors ? 'Нужно право изменения справочников' : undefined} onClick={() => openDepartmentDeleteDialog(departmentContextMenu.row)}>
                   <Trash2 size={16} />
                   <span>Удалить</span>
                 </button>

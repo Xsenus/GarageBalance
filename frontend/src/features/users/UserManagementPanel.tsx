@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import { Pencil, RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
@@ -8,7 +8,7 @@ import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, StatusMessage, Ta
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime } from '../../shared/formatters'
-import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { fitContextMenuToViewport, handleMenuArrowNavigation, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createEmptyPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
@@ -48,7 +48,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCodes: ['operator'], isActive: true, deactivationReason: '' })
   const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; controller: AbortController; promise: Promise<ManagedRoleDto[]> } | null>(null)
   const usersPageControllerRef = useRef<AbortController | null>(null)
+  const contextMenuTriggerRef = useRef<HTMLTableRowElement | null>(null)
   const busy = saving !== null
+  useRestoreFocusOnClose(Boolean(contextMenu))
+  const contextMenuFirstItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contextMenu))
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !deactivationConfirmation)
@@ -192,6 +195,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   }, [beginUsersPageRequest, getRolesOnce, offset])
 
   function openEditor(mode: 'create' | 'edit', user?: ManagedUserDto) {
+    if (contextMenu) contextMenuTriggerRef.current?.focus()
     setContextMenu(null)
     setValidationErrors([])
     setError(null)
@@ -220,6 +224,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       return
     }
 
+    if (editor.mode === 'edit' && editor.user && getUserEditorChanges(form, editor.user, roles).length === 0) {
+      closeEditor()
+      return
+    }
+
     const errors = getUserEditorValidationErrors(form, editor.mode, editor.user, actionCommentsRequired)
     if (errors.length > 0) {
       setValidationErrors(errors)
@@ -235,14 +244,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         roleCodes: form.roleCodes,
         isActive: form.isActive,
         newPassword: form.password.length > 0 ? form.password : null,
-        deactivationReason: editor.user.isActive && !form.isActive ? form.deactivationReason.trim() : null,
+        deactivationReason: form.deactivationReason.trim(),
       }
-      const changes = getUserEditorChanges(form, editor.user, roles)
-      if (changes.length === 0) {
-        closeEditor()
-        return
-      }
-
       if (editor.user.isActive && !request.isActive) {
         setDeactivationConfirmation({ user: editor.user, request })
         return
@@ -491,10 +494,25 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   }
 
   function openDeleteDialog(user: ManagedUserDto) {
+    if (contextMenu) contextMenuTriggerRef.current?.focus()
     setDeleteReason('')
     setDeleteReasonError(null)
     setError(null)
     setDeleteTarget(user)
+  }
+
+  function openUserContextMenu(event: MouseEvent<HTMLTableRowElement>, user: ManagedUserDto) {
+    event.preventDefault()
+    contextMenuTriggerRef.current = event.currentTarget
+    setContextMenu({ user, ...fitContextMenuToViewport(event.clientX, event.clientY) })
+  }
+
+  function openUserContextMenuFromKeyboard(event: KeyboardEvent<HTMLTableRowElement>, user: ManagedUserDto) {
+    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+    event.preventDefault()
+    const bounds = event.currentTarget.getBoundingClientRect()
+    contextMenuTriggerRef.current = event.currentTarget
+    setContextMenu({ user, ...fitContextMenuToViewport(bounds.left + 16, bounds.top + 16) })
   }
 
   function closeDeleteDialog() {
@@ -572,10 +590,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     key={managedUser.id}
                     tabIndex={0}
                     onContextMenu={loading ? undefined : (event) => {
-                      event.preventDefault()
                       event.stopPropagation()
-                      setContextMenu({ user: managedUser, x: event.clientX, y: event.clientY })
+                      openUserContextMenu(event, managedUser)
                     }}
+                    onKeyDown={loading ? undefined : (event) => openUserContextMenuFromKeyboard(event, managedUser)}
                   >
                     <td><strong>{managedUser.displayName}</strong></td>
                     <td>{managedUser.email}</td>
@@ -630,9 +648,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       <RolePermissionMatrix roles={roles} onEditRole={openRoleEditor} />
 
       {contextMenu && !loading ? (
-        <div className="context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
+        <div className="context-menu" role="menu" aria-label={`Действия пользователя ${contextMenu.user.displayName}`} style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()} onKeyDown={handleMenuArrowNavigation} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setContextMenu(null) }}>
           <div className="context-menu-group" role="group">
-            <button type="button" role="menuitem" onClick={() => openEditor('edit', contextMenu.user)}>
+            <button ref={contextMenuFirstItemRef} type="button" role="menuitem" onClick={() => openEditor('edit', contextMenu.user)}>
               <Save size={15} />
               <span>Изменить</span>
             </button>
@@ -640,7 +658,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               <Trash2 size={15} />
               <span>Удалить</span>
             </button>
-            <button type="button" role="menuitem" onClick={() => { setRestoreTarget(contextMenu.user); setContextMenu(null) }} disabled={contextMenu.user.isActive}>
+            <button type="button" role="menuitem" onClick={() => { contextMenuTriggerRef.current?.focus(); setRestoreTarget(contextMenu.user); setContextMenu(null) }} disabled={contextMenu.user.isActive}>
               <RotateCcw size={15} />
               <span>Вернуть</span>
             </button>
@@ -700,16 +718,16 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   options={[{ value: 'active', label: 'Активен' }, { value: 'inactive', label: 'Отключен' }]}
                   onChange={(value) => setForm({ ...form, isActive: value === 'active' })} />
               </FormField>
-              {editor.user?.isActive && !form.isActive ? (
-                <FormField label="Причина отключения">
+              {editor.mode === 'edit' ? (
+                <FormField label={editor.user?.isActive && !form.isActive ? 'Причина отключения' : 'Причина изменения'}>
                   <textarea
-                    aria-label="Причина отключения пользователя"
-                    placeholder="Например: сотрудник больше не работает"
+                    aria-label={editor.user?.isActive && !form.isActive ? 'Причина отключения пользователя' : 'Причина изменения пользователя'}
+                    placeholder={editor.user?.isActive && !form.isActive ? 'Например: сотрудник больше не работает' : 'Кратко опишите основание изменения'}
                     maxLength={1000}
                     value={form.deactivationReason}
                     disabled={busy}
                     onChange={(event) => setForm({ ...form, deactivationReason: event.target.value })}
-                    required={actionCommentsRequired}
+                    required={actionCommentsRequired && Boolean(editor.user && getUserEditorChanges(form, editor.user, roles).length > 0)}
                   />
                 </FormField>
               ) : null}

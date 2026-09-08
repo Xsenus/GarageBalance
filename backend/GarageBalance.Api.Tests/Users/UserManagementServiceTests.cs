@@ -327,7 +327,7 @@ public sealed class UserManagementServiceTests
 
         var result = await service.UpdateUserAsync(
             created.Value!.Id,
-            new UpdateManagedUserRequest("Бухгалтер", [SystemRoles.Accountant], true, "NewStrongPass123"),
+            new UpdateManagedUserRequest("Бухгалтер", [SystemRoles.Accountant], true, "NewStrongPass123", "Назначен бухгалтером"),
             Guid.NewGuid(),
             CancellationToken.None);
 
@@ -349,6 +349,7 @@ public sealed class UserManagementServiceTests
         Assert.Equal("True", metadata.RootElement.GetProperty("credentialsChanged").GetString());
         Assert.DoesNotContain("NewStrongPass123", auditEvent.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("NewStrongPass123", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("Назначен бухгалтером", auditEvent.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -365,7 +366,7 @@ public sealed class UserManagementServiceTests
 
         var result = await service.UpdateUserAsync(
             created.Value!.Id,
-            new UpdateManagedUserRequest(" User ", [SystemRoles.ReportsViewer, SystemRoles.Operator], true, null),
+            new UpdateManagedUserRequest(" User ", [SystemRoles.ReportsViewer, SystemRoles.Operator], true, null, "Проверка без изменений"),
             Guid.NewGuid(),
             CancellationToken.None);
 
@@ -413,7 +414,7 @@ public sealed class UserManagementServiceTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal("user_deactivation_reason_required", result.ErrorCode);
+        Assert.Equal("user_update_reason_required", result.ErrorCode);
         Assert.True(database.Context.Users.Single().IsActive);
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "users.user_updated");
     }
@@ -506,7 +507,7 @@ public sealed class UserManagementServiceTests
 
         var result = await service.UpdateUserAsync(
             created.Value!.Id,
-            new UpdateManagedUserRequest("Пользователь", [SystemRoles.Operator], true, "short"),
+            new UpdateManagedUserRequest("Пользователь", [SystemRoles.Operator], true, "short", "Смена пароля"),
             Guid.NewGuid(),
             CancellationToken.None);
 

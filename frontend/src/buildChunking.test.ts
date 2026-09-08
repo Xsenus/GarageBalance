@@ -16,10 +16,10 @@ describe('production chunking', () => {
     expect(getManualChunkName('/project/node_modules/react-router/index.js')).toBeUndefined()
   })
 
-  it('groups jointly loaded accounting sections while keeping funds separate', () => {
+  it('groups jointly loaded accounting sections', () => {
     expect(getManualChunkName('C:\\project\\src\\features\\finance\\FinancePanel.tsx')).toBe('workspace-accounting')
     expect(getManualChunkName('/project/src/features/meterReadings/MeterReadingsPanel.tsx')).toBe('workspace-accounting')
-    expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('funds')
+    expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('workspace-accounting')
     expect(getManualChunkName('C:\\project\\src\\features\\contractors\\ContractorsPanel.tsx')).toBe('workspace-accounting')
     expect(getManualChunkName('/project/src/features/tariffs/TariffsAndFeesPanel.tsx')).toBe('workspace-accounting')
     expect(getManualChunkName('/project/src/features/reports/ReportPanel.tsx')).toBe('workspace-accounting')
@@ -50,7 +50,7 @@ describe('production chunking', () => {
     }
     expect(visited).not.toContain(workspace!.fileName)
     expect(visited).not.toContain(shell!.fileName)
-    expect(chunks.find((chunk) => chunk.name === 'funds')).toBeDefined()
+    expect(Object.keys(workspace!.modules).some((id) => /[/\\]features[/\\]funds[/\\]FundsPanel\./.test(id))).toBe(true)
     expect(chunks.find((chunk) => chunk.name === 'ImportPanel')).toBeDefined()
   })
 })

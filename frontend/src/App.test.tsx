@@ -13264,6 +13264,41 @@ describe('App', () => {
     expect(historyRequests).toBe(2)
   })
 
+  it('explains why a targeted payment cannot be edited from payment history', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-targeted-history', number: '80', ownerName: 'Сидоров Алексей' })
+    const operation = createFinancialOperation({
+      id: 'targeted-payment',
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      incomeTypeName: 'Целевой сбор',
+      feeCampaignId: 'campaign-gates',
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => ({
+      items: params?.garageId === garage.id ? [operation] : [],
+      totalCount: params?.garageId === garage.id ? 1 : 0,
+      offset: 0,
+      limit: params?.limit ?? 25,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ getOperationsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*80\s*Сидоров Алексей/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'История платежей' }))
+    const history = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
+    const edit = await within(history).findByRole('button', { name: 'Изменить платеж Целевой сбор' })
+    expect(edit).toBeDisabled()
+    expect(edit).toHaveAttribute('title', 'Целевой платеж изменяется через связанное начисление')
+    expect(within(history).getByRole('button', { name: 'Отменить платеж Целевой сбор' })).toBeEnabled()
+    await user.click(edit)
+    expect(screen.queryByRole('dialog', { name: 'Изменить платеж' })).not.toBeInTheDocument()
+  })
+
   it('cancels the expense worksheet when leaving the payouts tab', async () => {
     const user = userEvent.setup()
     let worksheetSignal: AbortSignal | undefined
@@ -13706,6 +13741,8 @@ describe('App', () => {
 
   it('edits a supplier accrual from the payout breakdown context menu', async () => {
     const user = userEvent.setup()
+    const linkedExpenseType = createAccountingType({ id: 'expense-linked', name: 'Контрольное обслуживание' })
+    const salaryExpenseType = createAccountingType({ id: 'expense-salary', name: 'Зарплата', code: 'salary', isSystem: true })
     const updateSupplierAccrual = vi.fn(async (_token: string, id: string, request: CreateSupplierAccrualRequest) => createSupplierAccrual({
       id,
       supplierId: request.supplierId,
@@ -13725,8 +13762,8 @@ describe('App', () => {
         supplierId: 'supplier-1',
         staffMemberId: null,
         counterpartyName: 'Водоканал',
-        expenseTypeId: 'expense-type-1',
-        expenseTypeName: 'Электроэнергия',
+        expenseTypeId: salaryExpenseType.id,
+        expenseTypeName: salaryExpenseType.name,
         accrualAmount: 15000,
         expenseAmount: 0,
         balance: 15000,
@@ -13736,7 +13773,7 @@ describe('App', () => {
     }))
     const getExpenseWorksheetSupplierBreakdown = vi.fn(async () => ({
       supplierId: 'supplier-1',
-      expenseTypeId: 'expense-type-1',
+      expenseTypeId: salaryExpenseType.id,
       monthFrom: '2026-09-01',
       monthTo: '2026-09-01',
       accrualTotal: 15000,
@@ -13765,27 +13802,33 @@ describe('App', () => {
       getActionCommentSettings: async () => ({ required: false, version: 'optional-comments' }),
       getPayoutMutationSettings: async () => ({ editEnabled: true, deleteEnabled: true, version: 'payout-actions' }),
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+    const dictionaryClient = createDictionaryClient({
+      getExpenseTypes: async () => [linkedExpenseType, salaryExpenseType],
+      getSuppliers: async () => [createSupplier({ id: 'supplier-1', name: 'Водоканал', expenseTypeId: linkedExpenseType.id, expenseTypeName: linkedExpenseType.name, expenseFundId: 'fund-1', expenseFundName: 'Основной фонд' })],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
-    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Водоканал, Электроэнергия' }))
-    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: Водоканал, Электроэнергия' })
+    await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Водоканал, Зарплата' }))
+    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: Водоканал, Зарплата' })
     fireEvent.contextMenu(within(detailsTable).getByText('СЧЕТ-15').closest('tr')!)
     const contextMenu = await screen.findByRole('menu', { name: 'Действия начисления Водоканал' })
     await user.click(within(contextMenu).getByRole('menuitem', { name: 'Редактировать' }))
 
     const editDialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
+    expect(within(editDialog).getByRole('combobox', { name: 'Услуга начисления поставщику' })).toHaveTextContent('Зарплата')
+    expect(within(editDialog).queryByText('Контрольное обслуживание')).not.toBeInTheDocument()
     expect(within(editDialog).getByLabelText('Сумма начисления поставщику')).toHaveValue('15 000.00')
     await user.clear(within(editDialog).getByLabelText('Сумма начисления поставщику'))
     await user.type(within(editDialog).getByLabelText('Сумма начисления поставщику'), '14500')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(updateSupplierAccrual).toHaveBeenCalledWith('token', 'supplier-accrual-15', {
       supplierId: 'supplier-1',
-      expenseTypeId: 'expense-type-1',
+      expenseTypeId: salaryExpenseType.id,
       accountingMonth: '2026-09-01',
       amount: 14500,
       source: 'manual',
@@ -14541,9 +14584,12 @@ describe('App', () => {
     const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
     await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
-    await user.click(await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Резервный фонд' }))
-
-    expect(within(await screen.findByRole('dialog', { name: 'Резервный фонд' })).queryByRole('button', { name: 'Удалить фонд' })).not.toBeInTheDocument()
+    const fundCard = await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Резервный фонд' })
+    expect(fundCard).toBeDisabled()
+    expect(fundCard).toHaveAttribute('title', 'Нужно право payments.write')
+    expect(within(fundsPanel).getByText('Режим просмотра: для изменения фондов и их операций нужно право payments.write.')).toBeInTheDocument()
+    await user.click(fundCard)
+    expect(screen.queryByRole('dialog', { name: 'Резервный фонд' })).not.toBeInTheDocument()
   })
 
   it('shows funds management prototype from dashboard tile', async () => {
@@ -17810,11 +17856,22 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
     expect(updateCalls).toBe(0)
 
-    fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
+    const contextMenuRow = within(usersPanel).getByText('operator@example.com').closest('tr')!
+    contextMenuRow.focus()
+    fireEvent.keyDown(contextMenuRow, { key: 'F10', shiftKey: true })
+    const userMenu = await screen.findByRole('menu', { name: 'Действия пользователя Оператор' })
+    expect(within(userMenu).getByRole('menuitem', { name: 'Изменить' })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(within(userMenu).getByRole('menuitem', { name: 'Удалить' })).toHaveFocus()
+    await user.keyboard('{Tab}')
+    expect(screen.queryByRole('menu', { name: 'Действия пользователя Оператор' })).not.toBeInTheDocument()
+    await waitFor(() => expect(contextMenuRow).toHaveFocus())
+    fireEvent.contextMenu(contextMenuRow)
     await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
     await user.clear(within(editDialog).getByLabelText('Имя пользователя'))
     await user.type(within(editDialog).getByLabelText('Имя пользователя'), 'Старший оператор')
+    await user.type(within(editDialog).getByLabelText('Причина изменения пользователя'), 'Изменение должности')
     const editSaveButton = within(editDialog).getByRole('button', { name: 'Сохранить' })
     await user.click(editSaveButton)
 
@@ -17837,10 +17894,12 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Изменить пользователя' })).not.toBeInTheDocument()
     expect(updateCalls).toBe(2)
     expect(lastUpdateRequest?.newPassword).toBeNull()
+    expect(lastUpdateRequest?.deactivationReason).toBe('Изменение должности')
     expect(lastUpdateRequest?.version).toBe('user-version')
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
     await act(async () => editRefresh.release())
     expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
+    expect(contextMenuRow).toHaveFocus()
 
     const directDeleteButton = within(createdUserRow).getByRole('button', { name: 'Удалить пользователя Старший оператор' })
     await user.click(directDeleteButton)
@@ -18243,7 +18302,7 @@ describe('App', () => {
       },
     })
 
-    render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18256,6 +18315,18 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByLabelText('Поиск: Владельцы')).toBeEnabled()
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
     expect(within(dictionaryPanel).getByLabelText('Поиск: Гаражи')).toBeEnabled()
+
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(within(contractorsPanel).getByText('Режим просмотра: для добавления, изменения и удаления контрагентов нужно право dictionaries.write.')).toBeInTheDocument()
+    expect(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' })).toBeDisabled()
+
+    await openSection(user, 'Фонды')
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    expect(within(fundsPanel).getByText('Режим просмотра: для изменения фондов и их операций нужно право payments.write.')).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('button', { name: 'Создать фонд' })).toBeDisabled()
+    await within(fundsPanel).findByRole('table', { name: 'Фонды и собранные суммы' })
+    for (const button of within(fundsPanel).getAllByRole('button', { name: /Открыть карточку фонда|Изъять из фонда|Пополнить фонд/ })) expect(button).toBeDisabled()
 
     await openSection(user, 'Платежи')
 
@@ -18888,6 +18959,48 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Статьи расходов' })).not.toBeInTheDocument())
     expect(updateExpenseType).toHaveBeenCalledTimes(2)
     expect(await within(table).findByText('audit_expense')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Виды поступлений', 'Водоснабжение', 'water'],
+    ['Статьи расходов', 'Зарплата', 'salary'],
+  ] as const)('keeps the system record %s read-only before an edit starts', async (subgroup, name, code) => {
+    const user = userEvent.setup()
+    const systemType = createAccountingType({ id: `system-${code}`, name, code, isSystem: true })
+    const updateIncomeType = vi.fn()
+    const updateExpenseType = vi.fn()
+    const archiveIncomeType = vi.fn()
+    const archiveExpenseType = vi.fn()
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => subgroup === 'Виды поступлений' ? [systemType] : [],
+      getExpenseTypes: async () => subgroup === 'Статьи расходов' ? [systemType] : [],
+      updateIncomeType,
+      updateExpenseType,
+      archiveIncomeType,
+      archiveExpenseType,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const panel = await screen.findByRole('region', { name: 'Справочники' })
+    const table = await openDictionarySubgroup(user, panel, subgroup)
+    const row = within(table).getByText(name).closest('tr')!
+    expect(within(row).getByText('Системная')).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Удалить' })).toBeDisabled()
+    expect(within(row).getByRole('button', { name: 'Удалить' })).toHaveAttribute('title', 'Системную запись нельзя изменить или удалить')
+
+    await user.dblClick(row)
+    expect(screen.queryByRole('dialog', { name: subgroup })).not.toBeInTheDocument()
+    fireEvent.contextMenu(row)
+    const menu = await screen.findByRole('menu', { name: 'Операции со справочником' })
+    expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
+    expect(updateIncomeType).not.toHaveBeenCalled()
+    expect(updateExpenseType).not.toHaveBeenCalled()
+    expect(archiveIncomeType).not.toHaveBeenCalled()
+    expect(archiveExpenseType).not.toHaveBeenCalled()
   })
 
   it('derives opening debt from overdue in the garage dictionary editor', async () => {
@@ -20182,6 +20295,53 @@ describe('App', () => {
     expect(within(financePanel).queryByText('Начисление edit')).not.toBeInTheDocument()
   })
 
+  it('edits a custom irregular accrual without replacing its identity', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-irregular-edit', number: '901' })
+    const otherPayments = createAccountingType({ id: 'income-other-payments', name: 'Прочие оплаты', code: 'other_payments', isSystem: true })
+    const accrual = createAccrual({
+      id: 'irregular-accrual-75',
+      garageId: garage.id,
+      garageNumber: garage.number,
+      incomeTypeId: otherPayments.id,
+      incomeTypeName: otherPayments.name,
+      amount: 75,
+      basis: 'Контрольное ручное начисление',
+      comment: 'Проверка ручного долга',
+    })
+    const updateAccrual = vi.fn(async (_token: string, id: string, request: CreateAccrualRequest) => ({ ...accrual, id, amount: request.amount, comment: request.comment ?? null }))
+    const financeClient = createFinanceClient({
+      getAccruals: async () => [accrual],
+      getAccrualsPage: async (_token, params) => ({ items: [accrual], totalCount: 1, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+      updateAccrual,
+    })
+    const dictionaryClient = createDictionaryClient({ getGarages: async () => [garage], getIncomeTypes: async () => [otherPayments] })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(panel).getByRole('tab', { name: /Начисления владельцам/ }))
+    await user.click((await within(panel).findByText('Контрольное ручное начисление')).closest('tr')!)
+    const editor = await screen.findByRole('dialog', { name: 'Ручное начисление' })
+    const type = within(editor).getByRole('combobox', { name: 'Вид начисления' })
+    expect(type).toHaveTextContent('Контрольное ручное начисление')
+    expect(type).toBeDisabled()
+    await user.clear(within(editor).getByLabelText('Сумма начисления'))
+    await user.type(within(editor).getByLabelText('Сумма начисления'), '76')
+    await user.click(within(editor).getByRole('button', { name: 'Сохранить' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateAccrual).toHaveBeenCalledWith('token', accrual.id, expect.objectContaining({
+      amount: 76,
+      incomeTypeId: otherPayments.id,
+      irregularPaymentId: null,
+      basis: accrual.basis,
+    })))
+  })
+
   it('edits supplier accrual from payments table with confirmation', async () => {
     const user = userEvent.setup()
     const statefulFinanceClient = createStatefulFinanceClient()
@@ -20493,6 +20653,12 @@ describe('App', () => {
     await user.keyboard('{ArrowUp}')
     expect(deleteItem).toHaveFocus()
 
+    await user.keyboard('{Tab}')
+    expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument()
+    await waitFor(() => expect(paymentRow).toHaveFocus())
+    fireEvent.keyDown(paymentRow, { key: 'ContextMenu' })
+    await screen.findByRole('menu', { name: 'Операции с платежами' })
+
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument())
     await waitFor(() => expect(paymentRow).toHaveFocus())
@@ -20658,7 +20824,11 @@ describe('App', () => {
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({
       getOperations: async () => operations,
-      getAccruals: async () => accruals,
+      getAccruals: async () => accruals.filter((item) => !item.isCanceled),
+      getAccrualsPage: async (_token, params) => {
+        const items = accruals.filter((item) => params?.includeCanceled || !item.isCanceled)
+        return { items, totalCount: items.length, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }
+      },
       getSupplierAccruals: async () => supplierAccruals,
       restoreOperation,
       restoreAccrual,
@@ -20673,6 +20843,9 @@ describe('App', () => {
     async function restoreRow(options: { tabName?: RegExp; rowText: string; restoredText?: string; dialogName: string; assertRestored: () => void }) {
       if (options.tabName) {
         await user.click(within(financePanel).getByRole('tab', { name: options.tabName }))
+      }
+      if (options.rowText === 'Начисление к возврату') {
+        await user.click(within(financePanel).getByLabelText('Показывать отмененные'))
       }
 
       expect(await within(financePanel).findByText(options.rowText)).toBeInTheDocument()
@@ -25277,6 +25450,11 @@ describe('App', () => {
     const user = userEvent.setup()
     const getFunds = vi.fn(createFundsClient().getFunds)
       .mockRejectedValueOnce(new Error('Не удалось загрузить фонды'))
+      .mockResolvedValue([
+        createFund({ id: 'fund-water', name: 'Водоснабжение' }),
+        createFund({ id: 'fund-archive', name: 'Архивный резерв', isArchived: true }),
+        createFund({ id: 'fund-electricity', name: 'Электроэнергия' }),
+      ])
     const getFundChangeReport = vi.fn(async () => createFundChangeReport())
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['xlsx']))
     const exportFundChangeReportPdf = vi.fn(async () => new Blob(['pdf']))
@@ -25292,6 +25470,9 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await user.click(filter)
     const waterFund = await within(panel).findByRole('checkbox', { name: 'Выбрать водоснабжение' })
+    expect(within(panel).getByText('Архивный фонд')).toBeInTheDocument()
+    expect(within(panel).getByRole('checkbox', { name: 'Выбрать архивный резерв, архивный фонд' })).toBeInTheDocument()
+    expect(getFunds).toHaveBeenLastCalledWith(expect.any(String), expect.any(AbortSignal), true)
     await user.click(waterFund)
     await user.keyboard('{Escape}')
     expect(within(panel).queryByRole('listbox', { name: 'Доступные фонды' })).not.toBeInTheDocument()

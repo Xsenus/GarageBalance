@@ -69,9 +69,10 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         string? normalizedSearch,
         int offset,
         int limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeCanceled = false)
     {
-        var query = ApplyPeriod(QueryActive(), monthFrom, monthTo);
+        var query = ApplyPeriod(QueryActive(includeCanceled), monthFrom, monthTo);
         if (normalizedSearch is not null && IsSqliteProvider())
         {
             var filtered = (await Order(query).ToListAsync(cancellationToken))
@@ -851,14 +852,14 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             IsCanceled = row.IsCanceled
         };
 
-    private IQueryable<Accrual> QueryActive() =>
+    private IQueryable<Accrual> QueryActive(bool includeCanceled = false) =>
         dbContext.Accruals.AsNoTracking()
             .Include(accrual => accrual.Garage)
             .ThenInclude(garage => garage.Owner)
             .Include(accrual => accrual.IncomeType)
             .Include(accrual => accrual.IrregularPayment)
             .Include(accrual => accrual.FeeCampaign)
-            .Where(accrual => !accrual.IsCanceled);
+            .Where(accrual => includeCanceled || !accrual.IsCanceled);
 
     private IQueryable<Accrual> TrackedAggregate() =>
         dbContext.Accruals

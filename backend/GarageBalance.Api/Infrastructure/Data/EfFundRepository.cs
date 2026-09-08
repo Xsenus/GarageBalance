@@ -45,10 +45,10 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
         }
     }
 
-    public async Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken, bool includeArchived = false)
     {
         return await dbContext.Funds.AsNoTracking()
-            .Where(fund => !fund.IsArchived)
+            .Where(fund => includeArchived || !fund.IsArchived)
             .OrderBy(fund => fund.SortOrder)
             .ThenBy(fund => fund.Name)
             .ToListAsync(cancellationToken);

@@ -18,6 +18,15 @@ describe('fundsApi response cache', () => {
     vi.unstubAllGlobals()
   })
 
+  it('requests archived funds explicitly for historical report filters', async () => {
+    const fetchMock = vi.fn(async () => emptyFundsResponse())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fundsApi.getFunds('token', undefined, true)
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/funds?includeArchived=true'), expect.anything())
+  })
+
   it.each([true, false])('invalidates linked dictionaries only after successful fund deletion: %s', async (succeeds) => {
     for (const tag of ['suppliers', 'income-types']) {
       for (const token of ['token', 'other-token']) {

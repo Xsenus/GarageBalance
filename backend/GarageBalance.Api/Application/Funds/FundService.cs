@@ -9,9 +9,11 @@ public sealed class FundService(
     IFundRepository repository,
     IAuditEventWriter auditEventWriter) : IFundService
 {
-    public async Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken, bool includeArchived = false)
     {
-        var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();
+        var funds = includeArchived
+            ? (await repository.GetFundsAsync(cancellationToken, includeArchived: true)).ToList()
+            : (await repository.GetFundsAsync(cancellationToken)).ToList();
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
         var linkedServicesByFundId = (await repository.GetLinkedServicesAsync(
             funds.Select(fund => fund.Id).ToArray(),
@@ -807,7 +809,8 @@ public sealed class FundService(
             linkedServices
                 .Select(service => new FundLinkedServiceDto(service.ServiceId, service.ServiceName))
                 .ToList(),
-            fund.Version);
+            fund.Version,
+            fund.IsArchived);
     }
 
     private static FundOperationDto ToDto(FundOperation operation)

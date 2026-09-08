@@ -21,7 +21,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { ForegroundDialogError, FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatCount, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
-import { focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { fitContextMenuToViewport, focusAfterDomUpdate, handleMenuArrowNavigation, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { NegativeFundBalanceConfirmation } from './NegativeFundBalanceConfirmation'
@@ -470,7 +470,7 @@ export function FinancePanel({
   const recalculationDialogRef = useFocusTrap<HTMLElement>(recalculationOpen)
   const recalculationCloseRef = useFocusOnOpen<HTMLButtonElement>(recalculationOpen && !recalculationPending)
   useEscapeKey(recalculationOpen && !recalculationPending, () => setRecalculationOpen(false))
-  const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '' })
+  const [financeFilter, setFinanceFilter] = useState({ monthFrom: '', monthTo: '', search: '', includeCanceled: false })
   const financePeriodErrorId = useId()
   const financePeriodError = financeFilter.monthTo && financeFilter.monthFrom > financeFilter.monthTo
     ? 'Начало периода позже конца.' : ''
@@ -902,6 +902,7 @@ export function FinancePanel({
         monthFrom: financeFilter.monthFrom,
         monthTo: financeFilter.monthTo,
         search: financeFilter.search,
+        includeCanceled: financeFilter.includeCanceled,
         offset,
         limit,
       }
@@ -979,7 +980,7 @@ export function FinancePanel({
         setWorkbenchLoading(false)
       }
     }
-  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financePeriodError, financeWorkbenchRequests, meterForm.accountingMonth])
+  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financeFilter.includeCanceled, financePeriodError, financeWorkbenchRequests, meterForm.accountingMonth])
 
   function refreshFinanceWorkbenchAfterSave(section: FinanceSectionKey, offset = financePage.offset) {
     void loadFinanceWorkbench(section, offset, financePage.limit, true)
@@ -1218,6 +1219,9 @@ export function FinancePanel({
       amount: accrualForm.amount,
       source: accrualForm.source,
       comment: accrualForm.comment,
+      ...(financeEditor?.mode === 'edit' && financeEditor.record && 'incomeTypeId' in financeEditor.record && !('operationKind' in financeEditor.record)
+        ? { irregularPaymentId: financeEditor.record.irregularPaymentId, basis: financeEditor.record.basis }
+        : {}),
     }
     const errors = getAccrualValidationErrors(request)
     if (errors.length > 0) {
@@ -1666,13 +1670,9 @@ export function FinancePanel({
       setAccrualForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'supplierAccruals' && 'supplierId' in record && !('operationKind' in record)) {
-      const linkedExpenseTypeId = getSupplierAccrualExpenseType(
-        suppliers.find((supplier) => supplier.id === record.supplierId),
-        expenseTypes,
-      )?.id ?? ''
       const nextForm = {
         supplierId: record.supplierId,
-        expenseTypeId: linkedExpenseTypeId,
+        expenseTypeId: record.expenseTypeId,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
         source: record.source,
@@ -1717,7 +1717,7 @@ export function FinancePanel({
     }
 
     financeContextMenuTriggerRef.current = record ? event.currentTarget : null
-    setFinanceContextMenu({ section, record, x: event.clientX, y: event.clientY })
+    setFinanceContextMenu({ section, record, ...fitContextMenuToViewport(event.clientX, event.clientY) })
   }
 
   function selectFinanceSection(section: FinanceSectionKey) {
@@ -1759,7 +1759,7 @@ export function FinancePanel({
     setShowAllGarageOperations(true)
     setActiveFinanceSection(section)
     setFinanceSearchInput(search)
-    setFinanceFilter({ monthFrom: monthValue, monthTo: monthValue, search })
+    setFinanceFilter({ monthFrom: monthValue, monthTo: monthValue, search, includeCanceled: false })
     setJournalOpen(false)
   }
 
@@ -1881,8 +1881,7 @@ export function FinancePanel({
       setFinanceContextMenu({
         section,
         record,
-        x: rect.left,
-        y: rect.top + rect.height / 2,
+      ...fitContextMenuToViewport(rect.left, rect.top + rect.height / 2),
       })
     }
   }
@@ -1897,33 +1896,10 @@ export function FinancePanel({
     financeContextMenuTriggerRef.current = null
     setFinanceContextMenu({
       section: activeFinanceSection,
-      x: rect.left,
-      y: rect.top + Math.min(rect.height, 48),
+      ...fitContextMenuToViewport(rect.left, rect.top + Math.min(rect.height, 48)),
     })
   }
 
-  function handleFinanceContextMenuKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-      return
-    }
-
-    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'))
-    if (items.length === 0) {
-      return
-    }
-
-    event.preventDefault()
-    const currentIndex = items.findIndex((item) => item === document.activeElement)
-    if (event.key === 'Home') {
-      items[0].focus()
-    } else if (event.key === 'End') {
-      items[items.length - 1].focus()
-    } else if (event.key === 'ArrowDown') {
-      items[(currentIndex + 1) % items.length].focus()
-    } else {
-      items[(currentIndex <= 0 ? items.length : currentIndex) - 1].focus()
-    }
-  }
 
   const filteredIncomeOperations = activeFinanceSection === 'income'
     ? (financePage.items as FinancialOperationDto[]).filter((operation) => operation.operationKind === 'income')
@@ -2230,6 +2206,10 @@ export function FinancePanel({
     }
 
     if (section === 'accruals') {
+      const editedAccrual = financeEditor?.mode === 'edit' && financeEditor.record && 'irregularPaymentId' in financeEditor.record
+        ? financeEditor.record as AccrualDto
+        : null
+      const isIrregular = Boolean(editedAccrual?.irregularPaymentId || editedAccrual?.basis)
       return (
         <>
           {financeField('accrualGarage', (
@@ -2239,10 +2219,12 @@ export function FinancePanel({
             ]} onChange={(garageId) => setAccrualForm({ ...accrualForm, garageId })} />
           ))}
           {financeField('accrualIncomeType', (
-            <SelectControl aria-label="Вид начисления" value={accrualForm.incomeTypeId} options={[
+            <SelectControl aria-label="Вид начисления" value={accrualForm.incomeTypeId} options={isIrregular ? [
+              { value: accrualForm.incomeTypeId, label: editedAccrual?.irregularPaymentName ?? editedAccrual?.basis ?? 'Разовое начисление' },
+            ] : [
               { value: '', label: 'Выберите вид' },
               ...incomeTypes.map((item) => ({ value: item.id, label: item.name })),
-            ]} onChange={(incomeTypeId) => setAccrualForm({ ...accrualForm, incomeTypeId })} />
+            ]} disabled={isIrregular} onChange={(incomeTypeId) => setAccrualForm({ ...accrualForm, incomeTypeId })} />
           ))}
           <div className="inline-fields">
           {financeField('accrualMonth', <LocalizedDatePicker ariaLabel="Месяц начисления" mode="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setAccrualForm({ ...accrualForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2266,7 +2248,7 @@ export function FinancePanel({
           ))}
           {financeField('supplierAccrualType', (
             <SelectControl aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} options={supplierAccrualForm.expenseTypeId
-              ? [{ value: supplierAccrualForm.expenseTypeId, label: getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name ?? 'Настроенная услуга' }]
+              ? [{ value: supplierAccrualForm.expenseTypeId, label: expenseTypes.find((item) => item.id === supplierAccrualForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
               : [{ value: '', label: 'Для поставщика услуга не настроена' }]} onChange={() => undefined} disabled />
           ))}
           <div className="inline-fields">
@@ -2469,6 +2451,7 @@ export function FinancePanel({
             <Search size={16} aria-hidden="true" />
             <input aria-label={getFinanceToolbarLabel('search')} placeholder={getFinanceToolbarLabel('searchPlaceholder')} value={financeSearchInput} onChange={(event) => setFinanceSearchInput(event.target.value)} />
           </label>
+          {activeFinanceSection === 'accruals' ? <label className="dictionary-archive-toggle"><input type="checkbox" aria-label="Показывать отмененные начисления" checked={financeFilter.includeCanceled} onChange={(event) => setFinanceFilter((current) => ({ ...current, includeCanceled: event.target.checked }))} /><span>Показывать отмененные</span></label> : null}
           <div className="finance-toolbar-actions">
             {activeFinanceSection === 'supplierAccruals' ? (
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => void openFinanceEditor('supplierGroupSalaryAccruals')}>
@@ -2800,7 +2783,7 @@ export function FinancePanel({
         </div>
       </div>
       {financeContextMenu ? (
-        <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label={getFinanceToolbarLabel('contextMenu')} onClick={(event) => event.stopPropagation()} onKeyDown={handleFinanceContextMenuKeyDown}>
+        <div className="context-menu" style={{ left: financeContextMenu.x, top: financeContextMenu.y }} role="menu" aria-label={getFinanceToolbarLabel('contextMenu')} onClick={(event) => event.stopPropagation()} onKeyDown={handleMenuArrowNavigation} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFinanceContextMenu(null) }}>
           <div className="context-menu-group" role="group">
             <button ref={financeContextMenuFirstItemRef} type="button" role="menuitem" disabled={!canWritePayments} onClick={() => addFinanceRecord(financeContextMenu.section)}>
               <span>{getFinanceContextMenuLabel('add')}</span>
@@ -3738,7 +3721,7 @@ function PaymentsPrototypePanel({
     event.preventDefault()
     event.stopPropagation()
     payoutContextMenuTriggerRef.current = event.currentTarget
-    setPayoutContextMenu({ row, item, x: event.clientX, y: event.clientY })
+    setPayoutContextMenu({ row, item, ...fitContextMenuToViewport(event.clientX, event.clientY) })
   }
 
   function openPayoutContextMenuFromKeyboard(
@@ -3750,19 +3733,7 @@ function PaymentsPrototypePanel({
     event.preventDefault()
     const rect = event.currentTarget.getBoundingClientRect()
     payoutContextMenuTriggerRef.current = event.currentTarget
-    setPayoutContextMenu({ row, item, x: rect.left + Math.min(rect.width / 2, 180), y: rect.top + Math.min(rect.height, 32) })
-  }
-
-  function handlePayoutContextMenuKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
-    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'))
-    if (items.length === 0) return
-    event.preventDefault()
-    const currentIndex = items.findIndex((item) => item === document.activeElement)
-    if (event.key === 'Home') items[0].focus()
-    else if (event.key === 'End') items[items.length - 1].focus()
-    else if (event.key === 'ArrowDown') items[(currentIndex + 1) % items.length].focus()
-    else items[(currentIndex <= 0 ? items.length : currentIndex) - 1].focus()
+    setPayoutContextMenu({ row, item, ...fitContextMenuToViewport(rect.left + Math.min(rect.width / 2, 180), rect.top + Math.min(rect.height, 32)) })
   }
 
   function createPayoutEditRecord(row: PaymentPrototypeRow, item?: ExpenseWorksheetSupplierBreakdownEntryDto): PayoutEditRecord | null {
@@ -4796,11 +4767,14 @@ function PaymentsPrototypePanel({
       return 'Выберите поставщика из справочника.'
     }
 
-    const expenseType = getSupplierAccrualExpenseType(supplier, expenseTypes)
+    const editedItem = supplierAccrualDialogPreset?.item
+    const expenseType = editedItem
+      ? expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived)
+      : getSupplierAccrualExpenseType(supplier, expenseTypes)
     if (!expenseType) {
       return 'Для выбранного поставщика не настроена услуга начисления.'
     }
-    if (expenseType.id !== request.expenseTypeId) {
+    if (!editedItem && expenseType.id !== request.expenseTypeId) {
       return 'Услуга начисления не соответствует выбранному поставщику.'
     }
 
@@ -4813,7 +4787,6 @@ function PaymentsPrototypePanel({
       documentNumber: request.documentNumber.trim() || undefined,
       comment: request.comment.trim() || undefined,
     }
-    const editedItem = supplierAccrualDialogPreset?.item
     const accrual = editedItem
       ? await financeClient.updateSupplierAccrual(auth.accessToken, editedItem.id, payload)
       : await financeClient.createSupplierAccrual(auth.accessToken, payload)
@@ -5325,7 +5298,7 @@ function PaymentsPrototypePanel({
                     <td>
                       {row.operation && canWritePayments ? (
                         <div className="table-action-row payments-prototype-history-actions">
-                          <button className="icon-button" type="button" title="Изменить платеж" aria-label={`Изменить платеж ${row.purpose}`} onClick={(event) => openHistoryEdit(row, event.currentTarget)}>
+                          <button className="icon-button" type="button" title={row.operation.feeCampaignId || row.operation.irregularPaymentId ? 'Целевой платеж изменяется через связанное начисление' : 'Изменить платеж'} aria-label={`Изменить платеж ${row.purpose}`} disabled={Boolean(row.operation.feeCampaignId || row.operation.irregularPaymentId)} onClick={(event) => openHistoryEdit(row, event.currentTarget)}>
                             <Pencil size={16} aria-hidden="true" />
                           </button>
                           <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => openHistoryCancel(row, event.currentTarget)}>
@@ -5853,7 +5826,8 @@ function PaymentsPrototypePanel({
           role="menu"
           aria-label={`${payoutContextMenu.item?.entryKind === 'accrual' ? 'Действия начисления' : 'Действия выплаты'} ${payoutContextMenu.row.counterparty ?? payoutContextMenu.row.item}`}
           onClick={(event) => event.stopPropagation()}
-          onKeyDown={handlePayoutContextMenuKeyDown}
+          onKeyDown={handleMenuArrowNavigation}
+          onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setPayoutContextMenu(null) }}
         >
           <div className="context-menu-group" role="group">
             {payoutEditEnabled ? (
@@ -7132,10 +7106,7 @@ function NewAccrualPrototypeDialog({
               options={expenseTypeId
                 ? [{
                     value: expenseTypeId,
-                    label: getSupplierAccrualExpenseType(
-                      suppliers.find((supplier) => supplier.id === supplierId),
-                      expenseTypes,
-                    )?.name ?? 'Связанная услуга',
+                    label: expenseTypes.find((item) => item.id === expenseTypeId)?.name ?? 'Связанная услуга',
                   }]
                 : [{ value: '', label: 'Для поставщика услуга не настроена' }]}
               onChange={() => undefined}

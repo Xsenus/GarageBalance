@@ -865,6 +865,10 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     return item.isArchived
   }
 
+  function isProtectedSystemRecord(section: DictionarySectionKey, item: DictionaryRecord) {
+    return (section === 'incomeTypes' || section === 'expenseTypes') && (item as AccountingTypeDto).isSystem
+  }
+
   function renderRowAction(item: DictionaryRecord) {
     if (isArchivedRecord(item)) {
       return (
@@ -874,8 +878,10 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       )
     }
 
+    const systemRecord = isProtectedSystemRecord(activeSection, item)
+
     return (
-      <button className="ghost-button dictionary-row-action danger-icon-button" type="button" aria-label="Удалить" title="Удалить" disabled={loading || !canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
+      <button className="ghost-button dictionary-row-action danger-icon-button" type="button" aria-label="Удалить" title={systemRecord ? 'Системную запись нельзя изменить или удалить' : 'Удалить'} disabled={loading || !canWriteActiveSection || systemRecord} onClick={() => openArchiveTarget(activeSection, item)}>
         <Trash2 size={15} aria-hidden="true" />
       </button>
     )
@@ -1187,14 +1193,14 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               <tbody>
                 {activeSectionLoaded ? rows.map((item) => (
                   <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={loading ? undefined : (event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
-                    if (!loading && !editorReferencesLoading && !isArchivedRecord(item)) {
+                    if (!loading && !editorReferencesLoading && !isArchivedRecord(item) && !isProtectedSystemRecord(activeSection, item)) {
                       void openEditor(activeSection, 'edit', item)
                     }
                   }} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>
                     {renderCells(item)}
                     <td>
                       <span className={isArchivedRecord(item) ? 'dictionary-status-pill dictionary-status-pill-archived' : 'dictionary-status-pill'}>
-                        {isArchivedRecord(item) ? 'Архив' : 'Активна'}
+                        {isArchivedRecord(item) ? 'Архив' : isProtectedSystemRecord(activeSection, item) ? 'Системная' : 'Активна'}
                       </span>
                     </td>
                     <td className="dictionary-actions-column table-actions-column"><span className="dictionary-row-actions">{renderRowAction(item)}</span></td>
@@ -1244,11 +1250,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </button>
             ) : (
               <>
-                <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => void openEditor(contextMenu.section, 'edit', contextMenu.item)}>
+                <button type="button" role="menuitem" title={isProtectedSystemRecord(contextMenu.section, contextMenu.item) ? 'Системную запись нельзя изменить или удалить' : undefined} disabled={!canWriteActiveSection || isProtectedSystemRecord(contextMenu.section, contextMenu.item)} onClick={() => void openEditor(contextMenu.section, 'edit', contextMenu.item)}>
                   <Save size={15} />
                   <span>Изменить</span>
                 </button>
-                <button className="context-menu-danger" type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
+                <button className="context-menu-danger" type="button" role="menuitem" title={isProtectedSystemRecord(contextMenu.section, contextMenu.item) ? 'Системную запись нельзя изменить или удалить' : undefined} disabled={!canWriteActiveSection || isProtectedSystemRecord(contextMenu.section, contextMenu.item)} onClick={() => {
                   openArchiveTarget(contextMenu.section, contextMenu.item)
                   setContextMenu(null)
                 }}>

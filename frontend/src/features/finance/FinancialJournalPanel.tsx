@@ -13,7 +13,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset } from '../../shared/workspaceNavigation'
-import { focusAfterDomUpdate, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { fitContextMenuToViewport, focusAfterDomUpdate, handleMenuArrowNavigation, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 
 const journalEntityOptions = [
   { value: '', label: 'Все виды операций' },
@@ -92,6 +92,7 @@ export function FinancialJournalPanel({
   const filterRef = useRef(filter)
   const menuTriggerRef = useRef<HTMLElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const menuActionRef = useRef(false)
   const firstMenuItemRef = useFocusOnOpen<HTMLButtonElement>(Boolean(menu))
   useRestoreFocusOnClose(Boolean(cancelTarget))
   const cancelDialogRef = useFocusTrap<HTMLElement>(Boolean(cancelTarget))
@@ -160,7 +161,7 @@ export function FinancialJournalPanel({
   function openMenu(event: MouseEvent<HTMLElement>, entry: FinancialJournalEntryDto) {
     event.preventDefault()
     menuTriggerRef.current = event.currentTarget
-    setMenu({ entry, x: event.clientX, y: event.clientY })
+    setMenu({ entry, ...fitContextMenuToViewport(event.clientX, event.clientY) })
   }
 
   function openMenuFromKeyboard(event: KeyboardEvent<HTMLElement>, entry: FinancialJournalEntryDto) {
@@ -168,14 +169,21 @@ export function FinancialJournalPanel({
     event.preventDefault()
     const bounds = event.currentTarget.getBoundingClientRect()
     menuTriggerRef.current = event.currentTarget
-    setMenu({ entry, x: bounds.left + 16, y: bounds.top + 16 })
+    setMenu({ entry, ...fitContextMenuToViewport(bounds.left + 16, bounds.top + 16) })
   }
 
   function closeMenu() {
     setMenu(null)
   }
 
+  function prepareMenuAction() {
+    menuActionRef.current = true
+    menuTriggerRef.current?.focus()
+    window.setTimeout(() => { menuActionRef.current = false }, 0)
+  }
+
   function editEntry(entry: FinancialJournalEntryDto) {
+    prepareMenuAction()
     closeMenu()
     onEdit(entry)
   }
@@ -229,6 +237,7 @@ export function FinancialJournalPanel({
   }
 
   function openHistory(entry: FinancialJournalEntryDto) {
+    prepareMenuAction()
     closeMenu()
     onOpenAudit?.({ section: 'finance', entityType: entry.entityType, relatedCounterparty: entry.counterparty })
   }
@@ -291,10 +300,15 @@ export function FinancialJournalPanel({
       </div>
 
       {menu ? (
-        <div ref={menuRef} className="context-menu" style={{ left: menu.x, top: menu.y }} role="menu" aria-label={`Действия записи журнала ${menu.entry.counterparty}`}>
+        <div ref={menuRef} className="context-menu" style={{ left: menu.x, top: menu.y }} role="menu" aria-label={`Действия записи журнала ${menu.entry.counterparty}`} onKeyDown={handleMenuArrowNavigation} onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            if (menuActionRef.current) closeMenu()
+            else dismissMenu()
+          }
+        }}>
           <div className="context-menu-group" role="group">
             {menu.entry.canEdit && canWrite ? <button ref={firstMenuItemRef} type="button" role="menuitem" onClick={() => editEntry(menu.entry)}><Pencil size={15} aria-hidden="true" /><span>Редактировать</span></button> : null}
-            {menu.entry.canCancel && canWrite && !menu.entry.isCanceled ? <button ref={!menu.entry.canEdit || !canWrite ? firstMenuItemRef : undefined} className="context-menu-danger" type="button" role="menuitem" onClick={() => { setCancelTarget(menu.entry); setCancelReason(''); setActionError(null); closeMenu() }}><Trash2 size={15} aria-hidden="true" /><span>Отменить</span></button> : null}
+            {menu.entry.canCancel && canWrite && !menu.entry.isCanceled ? <button ref={!menu.entry.canEdit || !canWrite ? firstMenuItemRef : undefined} className="context-menu-danger" type="button" role="menuitem" onClick={() => { prepareMenuAction(); setCancelTarget(menu.entry); setCancelReason(''); setActionError(null); closeMenu() }}><Trash2 size={15} aria-hidden="true" /><span>Отменить</span></button> : null}
             {menu.entry.canRestore && canWrite && menu.entry.isCanceled ? <button ref={!menu.entry.canEdit || !canWrite ? firstMenuItemRef : undefined} type="button" role="menuitem" onClick={() => void restoreEntry(menu.entry)}><RotateCcw size={15} aria-hidden="true" /><span>Восстановить</span></button> : null}
           </div>
           {canReadAudit && onOpenAudit ? <><div className="context-menu-separator" role="separator" /><div className="context-menu-group" role="group"><button ref={!canWrite || (!menu.entry.canEdit && !menu.entry.canCancel && !menu.entry.canRestore) ? firstMenuItemRef : undefined} type="button" role="menuitem" onClick={() => openHistory(menu.entry)}><History size={15} aria-hidden="true" /><span>История</span></button></div></> : null}

@@ -33,6 +33,8 @@ export type FinancialOperationDto = {
   expenseFundName?: string | null
   counterpartyName?: string | null
   negativeFundBalanceConfirmed?: boolean
+  feeCampaignId?: string | null
+  irregularPaymentId?: string | null
   garageDebtBefore: number | null
   garageDebtAfter: number | null
   supplierDebtBefore: number | null
@@ -95,6 +97,7 @@ export type FinancePageParams = {
   staffMemberId?: string
   offset?: number
   limit?: number
+  includeCanceled?: boolean
 }
 
 export type FinancialJournalEntryDto = {
@@ -643,6 +646,8 @@ export type CreateAccrualRequest = {
   amount: number
   source: 'manual' | 'regular'
   comment?: string
+  irregularPaymentId?: string | null
+  basis?: string | null
 }
 
 export type CreateDebtTransferRequest = {
@@ -965,6 +970,7 @@ export const financeApi: FinanceClient = {
       search: params.search,
       offset: params.offset,
       limit: params.limit,
+      includeCanceled: params.includeCanceled ? 'true' : undefined,
     }), { signal })
   },
   getAccrualDueDateReviewPage(accessToken, params = {}) {

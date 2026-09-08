@@ -48,7 +48,9 @@ public sealed record FinancialOperationDto(
     string? ExpenseFundName = null,
     string? CounterpartyName = null,
     bool NegativeFundBalanceConfirmed = false,
-    Guid Version = default);
+    Guid Version = default,
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -258,7 +260,9 @@ public sealed record CreateAccrualRequest(
     DateOnly AccountingMonth,
     [Range(0.01, 999999999)] decimal Amount,
     [Required, MaxLength(40)] string Source,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? IrregularPaymentId = null,
+    [MaxLength(200)] string? Basis = null);
 
 public sealed record CreateIrregularAccrualRequest(
     Guid GarageId,
@@ -421,7 +425,8 @@ public sealed record AccrualListRequest(
     DateOnly? MonthTo,
     string? Search,
     int? Limit = null,
-    int? Offset = null);
+    int? Offset = null,
+    bool IncludeCanceled = false);
 
 public sealed record SupplierAccrualListRequest(
     DateOnly? MonthFrom,

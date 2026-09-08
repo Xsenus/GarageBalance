@@ -17,7 +17,8 @@ public interface IAccrualRepository
         string? normalizedSearch,
         int offset,
         int limit,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool includeCanceled = false);
 
     Task<AccrualPageData> GetDueDateReviewPageAsync(int offset, int limit, CancellationToken cancellationToken);
 

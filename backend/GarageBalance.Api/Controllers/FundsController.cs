@@ -15,9 +15,9 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
     [Authorize(Policy = SystemPermissions.ReportsRead)]
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<FundDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<FundDto>>> GetFunds(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<FundDto>>> GetFunds(CancellationToken cancellationToken, [FromQuery] bool includeArchived = false)
     {
-        return Ok(await fundService.GetFundsAsync(cancellationToken));
+        return Ok(await fundService.GetFundsAsync(cancellationToken, includeArchived));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesRead)]

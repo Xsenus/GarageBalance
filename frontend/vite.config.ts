@@ -8,7 +8,7 @@ export function getManualChunkName(id: string): string | undefined {
   // AppShell already imports these accounting sections together. Keep their shared
   // code compressed in one workspace chunk while preserving the separate login runtime.
   if (/[/\\]src[/\\]features[/\\](finance|meterReadings|contractors|tariffs)[/\\]/.test(id)) return 'workspace-accounting'
-  if (/[/\\]src[/\\]features[/\\]funds[/\\]/.test(id)) return 'funds'
+  if (/[/\\]src[/\\]features[/\\]funds[/\\]/.test(id)) return 'workspace-accounting'
   if (/[/\\]src[/\\]features[/\\](settings[/\\]PasswordPanel|users[/\\]UserManagementPanel)\./.test(id)) return 'app-runtime'
   if (id.includes('lucide-react')) return 'app-runtime'
   if (/[/\\]node_modules[/\\](react|react-dom|scheduler)[/\\]/.test(id)) return 'app-runtime'

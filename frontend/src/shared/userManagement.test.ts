@@ -119,6 +119,19 @@ describe('user management helpers', () => {
     }, 'edit', activeUser)).toEqual([])
   })
 
+  it('requires a reason for profile and administrator password changes', () => {
+    const activeUser = createUser(['operator'])
+    expect(getUserEditorValidationErrors({
+      email: activeUser.email,
+      displayName: 'Старший оператор',
+      password: 'NewStrongPass123',
+      passwordConfirmation: 'NewStrongPass123',
+      roleCodes: ['operator'],
+      isActive: true,
+      deactivationReason: '',
+    }, 'edit', activeUser)).toContain('Укажите причину изменения пользователя.')
+  })
+
   it('allows disabling a user without a reason when action comments are optional', () => {
     const activeUser = createUser(['operator'])
 

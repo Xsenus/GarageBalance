@@ -11,6 +11,7 @@ export type FundDto = {
   isSystem: boolean
   linkedServices: FundLinkedServiceDto[]
   version: string
+  isArchived?: boolean
 }
 
 export type FundOptionDto = {
@@ -81,7 +82,7 @@ export type CancelFundOperationRequest = {
 }
 
 export type FundsClient = {
-  getFunds(accessToken: string, signal?: AbortSignal): Promise<FundDto[]>
+  getFunds(accessToken: string, signal?: AbortSignal, includeArchived?: boolean): Promise<FundDto[]>
   getFundOptions(accessToken: string, signal?: AbortSignal): Promise<FundOptionDto[]>
   getReconciliation?(accessToken: string, signal?: AbortSignal): Promise<FundReconciliationDto>
   createFund(accessToken: string, request: UpsertFundRequest): Promise<FundDto>
@@ -157,10 +158,11 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 }
 
 export const fundsApi: FundsClient = {
-  getFunds(accessToken, signal) {
+  getFunds(accessToken, signal, includeArchived = false) {
+    const path = includeArchived ? '/api/funds?includeArchived=true' : '/api/funds'
     return signal
-      ? requestJson(accessToken, '/api/funds', { signal })
-      : getCachedFunds(accessToken)
+      ? requestJson(accessToken, path, { signal })
+      : includeArchived ? requestJson(accessToken, path) : getCachedFunds(accessToken)
   },
   getFundOptions(accessToken, signal) {
     return requestJson<FundOptionDto[]>(accessToken, '/api/funds/options', signal ? { signal } : undefined)

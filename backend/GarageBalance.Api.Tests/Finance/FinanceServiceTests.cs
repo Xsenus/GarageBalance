@@ -621,6 +621,7 @@ public sealed class FinanceServiceTests
         Assert.True(retry.Succeeded, retry.ErrorMessage);
         Assert.Equal(result.Value!.Operations.Select(item => item.Id), retry.Value!.Operations.Select(item => item.Id));
         Assert.Equal(500m, result.Value.TotalAmount);
+        Assert.Equal(campaign.Id, Assert.Single(result.Value.Operations).FeeCampaignId);
         Assert.NotNull(campaign.ClosedAtUtc);
         var operation = Assert.Single(database.Context.FinancialOperations, item => item.ReceiptBatchId == receiptBatchId);
         Assert.Equal(campaign.Id, operation.FeeCampaignId);
@@ -1414,6 +1415,13 @@ public sealed class FinanceServiceTests
         Assert.Equal(1, meterReadings.Limit);
         var meterReading = Assert.Single(meterReadings.Items);
         Assert.Equal(new DateOnly(2026, 7, 1), meterReading.AccountingMonth);
+
+        Assert.True((await service.CancelAccrualAsync(accrual.Id, new CancelFinanceEntryRequest("Проверка восстановления"), null, CancellationToken.None)).Succeeded);
+        var activeAccruals = await service.GetAccrualsPageAsync(new AccrualListRequest(null, null, null, 10, 0), CancellationToken.None);
+        var allAccruals = await service.GetAccrualsPageAsync(new AccrualListRequest(null, null, null, 10, 0, true), CancellationToken.None);
+        Assert.Equal(2, activeAccruals.TotalCount);
+        Assert.Equal(3, allAccruals.TotalCount);
+        Assert.Contains(allAccruals.Items, item => item.Id == accrual.Id && item.IsCanceled);
     }
 
     [Fact]
@@ -5109,6 +5117,78 @@ public sealed class FinanceServiceTests
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.irregular_accrual_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Замена пульта ворот", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateAccrualAsync_PreservesCustomIrregularIdentity()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var destinationFund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ" };
+        var otherPayments = new IncomeType
+        {
+            Name = "Прочие оплаты",
+            Code = "other_payments",
+            IsSystem = true,
+            DestinationFund = destinationFund
+        };
+        database.Context.AddRange(destinationFund, otherPayments);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, null, "Контрольное ручное начисление", 75m, new DateOnly(2026, 9, 1), "Проверка ручного долга"),
+            actorUserId,
+            CancellationToken.None);
+
+        var updated = await service.UpdateAccrualAsync(
+            created.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, otherPayments.Id, new DateOnly(2026, 9, 1), 76m, AccrualSources.Manual, "Исправленная сумма", null, created.Value.Basis),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded, updated.ErrorMessage);
+        Assert.Equal((76m, "Контрольное ручное начисление", "Исправленная сумма"), (updated.Value!.Amount, updated.Value.Basis, updated.Value.Comment));
+        Assert.Null(updated.Value.IrregularPaymentId);
+        var stored = await database.Context.Accruals.SingleAsync(item => item.Id == created.Value.Id);
+        Assert.Equal(otherPayments.Id, stored.IncomeTypeId);
+        Assert.Equal("Контрольное ручное начисление", stored.Basis);
+        Assert.Equal(76m, stored.Amount);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated" && item.EntityId == created.Value.Id.ToString());
+    }
+
+    [Fact]
+    public async Task UpdateAccrualAsync_RejectsChangedIrregularIdentityAndTemplateDuplicate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var destinationFund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ" };
+        var otherPayments = new IncomeType { Name = "Прочие оплаты", Code = "other_payments", IsSystem = true, DestinationFund = destinationFund };
+        var template = new IrregularPayment { Name = "Карта доступа", Amount = 75m };
+        database.Context.AddRange(destinationFund, otherPayments, template);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var first = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, template.Id, template.Name, template.Amount, new DateOnly(2026, 8, 1), null), null, CancellationToken.None);
+        var second = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, template.Id, template.Name, template.Amount, new DateOnly(2026, 9, 1), null), null, CancellationToken.None);
+
+        var identityMismatch = await service.UpdateAccrualAsync(
+            first.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, otherPayments.Id, first.Value.AccountingMonth, 76m, AccrualSources.Manual, null),
+            null,
+            CancellationToken.None);
+        var duplicate = await service.UpdateAccrualAsync(
+            second.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, otherPayments.Id, first.Value.AccountingMonth, 76m, AccrualSources.Manual, null, template.Id, template.Name),
+            null,
+            CancellationToken.None);
+
+        Assert.False(identityMismatch.Succeeded);
+        Assert.Equal("irregular_accrual_identity_mismatch", identityMismatch.ErrorCode);
+        Assert.False(duplicate.Succeeded);
+        Assert.Equal("accrual_duplicate", duplicate.ErrorCode);
+        Assert.Equal(new DateOnly(2026, 9, 1), second.Value.AccountingMonth);
     }
 
     [Theory]

@@ -404,8 +404,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   const currentReportQuery = JSON.stringify([auth.accessToken, reportQueryCriteria])
 
   const loadFundFilterOptions = useCallback(async (_search: string, signal: AbortSignal) => {
-    const funds = await fundsClient.getFunds(auth.accessToken, signal)
-    const options = funds.map((fund) => ({ value: fund.id, label: fund.name }))
+    const funds = await fundsClient.getFunds(auth.accessToken, signal, true)
+    const options = funds.map((fund) => ({ value: fund.id, label: fund.name, description: fund.isArchived ? 'Архивный фонд' : undefined }))
     if (!signal.aborted) setFundFilterOptions(options)
     return options
   }, [auth.accessToken, fundsClient])

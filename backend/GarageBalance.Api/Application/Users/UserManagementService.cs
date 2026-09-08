@@ -145,9 +145,7 @@ public sealed class UserManagementService(
             return UserManagementResult<ManagedUserDto>.Failure("last_admin_required", "Нельзя отключить или лишить роли последнего активного администратора.");
         }
 
-        var deactivatingUser = user.IsActive && !request.IsActive;
-        var deactivationReason = string.Empty;
-        if (deactivatingUser && ValidateDeactivationReason(request.DeactivationReason, out deactivationReason) is { } reasonError)
+        if (ValidateUpdateReason(request.DeactivationReason, out var updateReason) is { } reasonError)
         {
             return UserManagementResult<ManagedUserDto>.Failure(reasonError.Code, reasonError.Message);
         }
@@ -223,7 +221,7 @@ public sealed class UserManagementService(
                 ["credentialsChanged"] = passwordChanged
             },
             FieldLabels: UserAuditFieldLabels,
-            Reason: deactivatingUser ? deactivationReason : null,
+            Reason: updateReason.Length > 0 ? updateReason : null,
             RelatedCounterpartyId: user.Id.ToString(),
             RelatedCounterpartyName: user.DisplayName,
             Metadata: new Dictionary<string, object?>
@@ -346,17 +344,17 @@ public sealed class UserManagementService(
         return UserManagementResult<ManagedRoleDto>.Success(ToDto(role));
     }
 
-    private static (string Code, string Message)? ValidateDeactivationReason(string? reason, out string normalizedReason)
+    private static (string Code, string Message)? ValidateUpdateReason(string? reason, out string normalizedReason)
     {
         normalizedReason = reason?.Trim() ?? string.Empty;
         if (ActionCommentRequirementContext.IsRequired && normalizedReason.Length == 0)
         {
-            return ("user_deactivation_reason_required", "Укажите причину отключения пользователя.");
+            return ("user_update_reason_required", "Укажите причину изменения пользователя.");
         }
 
         if (normalizedReason.Length > 1000)
         {
-            return ("user_deactivation_reason_too_long", "Причина отключения пользователя не должна быть длиннее 1000 символов.");
+            return ("user_update_reason_too_long", "Причина изменения пользователя не должна быть длиннее 1000 символов.");
         }
 
         return null;

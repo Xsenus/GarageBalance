@@ -57,6 +57,17 @@ describe('financeApi', () => {
     })
   })
 
+  it('requests canceled accruals only when the filter is enabled', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [], totalCount: 0, offset: 0, limit: 25 }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.getAccrualsPage('token', { includeCanceled: true, limit: 25 })
+    await financeApi.getAccrualsPage('token', { includeCanceled: false, limit: 25 })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/accruals/page?limit=25&includeCanceled=true', expect.any(Object))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/accruals/page?limit=25', expect.any(Object))
+  })
+
   it('passes every financial journal filter, pagination value, and cancellation signal', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       items: [],

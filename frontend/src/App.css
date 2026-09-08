@@ -949,6 +949,7 @@ h1 {
 
 .settings-card--business-date {
   width: 100%;
+  min-width: 0;
   grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);
 }
 
@@ -1160,6 +1161,9 @@ h1 {
 }
 
 .business-date-salary-form {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   margin-top: 4px;
   background: #ffffff;
 }
@@ -3915,6 +3919,7 @@ h1 {
 
 .payments-prototype {
   display: grid;
+  min-width: 0;
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -3943,6 +3948,7 @@ h1 {
   display: grid;
   gap: 10px;
   width: 100%;
+  min-width: 0;
 }
 
 .payments-prototype-search-wrap {
@@ -4401,6 +4407,7 @@ h1 {
 }
 
 .payments-prototype-sheet {
+  min-width: 0;
   overflow: visible;
   border: 1px solid #dfe4ec;
   border-radius: 8px;
@@ -4409,6 +4416,7 @@ h1 {
 }
 
 .payments-prototype-table-scroll {
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
 }
@@ -8645,6 +8653,20 @@ button.operation-row:focus-visible {
 
 .contractor-financial-report__amount {
   text-align: right;
+  white-space: nowrap;
+}
+
+.financial-report-dialog .dictionary-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.financial-report-dialog .dictionary-data-table {
+  min-width: 760px;
+}
+
+.financial-report-dialog .dictionary-data-table :is(th, td):is(:nth-child(1), :nth-child(2), :nth-child(5), :nth-child(6), :nth-child(7)) {
+  white-space: nowrap;
 }
 
 .garage-balance-table-scroll {
@@ -9153,6 +9175,21 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 640px) {
+  .settings-card--business-date,
+  .settings-card--business-date > *,
+  .settings-card--business-date .settings-card-form,
+  .settings-card--business-date .summary-strip > div {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .settings-card--business-date .settings-form-actions button {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   .dictionary-subnav {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -9299,6 +9336,7 @@ button.operation-row:focus-visible {
     display: grid;
     grid-template-columns: 1fr;
     width: 100%;
+    min-width: 0;
   }
 
   .payments-prototype-tabs button,

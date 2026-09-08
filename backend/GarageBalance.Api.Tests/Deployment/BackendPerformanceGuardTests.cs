@@ -123,7 +123,9 @@ public sealed class BackendPerformanceGuardTests
         var poolBalancesPostgreSqlBranch = repositorySource[
             repositorySource.IndexOf("public async Task<FundPoolBalancesData> GetPoolBalancesAsync", StringComparison.Ordinal)..repositorySource.IndexOf("var linkedFinancialOperationIds", StringComparison.Ordinal)];
 
-        Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("var funds = includeArchived", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("? (await repository.GetFundsAsync(cancellationToken, includeArchived: true)).ToList()", serviceSource, StringComparison.Ordinal);
+        Assert.Contains(": (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsureDefaultFundsAsync", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("SaveChangesAsync", serviceSource[
             serviceSource.IndexOf("public async Task<IReadOnlyList<FundDto>> GetFundsAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<FundResult<FundDto>> CreateFundAsync", StringComparison.Ordinal)], StringComparison.Ordinal);

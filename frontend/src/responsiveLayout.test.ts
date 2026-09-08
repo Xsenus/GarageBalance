@@ -286,7 +286,7 @@ describe('responsive layout styles', () => {
   it('keeps the signed garage balance column and four period totals readable', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 1260px;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 1260px;\n  table-layout: fixed;')
-    expect(normalizedAppCss).toContain('.payments-prototype-table-scroll {\n  max-width: 100%;\n  overflow-x: auto;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table-scroll {\n  min-width: 0;\n  max-width: 100%;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(2) {\n  width: 32%;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(7), :nth-child(8)) {')
     expect(normalizedAppCss).toContain('white-space: nowrap;')
@@ -296,7 +296,7 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps the expense month calendar within the worksheet and narrow viewport', () => {
-    expect(normalizedAppCss).toContain('.payments-prototype-sheet {\n  overflow: visible;')
+    expect(normalizedAppCss).toContain('.payments-prototype-sheet {\n  min-width: 0;\n  overflow: visible;')
   })
 
   it('keeps payment history actions compact and horizontal', () => {
@@ -304,6 +304,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 820px;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 4px;\n  flex-wrap: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions .icon-button {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 32px;')
+  })
+
+  it('keeps employee report dates and amounts intact inside local horizontal scrolling', () => {
+    expect(normalizedAppCss).toContain('.financial-report-dialog .dictionary-table-scroll {\n  max-width: 100%;\n  overflow-x: auto;')
+    expect(normalizedAppCss).toContain('.financial-report-dialog .dictionary-data-table {\n  min-width: 760px;')
+    expect(normalizedAppCss).toContain('.financial-report-dialog .dictionary-data-table :is(th, td):is(:nth-child(1), :nth-child(2), :nth-child(5), :nth-child(6), :nth-child(7)) {\n  white-space: nowrap;')
   })
 
   it('keeps accrual and bonus form fields, hints and validation aligned', () => {
@@ -401,10 +407,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card {\n  width: 100%;')
     expect(normalizedAppCss).toContain('.settings-card--security {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  width: 100%;')
-    expect(normalizedAppCss).toContain('.settings-card--business-date {\n  width: 100%;\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--business-date {\n  width: 100%;\n  min-width: 0;\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('@media (max-width: 1500px) {\n  .settings-card--security,\n  .settings-card--display,\n  .settings-card--backups,\n  .settings-card--diagnostics,\n  .settings-card--business-date,\n  .settings-card--cash-bank,\n  .settings-card--integration {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.settings-form-actions {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 8px;')
-    expect(normalizedAppCss).toContain('.business-date-salary-form {\n  margin-top: 4px;\n  background: #ffffff;')
+    expect(normalizedAppCss).toContain('.business-date-salary-form {\n  width: 100%;\n  min-width: 0;\n  box-sizing: border-box;\n  margin-top: 4px;\n  background: #ffffff;')
+    expect(normalizedAppCss).toContain('.settings-card--business-date .settings-form-actions button {\n    min-width: 0;\n    white-space: normal;\n    overflow-wrap: anywhere;')
     expect(normalizedAppCss).toContain('.settings-card-body {\n  display: grid;\n  min-width: 0;\n  align-content: start;\n  gap: 12px;')
     expect(normalizedAppCss).toContain('.settings-card-intro {\n  align-self: start;')
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')

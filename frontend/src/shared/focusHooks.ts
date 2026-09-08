@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
+import type { Dispatch, KeyboardEvent, SetStateAction } from 'react'
 
 export function useCloseOnOutsidePointer<TElement extends HTMLElement>(enabled: boolean, setOpen: Dispatch<SetStateAction<boolean>>) {
   const ref = useRef<TElement | null>(null)
@@ -61,6 +61,24 @@ export function focusAfterDomUpdate(trigger: HTMLElement | null) {
   window.setTimeout(() => {
     if (trigger?.isConnected) trigger.focus()
   }, 0)
+}
+
+export function fitContextMenuToViewport(x: number, y: number, width = 200, height = 190) {
+  const margin = 8
+  return {
+    x: Math.max(margin, Math.min(x, window.innerWidth - width - margin)),
+    y: Math.max(margin, Math.min(y, window.innerHeight - height - margin)),
+  }
+}
+
+export function handleMenuArrowNavigation(event: KeyboardEvent<HTMLElement>) {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+  const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'))
+  if (items.length === 0) return
+  event.preventDefault()
+  const current = items.indexOf(document.activeElement as HTMLButtonElement)
+  const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : (current <= 0 ? items.length : current) - 1
+  items[index]?.focus()
 }
 
 export function restoreFocusAfterClose<TElement extends HTMLElement>(triggerRef: { current: TElement | null }) {

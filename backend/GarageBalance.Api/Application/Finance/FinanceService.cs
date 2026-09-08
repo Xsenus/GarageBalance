@@ -146,7 +146,8 @@ public sealed class FinanceService(
             NormalizeSearch(request.Search),
             normalizedOffset,
             normalizedLimit,
-            cancellationToken);
+            cancellationToken,
+            request.IncludeCanceled);
         return new FinancePagedResult<AccrualDto>(page.Items.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
@@ -4566,11 +4567,16 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
         }
 
-        if (accrual.IrregularPaymentId.HasValue || accrual.Basis is not null)
+        var isIrregular = accrual.IrregularPaymentId.HasValue || accrual.Basis is not null;
+        if (isIrregular &&
+            (request.IrregularPaymentId != accrual.IrregularPaymentId ||
+             !string.Equals(NormalizeOptional(request.Basis), accrual.Basis, StringComparison.Ordinal) ||
+             request.IncomeTypeId != accrual.IncomeTypeId ||
+             source != AccrualSources.Manual))
         {
             return FinanceResult<AccrualDto>.Failure(
-                "irregular_accrual_edit_not_supported",
-                "Разовое начисление нельзя переназначить как обычное. Отмените его и создайте заново.");
+                "irregular_accrual_identity_mismatch",
+                "При изменении разового начисления нельзя менять его основание или назначение.");
         }
 
         if (accrual.FeeCampaignId.HasValue)
@@ -4591,14 +4597,14 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
         }
 
-        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
+        var incomeType = isIrregular ? accrual.IncomeType : await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
         if (incomeType is null)
         {
             return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var dueDateSetting = source == AccrualSources.Regular
+        var dueDateSetting = !isIrregular && source == AccrualSources.Regular
             ? SelectChargeServiceSettingForDueDates(
                 await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
                     incomeType.Id,
@@ -4607,18 +4613,21 @@ public sealed class FinanceService(
                     cancellationToken),
                 month)
             : null;
-        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(
+        var accountingYear = isIrregular ? null : AnnualAccrualPolicy.ResolveAccountingYear(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
-        if (await accrualRepository.ActiveDuplicateExistsAsync(
-            accrual.Id,
-            garage.Id,
-            incomeType.Id,
-            month,
-            accountingYear,
-            source,
-            cancellationToken))
+        var duplicateExists = accrual.IrregularPaymentId.HasValue
+            ? await accrualRepository.ActiveIrregularDuplicateExistsAsync(accrual.Id, garage.Id, accrual.IrregularPaymentId.Value, month, cancellationToken)
+            : !isIrregular && await accrualRepository.ActiveDuplicateExistsAsync(
+                accrual.Id,
+                garage.Id,
+                incomeType.Id,
+                month,
+                accountingYear,
+                source,
+                cancellationToken);
+        if (duplicateExists)
         {
             var duplicateMessage = source == AccrualSources.Regular && accountingYear.HasValue
                 ? $"Регулярное годовое начисление за {accountingYear.Value} год уже внесено."
@@ -8670,7 +8679,9 @@ public sealed class FinanceService(
             operation.ExpenseFund?.Name,
             operation.CounterpartyName,
             operation.NegativeFundBalanceConfirmed,
-            operation.Version);
+            operation.Version,
+            operation.FeeCampaignId,
+            operation.IrregularPaymentId);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)

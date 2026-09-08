@@ -12,7 +12,8 @@ public sealed record FundDto(
     bool AllowOperations,
     bool IsSystem,
     IReadOnlyList<FundLinkedServiceDto> LinkedServices,
-    Guid Version = default);
+    Guid Version = default,
+    bool IsArchived = false);
 
 public sealed record FundOptionDto(
     Guid Id,

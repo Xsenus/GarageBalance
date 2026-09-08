@@ -618,6 +618,9 @@ public sealed class FundServiceTests
         var visibleFunds = await service.GetFundsAsync(CancellationToken.None);
         Assert.Equal(6, visibleFunds.Count);
         Assert.DoesNotContain(visibleFunds, item => item.Id == fund.Id);
+        var historicalFunds = await service.GetFundsAsync(CancellationToken.None, includeArchived: true);
+        Assert.Equal(7, historicalFunds.Count);
+        Assert.True(Assert.Single(historicalFunds, item => item.Id == fund.Id).IsArchived);
         Assert.Equal(7, await database.Context.Funds.CountAsync());
 
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.archived");

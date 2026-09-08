@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { vi } from 'vitest'
-import { focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
+import { fitContextMenuToViewport, focusAfterDomUpdate, restoreFocusAfterClose, useCloseOnOutsidePointer, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from './focusHooks'
 
 function OutsidePointerProbe() {
   const [open, setOpen] = useState(true)
@@ -58,6 +58,15 @@ function RestoreFocusProbe({ open }: { open: boolean }) {
 }
 
 describe('focus shared hooks', () => {
+  it('keeps context menus within every viewport edge', () => {
+    vi.stubGlobal('innerWidth', 934)
+    vi.stubGlobal('innerHeight', 678)
+
+    expect(fitContextMenuToViewport(920, 660)).toEqual({ x: 726, y: 480 })
+    expect(fitContextMenuToViewport(-20, -30)).toEqual({ x: 8, y: 8 })
+
+    vi.unstubAllGlobals()
+  })
   it('keeps an active surface open for inside clicks and closes it on an outside pointer', async () => {
     const user = userEvent.setup()
     render(<OutsidePointerProbe />)

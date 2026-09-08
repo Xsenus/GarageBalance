@@ -93,8 +93,8 @@ export function getUserEditorValidationErrors(form: UserFormState, mode: 'create
     errors.push(passwordConfirmationError)
   }
 
-  if (actionCommentsRequired && user?.isActive && !form.isActive && !form.deactivationReason.trim()) {
-    errors.push('Укажите причину отключения пользователя.')
+  if (actionCommentsRequired && user && !form.deactivationReason.trim()) {
+    errors.push(user?.isActive && !form.isActive ? 'Укажите причину отключения пользователя.' : 'Укажите причину изменения пользователя.')
   }
 
   return errors

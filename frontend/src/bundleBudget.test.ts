@@ -32,10 +32,10 @@ describe('frontend bundle budget gate', () => {
     expect(viteConfig).toContain("return 'workspace-accounting'")
   })
 
-  it('keeps funds separate from the accounting screens already imported together by the shell', () => {
+  it('groups funds with accounting screens to keep the total compressed bundle bounded', () => {
     expect(viteConfig).toContain('modulePreload: false')
     expect(viteConfig).toContain("return 'workspace-accounting'")
-    expect(viteConfig).toContain("return 'funds'")
+    expect(viteConfig.split('\n').find((line) => line.includes('features') && line.includes('funds'))).toContain("return 'workspace-accounting'")
     expect(viteConfig).toContain('(finance|meterReadings|contractors|tariffs)')
   })
 

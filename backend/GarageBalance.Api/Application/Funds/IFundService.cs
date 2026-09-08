@@ -2,7 +2,7 @@ namespace GarageBalance.Api.Application.Funds;
 
 public interface IFundService
 {
-    Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken, bool includeArchived = false);
 
     Task<IReadOnlyList<FundOptionDto>> GetFundOptionsAsync(CancellationToken cancellationToken);
 

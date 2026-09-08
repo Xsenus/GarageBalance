@@ -122,9 +122,10 @@ public sealed class FinanceControllerTests
         Assert.Equal(10, service.LastFinancialOperationListRequest?.Offset);
         Assert.Equal(25, service.LastFinancialOperationListRequest?.Limit);
 
-        await controller.GetAccrualsPage(null, null, "12", 20, 30, CancellationToken.None);
+        await controller.GetAccrualsPage(null, null, "12", 20, 30, CancellationToken.None, true);
         Assert.Equal(20, service.LastAccrualListRequest?.Offset);
         Assert.Equal(30, service.LastAccrualListRequest?.Limit);
+        Assert.True(service.LastAccrualListRequest?.IncludeCanceled);
 
         await controller.GetAccrualDueDateReviewPage(21, 31, CancellationToken.None);
         Assert.Equal((21, 31), service.LastAccrualDueDateReviewRequest);

@@ -49,12 +49,13 @@ public sealed class FundsControllerTests
         var service = new FakeFundService { Funds = [fund] };
         var controller = CreateController(service);
 
-        var result = await controller.GetFunds(CancellationToken.None);
+        var result = await controller.GetFunds(CancellationToken.None, includeArchived: true);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var returned = Assert.IsAssignableFrom<IReadOnlyList<FundDto>>(ok.Value);
         Assert.Same(fund, Assert.Single(returned));
         Assert.Equal("Электроэнергия по счётчику", Assert.Single(returned[0].LinkedServices).Name);
+        Assert.True(service.LastFundsIncludeArchived);
     }
 
     [Fact]
@@ -413,6 +414,7 @@ public sealed class FundsControllerTests
         public int? LastOperationsOffset { get; private set; }
         public int? LastOperationsPageLimit { get; private set; }
         public bool? LastOperationsPageIncludeCanceled { get; private set; }
+        public bool LastFundsIncludeArchived { get; private set; }
         public UpdateFundOperationRequest? LastUpdateRequest { get; private set; }
         public UpsertFundRequest? LastFundRequest { get; private set; }
         public DeleteFundRequest? LastDeleteRequest { get; private set; }
@@ -429,8 +431,9 @@ public sealed class FundsControllerTests
         public FundResult<FundOperationDto> CancelOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> RestoreOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
 
-        public Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
+        public Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken, bool includeArchived = false)
         {
+            LastFundsIncludeArchived = includeArchived;
             return Task.FromResult(Funds);
         }
 

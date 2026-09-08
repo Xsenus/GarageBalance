@@ -68,9 +68,10 @@ public sealed class FinanceController(
         [FromQuery] string? search,
         [FromQuery] int? offset,
         [FromQuery] int? limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool includeCanceled = false)
     {
-        return Ok(await financeService.GetAccrualsPageAsync(new AccrualListRequest(monthFrom, monthTo, search, limit, offset), cancellationToken));
+        return Ok(await financeService.GetAccrualsPageAsync(new AccrualListRequest(monthFrom, monthTo, search, limit, offset, includeCanceled), cancellationToken));
     }
 
     [HttpGet("accruals/due-date-review")]
