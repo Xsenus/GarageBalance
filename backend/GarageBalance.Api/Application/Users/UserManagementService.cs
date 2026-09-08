@@ -362,6 +362,11 @@ public sealed class UserManagementService(
 
     private async Task<UserManagementResult<IReadOnlyList<AppRole>>> GetRolesOrFailureAsync(IReadOnlyList<string> roleCodes, CancellationToken cancellationToken)
     {
+        if (roleCodes.Any(code => code is null))
+        {
+            return UserManagementResult<IReadOnlyList<AppRole>>.Failure("role_not_found", "Одна или несколько ролей не найдены.");
+        }
+
         var normalizedRoleCodes = roleCodes
             .Select(code => code.Trim())
             .Where(code => code.Length > 0)
@@ -419,6 +424,11 @@ public sealed class UserManagementService(
 
     private static UserManagementResult<IReadOnlyList<string>> NormalizePermissions(IReadOnlyList<string> permissions)
     {
+        if (permissions.Any(permission => permission is null))
+        {
+            return UserManagementResult<IReadOnlyList<string>>.Failure("permission_not_found", "Одно или несколько прав не поддерживаются системой.");
+        }
+
         var knownPermissions = SystemPermissions.All.ToHashSet(StringComparer.Ordinal);
         var normalizedPermissions = permissions
             .Select(permission => permission.Trim())

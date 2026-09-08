@@ -771,6 +771,8 @@ public sealed class FinanceServiceTests
     [InlineData(3, "full_payment_line_duplicate")]
     [InlineData(4, "full_payment_line_kind_invalid")]
     [InlineData(5, "full_payment_line_kind_invalid")]
+    [InlineData(6, "full_payment_lines_invalid")]
+    [InlineData(7, "full_payment_lines_invalid")]
     public async Task CreateFullGaragePaymentAsync_RejectsInvalidBatch(int scenario, string expectedCode)
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -782,6 +784,8 @@ public sealed class FinanceServiceTests
             2 => [new CreateFullGaragePaymentLineRequest(null, new DateOnly(2026, 7, 1), 100m, null)],
             4 => [new CreateFullGaragePaymentLineRequest(null, new DateOnly(2026, 7, 1), 100m, null, true, Guid.NewGuid())],
             5 => [new CreateFullGaragePaymentLineRequest(null, new DateOnly(2026, 7, 1), 100m, null, true, IrregularPaymentId: Guid.NewGuid())],
+            6 => [null!],
+            7 => [new CreateFullGaragePaymentLineRequest(fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 100m, null), null!],
             _ =>
             [
                 new CreateFullGaragePaymentLineRequest(fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 100m, null),
@@ -796,6 +800,7 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(expectedCode, result.ErrorCode);
+        Assert.Empty(database.Context.FinancialOperations);
     }
 
     [Fact]

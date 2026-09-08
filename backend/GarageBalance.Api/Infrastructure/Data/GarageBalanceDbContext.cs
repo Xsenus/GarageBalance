@@ -580,7 +580,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(operation => operation.CounterpartyName).HasMaxLength(200);
             entity.Property(operation => operation.Amount).HasPrecision(18, 2);
             entity.Property(operation => operation.DocumentNumber).HasMaxLength(120);
-            entity.Property(operation => operation.Comment).HasMaxLength(1000);
+            // Server-generated prefixes and cancellation history extend the bounded user comment.
+            entity.Property(operation => operation.Comment).HasColumnType("text");
             entity.Property(operation => operation.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(operation => operation.OperationDate);
             entity.HasIndex(operation => operation.AccountingMonth);
@@ -743,7 +744,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(accrual => accrual.Amount).HasPrecision(18, 2);
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
             entity.Property(accrual => accrual.DocumentNumber).HasMaxLength(120);
-            entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
+            entity.Property(accrual => accrual.Comment).HasColumnType("text");
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.SupplierId);
             entity.HasIndex(accrual => accrual.ExpenseTypeId);
@@ -823,7 +824,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(reading => reading.Consumption).HasPrecision(18, 3);
             entity.Property(reading => reading.IsMeterReplacement).HasDefaultValue(false);
             entity.Property(reading => reading.HasGapWarning).HasDefaultValue(false);
-            entity.Property(reading => reading.Comment).HasMaxLength(1000);
+            entity.Property(reading => reading.Comment).HasColumnType("text");
             entity.Property(reading => reading.Version).IsConcurrencyToken();
             entity.HasIndex(reading => reading.AccountingMonth);
             entity.HasIndex(reading => reading.ReadingDate);
@@ -866,7 +867,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(operation => operation.Amount).HasPrecision(18, 2);
             entity.Property(operation => operation.BalanceBefore).HasPrecision(18, 2);
             entity.Property(operation => operation.BalanceAfter).HasPrecision(18, 2);
-            entity.Property(operation => operation.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(operation => operation.Reason).HasColumnType("text").IsRequired();
             entity.Property(operation => operation.IsCanceled).HasDefaultValue(false);
             entity.HasIndex(operation => operation.FundId);
             entity.HasIndex(operation => operation.SourceFinancialOperationId)

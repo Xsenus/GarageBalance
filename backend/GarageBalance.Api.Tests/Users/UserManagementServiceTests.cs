@@ -14,6 +14,75 @@ namespace GarageBalance.Api.Tests.Users;
 
 public sealed class UserManagementServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateUserAsync_RejectsNullRoleEntriesWithoutCreatingUser(bool includeValidRole)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        string[] roles = includeValidRole ? [SystemRoles.Operator, null!] : [null!];
+
+        var result = await service.CreateUserAsync(
+            new CreateManagedUserRequest("invalid-role@example.test", "Пользователь", "StrongPass123", roles),
+            null, CancellationToken.None);
+
+        Assert.Equal("role_not_found", result.ErrorCode);
+        Assert.Empty(database.Context.Users);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateUserAsync_RejectsNullRoleEntriesWithoutChangingUser(bool includeValidRole)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest("invalid-role@example.test", "Пользователь", "StrongPass123", [SystemRoles.Operator]),
+            null, CancellationToken.None);
+        var user = await database.Context.Users.SingleAsync();
+        var version = user.SessionVersion;
+        string[] roles = includeValidRole ? [SystemRoles.Accountant, null!] : [null!];
+
+        var result = await service.UpdateUserAsync(created.Value!.Id,
+            new UpdateManagedUserRequest("Изменено", roles, false, null, "Проверка валидации"),
+            null, CancellationToken.None);
+
+        Assert.Equal("role_not_found", result.ErrorCode);
+        Assert.Equal("Пользователь", user.DisplayName);
+        Assert.True(user.IsActive);
+        Assert.Equal(version, user.SessionVersion);
+        Assert.Equal(SystemRoles.Operator, Assert.Single(user.UserRoles).Role.Code);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "users.user_updated");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateRolePermissionsAsync_RejectsNullPermissionEntriesWithoutChangingAccess(bool includeValidPermission)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.CreateUserAsync(
+            new CreateManagedUserRequest("invalid-permission@example.test", "Пользователь", "StrongPass123", [SystemRoles.Operator]),
+            null, CancellationToken.None);
+        var role = await database.Context.Roles.SingleAsync(item => item.Code == SystemRoles.Operator);
+        var originalPermissions = role.Permissions.ToArray();
+        var user = await database.Context.Users.SingleAsync();
+        var sessionVersion = user.SessionVersion;
+        string[] permissions = includeValidPermission ? [SystemPermissions.DictionariesRead, null!] : [null!];
+
+        var result = await service.UpdateRolePermissionsAsync(role.Code,
+            new UpdateRolePermissionsRequest(permissions, role.Version), null, CancellationToken.None);
+
+        Assert.Equal("permission_not_found", result.ErrorCode);
+        Assert.Equal(originalPermissions, role.Permissions);
+        Assert.Equal(sessionVersion, user.SessionVersion);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "users.role_permissions_updated");
+    }
+
     [PostgreSqlFact]
     public async Task RoleVersionMigration_PreservesExistingPermissionsAndCreatesDistinctVersions()
     {

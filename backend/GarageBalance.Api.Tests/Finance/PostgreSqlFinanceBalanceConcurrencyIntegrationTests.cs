@@ -1,14 +1,75 @@
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
 {
     private static readonly DateOnly June = new(2026, 6, 1);
+
+    [PostgreSqlFact]
+    public async Task OpeningDebtPayments_RecheckRemainingDebtAfterConcurrentPayment()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var setup = database.CreateContext();
+        var garage = new Garage { Number = "OPENING-DEBT-RACE", StartingBalance = 1000m };
+        setup.Garages.Add(garage);
+        if (!await setup.IncomeTypes.AnyAsync(item => item.Code == "debt_transfer"))
+        {
+            setup.IncomeTypes.Add(new IncomeType { Name = "Перенос задолженности", Code = "debt_transfer", IsSystem = true });
+        }
+        await setup.SaveChangesAsync();
+
+        await using var firstContext = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(new NpgsqlConnectionStringBuilder(database.ConnectionString) { ApplicationName = "opening-debt-first" }.ConnectionString).Options);
+        await using var secondContext = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(new NpgsqlConnectionStringBuilder(database.ConnectionString) { ApplicationName = "opening-debt-second" }.ConnectionString).Options);
+        await using var blocker = new NpgsqlConnection(database.ConnectionString);
+        await blocker.OpenAsync();
+        const long fundAllocationLockKey = 0x474246554E44;
+        await using (var acquire = new NpgsqlCommand($"SELECT pg_advisory_lock({fundAllocationLockKey})", blocker))
+        {
+            await acquire.ExecuteNonQueryAsync();
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var first = FinanceServiceTestFactory.Create(firstContext).CreateGarageDebtPaymentAsync(
+            new(garage.Id, June.AddDays(10), June, 700m, "Первая оплата"), null, timeout.Token);
+        var second = FinanceServiceTestFactory.Create(secondContext).CreateGarageDebtPaymentAsync(
+            new(garage.Id, June.AddDays(10), June, 700m, "Вторая оплата"), null, timeout.Token);
+        try
+        {
+            // Both requests must reach the shared money lock before either can save.
+            // This exposes an opening-debt read performed before the lock without
+            // relying on task scheduling or on an arbitrary delay.
+            await using var waiting = new NpgsqlCommand("""
+                SELECT count(*) FROM pg_stat_activity
+                WHERE datname = current_database() AND wait_event = 'advisory'
+                  AND application_name IN ('opening-debt-first', 'opening-debt-second')
+                """, blocker);
+            while ((long)(await waiting.ExecuteScalarAsync(timeout.Token))! < 2)
+            {
+                await Task.Delay(20, timeout.Token);
+            }
+        }
+        finally
+        {
+            await using var release = new NpgsqlCommand($"SELECT pg_advisory_unlock({fundAllocationLockKey})", blocker);
+            await release.ExecuteNonQueryAsync();
+        }
+
+        var results = await Task.WhenAll(first, second);
+        Assert.Single(results, result => result.Succeeded);
+        Assert.Single(results, result => result.ErrorCode == "debt_payment_amount_exceeds_opening_debt");
+        await using var assertion = database.CreateContext();
+        Assert.Equal(700m, await assertion.FinancialOperations.Where(item => item.GarageId == garage.Id).SumAsync(item => item.Amount));
+        Assert.Single(await assertion.AuditEvents.Where(item => item.Action == "finance.income_created").ToListAsync());
+    }
 
     [PostgreSqlFact]
     public async Task StaffPayments_SerializeCashAndSalaryBalances()

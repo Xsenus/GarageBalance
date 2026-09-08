@@ -1965,11 +1965,11 @@ public sealed class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        if (request.Lines is null || request.Lines.Count is < 1 or > 100)
+        if (request.Lines is null || request.Lines.Count is < 1 or > 100 || request.Lines.Any(line => line is null))
         {
             return FinanceResult<FullGaragePaymentDto>.Failure(
                 "full_payment_lines_invalid",
-                "Полная оплата должна содержать от 1 до 100 строк.");
+                "Полная оплата должна содержать от 1 до 100 заполненных строк.");
         }
 
         var normalizedLines = request.Lines
@@ -2485,6 +2485,14 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure("garage_not_found", "Гараж для оплаты входящего долга не найден.");
         }
+
+        // Use the same order as CreateIncomeAsync and keep the debt check under
+        // the money lock until the nested payment has been saved. PostgreSQL
+        // advisory locks are reentrant on this DbContext's connection.
+        await using var receiptBatchLock = request.ReceiptBatchId is Guid receiptBatchId
+            ? await financialOperationRepository.AcquireReceiptBatchLockAsync(receiptBatchId, cancellationToken)
+            : null;
+        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
 
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
         var availableOpeningDebt = await CalculateAvailableOpeningDebtAsync(garage, accountingMonth, cancellationToken);

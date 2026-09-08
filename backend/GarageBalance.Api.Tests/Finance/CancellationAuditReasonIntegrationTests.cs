@@ -32,6 +32,7 @@ public sealed class CancellationAuditReasonIntegrationTests
         };
         foreach (var operation in operations)
         {
+            operation.Comment = new string('к', 1000);
             operation.Amount = 1m;
             operation.AccountingMonth = month;
             operation.OperationDate = month.AddDays(19);
@@ -40,6 +41,8 @@ public sealed class CancellationAuditReasonIntegrationTests
         var accrual = new Accrual { Garage = garage, IncomeType = income, Amount = 1, AccountingMonth = month, DueDate = month.AddDays(25), Source = AccrualSources.Manual };
         var supplierAccrual = new SupplierAccrual { Supplier = supplier, ExpenseType = expense, Amount = 1, AccountingMonth = month, Source = AccrualSources.Manual };
         var reading = new MeterReading { Garage = garage, MeterKind = MeterKinds.Water, AccountingMonth = month, ReadingDate = month.AddDays(19), CurrentValue = 0, PreviousValue = 0, Consumption = 0 };
+        supplierAccrual.Comment = new string('к', 1000);
+        reading.Comment = new string('к', 1000);
         context.Accruals.Add(accrual);
         context.SupplierAccruals.Add(supplierAccrual);
         context.MeterReadings.Add(reading);
@@ -56,6 +59,10 @@ public sealed class CancellationAuditReasonIntegrationTests
         Assert.True((await service.CancelAccrualAsync(accrual.Id, request, null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CancelSupplierAccrualAsync(supplierAccrual.Id, request, null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CancelMeterReadingAsync(reading.Id, request, null, CancellationToken.None)).Succeeded);
+        var expectedComment = $"{new string('к', 1000)}{Environment.NewLine}Отменено: {reason}";
+        Assert.All(await context.FinancialOperations.AsNoTracking().ToListAsync(), item => Assert.Equal(expectedComment, item.Comment));
+        Assert.Equal(expectedComment, (await context.SupplierAccruals.AsNoTracking().SingleAsync()).Comment);
+        Assert.Equal(expectedComment, (await context.MeterReadings.AsNoTracking().SingleAsync()).Comment);
         var events = await context.AuditEvents.AsNoTracking().Where(item => item.Action == "finance.operation_canceled" || item.Action == "finance.accrual_canceled" || item.Action == "finance.supplier_accrual_canceled" || item.Action == "finance.meter_reading_canceled").ToListAsync();
         Assert.Equal(6, events.Count);
         foreach (var audit in events)
