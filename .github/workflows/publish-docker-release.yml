@@ -84,7 +84,8 @@ jobs:
           dotnet tool restore
 
       - name: Audit .NET dependencies
-        run: dotnet list GarageBalance.slnx package --vulnerable --include-transitive
+        shell: pwsh
+        run: ./infrastructure/scripts/verify-backend-dependencies.ps1
 
       - name: Test backend
         shell: pwsh

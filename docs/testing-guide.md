@@ -70,6 +70,21 @@ git diff --check
 
 ## GitHub Actions
 
+Workflow `Verify branch` запускается при push в любую ветку, кроме `master`, для всех
+pull request и вручную. Он выполняет полные backend/frontend suites с обязательными
+порогами coverage, PostgreSQL-интеграции, сборки, lint, форматирование, проверку privacy,
+зависимостей, бюджета frontend и соответствия EF-модели миграциям. После успешных
+проверок собирается и запускается изолированная Docker Compose установка: проверяются
+готовность API, frontend, nginx proxy и отказ в доступе без авторизации. Тестовые
+контейнеры и volumes удаляются даже при ошибке; публикации и обращения к VPS нет.
+Отчёты тестов и покрытия доступны в artifacts проверки семь дней.
+
+NuGet audit во всех проверках выполняется через
+`infrastructure/scripts/verify-backend-dependencies.ps1`: скрипт разбирает JSON-отчёт и
+останавливает CI при уязвимости прямой или транзитивной зависимости, ошибке команды,
+предупреждении источника или некорректном отчёте. Сам `dotnet list package --vulnerable`
+может завершаться кодом 0 даже при обнаруженной уязвимости.
+
 Workflow `Deploy staging` параллельно выполняет четыре независимых gate: backend с
 PostgreSQL и упаковкой API, frontend с coverage и production build, backend quality
 с форматированием/privacy/NuGet audit и отдельный npm audit. Деплой получает уже готовые

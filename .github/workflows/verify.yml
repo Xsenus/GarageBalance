@@ -1,0 +1,232 @@
+name: Verify branch
+
+on:
+  push:
+    branches-ignore:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: garagebalance-verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  backend:
+    name: Backend coverage and PostgreSQL migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: garagebalance_test
+          POSTGRES_PASSWORD: garagebalance_test_password
+          POSTGRES_DB: garagebalance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U garagebalance_test -d garagebalance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GARAGEBALANCE_POSTGRES_TEST_CONNECTION: Host=127.0.0.1;Port=5432;Database=garagebalance_test;Username=garagebalance_test;Password=garagebalance_test_password
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore backend and tools
+        run: |
+          dotnet restore GarageBalance.slnx --locked-mode
+          dotnet tool restore
+
+      - name: Build backend
+        run: dotnet build GarageBalance.slnx --configuration Release --no-restore
+
+      - name: Test complete backend suite with coverage
+        shell: pwsh
+        run: |
+          dotnet test GarageBalance.slnx --configuration Release --no-build --no-restore `
+            --collect:"XPlat Code Coverage" `
+            --settings backend-coverage.runsettings `
+            --logger "trx;LogFileName=backend.trx" `
+            --results-directory artifacts/coverage-backend
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./infrastructure/scripts/verify-backend-coverage.ps1 `
+            -ResultsDirectory artifacts/coverage-backend
+
+      - name: Verify migrations match the model
+        run: >-
+          dotnet tool run dotnet-ef migrations has-pending-model-changes
+          --project backend/GarageBalance.Api/GarageBalance.Api.csproj
+          --startup-project backend/GarageBalance.Api/GarageBalance.Api.csproj
+          --configuration Release --no-build
+
+      - name: Generate idempotent migration SQL
+        run: |
+          mkdir -p artifacts
+          dotnet tool run dotnet-ef migrations script --idempotent \
+            --project backend/GarageBalance.Api/GarageBalance.Api.csproj \
+            --startup-project backend/GarageBalance.Api/GarageBalance.Api.csproj \
+            --configuration Release --no-build \
+            --output artifacts/verify-migrations.sql
+          test -s artifacts/verify-migrations.sql
+
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verify-backend-${{ github.run_id }}
+          path: |
+            artifacts/coverage-backend
+            artifacts/verify-migrations.sql
+          retention-days: 7
+
+  frontend:
+    name: Frontend coverage, lint and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Test complete frontend suite with coverage
+        run: npm run test:coverage
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Build frontend and check bundle budget
+        run: |
+          npm run build
+          npm run check:bundle
+
+      - name: Audit frontend dependencies
+        run: >-
+          npm audit --package-lock-only --audit-level=high
+          --fetch-retries=2 --fetch-timeout=60000
+          --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=10000
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verify-frontend-${{ github.run_id }}
+          path: frontend/coverage
+          retention-days: 7
+
+  quality:
+    name: Formatting, privacy and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore backend
+        run: dotnet restore GarageBalance.slnx --locked-mode
+
+      - name: Audit backend dependencies
+        shell: pwsh
+        run: ./infrastructure/scripts/verify-backend-dependencies.ps1
+
+      - name: Verify backend formatting
+        run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
+
+      - name: Verify privacy and distribution contracts
+        shell: pwsh
+        run: |
+          ./infrastructure/scripts/verify-package-privacy.ps1
+          ./infrastructure/scripts/check-docker-distribution.ps1 -RequireDocker
+
+      - name: Verify patch whitespace and shell syntax
+        run: |
+          git show --format= --check HEAD
+          find infrastructure -name '*.sh' -print0 | xargs -0 -r -n 1 bash -n
+
+  docker:
+    name: Docker build and isolated startup
+    needs:
+      - backend
+      - frontend
+      - quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: garagebalance-verification
+      POSTGRES_DB: garagebalance_ci
+      POSTGRES_USER: garagebalance_ci
+      POSTGRES_PASSWORD: garagebalance_ci_ephemeral_password
+      JWT_SIGNING_KEY: garagebalance-ci-ephemeral-signing-key-at-least-32-characters
+      POSTGRES_PORT: 55432
+      API_PORT: 5580
+      FRONTEND_PORT: 55173
+      FRONTEND_ORIGIN: http://127.0.0.1:55173
+      DATABASE_BACKUP_AUTOMATIC_ENABLED: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set isolated Docker storage paths
+        run: |
+          echo "BACKUP_HOST_PATH=${RUNNER_TEMP}/garagebalance/backups" >> "$GITHUB_ENV"
+          echo "LOG_HOST_PATH=${RUNNER_TEMP}/garagebalance/logs" >> "$GITHUB_ENV"
+          echo "IMPORT_QUEUE_HOST_PATH=${RUNNER_TEMP}/garagebalance/import-queue" >> "$GITHUB_ENV"
+
+      - name: Validate and build Docker Compose
+        run: |
+          docker compose config --quiet
+          docker compose build
+
+      - name: Start isolated Docker installation
+        run: docker compose up --detach --wait --wait-timeout 180
+
+      - name: Verify API, frontend and reverse proxy
+        run: |
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 20 http://127.0.0.1:5580/health/ready
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 20 http://127.0.0.1:55173/health/ready
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 20 http://127.0.0.1:55173/ --output /tmp/garagebalance-index.html
+          grep -q '/assets/' /tmp/garagebalance-index.html
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 http://127.0.0.1:55173/api/auth/me)" = 401
+
+      - name: Show container diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps --all
+          docker compose logs --no-color --tail 100
+
+      - name: Remove isolated containers and test volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans

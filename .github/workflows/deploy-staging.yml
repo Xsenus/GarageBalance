@@ -184,7 +184,8 @@ jobs:
         run: dotnet restore GarageBalance.slnx
 
       - name: Audit backend dependencies
-        run: dotnet list GarageBalance.slnx package --vulnerable --include-transitive
+        shell: pwsh
+        run: ./infrastructure/scripts/verify-backend-dependencies.ps1
 
       - name: Check repository privacy
         shell: pwsh

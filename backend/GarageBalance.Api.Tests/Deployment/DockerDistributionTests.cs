@@ -100,6 +100,12 @@ public sealed class DockerDistributionTests
             };
             startInfo.ArgumentList.Add("-NoProfile");
             startInfo.ArgumentList.Add("-NonInteractive");
+            if (OperatingSystem.IsWindows())
+            {
+                startInfo.ArgumentList.Add("-ExecutionPolicy");
+                startInfo.ArgumentList.Add("Bypass");
+            }
+
             startInfo.ArgumentList.Add("-File");
             startInfo.ArgumentList.Add(testScript);
             startInfo.ArgumentList.Add("-Root");

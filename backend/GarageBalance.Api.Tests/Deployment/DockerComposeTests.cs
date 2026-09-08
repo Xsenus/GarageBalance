@@ -3,6 +3,30 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class DockerComposeTests
 {
     [Fact]
+    public void ExampleImportLimitMatchesApiAndFitsInsideReverseProxyRequestLimit()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var environment = File.ReadAllText(Path.Combine(repositoryRoot, ".env.example"));
+        var compose = File.ReadAllText(Path.Combine(repositoryRoot, "docker-compose.yml"));
+        var nginx = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "nginx.conf"));
+        using var settings = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            repositoryRoot, "backend", "GarageBalance.Api", "appsettings.json")));
+
+        var importMatch = System.Text.RegularExpressions.Regex.Match(environment,
+            @"(?m)^IMPORT_MAXIMUM_FILE_SIZE_MB=(\d+)\r?$");
+        var proxyMatch = System.Text.RegularExpressions.Regex.Match(nginx,
+            @"client_max_body_size\s+(\d+)m;");
+        Assert.True(importMatch.Success);
+        Assert.True(proxyMatch.Success);
+        var importLimit = int.Parse(importMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        var proxyLimit = int.Parse(proxyMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Equal(settings.RootElement.GetProperty("ImportProcessing").GetProperty("MaximumFileSizeMegabytes").GetInt32(), importLimit);
+        Assert.Contains($"${{IMPORT_MAXIMUM_FILE_SIZE_MB:-{importLimit}}}", compose, StringComparison.Ordinal);
+        Assert.True(proxyLimit > importLimit, "The proxy must accept a maximum-size import plus multipart request overhead.");
+    }
+
+    [Fact]
     public void ComposeDefinesServiceHealthChecksAndStartupOrder()
     {
         var compose = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docker-compose.yml"));

@@ -19,7 +19,7 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("deploy:\n", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test GarageBalance.slnx --configuration Release --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format GarageBalance.slnx --verify-no-changes --no-restore", workflow, StringComparison.Ordinal);
-        Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
+        Assert.Contains("./infrastructure/scripts/verify-backend-dependencies.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("./infrastructure/scripts/verify-package-privacy.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("npm ci --prefer-offline --no-audit", workflow, StringComparison.Ordinal);
         Assert.Contains("npm audit --package-lock-only --audit-level=high", workflow, StringComparison.Ordinal);
@@ -214,7 +214,7 @@ public sealed class GitHubActionsDeploymentTests
         var repositoryRoot = FindRepositoryRoot();
         var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "publish-docker-release.yml"));
 
-        Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
+        Assert.Contains("./infrastructure/scripts/verify-backend-dependencies.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("npm audit --prefix frontend --audit-level=high", workflow, StringComparison.Ordinal);
         Assert.Contains("needs:", workflow, StringComparison.Ordinal);
         Assert.Contains("- backend", workflow, StringComparison.Ordinal);
