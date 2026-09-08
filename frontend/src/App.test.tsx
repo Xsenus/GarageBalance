@@ -16410,6 +16410,7 @@ describe('App', () => {
     const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
     const backupSummary = await within(backupsPanel).findByLabelText('Состояние резервного копирования')
     const backupTable = within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })
+    expect(backupTable.parentElement).toHaveClass('settings-backup-table-shell')
     expect(backupSummary).toHaveTextContent('каждые 24 ч.')
     expect(backupSummary.parentElement).toHaveClass('settings-card-body')
     expect(backupTable.closest('.settings-card-body')).toBe(backupSummary.parentElement)

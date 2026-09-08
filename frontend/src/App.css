@@ -834,10 +834,9 @@ h1 {
 
 .settings-layout {
   display: grid;
+  height: calc(100dvh - 90px);
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 18px;
-  min-height: calc(100dvh - 210px);
-  align-items: stretch;
 }
 
 .settings-section-nav {
@@ -907,6 +906,7 @@ h1 {
 
 .settings-section-content {
   min-width: 0;
+  min-height: 0;
 }
 
 .settings-section-content > .password-panel {
@@ -930,10 +930,21 @@ h1 {
   grid-template-columns: minmax(260px, 0.65fr) minmax(440px, 1fr);
 }
 
-.settings-card--backups,
 .settings-card--diagnostics {
-  width: 100%;
   grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);
+}
+
+.settings-card--backups {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.settings-card--backups .settings-card-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .settings-card--backups .summary-strip,
@@ -948,7 +959,6 @@ h1 {
 }
 
 .settings-card--business-date {
-  width: 100%;
   min-width: 0;
   grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);
 }
@@ -1169,16 +1179,13 @@ h1 {
 }
 
 .settings-backup-table-shell {
-  overflow-x: auto;
+  flex: 1;
+  overflow: auto;
 }
 
 .settings-backup-table {
   min-width: 760px;
   table-layout: fixed;
-}
-
-.settings-backup-table td {
-  vertical-align: middle;
 }
 
 .settings-backup-table th:nth-child(1),
@@ -8125,7 +8132,6 @@ button.operation-row:focus-visible {
 @media (max-width: 1500px) {
   .settings-card--security,
   .settings-card--display,
-  .settings-card--backups,
   .settings-card--diagnostics,
   .settings-card--business-date,
   .settings-card--cash-bank,
@@ -8998,6 +9004,7 @@ button.operation-row:focus-visible {
   }
 
   .settings-layout {
+    height: auto;
     grid-template-columns: 1fr;
     min-height: 0;
   }
@@ -9011,14 +9018,9 @@ button.operation-row:focus-visible {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 
-  .settings-card {
-    width: 100%;
-  }
-
   .password-panel,
   .settings-card--security,
   .settings-card--display,
-  .settings-card--backups,
   .settings-card--diagnostics,
   .settings-card--business-date,
   .settings-card--cash-bank,
