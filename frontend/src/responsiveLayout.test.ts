@@ -129,7 +129,8 @@ describe('responsive layout styles', () => {
   it('keeps the service settings beside tariff periods and stacks them on narrower screens', () => {
     expect(normalizedAppCss).toContain('.contractors-modal-form.contractors-modal-form--service-edit {\n  grid-template-columns: minmax(400px, 0.9fr) minmax(540px, 1.35fr);')
     expect(normalizedAppCss).toContain('gap: 0 14px;')
-    expect(normalizedAppCss).toContain('"settings-title schedule"\n    "heading schedule"\n    "catalogs schedule"')
+    expect(normalizedAppCss).toContain('"settings schedule"\n    ". tiers"\n    "actions actions";')
+    expect(normalizedAppCss).toContain('.contractors-modal-form--service-edit > .contractors-service-settings-column {\n  grid-area: settings;\n  display: grid;\n  min-width: 0;\n  align-content: start;')
     expect(normalizedAppCss).toContain('.contractors-modal-form--service-edit-tiered > .contractors-tier-editor {\n  grid-area: schedule;\n  margin-top: 0;')
     expect(normalizedAppCss).toContain('.tariff-schedule-table {\n  overflow: visible;')
     expect(normalizedAppCss).toContain('.tariff-schedule-row:focus-within {\n  z-index: 40;')
@@ -137,7 +138,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-threshold-row {\n  display: grid;\n  grid-template-columns: minmax(120px, 0.72fr) minmax(230px, 1.25fr) minmax(230px, 1.25fr) 40px;')
     expect(normalizedAppCss).toContain('.contractors-threshold-row label:last-of-type input {\n  text-align: right;')
     expect(normalizedAppCss).toContain('@media (max-width: 1100px) {\n  .contractors-modal-form.contractors-modal-form--service-edit {\n    grid-template-columns: minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('"flags"\n      "schedule"\n      "tiers"\n      "actions";')
+    expect(normalizedAppCss).toContain('"settings"\n      "schedule"\n      "tiers"\n      "actions";')
   })
 
   it('keeps row actions visible at the right edge of wide mobile tables', () => {

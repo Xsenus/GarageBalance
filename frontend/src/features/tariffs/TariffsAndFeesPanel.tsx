@@ -3995,6 +3995,14 @@ export function AddServicePrototypeDialog({
     }
   }
 
+  const serviceHeading = (
+    <div className="contractors-service-heading-grid contractors-service-heading-grid--name-only">
+      <FormField label="Наименование услуги">
+        <input aria-label="Наименование услуги" value={name} disabled={dialogBusy} onChange={(event) => setName(event.target.value)} />
+      </FormField>
+    </div>
+  )
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={dialogBusy ? undefined : onClose}>
       <section
@@ -4016,14 +4024,11 @@ export function AddServicePrototypeDialog({
 
         <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
-          {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
-          <div className="contractors-service-heading-grid contractors-service-heading-grid--name-only">
-            <FormField label="Наименование услуги">
-              <input aria-label="Наименование услуги" value={name} disabled={dialogBusy} onChange={(event) => setName(event.target.value)} />
-            </FormField>
-          </div>
           {isRegular ? (
             <>
+              <div className="contractors-service-settings-column">
+                <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4>
+                {serviceHeading}
               <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
                 <FormField label="Фонд поступления" help="Фонд, куда будут поступать оплаты по услуге.">
                   <SelectControl
@@ -4040,6 +4045,76 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
+              </div>
+              {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
+              <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
+                <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
+                  <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} disabled={dialogBusy} onChange={setPeriodicityMonths} />
+                </FormField>
+                {!isMonthly ? <FormField label="Месяц начисления" help="В этом месяце ежегодная услуга попадёт в начисления.">
+                  <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setAccrualStartMonth} />
+                </FormField> : null}
+                <FormField label="Оплатить до" help={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
+                  <div className="contractors-inline-field contractors-inline-field--date">
+                    <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} disabled={dialogBusy} onChange={(event) => setPaymentDueDay(event.target.value)} />
+                    {!isMonthly
+                      ? <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setPaymentDueMonth} />
+                      : <span className="contractors-date-suffix">числа следующего месяца</span>}
+                  </div>
+                </FormField>
+                <FormField label="Перенос долга в просроченный" help="Количество дней после срока оплаты до переноса задолженности в просроченную.">
+                  <div className="contractors-inline-field">
+                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} disabled={dialogBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <span>дн.</span>
+                  </div>
+                </FormField>
+                <FormField label="Единица измерения" help="Это обозначение показывается в тарифах, начислениях и показаниях.">
+                  <EditableCombobox
+                    aria-label="Единица измерения"
+                    maxLength={40}
+                    placement="above"
+                    value={unitName}
+                    options={measurementUnits.map((unit) => ({ value: unit.name, label: unit.name }))}
+                    disabled={dialogBusy}
+                    onChange={(nextUnitName) => {
+                      setUnitName(nextUnitName)
+                      setError(null)
+                    }}
+                  />
+                </FormField>
+              </div>
+              <div className="contractors-service-flags">
+                <label className="contractors-check-row">
+                  <input
+                    type="checkbox"
+                    aria-label="По счетчику"
+                    checked={isByMeter}
+                    disabled={dialogBusy}
+                    onChange={(event) => changeMeterMode(event.target.checked)}
+                  />
+                  <span>По счетчику</span>
+                </label>
+                <label className="contractors-check-row">
+                  <input
+                    type="checkbox"
+                    aria-label="Пороговая тарификация"
+                    checked={isTiered}
+                    disabled={dialogBusy || !canUseTieredTariff}
+                    onChange={(event) => {
+                      const nextTiered = event.target.checked
+                      setIsTiered(nextTiered)
+                      if (nextTiered && tariffTiers.length < 2) {
+                        const rate = parsePrototypeAmount(regularRate) ?? 1
+                        setTariffTiers([
+                          { id: 'draft-tier-1', name: 'Ступень 1', upperBound: 1100, rate, isCustom: true },
+                          { id: 'draft-tier-2', name: 'Ступень 2', upperBound: null, rate, isCustom: true },
+                        ])
+                      }
+                    }}
+                  />
+                  <span>Пороговая тарификация</span>
+                </label>
+              </div>
               </div>
               {initialSetting && !isTiered ? (
                 <section className="tariff-schedule-editor" aria-labelledby="tariff-schedule-title">
@@ -4170,75 +4245,6 @@ export function AddServicePrototypeDialog({
                   </div>
                 </section>
               ) : null}
-              {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
-              <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
-                <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
-                  <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} disabled={dialogBusy} onChange={setPeriodicityMonths} />
-                </FormField>
-                {!isMonthly ? <FormField label="Месяц начисления" help="В этом месяце ежегодная услуга попадёт в начисления.">
-                  <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setAccrualStartMonth} />
-                </FormField> : null}
-                <FormField label="Оплатить до" help={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
-                  <div className="contractors-inline-field contractors-inline-field--date">
-                    <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} disabled={dialogBusy} onChange={(event) => setPaymentDueDay(event.target.value)} />
-                    {!isMonthly
-                      ? <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setPaymentDueMonth} />
-                      : <span className="contractors-date-suffix">числа следующего месяца</span>}
-                  </div>
-                </FormField>
-                <FormField label="Перенос долга в просроченный" help="Количество дней после срока оплаты до переноса задолженности в просроченную.">
-                  <div className="contractors-inline-field">
-                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} disabled={dialogBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
-                    <span>дн.</span>
-                  </div>
-                </FormField>
-                <FormField label="Единица измерения" help="Это обозначение показывается в тарифах, начислениях и показаниях.">
-                  <EditableCombobox
-                    aria-label="Единица измерения"
-                    maxLength={40}
-                    placement="above"
-                    value={unitName}
-                    options={measurementUnits.map((unit) => ({ value: unit.name, label: unit.name }))}
-                    disabled={dialogBusy}
-                    onChange={(nextUnitName) => {
-                      setUnitName(nextUnitName)
-                      setError(null)
-                    }}
-                  />
-                </FormField>
-              </div>
-              <div className="contractors-service-flags">
-                <label className="contractors-check-row">
-                  <input
-                    type="checkbox"
-                    aria-label="По счетчику"
-                    checked={isByMeter}
-                    disabled={dialogBusy}
-                    onChange={(event) => changeMeterMode(event.target.checked)}
-                  />
-                  <span>По счетчику</span>
-                </label>
-                <label className="contractors-check-row">
-                  <input
-                    type="checkbox"
-                    aria-label="Пороговая тарификация"
-                    checked={isTiered}
-                    disabled={dialogBusy || !canUseTieredTariff}
-                    onChange={(event) => {
-                      const nextTiered = event.target.checked
-                      setIsTiered(nextTiered)
-                      if (nextTiered && tariffTiers.length < 2) {
-                        const rate = parsePrototypeAmount(regularRate) ?? 1
-                        setTariffTiers([
-                          { id: 'draft-tier-1', name: 'Ступень 1', upperBound: 1100, rate, isCustom: true },
-                          { id: 'draft-tier-2', name: 'Ступень 2', upperBound: null, rate, isCustom: true },
-                        ])
-                      }
-                    }}
-                  />
-                  <span>Пороговая тарификация</span>
-                </label>
-              </div>
               {isTiered ? (
                 <section className="contractors-tier-editor" aria-labelledby="contractors-tier-editor-title">
                   <div className="contractors-tier-editor-heading">
@@ -4343,19 +4349,22 @@ export function AddServicePrototypeDialog({
               ) : null}
             </>
           ) : (
-            <div className="contractors-service-cost-grid">
-              <FormField label="Стоимость" className="contractors-service-cost-field">
-                <div className="contractors-inline-field">
-                  <MoneyTextInput
-                    aria-label="Стоимость услуги"
-                    value={cost}
-                    disabled={dialogBusy}
-                    onValueChange={setCost}
-                  />
-                  <span>руб.</span>
-                </div>
-              </FormField>
-            </div>
+            <>
+              {serviceHeading}
+              <div className="contractors-service-cost-grid">
+                <FormField label="Стоимость" className="contractors-service-cost-field">
+                  <div className="contractors-inline-field">
+                    <MoneyTextInput
+                      aria-label="Стоимость услуги"
+                      value={cost}
+                      disabled={dialogBusy}
+                      onValueChange={setCost}
+                    />
+                    <span>руб.</span>
+                  </div>
+                </FormField>
+              </div>
+            </>
           )}
 
           <div className="detail-dialog-actions contractors-service-dialog-actions">

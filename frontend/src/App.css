@@ -2228,12 +2228,7 @@ h1 {
   grid-template-columns: minmax(400px, 0.9fr) minmax(540px, 1.35fr);
   grid-template-areas:
     "feedback feedback"
-    "settings-title schedule"
-    "heading schedule"
-    "catalogs schedule"
-    "parameters-title schedule"
-    "parameters schedule"
-    "flags schedule"
+    "settings schedule"
     ". tiers"
     "actions actions";
   gap: 0 14px;
@@ -2259,25 +2254,25 @@ h1 {
   line-height: 1.35;
 }
 
-.contractors-service-section-title--settings {
-  grid-area: settings-title;
-}
-
 .contractors-service-section-title--parameters {
-  grid-area: parameters-title;
   margin-top: 12px;
 }
 
-.contractors-modal-form--service-edit > .contractors-service-heading-grid {
-  grid-area: heading;
+.contractors-modal-form--service-edit > .contractors-service-settings-column {
+  grid-area: settings;
+  display: grid;
+  min-width: 0;
+  align-content: start;
+}
+
+.contractors-service-settings-column > .contractors-service-heading-grid {
   border-right: 1px solid #dce3ee;
   border-left: 1px solid #dce3ee;
   background: #f8fafc;
   padding: 0 14px;
 }
 
-.contractors-modal-form--service-edit > .contractors-service-period-grid--catalogs {
-  grid-area: catalogs;
+.contractors-service-settings-column > .contractors-service-period-grid--catalogs {
   grid-template-columns: 1fr;
   border: 1px solid #dce3ee;
   border-top: 0;
@@ -2294,8 +2289,7 @@ h1 {
   background: #ffffff;
 }
 
-.contractors-modal-form--service-edit > .contractors-service-period-grid--single-row {
-  grid-area: parameters;
+.contractors-service-settings-column > .contractors-service-period-grid--single-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border-right: 1px solid #dce3ee;
   border-left: 1px solid #dce3ee;
@@ -2303,8 +2297,7 @@ h1 {
   padding: 0 14px;
 }
 
-.contractors-modal-form--service-edit > .contractors-service-flags {
-  grid-area: flags;
+.contractors-service-settings-column > .contractors-service-flags {
   grid-template-columns: 1fr;
   border: 1px solid #dce3ee;
   border-top: 0;
@@ -3190,12 +3183,7 @@ h1 {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "feedback"
-      "settings-title"
-      "heading"
-      "catalogs"
-      "parameters-title"
-      "parameters"
-      "flags"
+      "settings"
       "schedule"
       "tiers"
       "actions";
