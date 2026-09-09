@@ -28,6 +28,7 @@ import { SupplierServiceDialog } from './SupplierServiceDialog'
 import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
 import { supplierBalanceWithDebtHelp, supplierDebtSortDirection, toDisplayedSupplierBalance, toStoredSupplierStartingBalance } from '../../shared/supplierOpeningBalance'
 
@@ -798,8 +799,16 @@ function FinancialReportPeriodFilters({ filters, targetLabel, onChange }: { filt
 
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [actionCommentsRequired] = useActionCommentSettings()
-  const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
+  const [activeSection, setActiveSection] = useState<ContractorSection>(() => initialTarget?.section ?? loadStoredWorkspaceView(
+    workspaceViewStorageKeys.contractorsSection,
+    Object.keys(contractorSectionLabels) as ContractorSection[],
+    'garages',
+  ))
   const [showGarageDebtorsOnly, setShowGarageDebtorsOnly] = useState(false)
+
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.contractorsSection, activeSection)
+  }, [activeSection])
   const [garageColumnFilterForm, setGarageColumnFilterForm] = useState<GarageColumnFilterForm>(emptyGarageColumnFilterForm)
   const [garageColumnFilters, setGarageColumnFilters] = useState<GarageColumnFilters>({})
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })

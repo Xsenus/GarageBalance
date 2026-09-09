@@ -327,6 +327,10 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 820px;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 4px;\n  flex-wrap: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions .icon-button {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 32px;')
+    expect(normalizedAppCss).toContain('.detail-dialog.garage-payment-history-dialog {\n  position: fixed;')
+    expect(normalizedAppCss).toContain('resize: both;')
+    expect(normalizedAppCss).toContain('.garage-payment-history-dialog .garage-payment-history-dialog__drag-handle {\n  position: static;')
+    expect(normalizedAppCss).toContain('.detail-dialog.garage-payment-history-dialog {\n    width: calc(100vw - 16px);\n    height: calc(100dvh - 16px);\n    min-width: 0;\n    min-height: 0;\n    resize: none;')
   })
 
   it('keeps employee report dates and amounts intact inside local horizontal scrolling', () => {
@@ -358,6 +362,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.full-payment-dialog {\n  width: min(660px, 100%);')
     expect(normalizedAppCss).toContain('.full-payment-form {\n  grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.full-payment-fields {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);')
+    expect(normalizedAppCss).toContain('.full-payment-distribution {\n  grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.full-payment-amount input {\n  text-align: right;\n  font-variant-numeric: tabular-nums;')
     expect(normalizedAppCss).toContain('.full-payment-form > .form-error {\n  grid-column: 1;\n  width: 100%;')
   })

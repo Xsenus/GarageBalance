@@ -64,7 +64,31 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                             (previous.OperationDate < operation.OperationDate ||
                                 (previous.OperationDate == operation.OperationDate &&
                                     previous.CreatedAtUtc < operation.CreatedAtUtc)))
-                        .Sum(previous => previous.Amount)
+                        .Sum(previous => previous.Amount),
+                ServiceDebtAfter = operation.OperationKind == FinancialOperationKinds.Income
+                    ? (decimal?)(dbContext.Accruals
+                        .Where(accrual =>
+                            !accrual.IsCanceled &&
+                            accrual.GarageId == operation.GarageId &&
+                            accrual.IncomeTypeId == operation.IncomeTypeId &&
+                            accrual.FeeCampaignId == operation.FeeCampaignId &&
+                            accrual.IrregularPaymentId == operation.IrregularPaymentId &&
+                            accrual.AccountingMonth <= operation.AccountingMonth)
+                        .Sum(accrual => accrual.Amount) -
+                        dbContext.FinancialOperations
+                            .Where(payment =>
+                                !payment.IsCanceled &&
+                                payment.OperationKind == FinancialOperationKinds.Income &&
+                                payment.GarageId == operation.GarageId &&
+                                payment.IncomeTypeId == operation.IncomeTypeId &&
+                                payment.FeeCampaignId == operation.FeeCampaignId &&
+                                payment.IrregularPaymentId == operation.IrregularPaymentId &&
+                                (payment.Id == operation.Id ||
+                                    payment.OperationDate < operation.OperationDate ||
+                                    (payment.OperationDate == operation.OperationDate &&
+                                        payment.CreatedAtUtc < operation.CreatedAtUtc)))
+                            .Sum(payment => payment.Amount))
+                    : null
             });
         var garageBucketRows = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
@@ -79,7 +103,8 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                 CounterpartyKind = GarageKind,
                 CounterpartyId = group.Key.GarageId,
                 group.Key.AccountingMonth,
-                Amount = group.Sum(accrual => accrual.Amount)
+                Amount = group.Sum(accrual => accrual.Amount),
+                ServiceDebtAfter = (decimal?)null
             });
         var supplierBucketRows = dbContext.SupplierAccruals.AsNoTracking()
             .Where(accrual =>
@@ -94,7 +119,8 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                 CounterpartyKind = SupplierKind,
                 CounterpartyId = group.Key.SupplierId,
                 group.Key.AccountingMonth,
-                Amount = group.Sum(accrual => accrual.Amount)
+                Amount = group.Sum(accrual => accrual.Amount),
+                ServiceDebtAfter = (decimal?)null
             });
 
         var rows = await calculationRows
@@ -109,7 +135,8 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                     row.CounterpartyKind,
                     row.CounterpartyId,
                     row.AccountingMonth,
-                    row.Amount))
+                    row.Amount,
+                    row.ServiceDebtAfter))
                 .ToList(),
             rows.Where(row => row.RowKind == AccrualBucketRow)
                 .Select(row => new FinancialOperationAccrualBucketData(
@@ -130,6 +157,7 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
         const int VisibleOperationRow = 1;
         const int PaymentRow = 2;
         const int BucketRow = 3;
+        const int ServiceAccrualRow = 4;
         var visibleOperations = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 operationIds.Contains(operation.Id) &&
@@ -147,6 +175,9 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                 AccountingMonth = (DateOnly?)operation.AccountingMonth,
                 OperationDate = (DateOnly?)operation.OperationDate,
                 CreatedAtUtc = (DateTimeOffset?)operation.CreatedAtUtc,
+                operation.IncomeTypeId,
+                operation.FeeCampaignId,
+                operation.IrregularPaymentId,
                 Amount = 0m
             });
         var paymentRows = dbContext.FinancialOperations.AsNoTracking()
@@ -171,6 +202,9 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                 AccountingMonth = (DateOnly?)null,
                 OperationDate = (DateOnly?)operation.OperationDate,
                 CreatedAtUtc = (DateTimeOffset?)operation.CreatedAtUtc,
+                operation.IncomeTypeId,
+                operation.FeeCampaignId,
+                operation.IrregularPaymentId,
                 operation.Amount
             });
         var garageBuckets = dbContext.Accruals.AsNoTracking()
@@ -187,6 +221,9 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 OperationDate = (DateOnly?)null,
                 CreatedAtUtc = (DateTimeOffset?)null,
+                IncomeTypeId = (Guid?)null,
+                FeeCampaignId = (Guid?)null,
+                IrregularPaymentId = (Guid?)null,
                 Amount = group.Sum(accrual => accrual.Amount)
             });
         var supplierBuckets = dbContext.SupplierAccruals.AsNoTracking()
@@ -203,12 +240,42 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 OperationDate = (DateOnly?)null,
                 CreatedAtUtc = (DateTimeOffset?)null,
+                IncomeTypeId = (Guid?)null,
+                FeeCampaignId = (Guid?)null,
+                IrregularPaymentId = (Guid?)null,
+                Amount = group.Sum(accrual => accrual.Amount)
+            });
+        var serviceAccrualRows = dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                visibleOperations.Any(operation => operation.GarageId == accrual.GarageId))
+            .GroupBy(accrual => new
+            {
+                accrual.GarageId,
+                accrual.AccountingMonth,
+                accrual.IncomeTypeId,
+                accrual.FeeCampaignId,
+                accrual.IrregularPaymentId
+            })
+            .Select(group => new
+            {
+                RowKind = ServiceAccrualRow,
+                OperationId = (Guid?)null,
+                CounterpartyKind = GarageKind,
+                CounterpartyId = group.Key.GarageId,
+                AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
+                OperationDate = (DateOnly?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                IncomeTypeId = (Guid?)group.Key.IncomeTypeId,
+                group.Key.FeeCampaignId,
+                group.Key.IrregularPaymentId,
                 Amount = group.Sum(accrual => accrual.Amount)
             });
         var rows = await visibleRows
             .Concat(paymentRows)
             .Concat(garageBuckets)
             .Concat(supplierBuckets)
+            .Concat(serviceAccrualRows)
             .ToArrayAsync(cancellationToken);
         var selectedOperations = rows.Where(row => row.RowKind == VisibleOperationRow).ToList();
         if (selectedOperations.Count == 0)
@@ -229,12 +296,40 @@ public sealed class EfFinancialOperationDisplayQuery(GarageBalanceDbContext dbCo
                         (previous.OperationDate == operation.OperationDate &&
                             previous.CreatedAtUtc < operation.CreatedAtUtc)))
                 .Sum(previous => previous.Amount);
+            decimal? serviceDebtAfter = null;
+            if (operation.CounterpartyKind == GarageKind)
+            {
+                var serviceAccrualTotal = rows
+                    .Where(accrual =>
+                        accrual.RowKind == ServiceAccrualRow &&
+                        accrual.CounterpartyId == operation.CounterpartyId &&
+                        accrual.IncomeTypeId == operation.IncomeTypeId &&
+                        accrual.FeeCampaignId == operation.FeeCampaignId &&
+                        accrual.IrregularPaymentId == operation.IrregularPaymentId &&
+                        accrual.AccountingMonth <= operation.AccountingMonth)
+                    .Sum(accrual => accrual.Amount);
+                var servicePaymentTotal = calculationRows
+                    .Where(payment =>
+                        payment.CounterpartyKind == GarageKind &&
+                        payment.CounterpartyId == operation.CounterpartyId &&
+                        payment.IncomeTypeId == operation.IncomeTypeId &&
+                        payment.FeeCampaignId == operation.FeeCampaignId &&
+                        payment.IrregularPaymentId == operation.IrregularPaymentId &&
+                        (payment.OperationId == operation.OperationId ||
+                            payment.OperationDate < operation.OperationDate ||
+                            (payment.OperationDate == operation.OperationDate &&
+                                payment.CreatedAtUtc < operation.CreatedAtUtc)))
+                    .Sum(payment => payment.Amount);
+                serviceDebtAfter = serviceAccrualTotal - servicePaymentTotal;
+            }
+
             return new FinancialOperationCalculationData(
                 operation.OperationId!.Value,
                 operation.CounterpartyKind,
                 operation.CounterpartyId,
                 operation.AccountingMonth!.Value,
-                previousPaymentTotal);
+                previousPaymentTotal,
+                serviceDebtAfter);
         }).ToList();
         var accrualBuckets = rows
             .Where(row => row.RowKind == BucketRow && row.AccountingMonth <= latestVisibleMonth)

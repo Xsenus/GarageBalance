@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BookOpenCheck,
   DatabaseZap,
@@ -37,6 +37,7 @@ import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { useIntentPreload } from '../../shared/useIntentPreload'
 import { ActionCommentSettingsProvider } from '../../shared/ActionCommentSettings'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { Workspace } from './Workspace'
 import { preloadWorkspaceSection } from './workspaceSectionLoader'
 
@@ -97,7 +98,10 @@ type AppShellProps = {
 }
 
 export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, settingsClient = settingsApi, userClient = usersApi, onLogout }: AppShellProps) {
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>(() => {
+    const storedSection = loadStoredWorkspaceView(workspaceViewStorageKeys.section, navigation.map((item) => item.section), 'dashboard')
+    return canAccessWorkspaceSection(auth, storedSection) ? storedSection : 'dashboard'
+  })
   const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
   const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)
   const [isSidebarExpanded, setSidebarExpanded] = useState(loadStoredSidebarExpanded)
@@ -125,6 +129,10 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
       return next
     })
   }, [])
+
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.section, effectiveActiveSection)
+  }, [effectiveActiveSection])
 
   const openWorkspaceSection = useCallback((section: WorkspaceSection, context: WorkspaceOpenContext | null = null) => {
     const canOpen = canAccessWorkspaceSection(auth, section)

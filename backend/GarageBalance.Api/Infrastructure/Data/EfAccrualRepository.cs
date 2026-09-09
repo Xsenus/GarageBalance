@@ -405,10 +405,14 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
 
     public async Task<IReadOnlyList<OutstandingAccrualDebtData>> GetOutstandingDebtDetailsAsync(
         Guid garageId,
+        DateOnly accountingMonthThrough,
         CancellationToken cancellationToken)
     {
         var rows = await dbContext.Accruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId)
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.AccountingMonth <= accountingMonthThrough)
             .Select(accrual => new
             {
                 AccrualId = accrual.Id,

@@ -37,6 +37,7 @@ export type FinancialOperationDto = {
   irregularPaymentId?: string | null
   garageDebtBefore: number | null
   garageDebtAfter: number | null
+  garageServiceDebtAfter?: number | null
   supplierDebtBefore: number | null
   supplierDebtAfter: number | null
   paymentAllocations: PaymentAllocationDto[]
@@ -310,6 +311,7 @@ export type GarageFullPaymentQuoteDto = {
   ownerName: string | null
   totalAmount: number
   lines: GarageFullPaymentQuoteLineDto[]
+  accountingMonthThrough?: string
 }
 
 export type MeterReadingYearPageDto = {

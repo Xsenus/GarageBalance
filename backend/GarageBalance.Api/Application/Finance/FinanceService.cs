@@ -728,7 +728,11 @@ public sealed class FinanceService(
                 "Гараж для расчёта полной оплаты не найден.");
         }
 
-        var accruals = await accrualRepository.GetOutstandingDebtDetailsAsync(garageId, cancellationToken);
+        var accountingMonthThrough = GetCurrentAccountingMonth();
+        var accruals = await accrualRepository.GetOutstandingDebtDetailsAsync(
+            garageId,
+            accountingMonthThrough,
+            cancellationToken);
         var totals = await garageRepository.GetBalanceTotalsAsync([garageId], cancellationToken);
         var unallocatedIncome = Math.Max(
             totals.IncomeTotals.GetValueOrDefault(garageId) - totals.AllocatedIncomeTotals.GetValueOrDefault(garageId),
@@ -741,7 +745,7 @@ public sealed class FinanceService(
             accruals.Sum(accrual => accrual.ExcessPaidAmount));
         var accountingMonth = accruals.Count > 0
             ? accruals.Min(accrual => accrual.AccountingMonth)
-            : GetCurrentAccountingMonth();
+            : accountingMonthThrough;
         var lines = new List<GarageFullPaymentQuoteLineDto>(accruals.Count + 1);
 
         if (openingOutstanding > 0m)
@@ -801,7 +805,8 @@ public sealed class FinanceService(
             garage.Number,
             garage.Owner?.FullName,
             MoneyMath.RoundMoney(consolidatedLines.Sum(line => line.OutstandingAmount)),
-            consolidatedLines));
+            consolidatedLines,
+            accountingMonthThrough));
     }
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
@@ -1986,6 +1991,14 @@ public sealed class FinanceService(
             return FinanceResult<FullGaragePaymentDto>.Failure(
                 "full_payment_amount_invalid",
                 "Сумма каждой строки полной оплаты должна быть больше нуля.");
+        }
+
+        var currentAccountingMonth = GetCurrentAccountingMonth();
+        if (normalizedLines.Any(line => line.AccountingMonth > currentAccountingMonth))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_future_month_not_allowed",
+                "Полной оплатой можно погасить задолженность только за текущий и прошлые месяцы.");
         }
 
         if (normalizedLines.Any(line => line.FeeCampaignId.HasValue && line.IrregularPaymentId.HasValue))
@@ -8495,7 +8508,14 @@ public sealed class FinanceService(
                     ? operation.AccountingMonth
                     : null);
             result.Add(operation.OperationKind == FinancialOperationKinds.Income
-                ? ToDto(operation, debtBefore, debtBefore - operation.Amount, null, null, allocations)
+                ? ToDto(
+                    operation,
+                    debtBefore,
+                    debtBefore - operation.Amount,
+                    null,
+                    null,
+                    allocations,
+                    NormalizeServiceDebt(calculation.GarageServiceDebtAfter))
                 : ToDto(operation, null, null, debtBefore, debtBefore - operation.Amount, allocations));
         }
 
@@ -8508,12 +8528,16 @@ public sealed class FinanceService(
         decimal? garageDebtAfter = null;
         decimal? supplierDebtBefore = null;
         decimal? supplierDebtAfter = null;
+        decimal? garageServiceDebtAfter = null;
         IReadOnlyList<PaymentAllocationDto> paymentAllocations = [];
         if (operation.OperationKind == FinancialOperationKinds.Income && operation.GarageId is not null)
         {
             garageDebtBefore = await CalculateGarageDebtBeforeIncomeAsync(operation, cancellationToken);
             garageDebtAfter = garageDebtBefore - operation.Amount;
             paymentAllocations = await CalculateGaragePaymentAllocationsAsync(operation, cancellationToken);
+            var displayData = await financialOperationDisplayQuery.GetAsync([operation.Id], cancellationToken);
+            garageServiceDebtAfter = NormalizeServiceDebt(
+                displayData.Calculations.SingleOrDefault()?.GarageServiceDebtAfter);
         }
         else if (operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId is not null)
         {
@@ -8522,7 +8546,14 @@ public sealed class FinanceService(
             paymentAllocations = await CalculateSupplierPaymentAllocationsAsync(operation, cancellationToken);
         }
 
-        return ToDto(operation, garageDebtBefore, garageDebtAfter, supplierDebtBefore, supplierDebtAfter, paymentAllocations);
+        return ToDto(
+            operation,
+            garageDebtBefore,
+            garageDebtAfter,
+            supplierDebtBefore,
+            supplierDebtAfter,
+            paymentAllocations,
+            garageServiceDebtAfter);
     }
 
     private async Task<decimal> CalculateGarageDebtBeforeIncomeAsync(FinancialOperation operation, CancellationToken cancellationToken)
@@ -8681,7 +8712,8 @@ public sealed class FinanceService(
         decimal? garageDebtAfter = null,
         decimal? supplierDebtBefore = null,
         decimal? supplierDebtAfter = null,
-        IReadOnlyList<PaymentAllocationDto>? paymentAllocations = null)
+        IReadOnlyList<PaymentAllocationDto>? paymentAllocations = null,
+        decimal? garageServiceDebtAfter = null)
     {
         return new FinancialOperationDto(
             operation.Id,
@@ -8719,8 +8751,12 @@ public sealed class FinanceService(
             operation.NegativeFundBalanceConfirmed,
             operation.Version,
             operation.FeeCampaignId,
-            operation.IrregularPaymentId);
+            operation.IrregularPaymentId,
+            garageServiceDebtAfter);
     }
+
+    private static decimal? NormalizeServiceDebt(decimal? value) =>
+        value.HasValue ? Math.Max(MoneyMath.RoundMoney(value.Value), 0m) : null;
 
     private static FinanceResult<SupplierAccrualDto>? ValidateSupplierExpenseTypeLink(Supplier supplier, ExpenseType expenseType)
     {

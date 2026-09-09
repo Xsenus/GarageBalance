@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
@@ -44,6 +44,7 @@ import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplie
 import { overdueDebtDetailsPreference } from './financeDisplayPreferences'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 
 const FinancialJournalPanel = lazy(() => import('./FinancialJournalPanel').then((module) => ({ default: module.FinancialJournalPanel })))
 const ExpenseBatchPaymentDialog = lazy(() => import('./ExpenseBatchPaymentDialog'))
@@ -200,6 +201,7 @@ type GaragePaymentHistoryPrototypeRow = {
   time: string
   amount: number
   purpose: string
+  serviceDebtAfter: number | null
   debtAfter: number
   operation?: FinancialOperationDto
 }
@@ -438,7 +440,14 @@ export function FinancePanel({
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
   const [incomeGarageSearch, setIncomeGarageSearch] = useState('')
   const [incomeGarageSearchStatus, setIncomeGarageSearchStatus] = useState<string | null>(null)
-  const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>('income')
+  const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.financeSection,
+    financeSectionOptions.map((section) => section.key),
+    'income',
+  ))
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.financeSection, activeFinanceSection)
+  }, [activeFinanceSection])
   const [journalOpen, setJournalOpen] = useState(false)
   const [recalculationOpen, setRecalculationOpen] = useState(false)
   const [recalculationTariffs, setRecalculationTariffs] = useState<TariffDto[]>([])
@@ -3048,9 +3057,208 @@ function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOpera
       time: formatOperationTime(operation.createdAtUtc),
       amount: operation.amount,
       purpose: operation.incomeTypeName ?? operation.comment ?? 'Поступление',
+      serviceDebtAfter: operation.garageServiceDebtAfter == null
+        ? null
+        : normalizeGarageDebtAfterForHistory(operation.garageServiceDebtAfter),
       debtAfter: normalizeGarageDebtAfterForHistory(operation.garageDebtAfter),
       operation,
     }))
+}
+
+function GaragePaymentHistoryDialog({
+  id,
+  garageNumber,
+  rows,
+  loading,
+  error,
+  canWritePayments,
+  nestedDialogOpen,
+  onRetry,
+  onClose,
+  onEdit,
+  onCancel,
+}: {
+  id: string
+  garageNumber: string
+  rows: GaragePaymentHistoryPrototypeRow[]
+  loading: boolean
+  error: string | null
+  canWritePayments: boolean
+  nestedDialogOpen: boolean
+  onRetry: () => void
+  onClose: () => void
+  onEdit: (row: GaragePaymentHistoryPrototypeRow, trigger: HTMLButtonElement) => void
+  onCancel: (row: GaragePaymentHistoryPrototypeRow, trigger: HTMLButtonElement) => void
+}) {
+  const dialogActive = !nestedDialogOpen
+  const dialogRef = useFocusTrap<HTMLElement>(dialogActive)
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; left: number; top: number } | null>(null)
+  const titleId = `${id}-title`
+  const hintId = `${id}-move-hint`
+
+  useEscapeKey(dialogActive, onClose)
+  useEffect(() => closeButtonRef.current?.focus(), [])
+
+  const clampPosition = useCallback((left: number, top: number) => {
+    const rect = dialogRef.current?.getBoundingClientRect()
+    const width = rect?.width || Math.min(1280, Math.max(window.innerWidth - 32, 0))
+    const height = rect?.height || Math.min(620, Math.max(window.innerHeight - 32, 0))
+    const margin = 8
+    return {
+      left: Math.max(margin, Math.min(left, Math.max(window.innerWidth - width - margin, margin))),
+      top: Math.max(margin, Math.min(top, Math.max(window.innerHeight - height - margin, margin))),
+    }
+  }, [dialogRef])
+
+  useEffect(() => {
+    function keepDialogInViewport() {
+      setPosition((current) => current ? clampPosition(current.left, current.top) : current)
+    }
+    window.addEventListener('resize', keepDialogInViewport)
+    return () => window.removeEventListener('resize', keepDialogInViewport)
+  }, [clampPosition])
+
+  function handleDragStart(event: ReactPointerEvent<HTMLElement>) {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    const rect = dialogRef.current?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  function handleDragMove(event: ReactPointerEvent<HTMLElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    setPosition(clampPosition(
+      drag.left + event.clientX - drag.startX,
+      drag.top + event.clientY - drag.startY,
+    ))
+  }
+
+  function handleDragEnd(event: ReactPointerEvent<HTMLElement>) {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
+  function handleDragKeyboard(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setPosition(null)
+      return
+    }
+    let deltaX = 0
+    let deltaY = 0
+    if (event.key === 'ArrowLeft') deltaX = -1
+    else if (event.key === 'ArrowRight') deltaX = 1
+    else if (event.key === 'ArrowUp') deltaY = -1
+    else if (event.key === 'ArrowDown') deltaY = 1
+    else return
+    event.preventDefault()
+    const rect = dialogRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const step = event.shiftKey ? 40 : 10
+    const current = position ?? { left: rect.left, top: rect.top }
+    setPosition(clampPosition(current.left + deltaX * step, current.top + deltaY * step))
+  }
+
+  const dialogStyle: CSSProperties | undefined = position
+    ? { left: position.left, top: position.top, transform: 'none' }
+    : undefined
+
+  return (
+    <div className="modal-backdrop payment-history-modal-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && dialogActive) onClose()
+    }}>
+      <section
+        id={id}
+        ref={dialogRef}
+        className="detail-dialog garage-payment-history-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={hintId}
+        style={dialogStyle}
+      >
+        <header
+          className="detail-dialog-header garage-payment-history-dialog__drag-handle"
+          tabIndex={0}
+          aria-label="Переместить окно истории платежей"
+          onPointerDown={handleDragStart}
+          onPointerMove={handleDragMove}
+          onPointerUp={handleDragEnd}
+          onPointerCancel={handleDragEnd}
+          onDoubleClick={() => setPosition(null)}
+          onKeyDown={handleDragKeyboard}
+        >
+          <div>
+            <h2 id={titleId}>История платежей</h2>
+            <p>Гараж {garageNumber}</p>
+          </div>
+          <button ref={closeButtonRef} className="icon-button" type="button" aria-label="Закрыть историю платежей" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <p id={hintId} className="visually-hidden">Окно можно перемещать за заголовок стрелками или указателем и изменять его размер за правый нижний край.</p>
+        <section className="payments-prototype-card payments-prototype-card--history garage-payment-history-dialog__content" aria-label="История платежей гаража">
+          {error ? <AsyncErrorState message={error} onRetry={onRetry} /> : null}
+          <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
+            <thead>
+              <tr>
+                <th scope="col">Дата</th>
+                <th scope="col">Время</th>
+                <th scope="col">Сумма платежа</th>
+                <th scope="col">Назначение платежа</th>
+                <th scope="col">Долг по услуге после платежа</th>
+                <th scope="col">Долг после платежа</th>
+                <th scope="col">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7}><TableLoadingState label="Загружаем историю платежей" /></td>
+                </tr>
+              ) : rows.length > 0 ? rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.date}</td>
+                  <td>{row.time}</td>
+                  <td>{formatPaymentMoney(row.amount)}</td>
+                  <td>{row.purpose}</td>
+                  <td>{row.serviceDebtAfter == null ? '—' : formatPaymentMoney(row.serviceDebtAfter)}</td>
+                  <td>{formatPaymentMoney(row.debtAfter)}</td>
+                  <td>
+                    {row.operation && canWritePayments ? (
+                      <div className="table-action-row payments-prototype-history-actions">
+                        <button className="icon-button" type="button" title={row.operation.feeCampaignId || row.operation.irregularPaymentId ? 'Целевой платеж изменяется через связанное начисление' : 'Изменить платеж'} aria-label={`Изменить платеж ${row.purpose}`} disabled={Boolean(row.operation.feeCampaignId || row.operation.irregularPaymentId)} onClick={(event) => onEdit(row, event.currentTarget)}>
+                          <Pencil size={16} aria-hidden="true" />
+                        </button>
+                        <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => onCancel(row, event.currentTarget)}>
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : '—'}
+                  </td>
+                </tr>
+              )) : error ? null : (
+                <tr>
+                  <td colSpan={7}><EmptyState>Платежей пока нет.</EmptyState></td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    </div>
+  )
 }
 
 function PaymentsPrototypePanel({
@@ -3097,7 +3305,14 @@ function PaymentsPrototypePanel({
   refreshRevision: number
 }) {
   const [actionCommentsRequired] = useActionCommentSettings()
-  const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
+  const [activeTab, setActiveTab] = useState<'income' | 'expense'>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.paymentsTab,
+    ['income', 'expense'],
+    'income',
+  ))
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.paymentsTab, activeTab)
+  }, [activeTab])
   const [garageSearch, setGarageSearch] = useState('')
   const [garageSearchGarages, setGarageSearchGarages] = useState<GarageDto[]>([])
   const [garageSearchLoading, setGarageSearchLoading] = useState(false)
@@ -3144,6 +3359,7 @@ function PaymentsPrototypePanel({
   const [paymentHistoryError, setPaymentHistoryError] = useState<string | null>(null)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
   const paymentHistoryRequestControllerRef = useRef<AbortController | null>(null)
+  const paymentHistoryTriggerRef = useRef<HTMLButtonElement | null>(null)
   const incomePaymentWarningControllerRef = useRef<AbortController | null>(null)
   const overdueDebtRefreshControllerRef = useRef<AbortController | null>(null)
   const paymentHistoryId = useId()
@@ -3916,19 +4132,29 @@ function PaymentsPrototypePanel({
     })
   }
 
-  function togglePaymentHistory() {
+  function closePaymentHistory(restoreFocus = true) {
+    paymentHistoryRequests.invalidate()
+    paymentHistoryRequestControllerRef.current?.abort()
+    setPaymentHistoryOpen(false)
+    setGaragePaymentHistoryLoadingId(null)
+    if (restoreFocus) {
+      restoreFocusAfterClose(paymentHistoryTriggerRef)
+    } else {
+      paymentHistoryTriggerRef.current = null
+    }
+  }
+
+  function togglePaymentHistory(event: MouseEvent<HTMLButtonElement>) {
     if (!selectedGarage) {
       return
     }
 
     if (paymentHistoryOpen) {
-      paymentHistoryRequests.invalidate()
-      paymentHistoryRequestControllerRef.current?.abort()
-      setPaymentHistoryOpen(false)
-      setGaragePaymentHistoryLoadingId(null)
+      closePaymentHistory()
       return
     }
 
+    paymentHistoryTriggerRef.current = event.currentTarget
     setPaymentError(null)
     setHistoryRows([])
     setPaymentHistoryOpen(true)
@@ -4058,7 +4284,7 @@ function PaymentsPrototypePanel({
     setGarageRows([])
     setGarageWorksheetSummary(null)
     setHistoryRows([])
-    setPaymentHistoryOpen(false)
+    closePaymentHistory(false)
     setGaragePaymentHistoryLoadingId(null)
     setFullPaymentQuoteLoading(false)
     setFullPaymentQuote(null)
@@ -4327,7 +4553,18 @@ function PaymentsPrototypePanel({
           }
         : currentSummary)
       setHistoryRows((currentRows) => [
-        { id: operation.id, date: formatDateOnly(operation.operationDate), time: formatOperationTime(operation.createdAtUtc) || paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
+        {
+          id: operation.id,
+          date: formatDateOnly(operation.operationDate),
+          time: formatOperationTime(operation.createdAtUtc) || paymentTime,
+          amount: operation.amount,
+          purpose: operation.incomeTypeName ?? row.service,
+          serviceDebtAfter: operation.garageServiceDebtAfter == null
+            ? null
+            : normalizeGarageDebtAfterForHistory(operation.garageServiceDebtAfter),
+          debtAfter: historyDebtAfter,
+          operation,
+        },
         ...currentRows,
       ])
       setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
@@ -4515,7 +4752,11 @@ function PaymentsPrototypePanel({
           time: formatOperationTime(operation.createdAtUtc) || paymentTime,
           amount: operation.amount,
           purpose: operation.incomeTypeName ?? item.purposeFallback,
+          serviceDebtAfter: operation.garageServiceDebtAfter == null
+            ? null
+            : normalizeGarageDebtAfterForHistory(operation.garageServiceDebtAfter),
           debtAfter: normalizeGarageDebtAfterForHistory(operation.garageDebtAfter),
+          operation,
         }
       }),
       ...currentRows,
@@ -4707,10 +4948,19 @@ function PaymentsPrototypePanel({
       return null
     }
 
+    const requestedMonth = accrual.accountingMonth.slice(0, 7)
+    if (requestedMonth < expenseWorksheetMonthFrom || requestedMonth > expenseWorksheetMonthTo) {
+      refreshExpenseWorksheetAfterSave(accrual.accountingMonth)
+      return null
+    }
+
+    const supplierRowName = supplier.name
+    const expenseTypeRowName = expenseType.name
+
     setExpenseRows((currentRows) => {
       let updated = false
       const nextRows = currentRows.map((row) => {
-        if (row.item.trim().toLocaleLowerCase('ru-RU') !== accrual.expenseTypeName.trim().toLocaleLowerCase('ru-RU')) {
+        if (row.supplierId !== accrual.supplierId || row.expenseTypeId !== accrual.expenseTypeId) {
           return row
         }
 
@@ -4728,7 +4978,12 @@ function PaymentsPrototypePanel({
       return [
         ...nextRows,
         {
-          item: accrual.expenseTypeName,
+          rowKind: 'supplier',
+          supplierId: accrual.supplierId,
+          expenseTypeId: accrual.expenseTypeId,
+          item: expenseTypeRowName,
+          counterparty: supplierRowName,
+          expenseFundName: supplier.expenseFundName,
           openingDebt: 0,
           openingAdvance: 0,
           closingDebt: accrual.amount,
@@ -4742,6 +4997,63 @@ function PaymentsPrototypePanel({
         },
       ]
     })
+
+    const breakdownRow: PaymentPrototypeRow = {
+      rowKind: 'supplier',
+      supplierId: accrual.supplierId,
+      expenseTypeId: accrual.expenseTypeId,
+      item: expenseTypeRowName,
+      counterparty: supplierRowName,
+      openingDebt: 0,
+      openingAdvance: 0,
+      closingDebt: accrual.amount,
+      closingAdvance: 0,
+      cost: accrual.amount,
+      paid: 0,
+      balance: accrual.amount,
+      collected: '',
+      difference: '',
+      action: true,
+    }
+    const breakdownKey = getExpenseSupplierBreakdownKey(breakdownRow)
+    if (breakdownKey && expandedExpenseSupplierRows[breakdownKey]) {
+      const existingValue = expenseSupplierBreakdowns[breakdownKey]?.value
+      if (existingValue && 'supplierId' in existingValue) {
+        setExpenseSupplierBreakdowns((current) => {
+          const state = current[breakdownKey]
+          const value = state?.value
+          if (!state || !value || !('supplierId' in value)) return current
+          const previousEntry = value.items.find((item) => item.id === accrual.id)
+          const entry = {
+            id: accrual.id,
+            entryKind: 'accrual',
+            accountingMonth: accrual.accountingMonth,
+            operationDate: null,
+            amount: accrual.amount,
+            documentNumber: accrual.documentNumber,
+            comment: accrual.comment,
+            source: accrual.source,
+            isCanceled: accrual.isCanceled,
+          }
+          return {
+            ...current,
+            [breakdownKey]: {
+              ...state,
+              value: {
+                ...value,
+                accrualTotal: roundPaymentMoney(value.accrualTotal + accrual.amount - (previousEntry?.amount ?? 0)),
+                totalCount: previousEntry
+                  ? value.totalCount
+                  : value.totalCount + 1,
+                items: [entry, ...value.items.filter((item) => item.id !== accrual.id)],
+              },
+            },
+          }
+        })
+      } else {
+        void loadExpenseSupplierBreakdown(breakdownRow)
+      }
+    }
 
     return null
   }
@@ -4779,6 +5091,7 @@ function PaymentsPrototypePanel({
   const selectedGarageFullPaymentQuote = fullPaymentQuote && fullPaymentQuote.garageId === selectedGarage?.id
     ? fullPaymentQuote
     : null
+  const fullPaymentAccountingMonthThrough = selectedGarageFullPaymentQuote?.accountingMonthThrough?.slice(0, 7) ?? null
   const authoritativeFullPaymentDebt = selectedGarageFullPaymentQuote
     ? roundPaymentMoney(selectedGarageFullPaymentQuote.totalAmount)
     : roundPaymentMoney(fullPaymentRowsDebt + getOpeningDebtForFullPayment('full'))
@@ -4806,7 +5119,7 @@ function PaymentsPrototypePanel({
     : fallbackFullPaymentLines
   const fullPaymentPeriodOptions = [
     { value: 'full', label: 'Полный расчет', debt: authoritativeFullPaymentDebt, lines: authoritativeFullPaymentLines },
-    ...groupedGarageRows.map((group) => {
+    ...groupedGarageRows.filter((group) => !fullPaymentAccountingMonthThrough || group.month <= fullPaymentAccountingMonthThrough).map((group) => {
       const rows = getRowsForFullPayment(group.month)
       const debt = sumPaymentDebt(rows)
       return {
@@ -5180,54 +5493,21 @@ function PaymentsPrototypePanel({
           : <p className="empty-state" role="status">Выберите гараж для платежей.</p>
       ) : (
         <>
-          {paymentHistoryOpen ? <section id={paymentHistoryId} className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
-            {paymentHistoryError ? <AsyncErrorState message={paymentHistoryError} onRetry={() => void loadGaragePaymentHistory(selectedGarage)} /> : null}
-            <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
-              <thead>
-                <tr>
-                  <th scope="col">Дата</th>
-                  <th scope="col">Время</th>
-                  <th scope="col">Сумма платежа</th>
-                  <th scope="col">Назначение платежа</th>
-                  <th scope="col">Остаток долга после платежа</th>
-                  <th scope="col">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {garagePaymentHistoryLoadingId === selectedGarage.id ? (
-                  <tr>
-                    <td colSpan={6}><TableLoadingState label="Загружаем историю платежей" /></td>
-                  </tr>
-                ) : historyRows.length > 0 ? historyRows.map((row) => {
-                  return (
-                  <tr key={row.id}>
-                    <td>{row.date}</td>
-                    <td>{row.time}</td>
-                    <td>{formatPaymentMoney(row.amount)}</td>
-                    <td>{row.purpose}</td>
-                    <td>{formatPaymentMoney(row.debtAfter)}</td>
-                    <td>
-                      {row.operation && canWritePayments ? (
-                        <div className="table-action-row payments-prototype-history-actions">
-                          <button className="icon-button" type="button" title={row.operation.feeCampaignId || row.operation.irregularPaymentId ? 'Целевой платеж изменяется через связанное начисление' : 'Изменить платеж'} aria-label={`Изменить платеж ${row.purpose}`} disabled={Boolean(row.operation.feeCampaignId || row.operation.irregularPaymentId)} onClick={(event) => openHistoryEdit(row, event.currentTarget)}>
-                            <Pencil size={16} aria-hidden="true" />
-                          </button>
-                          <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => openHistoryCancel(row, event.currentTarget)}>
-                            <Trash2 size={16} aria-hidden="true" />
-                          </button>
-                        </div>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                  )
-                }) : paymentHistoryError ? null : (
-                  <tr>
-                    <td colSpan={6}><EmptyState>Платежей пока нет.</EmptyState></td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </section> : null}
+          {paymentHistoryOpen ? (
+            <GaragePaymentHistoryDialog
+              id={paymentHistoryId}
+              garageNumber={selectedGarage.number}
+              rows={historyRows}
+              loading={garagePaymentHistoryLoadingId === selectedGarage.id}
+              error={paymentHistoryError}
+              canWritePayments={canWritePayments}
+              nestedDialogOpen={Boolean(historyEdit || historyCancel)}
+              onRetry={() => void loadGaragePaymentHistory(selectedGarage)}
+              onClose={closePaymentHistory}
+              onEdit={openHistoryEdit}
+              onCancel={openHistoryCancel}
+            />
+          ) : null}
 
           <div className="payments-prototype-sheet">
             <div className="payments-prototype-period-row">
@@ -5844,23 +6124,23 @@ function PaymentsPrototypePanel({
               </p>
               {historicalMeterReadingSave.error ? <FormError>{historicalMeterReadingSave.error}</FormError> : null}
             </div>
-            <div className="dialog-actions">
+            <div className="detail-dialog-actions">
               <button
-                className="primary-button"
+                className="ghost-button"
+                type="button"
+                disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
+                onClick={() => setHistoricalMeterReadingSave(null)}
+              >
+                Отмена
+              </button>
+              <button
+                className="secondary-button"
                 type="button"
                 disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
                 onClick={() => void confirmHistoricalMeterReadingSave()}
               >
                 <Save size={16} aria-hidden="true" />
                 {savingMeterRowId === historicalMeterReadingSave.row.id ? 'Сохраняем…' : 'Сохранить показание'}
-              </button>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
-                onClick={() => setHistoricalMeterReadingSave(null)}
-              >
-                Отмена
               </button>
             </div>
           </section>
@@ -7416,7 +7696,7 @@ function FullPaymentPrototypeDialog({
           <FormField className="full-payment-field" label="Комментарий" hint="Необязательно">
             <textarea aria-label="Комментарий к полной оплате" rows={3} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
-          <div className="full-payment-fields" role="status" aria-live="polite">
+          <div className="full-payment-fields full-payment-distribution" role="status" aria-live="polite">
             <strong>Распределение выбранной суммы</strong>
             {visiblePlanLines.length > 0 ? (
               <ul aria-label="Распределение полной оплаты">

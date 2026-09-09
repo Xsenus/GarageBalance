@@ -4339,6 +4339,57 @@ input.meter-readings-control {
   overscroll-behavior: contain;
 }
 
+.modal-backdrop.payment-history-modal-backdrop {
+  overflow: hidden;
+}
+
+.detail-dialog.garage-payment-history-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1280px, calc(100vw - 32px));
+  height: min(620px, calc(100dvh - 32px));
+  min-width: 560px;
+  min-height: 300px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: hidden;
+  resize: both;
+  transform: translate(-50%, -50%);
+  padding: 0;
+}
+
+.garage-payment-history-dialog .garage-payment-history-dialog__drag-handle {
+  position: static;
+  align-items: center;
+  margin: 0;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.garage-payment-history-dialog__drag-handle:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.22);
+  outline-offset: -3px;
+}
+
+.garage-payment-history-dialog__drag-handle h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.garage-payment-history-dialog__content {
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .payments-prototype-mini-table {
   width: 100%;
   min-width: 820px;
@@ -4998,6 +5049,29 @@ input.meter-readings-control {
   border-radius: 10px;
   background: #f8faff;
   padding: 14px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .detail-dialog.garage-payment-history-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
+    min-width: 0;
+    min-height: 0;
+    resize: none;
+  }
+}
+
+.full-payment-distribution {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .full-payment-amount input {

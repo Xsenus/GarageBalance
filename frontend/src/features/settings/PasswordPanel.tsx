@@ -20,6 +20,7 @@ import { downloadBlob } from '../../shared/fileExports'
 import { restoreFocusAfterClose, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 
@@ -56,6 +57,8 @@ const accrualReasonDisplayOptions = [
   { value: 'hidden', label: 'Не показывать' },
 ]
 
+type SettingsTab = 'security' | 'business-date' | 'cash-bank' | 'display' | 'backups' | 'diagnostics' | 'integrations'
+
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
   const [actionCommentsRequired, actionCommentSettingsLoading, actionCommentSettingsError, saveActionCommentsRequired] = useActionCommentSettings()
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
@@ -65,11 +68,23 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
   const canManageDadataSettings = dadataSettingsVisible
   const integrationTabVisible = canViewIntegrationStatus || canViewReceiptPrintingStatus || canManageIntegrationSettings || canManageDadataSettings
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'business-date' | 'cash-bank' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
-    integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
-      ? 'integrations'
-      : 'security'
+  const defaultSettingsTab: SettingsTab = integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
+    ? 'integrations'
+    : 'security'
+  const availableSettingsTabs: SettingsTab[] = [
+    'security',
+    ...(isAdministrator(auth) ? ['business-date', 'cash-bank'] as const : []),
+    ...(hasPermission(auth, permissions.usersManage) ? ['display', 'backups', 'diagnostics'] as const : []),
+    ...(integrationTabVisible ? ['integrations'] as const : []),
+  ]
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.settingsTab,
+    availableSettingsTabs,
+    defaultSettingsTab,
   ))
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.settingsTab, activeSettingsTab)
+  }, [activeSettingsTab])
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])

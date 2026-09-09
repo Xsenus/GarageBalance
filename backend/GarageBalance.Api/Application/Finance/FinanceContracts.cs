@@ -50,7 +50,8 @@ public sealed record FinancialOperationDto(
     bool NegativeFundBalanceConfirmed = false,
     Guid Version = default,
     Guid? FeeCampaignId = null,
-    Guid? IrregularPaymentId = null);
+    Guid? IrregularPaymentId = null,
+    decimal? GarageServiceDebtAfter = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -98,7 +99,8 @@ public sealed record GarageFullPaymentQuoteDto(
     string GarageNumber,
     string? OwnerName,
     decimal TotalAmount,
-    IReadOnlyList<GarageFullPaymentQuoteLineDto> Lines);
+    IReadOnlyList<GarageFullPaymentQuoteLineDto> Lines,
+    DateOnly AccountingMonthThrough);
 
 public sealed record IncomePaymentWarningRequest(
     Guid GarageId,

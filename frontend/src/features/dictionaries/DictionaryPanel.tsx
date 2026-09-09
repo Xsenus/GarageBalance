@@ -28,6 +28,7 @@ import { createEmptyPage, createFallbackPage, getLastPageOffset } from '../../sh
 import { TablePagination } from '../../shared/TablePagination'
 import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
@@ -60,12 +61,20 @@ type DictionaryChangePreview = ChangePreview
 
 export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey; onOpenWorkspaceSection?: (section: Exclude<CatalogWorkspaceSection, 'dictionaries'>, context?: WorkspaceOpenContext | null) => void }) {
   const [actionCommentsRequired] = useActionCommentSettings()
-  const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
+  const [activeSection, setActiveSection] = useState<DictionarySectionKey>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.dictionariesSection,
+    dictionarySectionOptions.map((section) => section.key),
+    initialSection,
+  ))
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnitDto[]>([])
+
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.dictionariesSection, activeSection)
+  }, [activeSection])
   const [ownerOptions, setOwnerOptions] = useState<OwnerDto[]>([])
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
   const loadedEditorReferences = useRef({ owners: false, garages: false })

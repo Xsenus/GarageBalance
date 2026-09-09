@@ -38,7 +38,7 @@ const auth: AuthResponse = {
   },
 }
 
-function renderShell() {
+function renderShell(authResponse = auth) {
   const emptyClient = {} as never
   const settingsClient = {
     getActionCommentSettings: () => new Promise<never>(() => undefined),
@@ -46,7 +46,7 @@ function renderShell() {
   } as never
   return render(
     <AuthenticatedAppShell
-      auth={auth}
+      auth={authResponse}
       authClient={emptyClient}
       auditClient={emptyClient}
       dictionaryClient={emptyClient}
@@ -70,6 +70,31 @@ describe('AuthenticatedAppShell performance', () => {
     vi.mocked(preloadWorkspaceSection).mockReset()
     vi.useRealTimers()
     window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+
+  it('restores the last accessible workspace section and saves subsequent navigation', () => {
+    window.sessionStorage.setItem('garagebalance.workspace.section', 'reports')
+    const firstRender = renderShell()
+
+    expect(screen.getByRole('region', { name: 'workspace-reports' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Платежи' }))
+    expect(window.sessionStorage.getItem('garagebalance.workspace.section')).toBe('payments')
+
+    firstRender.unmount()
+    renderShell()
+    expect(screen.getByRole('region', { name: 'workspace-payments' })).toBeInTheDocument()
+  })
+
+  it('falls back to the dashboard when the stored section is not permitted', () => {
+    window.sessionStorage.setItem('garagebalance.workspace.section', 'users')
+    renderShell({
+      ...auth,
+      user: { ...auth.user, permissions: [] },
+    })
+
+    expect(screen.getByRole('region', { name: 'workspace-dashboard' })).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('garagebalance.workspace.section')).toBe('dashboard')
   })
 
   it('keeps the workspace memoized when only the sidebar state changes', () => {

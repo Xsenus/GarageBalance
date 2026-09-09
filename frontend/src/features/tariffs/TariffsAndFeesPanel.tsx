@@ -31,6 +31,7 @@ import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
 import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 
 const dictionaryScreenRequestLimit = 100
 const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -782,7 +783,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
   const [tariffPageSize, setTariffPageSize] = useState(25)
-  const [chargeServiceView, setChargeServiceView] = useState<'active' | 'deleted'>('active')
+  const [chargeServiceView, setChargeServiceView] = useState<'active' | 'deleted'>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.tariffsView,
+    ['active', 'deleted'],
+    'active',
+  ))
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.tariffsView, chargeServiceView)
+  }, [chargeServiceView])
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendMeasurementUnits, setBackendMeasurementUnits] = useState<MeasurementUnitDto[]>([])

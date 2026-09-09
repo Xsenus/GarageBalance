@@ -1689,10 +1689,12 @@ public sealed class FinanceServiceTests
         var firstIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-0");
         Assert.Equal(600m, firstIncome.GarageDebtBefore);
         Assert.Equal(500m, firstIncome.GarageDebtAfter);
+        Assert.Equal(400m, firstIncome.GarageServiceDebtAfter);
         Assert.NotEmpty(firstIncome.PaymentAllocations);
         var lastIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-2");
         Assert.Equal(400m, lastIncome.GarageDebtBefore);
         Assert.Equal(300m, lastIncome.GarageDebtAfter);
+        Assert.Equal(200m, lastIncome.GarageServiceDebtAfter);
         var firstExpense = Assert.Single(page.Items, item => item.DocumentNumber == "RKO-BATCH-0");
         Assert.Equal(900m, firstExpense.SupplierDebtBefore);
         Assert.Equal(850m, firstExpense.SupplierDebtAfter);
@@ -3820,7 +3822,9 @@ public sealed class FinanceServiceTests
         };
         database.Context.Accruals.Add(accrual);
         await database.Context.SaveChangesAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 9, 12, 0, 0, TimeSpan.Zero)));
         Assert.True((await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(
                 fixtures.Garage.Id,
@@ -3852,6 +3856,147 @@ public sealed class FinanceServiceTests
                 Assert.Equal(accrual.AccountingMonth, line.AccountingMonth);
                 Assert.Equal(300m, line.OutstandingAmount);
             });
+        Assert.Equal(new DateOnly(2026, 9, 1), result.Value.AccountingMonthThrough);
+    }
+
+    [Fact]
+    public async Task GetOperationsPageAsync_ReturnsDebtForThePaidServiceOnly()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 150m;
+        var secondIncomeType = new IncomeType { Name = "Вторая услуга", Code = "second_history_service" };
+        database.Context.Add(secondIncomeType);
+        await database.Context.SaveChangesAsync();
+        var month = new DateOnly(2026, 6, 1);
+        database.Context.AddRange(
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = month,
+                Amount = 500m,
+                Source = "manual"
+            },
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = secondIncomeType.Id,
+                AccountingMonth = month,
+                Amount = 900m,
+                Source = "manual"
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 10),
+                month,
+                125m,
+                "PKO-SERVICE-DEBT",
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(payment.Succeeded);
+        Assert.Equal(375m, payment.Value!.GarageServiceDebtAfter);
+        Assert.Equal(1425m, payment.Value.GarageDebtAfter);
+
+        var page = await service.GetOperationsPageAsync(
+            new FinancialOperationListRequest(null, null, "income", null, 25, 0, fixtures.Garage.Id),
+            CancellationToken.None);
+
+        var historyPayment = Assert.Single(page.Items);
+        Assert.Equal(375m, historyPayment.GarageServiceDebtAfter);
+        Assert.Equal(1425m, historyPayment.GarageDebtAfter);
+    }
+
+    [Fact]
+    public async Task GetGarageFullPaymentQuoteAsync_ExcludesDebtAfterCurrentAccountingMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.Accruals.AddRange(
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                DueDate = new DateOnly(2026, 9, 20),
+                OverdueFromDate = new DateOnly(2026, 10, 21),
+                Amount = 100m,
+                Source = "full-payment-past"
+            },
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 9, 1),
+                DueDate = new DateOnly(2026, 10, 20),
+                OverdueFromDate = new DateOnly(2026, 11, 21),
+                Amount = 200m,
+                Source = "full-payment-current"
+            },
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 10, 1),
+                DueDate = new DateOnly(2026, 11, 20),
+                OverdueFromDate = new DateOnly(2026, 12, 21),
+                Amount = 400m,
+                Source = "full-payment-future"
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 9, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.GetGarageFullPaymentQuoteAsync(fixtures.Garage.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 9, 1), result.Value!.AccountingMonthThrough);
+        Assert.Equal(300m, result.Value.TotalAmount);
+        Assert.Equal(
+            [new DateOnly(2026, 8, 1), new DateOnly(2026, 9, 1)],
+            result.Value.Lines.Select(line => line.AccountingMonth));
+    }
+
+    [Fact]
+    public async Task CreateFullGaragePaymentAsync_RejectsFutureAccountingMonthWithoutPersistingBatch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var receiptBatchId = Guid.NewGuid();
+        var baselineOperationCount = await database.Context.FinancialOperations.CountAsync();
+        var baselineAuditCount = await database.Context.AuditEvents.CountAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 9, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CreateFullGaragePaymentAsync(
+            new CreateFullGaragePaymentRequest(
+                fixtures.Garage.Id,
+                new DateOnly(2026, 9, 9),
+                [new CreateFullGaragePaymentLineRequest(
+                    fixtures.IncomeType.Id,
+                    new DateOnly(2026, 10, 1),
+                    100m,
+                    null)],
+                receiptBatchId),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("full_payment_future_month_not_allowed", result.ErrorCode);
+        Assert.Equal(baselineOperationCount, await database.Context.FinancialOperations.CountAsync());
+        Assert.Equal(baselineAuditCount, await database.Context.AuditEvents.CountAsync());
+        Assert.DoesNotContain(
+            database.Context.FinancialOperations,
+            operation => operation.ReceiptBatchId == receiptBatchId);
     }
 
     [Fact]

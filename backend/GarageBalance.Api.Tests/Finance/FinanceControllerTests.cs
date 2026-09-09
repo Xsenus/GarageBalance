@@ -483,7 +483,8 @@ public sealed class FinanceControllerTests
             "102",
             "Тестовый владелец",
             3800m,
-            [new GarageFullPaymentQuoteLineDto(Guid.NewGuid(), "Внеочередной вывоз мусора", new DateOnly(2026, 8, 1), 3000m)]);
+            [new GarageFullPaymentQuoteLineDto(Guid.NewGuid(), "Внеочередной вывоз мусора", new DateOnly(2026, 8, 1), 3000m)],
+            new DateOnly(2026, 9, 1));
         var service = new FakeFinanceService
         {
             GarageFullPaymentQuoteResult = FinanceResult<GarageFullPaymentQuoteDto>.Success(quote)

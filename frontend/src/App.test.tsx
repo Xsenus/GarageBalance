@@ -317,6 +317,75 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Главное меню' })).toBeEnabled()
   })
 
+  it('restores every nested workspace view after page reload', async () => {
+    const user = userEvent.setup()
+    window.sessionStorage.setItem('garagebalance.auth.session', JSON.stringify(createAuthResponse({ accessToken: 'workspace-view-token' })))
+    window.sessionStorage.setItem('garagebalance.workspace.section', 'reports')
+    window.sessionStorage.setItem('garagebalance.workspace.reports.tab', 'income')
+    window.sessionStorage.setItem('garagebalance.workspace.payments.tab', 'expense')
+    window.sessionStorage.setItem('garagebalance.workspace.finance.section', 'supplierAccruals')
+    window.sessionStorage.setItem('garagebalance.workspace.contractors.section', 'suppliers')
+    window.sessionStorage.setItem('garagebalance.workspace.dictionaries.section', 'measurementUnits')
+    window.sessionStorage.setItem('garagebalance.workspace.tariffs.view', 'deleted')
+    window.sessionStorage.setItem('garagebalance.workspace.import.tab', 'history')
+    window.sessionStorage.setItem('garagebalance.workspace.settings.tab', 'diagnostics')
+
+    // This scenario verifies restored navigation state, not lazy-chunk latency. Warm the
+    // panels so a busy full-suite worker cannot exhaust the accessibility-query timeout.
+    await Promise.all([
+      import('./features/reports/ReportPanel'),
+      import('./features/finance/FinancePanel'),
+      import('./features/contractors/ContractorsPanel'),
+      import('./features/dictionaries/DictionaryPanel'),
+      import('./features/tariffs/TariffsAndFeesPanel'),
+      import('./features/import/ImportPanel'),
+      import('./features/settings/PasswordPanel'),
+    ])
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient()}
+      financeClient={createFinanceClient()}
+      fundsClient={createFundsClient()}
+      importClient={createImportClient()}
+      integrationClient={createIntegrationClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      settingsClient={createSettingsClient()}
+      userClient={createUserClient()}
+    />)
+    await act(async () => undefined)
+
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    expect(within(reportsPanel).getByRole('tab', { name: 'Поступления' })).toHaveAttribute('aria-selected', 'true')
+
+    await openSection(user, 'Платежи')
+    const paymentsPanel = await screen.findByRole('region', { name: 'Платежи' })
+    expect(within(paymentsPanel).getByRole('tab', { name: 'Выплаты' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(paymentsPanel).getByRole('tab', { name: /Начисления поставщикам/ })).toHaveAttribute('aria-selected', 'true')
+
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' })).toHaveAttribute('aria-selected', 'true')
+
+    await openSection(user, 'Справочники')
+    const dictionariesPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(within(dictionariesPanel).getByRole('button', { name: 'Подгруппа: Единицы измерения' })).toHaveAttribute('aria-current', 'page')
+
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    expect(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ })).toHaveAttribute('aria-selected', 'true')
+
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    expect(within(importPanel).getByRole('tab', { name: /История/ })).toHaveAttribute('aria-selected', 'true')
+
+    await openSection(user, 'Настройки')
+    const settingsPanel = await screen.findByRole('region', { name: 'Настройки' })
+    expect(within(settingsPanel).getByRole('tab', { name: 'Диагностика' })).toHaveAttribute('aria-selected', 'true')
+    expect(window.sessionStorage.getItem('garagebalance.workspace.section')).toBe('settings')
+  })
+
   it('ignores expired stored auth session', () => {
     window.sessionStorage.setItem('garagebalance.auth.session', JSON.stringify(createAuthResponse({ expiresAtUtc: new Date(Date.now() - 60_000).toISOString() })))
 
@@ -9468,9 +9537,18 @@ describe('App', () => {
     expect(paymentHistoryButton.querySelector('.lucide-history')).not.toBeNull()
     await user.click(paymentHistoryButton)
     expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'true')
-    expect(await within(prototype).findByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
-    await user.click(within(workspaceHeader).getByRole('button', { name: 'Скрыть историю' }))
+    const paymentHistoryDialog = await within(prototype).findByRole('dialog', { name: 'История платежей' })
+    const paymentHistoryTable = within(paymentHistoryDialog).getByRole('table', { name: 'История платежей гаража' })
+    expect(within(paymentHistoryTable).getByRole('columnheader', { name: 'Долг по услуге после платежа' })).toBeInTheDocument()
+    expect(within(paymentHistoryTable).getByRole('columnheader', { name: 'Долг после платежа' })).toBeInTheDocument()
+    expect(within(paymentHistoryTable).queryByRole('columnheader', { name: 'Остаток долга после платежа' })).not.toBeInTheDocument()
+    const dragHandle = within(paymentHistoryDialog).getByLabelText('Переместить окно истории платежей')
+    dragHandle.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(paymentHistoryDialog).toHaveStyle({ transform: 'none' })
+    await user.click(within(paymentHistoryDialog).getByRole('button', { name: 'Закрыть историю платежей' }))
     expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
+    await waitFor(() => expect(paymentHistoryButton).toHaveFocus())
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
     await within(incomeTable).findByText('Электроэнергия')
     expect(within(prototype).getByText('май.26')).toBeInTheDocument()
@@ -10716,7 +10794,12 @@ describe('App', () => {
 
     const reasonDialog = screen.getByRole('dialog', { name: 'Сохранить показание Вода историческая за фев.24' })
     expect(within(reasonDialog).getByText(/автоматически сохранит это действие/i)).toBeInTheDocument()
-    await user.click(within(reasonDialog).getByRole('button', { name: 'Сохранить показание' }))
+    const reasonDialogActions = reasonDialog.querySelector('.detail-dialog-actions') as HTMLElement
+    expect(reasonDialogActions).toBeInTheDocument()
+    expect(within(reasonDialogActions).getByRole('button', { name: 'Отмена' })).toHaveClass('ghost-button')
+    const saveHistoricalReadingButton = within(reasonDialogActions).getByRole('button', { name: 'Сохранить показание' })
+    expect(saveHistoricalReadingButton).toHaveClass('secondary-button')
+    await user.click(saveHistoricalReadingButton)
 
     await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenCalledWith('token', expect.objectContaining({
       garageId: garage.id,
@@ -12481,6 +12564,86 @@ describe('App', () => {
     ])
   })
 
+  it('limits full payment to current and past months and shows its distribution in one column', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-full-payment-current-limit', number: '106', ownerName: 'Петров Пётр' })
+    const createFullGaragePayment = vi.fn(async (_token: string, request: CreateFullGaragePaymentRequest) => ({
+      receiptBatchId: request.receiptBatchId!,
+      totalAmount: request.lines.reduce((sum, line) => sum + line.amount, 0),
+      operations: request.lines.map((line, index) => createFinancialOperation({
+        id: `current-limited-full-payment-${index}`,
+        garageId: garage.id,
+        garageNumber: garage.number,
+        amount: line.amount,
+        accountingMonth: line.accountingMonth,
+        receiptBatchId: request.receiptBatchId,
+      })),
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({
+        getGarageIncomeWorksheet: async () => createGarageIncomeWorksheet({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          monthFrom: '2026-05-01',
+          monthTo: '2026-07-01',
+          debtTotal: 700,
+          closingDebt: 700,
+          rows: [
+            { accountingMonth: '2026-05-01', incomeTypeId: 'income-past', incomeTypeName: 'Прошлый долг', meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 100, incomeAmount: 0, debt: 100 },
+            { accountingMonth: '2026-06-01', incomeTypeId: 'income-current', incomeTypeName: 'Текущий долг', meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 200, incomeAmount: 0, debt: 200 },
+            { accountingMonth: '2026-07-01', incomeTypeId: 'income-future', incomeTypeName: 'Будущий долг', meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 400, incomeAmount: 0, debt: 400 },
+          ],
+        }),
+        getGarageFullPaymentQuote: async () => ({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          totalAmount: 300,
+          accountingMonthThrough: '2026-06-01',
+          lines: [
+            { incomeTypeId: 'income-past', incomeTypeName: 'Прошлый долг', accountingMonth: '2026-05-01', outstandingAmount: 100, isOpeningDebt: false },
+            { incomeTypeId: 'income-current', incomeTypeName: 'Текущий долг', accountingMonth: '2026-06-01', outstandingAmount: 200, isOpeningDebt: false },
+          ],
+        }),
+        createFullGaragePayment,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*106\s*Петров Пётр/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+
+    expect(within(dialog).getByLabelText('Сумма полной оплаты')).toHaveValue('300.00')
+    const distributionTitle = within(dialog).getByText('Распределение выбранной суммы')
+    expect(distributionTitle.parentElement).toHaveClass('full-payment-distribution')
+    const distribution = within(dialog).getByRole('list', { name: 'Распределение полной оплаты' })
+    expect(distribution).toHaveTextContent('Прошлый долг (май.26)')
+    expect(distribution).toHaveTextContent('Текущий долг (июн.26)')
+    expect(distribution).not.toHaveTextContent('Будущий долг')
+    await user.click(within(dialog).getByRole('combobox', { name: 'Период полной оплаты' }))
+    expect(within(dialog).queryByRole('option', { name: 'июл.26' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledTimes(1))
+    expect(createFullGaragePayment.mock.calls[0][1].lines).toEqual([
+      expect.objectContaining({ accountingMonth: '2026-05-01', amount: 100 }),
+      expect.objectContaining({ accountingMonth: '2026-06-01', amount: 200 }),
+    ])
+  })
+
   it('uses the server quote when full debt is larger than the visible worksheet period', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-full-payment-authoritative', number: '102-А', ownerName: 'Тестовый владелец', balance: 13105.36 })
@@ -12804,6 +12967,7 @@ describe('App', () => {
       amount: 1234,
       incomeTypeName: 'Серверная оплата',
       garageDebtAfter: 3200,
+      garageServiceDebtAfter: 480,
       operationDate: '2026-06-19',
       accountingMonth: '2026-06-01',
       createdAtUtc: '2026-06-19T10:24:00',
@@ -12887,6 +13051,7 @@ describe('App', () => {
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200.00')).toBeInTheDocument()
+    expect(within(historyTable).getByText('480.00')).toBeInTheDocument()
     const historyActions = within(historyTable).getByText('Серверная оплата').closest('tr')?.querySelector('.payments-prototype-history-actions')
     expect(historyActions).not.toBeNull()
     expect(within(historyActions as HTMLElement).getAllByRole('button')).toHaveLength(2)
@@ -13767,19 +13932,43 @@ describe('App', () => {
       expenseTotal: 400,
       rows: [{
         rowKind: 'supplier',
-        supplierId: 'supplier-312',
+        supplierId: 'supplier-1',
         staffMemberId: null,
-        counterpartyName: '312',
-        expenseTypeId: 'expense-water',
-        expenseTypeName: 'Вода',
+        counterpartyName: 'Водоканал',
+        expenseTypeId: 'expense-type-1',
+        expenseTypeName: 'Электроэнергия',
         accrualAmount: 1250,
         expenseAmount: 400,
         balance: 850,
         collectedAmount: 0,
         difference: 0,
+      }, {
+        rowKind: 'supplier',
+        supplierId: 'supplier-other',
+        staffMemberId: null,
+        counterpartyName: 'Другой поставщик',
+        expenseTypeId: 'expense-type-1',
+        expenseTypeName: 'Электроэнергия',
+        accrualAmount: 500,
+        expenseAmount: 0,
+        balance: 500,
+        collectedAmount: 0,
+        difference: 0,
       }],
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetSupplierBreakdown })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const createSupplierAccrualRequest = vi.fn(async (_token: string, request: CreateSupplierAccrualRequest) => createSupplierAccrual({
+      id: 'accrual-new-visible',
+      supplierId: request.supplierId,
+      supplierName: 'Водоканал',
+      expenseTypeId: request.expenseTypeId,
+      expenseTypeName: 'Электроэнергия',
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: request.source,
+      documentNumber: request.documentNumber ?? null,
+      comment: request.comment ?? null,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetSupplierBreakdown, createSupplierAccrual: createSupplierAccrualRequest })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -13787,16 +13976,16 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
 
-    const expandButton = await within(prototype).findByRole('button', { name: 'Показать состав суммы: 312, Вода' })
+    const expandButton = await within(prototype).findByRole('button', { name: 'Показать состав суммы: Водоканал, Электроэнергия' })
     await user.click(expandButton)
-    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: 312, Вода' })
+    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: Водоканал, Электроэнергия' })
     expect(within(detailsTable).getByText('ПП-7')).toBeInTheDocument()
     expect(within(detailsTable).getByText('СЧЕТ-2')).toBeInTheDocument()
     expect(within(prototype).getByText('Начислено:').closest('span')).toHaveTextContent('1 250.00')
     expect(within(prototype).getByText('Оплачено:').closest('span')).toHaveTextContent('400.00')
     expect(getExpenseWorksheetSupplierBreakdown).toHaveBeenNthCalledWith(1, 'token', {
-      supplierId: 'supplier-312',
-      expenseTypeId: 'expense-water',
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
       monthFrom: '2026-06',
       monthTo: '2026-06',
       offset: 0,
@@ -13807,8 +13996,132 @@ describe('App', () => {
     expect(await within(detailsTable).findByText('СЧЕТ-1')).toBeInTheDocument()
     expect(getExpenseWorksheetSupplierBreakdown).toHaveBeenNthCalledWith(2, 'token', expect.objectContaining({ offset: 2 }), expect.any(AbortSignal))
 
-    await user.click(within(prototype).getByRole('button', { name: 'Скрыть состав суммы: 312, Вода' }))
-    expect(within(prototype).queryByRole('table', { name: 'Операции: 312, Вода' })).not.toBeInTheDocument()
+    const worksheetRequestCountBeforeCreate = getExpenseWorksheet.mock.calls.length
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить начисление' }))
+    const accrualDialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
+    await user.type(within(accrualDialog).getByLabelText('Сумма начисления поставщику'), '75')
+    await user.type(within(accrualDialog).getByLabelText('Документ начисления поставщику'), 'СЧЕТ-NEW')
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
+    expect(within(prototype).getByRole('button', { name: 'Скрыть состав суммы: Водоканал, Электроэнергия' })).toHaveAttribute('aria-expanded', 'true')
+    expect(await within(detailsTable).findByText('СЧЕТ-NEW')).toBeInTheDocument()
+    const breakdown = within(detailsTable.closest('section') as HTMLElement)
+    expect(breakdown.getByText('Начислено:').closest('span')).toHaveTextContent('1 325.00')
+    expect(breakdown.getByText('Операций:').closest('span')).toHaveTextContent('4')
+    const updatedSupplierRow = within(prototype).getByRole('button', { name: 'Скрыть состав суммы: Водоканал, Электроэнергия' }).closest('tr')
+    const untouchedSupplierRow = within(prototype).getByText('Другой поставщик').closest('tr')
+    expect(within(updatedSupplierRow!).getByText('1 325.00')).toBeInTheDocument()
+    expect(within(untouchedSupplierRow!).getByText('500.00')).toBeInTheDocument()
+    expect(within(untouchedSupplierRow!).queryByText('575.00')).not.toBeInTheDocument()
+    expect(getExpenseWorksheet).toHaveBeenCalledTimes(worksheetRequestCountBeforeCreate)
+    expect(createSupplierAccrualRequest).toHaveBeenCalledWith('token', expect.objectContaining({
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      amount: 75,
+    }))
+
+    await user.click(within(prototype).getByRole('button', { name: 'Скрыть состав суммы: Водоканал, Электроэнергия' }))
+    expect(within(prototype).queryByRole('table', { name: 'Операции: Водоканал, Электроэнергия' })).not.toBeInTheDocument()
+  })
+
+  it('shows a newly created supplier accrual group immediately without reloading the worksheet', async () => {
+    const user = userEvent.setup()
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accountingMonth: '2026-06-01',
+      accrualTotal: 75,
+      expenseTotal: 0,
+      rows: [{
+        rowKind: 'supplier',
+        supplierId: 'supplier-other',
+        staffMemberId: null,
+        counterpartyName: 'Другой поставщик',
+        expenseTypeId: 'expense-other',
+        expenseTypeName: 'Уборка территории',
+        expenseFundName: 'Хозяйственный фонд',
+        accrualAmount: 75,
+        expenseAmount: 0,
+        balance: 75,
+        collectedAmount: 0,
+        difference: 0,
+      }],
+    }))
+    const createSupplierAccrualRequest = vi.fn(async (_token: string, request: CreateSupplierAccrualRequest) => createSupplierAccrual({
+      id: 'new-supplier-group-accrual',
+      supplierId: request.supplierId,
+      supplierName: '',
+      expenseTypeId: request.expenseTypeId,
+      expenseTypeName: '',
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: request.source,
+      documentNumber: request.documentNumber ?? null,
+      comment: request.comment ?? null,
+    }))
+    const getExpenseWorksheetSupplierBreakdown = vi.fn(async () => ({
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      monthFrom: '2026-06-01',
+      monthTo: '2026-06-01',
+      accrualTotal: 23,
+      expenseTotal: 0,
+      items: [{
+        id: 'new-supplier-group-accrual',
+        entryKind: 'accrual',
+        accountingMonth: '2026-06-01',
+        operationDate: null,
+        amount: 23,
+        documentNumber: 'СЧЕТ-NEW-GROUP',
+        comment: null,
+        source: 'manual',
+        isCanceled: false,
+      }],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient()}
+      financeClient={createFinanceClient({ getExpenseWorksheet, getExpenseWorksheetSupplierBreakdown, createSupplierAccrual: createSupplierAccrualRequest })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    expect(within(prototype).queryByRole('button', { name: 'Показать состав суммы: Водоканал, Электроэнергия' })).not.toBeInTheDocument()
+
+    const worksheetRequestCountBeforeCreate = getExpenseWorksheet.mock.calls.length
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить начисление' }))
+    const accrualDialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
+    await user.type(within(accrualDialog).getByLabelText('Сумма начисления поставщику'), '23')
+    await user.type(within(accrualDialog).getByLabelText('Документ начисления поставщику'), 'СЧЕТ-NEW-GROUP')
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
+    const expandButton = await within(prototype).findByRole('button', { name: 'Показать состав суммы: Водоканал, Электроэнергия' })
+    const createdGroupRow = expandButton.closest('tr')
+    expect(createdGroupRow).not.toBeNull()
+    expect(within(createdGroupRow!).getByText('Водоканал')).toBeInTheDocument()
+    expect(within(createdGroupRow!).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(within(createdGroupRow!).getByText('Фонд: Водоснабжение')).toBeInTheDocument()
+    expect(within(createdGroupRow!).getByText('23.00')).toBeInTheDocument()
+    expect(within(createdGroupRow!).getByText('-23.00')).toBeInTheDocument()
+    expect(getExpenseWorksheet).toHaveBeenCalledTimes(worksheetRequestCountBeforeCreate)
+
+    await user.click(expandButton)
+    const detailsTable = await within(prototype).findByRole('table', { name: 'Операции: Водоканал, Электроэнергия' })
+    expect(within(detailsTable).getByText('СЧЕТ-NEW-GROUP')).toBeInTheDocument()
+    expect(getExpenseWorksheetSupplierBreakdown).toHaveBeenCalledWith('token', expect.objectContaining({
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+    }), expect.any(AbortSignal))
   })
 
   it('edits a supplier accrual from the payout breakdown context menu', async () => {
@@ -20006,61 +20319,64 @@ describe('App', () => {
     view.unmount()
     view = renderReloadedApp()
     expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
-    await openSection(user, 'Платежи')
     financePanel = await screen.findByRole('region', { name: 'Платежи' })
     expect(await within(financePanel).findByText('RELOAD-PKO')).toBeInTheDocument()
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
     expect(await within(financePanel).findByText('RELOAD-ACCRUAL')).toBeInTheDocument()
 
-    await financeClient.createSupplierAccrual('persisted-session', {
-      supplierId: 'supplier-1',
-      expenseTypeId: 'expense-type-1',
-      expensePaymentType: 'with_receipt',
-      accountingMonth: '2026-06-01',
-      amount: 650,
-      source: 'manual',
-      documentNumber: 'RELOAD-INV',
-    })
-    await financeClient.createExpense('persisted-session', {
-      supplierId: 'supplier-1',
-      expenseTypeId: 'expense-type-1',
-      expensePaymentType: 'with_receipt',
-      operationDate: '2026-06-30',
-      accountingMonth: '2026-06-01',
-      amount: 250,
-      documentNumber: 'RELOAD-RKO',
+    await act(async () => {
+      await financeClient.createSupplierAccrual('persisted-session', {
+        supplierId: 'supplier-1',
+        expenseTypeId: 'expense-type-1',
+        expensePaymentType: 'with_receipt',
+        accountingMonth: '2026-06-01',
+        amount: 650,
+        source: 'manual',
+        documentNumber: 'RELOAD-INV',
+      })
+      await financeClient.createExpense('persisted-session', {
+        supplierId: 'supplier-1',
+        expenseTypeId: 'expense-type-1',
+        expensePaymentType: 'with_receipt',
+        operationDate: '2026-06-30',
+        accountingMonth: '2026-06-01',
+        amount: 250,
+        documentNumber: 'RELOAD-RKO',
+      })
     })
 
     view.unmount()
     view = renderReloadedApp()
-    await openSection(user, 'Платежи')
     financePanel = await screen.findByRole('region', { name: 'Платежи' })
     await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
     expect(await within(financePanel).findByText('RELOAD-RKO')).toBeInTheDocument()
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
     expect(await within(financePanel).findByText('RELOAD-INV')).toBeInTheDocument()
 
-    await financeClient.createMeterReading('persisted-session', {
-      garageId: 'garage-1',
-      meterKind: 'water',
-      accountingMonth: '2026-06-01',
-      readingDate: '2026-06-30',
-      currentValue: 17.25,
-      comment: 'RELOAD-METER',
+    await act(async () => {
+      await financeClient.createMeterReading('persisted-session', {
+        garageId: 'garage-1',
+        meterKind: 'water',
+        accountingMonth: '2026-06-01',
+        readingDate: '2026-06-30',
+        currentValue: 17.25,
+        comment: 'RELOAD-METER',
+      })
     })
 
     view.unmount()
     view = renderReloadedApp()
-    await openSection(user, 'Платежи')
     financePanel = await screen.findByRole('region', { name: 'Платежи' })
     await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
     const meterTable = await within(financePanel).findByRole('table', { name: 'Последние показания' })
     expect(await within(meterTable).findByText('7.25')).toBeInTheDocument()
 
-    await fundsClient.createOperation('persisted-session', 'fund-target', {
-      operationKind: 'deposit',
-      amount: 1500,
-      reason: 'RELOAD-FUND',
+    await act(async () => {
+      await fundsClient.createOperation('persisted-session', 'fund-target', {
+        operationKind: 'deposit',
+        amount: 1500,
+        reason: 'RELOAD-FUND',
+      })
     })
 
     view.unmount()

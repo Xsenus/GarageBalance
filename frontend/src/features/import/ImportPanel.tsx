@@ -13,6 +13,7 @@ import { createClientPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { maximumAccessImportFileSizeMegabytes, validateAccessImportFileSize } from './importFileLimits'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 
 const importQuarantineScreenRequestLimit = 50
 const importCreatedRecordsScreenRequestLimit = 100
@@ -28,7 +29,14 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const [createdRecords, setCreatedRecords] = useState<AccessImportCreatedRecordDto[]>([])
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [currentRun, setCurrentRun] = useState<AccessImportRunDto | null>(null)
-  const [activeImportTab, setActiveImportTab] = useState<ImportTab>('checks')
+  const [activeImportTab, setActiveImportTab] = useState<ImportTab>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.importTab,
+    ['checks', 'log', 'created', 'history', 'quarantine'],
+    'checks',
+  ))
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.importTab, activeImportTab)
+  }, [activeImportTab])
   const [logPageNumber, setLogPageNumber] = useState(1)
   const [logPageSize, setLogPageSize] = useState(10)
   const [createdPageNumber, setCreatedPageNumber] = useState(1)

@@ -14,7 +14,8 @@ public sealed record FinancialOperationCalculationData(
     string CounterpartyKind,
     Guid CounterpartyId,
     DateOnly AccountingMonth,
-    decimal PreviousPaymentTotal);
+    decimal PreviousPaymentTotal,
+    decimal? GarageServiceDebtAfter);
 
 public sealed record FinancialOperationAccrualBucketData(
     string CounterpartyKind,

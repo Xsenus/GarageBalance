@@ -22,6 +22,7 @@ import { ToastViewport } from '../../shared/Toast'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { useToast } from '../../shared/useToast'
 import { getReportDateRangeValidationErrors } from '../../shared/validation'
+import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
@@ -294,7 +295,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   const { toast, showToast, dismissToast } = useToast()
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
-  const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
+  const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>(() => loadStoredWorkspaceView(
+    workspaceViewStorageKeys.reportsTab,
+    reportWorkbookTabs.map((tab) => tab.key),
+    'consolidated',
+  ))
+  useEffect(() => {
+    saveStoredWorkspaceView(workspaceViewStorageKeys.reportsTab, activeReportTab)
+  }, [activeReportTab])
   const [reportSorts, setReportSorts] = useState<Partial<Record<ReportWorkbookTab, ReportSort>>>({})
   const [monthlyFilters, setMonthlyFilters] = useState<Record<ReportMonthlyFilterKey, ReportMonthRange>>({
     consolidated: { monthFrom: currentMonth, monthTo: currentMonth },
