@@ -2804,6 +2804,37 @@ describe('App', () => {
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
   })
 
+  it('reuses the loaded default supplier group when a supplier is created immediately after references load', async () => {
+    const user = userEvent.setup()
+    const defaultGroup = createGroup({ id: 'default-supplier-group', name: 'Поставщики' })
+    const createSupplierGroup = vi.fn<DictionaryClient['createSupplierGroup']>()
+    const createSupplierRequest = vi.fn<DictionaryClient['createSupplier']>(async (_token, request) => createSupplier({
+      ...request,
+      id: 'supplier-with-existing-default-group',
+      groupId: defaultGroup.id,
+      groupName: defaultGroup.name,
+    }))
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [defaultGroup],
+      createSupplierGroup,
+      createSupplier: createSupplierRequest,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(within(panel).getByRole('button', { name: 'Добавить поставщика' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    await user.type(within(dialog).getByLabelText('Наименование поставщика'), 'Поставщик без повторной группы')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createSupplierRequest).toHaveBeenCalledWith('token', expect.objectContaining({ groupId: defaultGroup.id })))
+    expect(createSupplierGroup).not.toHaveBeenCalled()
+  })
+
   it('hides financial report actions until contractor records are saved', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

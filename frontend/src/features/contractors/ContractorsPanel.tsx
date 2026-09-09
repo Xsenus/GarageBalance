@@ -816,7 +816,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>([])
   const [departmentPageNumber, setDepartmentPageNumber] = useState(1)
   const [departmentPageSize, setDepartmentPageSize] = useState(10)
-  const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [supplierServices, setSupplierServices] = useState<SupplierServiceDto[]>([])
   const [serviceFunds, setServiceFunds] = useState<FundOptionDto[]>([])
   const [formStateError, setFormStateError] = useState<string | null>(null)
@@ -860,6 +859,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const contractorReferenceControllersRef = useRef<Partial<Record<'garages' | 'suppliers', AbortController>>>({})
   const [contractorReferenceLoading, setContractorReferenceLoading] = useState<'garages' | 'suppliers' | null>(null)
   const ownersRef = useRef<OwnerDto[]>([])
+  const supplierGroupsRef = useRef<SupplierGroupDto[]>([])
   const supplierContactsRef = useRef<SupplierContactDto[]>([])
   const loadedSupplierContactsRef = useRef(new Set<string>())
   const supplierEditorRequestSequenceRef = useRef(0)
@@ -956,7 +956,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             fundsClient.getFundOptions(auth.accessToken, controller.signal),
           ])
           if (controller.signal.aborted) return false
-          setSupplierGroups(groups)
+          supplierGroupsRef.current = groups
           setSupplierServices(loadedSupplierServices.items)
           setServiceFunds(loadedFunds)
         }
@@ -1758,7 +1758,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     const currentSupplier = suppliers.find((item) => item.id === normalizedSupplier.id)
 
     try {
-      const groups = [...supplierGroups]
+      const groups = [...supplierGroupsRef.current]
       const group = normalizedSupplier.groupId
         ? { id: normalizedSupplier.groupId }
         : await resolveSupplierGroup(dictionaryClient, auth.accessToken, groups, 'Поставщики')
@@ -1808,7 +1808,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       supplierContactsRef.current = nextSupplierContacts
       loadedSupplierContactsRef.current.add(savedSupplier.id)
       setSupplierContacts(nextSupplierContacts)
-      setSupplierGroups(groups)
+      supplierGroupsRef.current = groups
       setSuppliers((currentSuppliers) => {
         if (currentSupplier) {
           return currentSuppliers.map((item) => (item.id === normalizedSupplier.id ? nextSupplier : item))
