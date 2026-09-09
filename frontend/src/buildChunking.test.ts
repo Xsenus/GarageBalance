@@ -16,13 +16,14 @@ describe('production chunking', () => {
     expect(getManualChunkName('/project/node_modules/react-router/index.js')).toBeUndefined()
   })
 
-  it('groups jointly loaded accounting sections', () => {
-    expect(getManualChunkName('C:\\project\\src\\features\\finance\\FinancePanel.tsx')).toBe('workspace-accounting')
-    expect(getManualChunkName('/project/src/features/meterReadings/MeterReadingsPanel.tsx')).toBe('workspace-accounting')
-    expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('workspace-accounting')
-    expect(getManualChunkName('C:\\project\\src\\features\\contractors\\ContractorsPanel.tsx')).toBe('workspace-accounting')
-    expect(getManualChunkName('/project/src/features/tariffs/TariffsAndFeesPanel.tsx')).toBe('workspace-accounting')
-    expect(getManualChunkName('/project/src/features/reports/ReportPanel.tsx')).toBe('workspace-accounting')
+  it('splits authenticated accounting sections into bounded business chunks', () => {
+    expect(getManualChunkName('C:\\project\\src\\features\\finance\\FinancePanel.tsx')).toBe('workspace-finance')
+    expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('workspace-finance')
+    expect(getManualChunkName('/project/src/features/import/ImportPanel.tsx')).toBe('workspace-finance')
+    expect(getManualChunkName('/project/src/features/meterReadings/MeterReadingsPanel.tsx')).toBe('workspace-operations')
+    expect(getManualChunkName('C:\\project\\src\\features\\contractors\\ContractorsPanel.tsx')).toBe('workspace-operations')
+    expect(getManualChunkName('/project/src/features/tariffs/TariffsAndFeesPanel.tsx')).toBe('workspace-operations')
+    expect(getManualChunkName('/project/src/features/reports/ReportPanel.tsx')).toBe('workspace-operations')
     expect(getManualChunkName('/project/src/features/users/UserManagementPanel.tsx')).toBe('app-runtime')
   })
 
@@ -35,11 +36,15 @@ describe('production chunking', () => {
     if (Array.isArray(result) || !('output' in result)) throw new Error('Expected one completed application build')
     const chunks = result.output.filter((output) => output.type === 'chunk')
     const entry = chunks.find((chunk) => chunk.isEntry)
-    const workspace = chunks.find((chunk) => chunk.name === 'workspace-accounting')
+    const workspaces = chunks.filter((chunk) => chunk.name.startsWith('workspace-'))
+    const financeWorkspace = chunks.find((chunk) => chunk.name === 'workspace-finance')
     const shell = chunks.find((chunk) => chunk.name === 'AppShell')
     expect(entry).toBeDefined()
-    expect(workspace).toBeDefined()
-    expect(shell?.imports).toContain(workspace!.fileName)
+    expect(financeWorkspace).toBeDefined()
+    expect(workspaces.map((chunk) => chunk.name).sort()).toEqual([
+      'workspace-finance',
+      'workspace-operations',
+    ])
     const visited = new Set<string>()
     const pending = [entry!.fileName]
     while (pending.length) {
@@ -48,9 +53,9 @@ describe('production chunking', () => {
       visited.add(name)
       pending.push(...(chunks.find((chunk) => chunk.fileName === name)?.imports ?? []))
     }
-    expect(visited).not.toContain(workspace!.fileName)
+    for (const workspace of workspaces) expect(visited).not.toContain(workspace.fileName)
     expect(visited).not.toContain(shell!.fileName)
-    expect(Object.keys(workspace!.modules).some((id) => /[/\\]features[/\\]funds[/\\]FundsPanel\./.test(id))).toBe(true)
-    expect(chunks.find((chunk) => chunk.name === 'ImportPanel')).toBeDefined()
+    expect(Object.keys(financeWorkspace!.modules).some((id) => /[/\\]features[/\\]funds[/\\]FundsPanel\./.test(id))).toBe(true)
+    expect(Object.keys(financeWorkspace!.modules).some((id) => /[/\\]features[/\\]import[/\\]ImportPanel\./.test(id))).toBe(true)
   })
 })

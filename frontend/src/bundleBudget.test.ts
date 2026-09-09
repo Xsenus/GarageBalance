@@ -27,16 +27,17 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('remaining ${limit - bytes} bytes')
   })
 
-  it('groups the compact release panel with the accounting workspace', () => {
+  it('groups the compact release panel with the operations workspace', () => {
     expect(viteConfig).toContain('releases[/\\\\]ReleasePanel')
-    expect(viteConfig).toContain("return 'workspace-accounting'")
+    expect(viteConfig).toContain("return 'workspace-operations'")
   })
 
-  it('groups funds with accounting screens to keep the total compressed bundle bounded', () => {
+  it('splits authenticated business areas while keeping the login graph separate', () => {
     expect(viteConfig).toContain('modulePreload: false')
-    expect(viteConfig).toContain("return 'workspace-accounting'")
-    expect(viteConfig.split('\n').find((line) => line.includes('features') && line.includes('funds'))).toContain("return 'workspace-accounting'")
-    expect(viteConfig).toContain('(finance|meterReadings|contractors|tariffs)')
+    expect(viteConfig).toContain("return 'workspace-finance'")
+    expect(viteConfig).toContain("return 'workspace-operations'")
+    expect(viteConfig).toContain('(finance|funds|import)')
+    expect(viteConfig).toContain('(meterReadings|contractors|tariffs)')
   })
 
   it('loads the authenticated workspace only after authentication', () => {
