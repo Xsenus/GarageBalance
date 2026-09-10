@@ -41,6 +41,10 @@ public interface IAccrualRepository
         Guid incomeTypeId,
         DateOnly accountingMonth,
         CancellationToken cancellationToken);
+    Task<IReadOnlyList<DateOnly>> GetActiveRegularMonthsForRecalculationAsync(
+        Guid incomeTypeId,
+        DateOnly monthFrom,
+        CancellationToken cancellationToken);
     Task<IReadOnlySet<Guid>> GetActiveRegularIncomeTypeIdsAsync(
         Guid garageId,
         DateOnly monthFrom,

@@ -1391,11 +1391,24 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setTariffDrafts(createEditableDrafts(nextRows))
   }
 
-  function applySavedServiceTariff(saved: { service: ChargeServiceSettingDto, tariff: TariffDto }) {
+  function applySavedServiceTariff(
+    saved: { service: ChargeServiceSettingDto, tariff: TariffDto },
+    tariffs = backendTariffs,
+    settings = backendChargeServices,
+  ) {
     applyTariffRows(
-      [...backendTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
-      [...backendChargeServices.filter((setting) => setting.id !== saved.service.id), saved.service],
+      [...tariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
+      [...settings.filter((setting) => setting.id !== saved.service.id), saved.service],
     )
+  }
+
+  async function reloadServiceTariff(serviceId: string) {
+    const [tariffs, settings] = await Promise.all([
+      dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+      dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
+    ])
+    const setting = settings.find((item) => item.id === serviceId)
+    return [tariffs, settings, setting, tariffs.find((item) => item.id === setting?.tariffId)] as const
   }
 
   async function persistServiceSettingRow(
@@ -1442,7 +1455,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const sourceTariffId = row.backendTariffId ?? serviceSetting?.tariffId
     const sourceTariff = sourceTariffId ? backendTariffs.find((tariff) => tariff.id === sourceTariffId) : null
     if (!serviceSetting || !sourceTariff) {
-      setTariffPersistenceError('Не удалось определить действующий тариф услуги.')
+      setTariffPersistenceError('Тариф услуги не найден.')
       return false
     }
 
@@ -1518,15 +1531,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         let retryError: unknown = caught
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
-            const refreshController = new AbortController()
-            const [latestTariffs, latestSettings] = await Promise.all([
-              dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, refreshController.signal),
-              dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true, undefined, undefined, refreshController.signal),
-            ])
-            const latestSetting = latestSettings.find((setting) => setting.id === serviceSetting.id)
-            const latestTariff = latestSetting?.tariffId
-              ? latestTariffs.find((tariff) => tariff.id === latestSetting.tariffId)
-              : null
+            const [latestTariffs, latestSettings, latestSetting, latestTariff] = await reloadServiceTariff(serviceSetting.id)
             if (!latestSetting || !latestTariff) {
               break
             }
@@ -1550,10 +1555,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 latestTariff.rate,
               ),
             )
-            applyTariffRows(
-              [...latestTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
-              [...latestSettings.filter((setting) => setting.id !== saved.service.id), saved.service],
-            )
+            applySavedServiceTariff(saved, latestTariffs, latestSettings)
             return true
           } catch (currentRetryError) {
             retryError = currentRetryError
@@ -1562,7 +1564,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             }
           }
         }
-        setTariffPersistenceError(getErrorMessage(retryError, 'Не удалось обновить тариф и повторить смену режима.'))
+        setTariffPersistenceError(getErrorMessage(retryError, 'Не удалось сменить режим тарифа.'))
         return false
       }
       setTariffPersistenceError(getErrorMessage(caught, 'Не удалось сменить режим тарифа.'))
@@ -1637,17 +1639,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       request = { ...request, version: backendTariff.version }
     }
 
+    const linkedSetting = backendChargeServices.find((setting) =>
+      setting.id === targetRow.backendServiceSettingId || setting.tariffId === backendTariff?.id)
+
     setTariffSavingRowId(targetRow.id)
     setTariffPersistenceError(null)
     try {
-      const linkedServiceSettingId = targetRow.backendServiceSettingId
-        ?? nextRows.find((candidate) => (
-          candidate.backendTariffId === backendTariff?.id
-          && Boolean(candidate.backendServiceSettingId)
-        ))?.backendServiceSettingId
-      const linkedSetting = linkedServiceSettingId
-        ? backendChargeServices.find((setting) => setting.id === linkedServiceSettingId)
-        : null
       if (linkedSetting && backendTariff) {
         const tariffMode = linkedSetting.hasTieredTariff ? 'metered_tiered' : linkedSetting.isMetered ? 'metered' : 'regular'
         const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, linkedSetting.id, {
@@ -1676,7 +1673,28 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applyTariffRows(nextTariffs)
       return true
     } catch (caught) {
-      const message = getErrorMessage(caught, 'Не удалось сохранить тариф.')
+      if (caught instanceof DictionaryApiError && caught.code === 'concurrent_write_conflict' && linkedSetting && backendTariff) {
+        try {
+          const [latestTariffs, latestSettings, latestSetting, latestTariff] = await reloadServiceTariff(linkedSetting.id)
+          if (latestSetting && latestTariff) {
+            const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, latestSetting.id, {
+              service: { ...buildChargeServiceRequest(latestSetting, nextRows), tariffId: latestTariff.id },
+              rate: request.rate,
+              tariffMode: latestSetting.hasTieredTariff ? 'metered_tiered' : latestSetting.isMetered ? 'metered' : 'regular',
+              effectiveFrom: request.effectiveFrom,
+              electricityTiers: request.electricityTiers ?? null,
+              changeReason: electricityTierChangeReason,
+              calculationBase: request.calculationBase,
+              tariffVersion: latestTariff.version,
+            })
+            applySavedServiceTariff(saved, latestTariffs, latestSettings)
+            return true
+          }
+        } catch (retryError) {
+          caught = retryError
+        }
+      }
+      const message = getErrorMessage(caught, 'Тариф не сохранён')
       ;(onPersistenceError ?? setTariffPersistenceError)(message)
       return false
     } finally {

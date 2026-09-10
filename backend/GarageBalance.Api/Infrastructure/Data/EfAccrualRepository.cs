@@ -536,6 +536,26 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .ThenBy(accrual => accrual.Id)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<DateOnly>> GetActiveRegularMonthsForRecalculationAsync(
+        Guid incomeTypeId,
+        DateOnly monthFrom,
+        CancellationToken cancellationToken) =>
+        // The result is intrinsically bounded to one row per accounting month,
+        // while the much larger garage/accrual set remains in PostgreSQL.
+        await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.Source == AccrualSources.Regular &&
+                accrual.IncomeTypeId == incomeTypeId &&
+                accrual.AccountingMonth >= monthFrom &&
+                accrual.FeeCampaignId == null &&
+                accrual.IrregularPaymentId == null &&
+                accrual.Basis == null)
+            .Select(accrual => accrual.AccountingMonth)
+            .Distinct()
+            .OrderBy(month => month)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlySet<Guid>> GetActiveRegularIncomeTypeIdsAsync(
         Guid garageId,
         DateOnly monthFrom,

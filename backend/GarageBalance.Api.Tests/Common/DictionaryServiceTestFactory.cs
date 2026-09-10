@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 
@@ -13,7 +14,10 @@ internal static class DictionaryServiceTestFactory
         new(new EfSupplierServiceRepository(dbContext), new EfFundRepository(dbContext),
             new EfApplicationUnitOfWork(dbContext), new AuditEventWriter(dbContext));
 
-    public static DictionaryService Create(GarageBalanceDbContext dbContext, DateOnly? businessDate = null) =>
+    public static DictionaryService Create(
+        GarageBalanceDbContext dbContext,
+        DateOnly? businessDate = null,
+        ITariffAccrualRecalculationService? tariffAccrualRecalculationService = null) =>
         new(
             new EfOwnerRepository(dbContext),
             new EfGarageRepository(dbContext),
@@ -33,7 +37,14 @@ internal static class DictionaryServiceTestFactory
             new EfFundRepository(dbContext),
             new EfOpeningBalanceAdjustmentRepository(dbContext),
             new EfAccrualPaymentAllocationRepository(dbContext),
+            tariffAccrualRecalculationService ?? new NoOpTariffAccrualRecalculationService(),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             new TestBusinessDateProvider(businessDate ?? DefaultBusinessDate));
+
+    private sealed class NoOpTariffAccrualRecalculationService : ITariffAccrualRecalculationService
+    {
+        public Task RecalculateExistingUnpaidAsync(Guid chargeServiceId, Guid incomeTypeId, DateOnly affectedFrom, Guid? actorUserId, string reason, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
 }

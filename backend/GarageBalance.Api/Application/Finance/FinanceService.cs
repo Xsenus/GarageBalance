@@ -45,7 +45,7 @@ public sealed class FinanceService(
     IAuditEventWriter auditEventWriter,
     TimeProvider timeProvider,
     IBusinessDateProvider businessDateProvider,
-    IPayoutMutationPolicy? payoutMutationPolicy = null) : IFinanceService
+    IPayoutMutationPolicy? payoutMutationPolicy = null) : IFinanceService, IRegularAccrualRecalculationService
 {
     private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private const int MaxAutomaticFeeCampaigns = 500;

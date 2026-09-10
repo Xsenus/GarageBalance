@@ -29,6 +29,7 @@ public sealed class DictionaryService(
     IFundRepository fundRepository,
     IOpeningBalanceAdjustmentRepository openingBalanceAdjustmentRepository,
     IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
+    ITariffAccrualRecalculationService tariffAccrualRecalculationService,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     IBusinessDateProvider businessDateProvider) : IDictionaryService
@@ -2748,6 +2749,16 @@ public sealed class DictionaryService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (tariffChanged && setting.IncomeTypeId.HasValue)
+        {
+            await tariffAccrualRecalculationService.RecalculateExistingUnpaidAsync(
+                setting.Id,
+                setting.IncomeTypeId.Value,
+                tariff.EffectiveFrom,
+                actorUserId,
+                $"Автоматический перерасчёт после изменения тарифа услуги «{setting.Name}».",
+                cancellationToken);
+        }
         return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
     }
@@ -2873,6 +2884,17 @@ public sealed class DictionaryService(
             $"Обновлена тарифная сетка услуги {setting.Name}: {replacements.Count} период(ов).",
             NormalizeOptional(request.ChangeReason));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (setting.IncomeTypeId.HasValue)
+        {
+            var affectedFrom = replacements.Min(period => period.EffectiveFrom);
+            await tariffAccrualRecalculationService.RecalculateExistingUnpaidAsync(
+                setting.Id,
+                setting.IncomeTypeId.Value,
+                affectedFrom,
+                actorUserId,
+                $"Автоматический перерасчёт после изменения тарифной сетки услуги «{setting.Name}».",
+                cancellationToken);
+        }
 
         return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Success(
             new UpdatedChargeServiceTariffScheduleDto(
@@ -3064,6 +3086,16 @@ public sealed class DictionaryService(
             oldValues,
             ToChargeServiceAuditValues(setting));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (setting.IncomeTypeId.HasValue)
+        {
+            await tariffAccrualRecalculationService.RecalculateExistingUnpaidAsync(
+                setting.Id,
+                setting.IncomeTypeId.Value,
+                effectiveFrom,
+                actorUserId,
+                $"Автоматический перерасчёт после изменения ставки услуги «{setting.Name}».",
+                cancellationToken);
+        }
 
         return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
@@ -3249,6 +3281,16 @@ public sealed class DictionaryService(
             oldValues,
             ToChargeServiceAuditValues(setting));
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (setting.IncomeTypeId.HasValue)
+        {
+            await tariffAccrualRecalculationService.RecalculateExistingUnpaidAsync(
+                setting.Id,
+                setting.IncomeTypeId.Value,
+                tariff.EffectiveFrom,
+                actorUserId,
+                $"Автоматический перерасчёт после смены режима тарифа услуги «{setting.Name}».",
+                cancellationToken);
+        }
 
         return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));

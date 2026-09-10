@@ -2214,6 +2214,7 @@ describe('App', () => {
       electricityThirdRate: 5,
       electricityTiers,
     })
+    let latestElectricityTariff = electricityTariff
     let membershipSetting = createChargeServiceSetting({
       id: 'membership',
       name: 'Членский взнос',
@@ -2238,7 +2239,7 @@ describe('App', () => {
     })
     const electricitySettingRequests: UpdateChargeServiceWithTariffRequest[] = []
     const dictionaryClient = createDictionaryClient({
-      getTariffs: async () => [waterTariff, electricityTariff, lightingTariff],
+      getTariffs: async () => [waterTariff, latestElectricityTariff, lightingTariff],
       getIncomeTypes: async () => [membershipIncomeType, electricityIncomeType],
       getChargeServiceSettings: async () => [membershipSetting, electricitySetting],
       updateChargeServiceWithTariff: async (_token, id, request) => {
@@ -2255,7 +2256,9 @@ describe('App', () => {
         }
         if (request.changeReason === 'Добавлен числовой диапазон пороговой тарификации.') {
           thresholdCreateAttempts += 1
-          if (thresholdCreateAttempts === 1) throw new Error('Новый порог временно не сохранён.')
+          if (thresholdCreateAttempts === 1) {
+            throw new DictionaryApiError('concurrent_write_conflict', 'Версия тарифа устарела.', 409)
+          }
         }
         if (request.changeReason === 'Лишний порог добавлен ошибочно') {
           thresholdDeleteAttempts += 1
@@ -2277,6 +2280,7 @@ describe('App', () => {
           rate: request.rate,
           electricityTiers: savedTiers,
         })
+        latestElectricityTariff = savedTariff
         electricitySetting = createChargeServiceSetting({
           ...electricitySetting,
           id,
@@ -2596,16 +2600,13 @@ describe('App', () => {
     await user.clear(within(createThresholdDialog).getByLabelText('Ставка нового порога'))
     await user.type(within(createThresholdDialog).getByLabelText('Ставка нового порога'), '7.5')
     await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
-    expect(await within(createThresholdDialog).findByRole('alert')).toHaveTextContent('Новый порог временно не сохранён.')
-    expect(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога')).toHaveValue('5')
-    expect(within(createThresholdDialog).getByLabelText('Ставка нового порога')).toHaveValue('7.50')
-    await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
     const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: 5.00–5.00: значение')
     expect(electricityThresholdInput).toHaveValue('7.50')
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(4)
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: '5.00–5.00', upperBound: 5, rate: 7.5 })
     expect(directTariffUpdateRequests).toHaveLength(directTariffUpdatesBeforeThresholdAdd)
     expect(electricitySettingRequests.at(-1)?.changeReason).toBe('Добавлен числовой диапазон пороговой тарификации.')
+    expect(thresholdCreateAttempts).toBe(2)
     const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог 5.00–5.00' })
     await user.click(deleteThresholdButton)
     const thresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })

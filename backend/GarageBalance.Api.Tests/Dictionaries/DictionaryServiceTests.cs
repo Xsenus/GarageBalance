@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -4820,6 +4821,138 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_RecalculatesExistingUnpaidAccrualsForAllGarages()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Содержание", 10);
+        var incomeType = new IncomeType { Name = "Содержание", Code = "service_maintenance", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Содержание", CalculationBase = "fixed", Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Содержание",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            UnitName = "гараж"
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+        var recalculation = new RecordingTariffAccrualRecalculationService();
+        var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: recalculation);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name, true, 1, 1, 30, null, 30, false, false, setting.UnitName,
+                    incomeType.Id, tariff.Id),
+                125m),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var call = Assert.Single(recalculation.Calls);
+        Assert.Equal(setting.Id, call.ChargeServiceId);
+        Assert.Equal(incomeType.Id, call.IncomeTypeId);
+        Assert.Equal(new DateOnly(2026, 1, 1), call.AffectedFrom);
+        Assert.Equal(actorUserId, call.ActorUserId);
+    }
+
+    private sealed class RecordingTariffAccrualRecalculationService : ITariffAccrualRecalculationService
+    {
+        public List<(Guid ChargeServiceId, Guid IncomeTypeId, DateOnly AffectedFrom, Guid? ActorUserId)> Calls { get; } = [];
+
+        public Task RecalculateExistingUnpaidAsync(Guid chargeServiceId, Guid incomeTypeId, DateOnly affectedFrom, Guid? actorUserId, string reason, CancellationToken cancellationToken)
+        {
+            Calls.Add((chargeServiceId, incomeTypeId, affectedFrom, actorUserId));
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_ChangesOnlyCompletelyUnpaidExistingAccruals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Содержание", 10);
+        var incomeType = new IncomeType { Name = "Содержание", Code = "service_maintenance", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Содержание", CalculationBase = TariffCalculationBases.Fixed, Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Содержание",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            UnitName = "гараж"
+        };
+        var paidGarage = new Garage { Number = "P-1", PeopleCount = 1, FloorCount = 1 };
+        var unpaidGarage = new Garage { Number = "U-1", PeopleCount = 1, FloorCount = 1 };
+        var month = new DateOnly(2026, 9, 1);
+        var paidAccrual = new Accrual
+        {
+            Garage = paidGarage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = month,
+            DueDate = new DateOnly(2026, 9, 30),
+            OverdueFromDate = new DateOnly(2026, 10, 31),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        var unpaidAccrual = new Accrual
+        {
+            Garage = unpaidGarage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = month,
+            DueDate = new DateOnly(2026, 9, 30),
+            OverdueFromDate = new DateOnly(2026, 10, 31),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = month,
+            AccountingMonth = month,
+            Amount = 1m,
+            Garage = paidGarage,
+            IncomeType = incomeType
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting, paidGarage, unpaidGarage, paidAccrual, unpaidAccrual,
+            payment, new AccrualPaymentAllocation { FinancialOperation = payment, Accrual = paidAccrual, Amount = 1m, IsActive = true });
+        await database.Context.SaveChangesAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var automaticRecalculation = new TariffAccrualRecalculationService(
+            new EfAccrualRepository(database.Context),
+            new EfChargeServiceSettingRepository(database.Context),
+            finance);
+        var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: automaticRecalculation);
+
+        var result = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(setting.Name, true, 1, 1, 30, null, 30, false, false, setting.UnitName, incomeType.Id, tariff.Id),
+                125m),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(100m, paidAccrual.Amount);
+        Assert.Equal(125m, unpaidAccrual.Amount);
+        Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "finance.regular_accrual_safely_recalculated" && audit.EntityId == unpaidAccrual.Id.ToString());
+        Assert.DoesNotContain(database.Context.AuditEvents, audit => audit.Action == "finance.regular_accrual_safely_recalculated" && audit.EntityId == paidAccrual.Id.ToString());
+    }
+
+    [Fact]
     public async Task UpdateChargeServiceWithTariffAsync_VersionsMeteredAndTieredModesAtomically()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -4843,7 +4976,8 @@ public sealed class DictionaryServiceTests
         };
         database.Context.AddRange(fund, selectedFund, incomeType, sourceTariff, setting);
         await database.Context.SaveChangesAsync();
-        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var recalculation = new RecordingTariffAccrualRecalculationService();
+        var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: recalculation);
 
         var tiered = await service.UpdateChargeServiceWithTariffAsync(
             setting.Id,
@@ -4966,6 +5100,10 @@ public sealed class DictionaryServiceTests
         Assert.Equal(3, database.Context.Tariffs.Count());
         Assert.Equal(3, database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_updated");
+        Assert.Equal(3, recalculation.Calls.Count);
+        Assert.Equal(new DateOnly(2026, 8, 1), recalculation.Calls[0].AffectedFrom);
+        Assert.Equal(new DateOnly(2026, 8, 2), recalculation.Calls[1].AffectedFrom);
+        Assert.Equal(new DateOnly(2026, 8, 2), recalculation.Calls[2].AffectedFrom);
     }
 
     [Fact]
@@ -5275,7 +5413,8 @@ public sealed class DictionaryServiceTests
         database.Context.AddRange(fund, incomeType, tariff, setting);
         await database.Context.SaveChangesAsync();
 
-        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var recalculation = new RecordingTariffAccrualRecalculationService();
+        var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: recalculation);
         var result = await service.UpdateChargeServiceTariffScheduleAsync(
             setting.Id,
             new UpsertChargeServiceTariffScheduleRequest(
@@ -5306,6 +5445,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(result.Value.Periods[0].TariffId, listedInAugust.TariffId);
         Assert.Equal(result.Value.Periods[1].TariffId, listedInSeptember.TariffId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_schedule_updated");
+        Assert.Equal(new DateOnly(1900, 1, 1), Assert.Single(recalculation.Calls).AffectedFrom);
     }
 
     [Fact]
