@@ -5341,6 +5341,7 @@ public sealed class FinanceService(
             }
             else
             {
+                accrual.IsCanceled = false;
                 accrual.Amount = row.ProposedAmount.Value;
                 var planned = regularAccrualRecalculationDetails.GetValueOrDefault(accrual.Id);
                 if (planned is not null)
@@ -5358,7 +5359,7 @@ public sealed class FinanceService(
             changedKeys.Add(new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId));
             AddAudit(
                 actorUserId,
-                row.Action == "cancel" ? "finance.regular_accrual_canceled_by_safe_recalculation" : "finance.regular_accrual_safely_recalculated",
+                row.Action == "cancel" ? "finance.regular_accrual_canceled_by_safe_recalculation" : RegularAccrualRecalculationAuditActions.SafelyRecalculated,
                 accrual,
                 $"Безопасный перерасчёт неоплаченного начисления по гаражу {accrual.Garage.Number} за {month:MM.yyyy}: {MoneyFormatting.Format(oldAmount)} → {MoneyFormatting.Format(row.ProposedAmount.Value)}. Основание: {reason}",
                 new Dictionary<string, object?>
@@ -5438,7 +5439,7 @@ public sealed class FinanceService(
             canceledCount++;
             AddAudit(
                 actorUserId,
-                "finance.regular_accrual_canceled_without_tariff",
+                RegularAccrualRecalculationAuditActions.CanceledWithoutTariff,
                 accrual,
                 $"Отменено неоплаченное начисление по гаражу {accrual.Garage.Number} за {month:MM.yyyy}: в тарифной сетке нет действующего тарифа. Основание: {reason}",
                 new Dictionary<string, object?> { ["isCanceled"] = false, ["amount"] = accrual.Amount },
@@ -5552,8 +5553,10 @@ public sealed class FinanceService(
 
             regularAccrualRecalculationDetails[accrual.Id] = calculation.Details;
             var detailsJson = RegularAccrualCalculator.Serialize(calculation.Details);
-            var action = calculation.Amount <= 0m
-                ? "cancel"
+            var action = accrual.IsCanceled
+                ? "update"
+                : calculation.Amount <= 0m
+                    ? "cancel"
                 : accrual.Amount != calculation.Amount
                     ? "update"
                     : !string.Equals(accrual.CalculationDetailsJson, detailsJson, StringComparison.Ordinal) || accrual.TariffId != tariffId
@@ -5562,6 +5565,7 @@ public sealed class FinanceService(
             var explanation = action switch
             {
                 "cancel" => "Расчётная сумма равна нулю: неоплаченное начисление будет отменено с аудитом.",
+                "update" when accrual.IsCanceled => "Начисление, автоматически отменённое из-за отсутствия тарифа, будет восстановлено и пересчитано.",
                 "update" => "Сумма и расчётный снимок будут обновлены.",
                 "snapshot" => "Сумма не меняется; будет обновлён только расчётный снимок и ссылка на тариф.",
                 _ => "Сумма и расчётный снимок уже актуальны."

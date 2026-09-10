@@ -4976,10 +4976,11 @@ public sealed class DictionaryServiceTests
         var septemberAccrual = CreateRegularAccrual(garage, incomeType, tariff, new DateOnly(2026, 9, 1), 100m);
         database.Context.AddRange(fund, incomeType, tariff, setting, garage, augustAccrual, septemberAccrual);
         await database.Context.SaveChangesAsync();
+        var financeService = FinanceServiceTestFactory.Create(database.Context);
         var automaticRecalculation = new TariffAccrualRecalculationService(
             new EfAccrualRepository(database.Context),
             new EfChargeServiceSettingRepository(database.Context),
-            FinanceServiceTestFactory.Create(database.Context));
+            financeService);
         var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: automaticRecalculation);
 
         var result = await service.UpdateChargeServiceWithTariffAsync(
@@ -5643,10 +5644,11 @@ public sealed class DictionaryServiceTests
         Assert.Equal("tariff_schedule_gap", result.ErrorCode);
         Assert.Empty(database.Context.ChargeServiceTariffVersions);
 
+        var financeService = FinanceServiceTestFactory.Create(database.Context);
         var automaticRecalculation = new TariffAccrualRecalculationService(
             new EfAccrualRepository(database.Context),
             new EfChargeServiceSettingRepository(database.Context),
-            FinanceServiceTestFactory.Create(database.Context));
+            financeService);
         var confirmed = await DictionaryServiceTestFactory.Create(
             database.Context,
             tariffAccrualRecalculationService: automaticRecalculation).UpdateChargeServiceTariffScheduleAsync(
@@ -5665,6 +5667,50 @@ public sealed class DictionaryServiceTests
         Assert.True(unpaidAccrual.IsCanceled);
         Assert.False(paidAccrual.IsCanceled);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accrual_canceled_without_tariff" && item.EntityId == unpaidAccrual.Id.ToString());
+
+        var restored = await DictionaryServiceTestFactory.Create(
+            database.Context,
+            tariffAccrualRecalculationService: automaticRecalculation).UpdateChargeServiceTariffScheduleAsync(
+            setting.Id,
+            new UpsertChargeServiceTariffScheduleRequest(
+                [new(null, null, null, 150m)],
+                false,
+                "Разрыв устранен",
+                confirmed.Value!.Service.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(restored.Succeeded, restored.ErrorMessage);
+        Assert.False(unpaidAccrual.IsCanceled);
+        Assert.Equal(150m, unpaidAccrual.Amount);
+        Assert.False(paidAccrual.IsCanceled);
+        Assert.Equal(100m, paidAccrual.Amount);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "finance.regular_accrual_safely_recalculated" &&
+            item.EntityId == unpaidAccrual.Id.ToString());
+
+        var manuallyCanceled = await financeService.CancelAccrualAsync(
+            unpaidAccrual.Id,
+            new CancelFinanceEntryRequest("Ручная отмена после восстановления тарифа"),
+            null,
+            CancellationToken.None);
+        Assert.True(manuallyCanceled.Succeeded, manuallyCanceled.ErrorMessage);
+
+        var changedAgain = await DictionaryServiceTestFactory.Create(
+            database.Context,
+            tariffAccrualRecalculationService: automaticRecalculation).UpdateChargeServiceTariffScheduleAsync(
+            setting.Id,
+            new UpsertChargeServiceTariffScheduleRequest(
+                [new(null, null, null, 175m)],
+                false,
+                "Повторное изменение ставки",
+                restored.Value!.Service.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(changedAgain.Succeeded, changedAgain.ErrorMessage);
+        Assert.True(unpaidAccrual.IsCanceled);
+        Assert.Equal(150m, unpaidAccrual.Amount);
     }
 
     [Fact]

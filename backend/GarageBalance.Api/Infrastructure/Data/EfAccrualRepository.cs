@@ -521,11 +521,11 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
     public async Task<IReadOnlyList<Accrual>> GetActiveRegularForRecalculationAsync(
         Guid incomeTypeId,
         DateOnly accountingMonth,
-        CancellationToken cancellationToken) =>
-        await TrackedAggregate()
+        CancellationToken cancellationToken)
+    {
+        var query = TrackedAggregate()
             .Include(accrual => accrual.Tariff)
             .Where(accrual =>
-                !accrual.IsCanceled &&
                 accrual.Source == AccrualSources.Regular &&
                 accrual.IncomeTypeId == incomeTypeId &&
                 accrual.AccountingMonth == accountingMonth &&
@@ -533,28 +533,96 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 accrual.IrregularPaymentId == null &&
                 accrual.Basis == null)
             .OrderBy(accrual => accrual.Garage.Number)
-            .ThenBy(accrual => accrual.Id)
-            .ToListAsync(cancellationToken);
+            .ThenBy(accrual => accrual.Id);
+        return await ReadTariffRecalculationCandidatesAsync(query, cancellationToken);
+    }
 
     public async Task<IReadOnlyList<DateOnly>> GetActiveRegularMonthsForRecalculationAsync(
         Guid incomeTypeId,
         DateOnly monthFrom,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
         // The result is intrinsically bounded to one row per accounting month,
         // while the much larger garage/accrual set remains in PostgreSQL.
-        await dbContext.Accruals.AsNoTracking()
+        var query = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
-                !accrual.IsCanceled &&
                 accrual.Source == AccrualSources.Regular &&
                 accrual.IncomeTypeId == incomeTypeId &&
                 accrual.AccountingMonth >= monthFrom &&
                 accrual.FeeCampaignId == null &&
                 accrual.IrregularPaymentId == null &&
-                accrual.Basis == null)
+                accrual.Basis == null);
+        if (IsSqliteProvider())
+        {
+            // SQLite cannot order DateTimeOffset inside the correlated lifecycle
+            // subquery. This fallback is restricted to the test provider.
+            return (await ReadTariffRecalculationCandidatesAsync(query, cancellationToken))
+                .Select(accrual => accrual.AccountingMonth)
+                .Distinct()
+                .OrderBy(month => month)
+                .ToList();
+        }
+
+        return await WithTariffRecalculationCancellationState(query)
             .Select(accrual => accrual.AccountingMonth)
             .Distinct()
             .OrderBy(month => month)
             .ToListAsync(cancellationToken);
+    }
+
+    private IQueryable<Accrual> WithTariffRecalculationCancellationState(IQueryable<Accrual> query) =>
+        query.Where(accrual =>
+            !accrual.IsCanceled ||
+            dbContext.AuditEvents
+                .Where(auditEvent =>
+                    auditEvent.EntityType == "accrual" &&
+                    auditEvent.EntityId == accrual.Id.ToString() &&
+                    (auditEvent.Action == RegularAccrualRecalculationAuditActions.CanceledWithoutTariff ||
+                     auditEvent.Action == RegularAccrualRecalculationAuditActions.SafelyRecalculated ||
+                     auditEvent.Action == RegularAccrualRecalculationAuditActions.ManuallyCanceled ||
+                     auditEvent.Action == RegularAccrualRecalculationAuditActions.ManuallyRestored))
+                .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
+                .ThenByDescending(auditEvent => auditEvent.Id)
+                .Select(auditEvent => auditEvent.Action)
+                .FirstOrDefault() == RegularAccrualRecalculationAuditActions.CanceledWithoutTariff);
+
+    private async Task<IReadOnlyList<Accrual>> ReadTariffRecalculationCandidatesAsync(
+        IQueryable<Accrual> query,
+        CancellationToken cancellationToken)
+    {
+        if (!IsSqliteProvider())
+        {
+            return await WithTariffRecalculationCancellationState(query).ToListAsync(cancellationToken);
+        }
+
+        var candidates = await query.ToListAsync(cancellationToken);
+        var canceledIds = candidates.Where(accrual => accrual.IsCanceled).Select(accrual => accrual.Id).ToArray();
+        if (canceledIds.Length == 0)
+        {
+            return candidates;
+        }
+
+        var entityIds = canceledIds.Select(id => id.ToString()).ToArray();
+        var lifecycleEvents = await dbContext.AuditEvents.AsNoTracking()
+            .Where(auditEvent =>
+                auditEvent.EntityType == "accrual" &&
+                auditEvent.EntityId != null &&
+                entityIds.Contains(auditEvent.EntityId) &&
+                (auditEvent.Action == RegularAccrualRecalculationAuditActions.CanceledWithoutTariff ||
+                 auditEvent.Action == RegularAccrualRecalculationAuditActions.SafelyRecalculated ||
+                 auditEvent.Action == RegularAccrualRecalculationAuditActions.ManuallyCanceled ||
+                 auditEvent.Action == RegularAccrualRecalculationAuditActions.ManuallyRestored))
+            .ToListAsync(cancellationToken);
+        var restorableIds = lifecycleEvents
+            .GroupBy(auditEvent => auditEvent.EntityId)
+            .Where(group => group
+                .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
+                .ThenByDescending(auditEvent => auditEvent.Id)
+                .First().Action == RegularAccrualRecalculationAuditActions.CanceledWithoutTariff)
+            .Select(group => Guid.Parse(group.Key!))
+            .ToHashSet();
+        return candidates.Where(accrual => !accrual.IsCanceled || restorableIds.Contains(accrual.Id)).ToList();
+    }
 
     public async Task<IReadOnlySet<Guid>> GetActiveRegularIncomeTypeIdsAsync(
         Guid garageId,

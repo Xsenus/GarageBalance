@@ -1,5 +1,7 @@
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +10,79 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 
 public sealed class PostgreSqlTariffModeIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task TariffRecalculation_FindsOnlySystemCanceledGapAccrualsOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var incomeType = new IncomeType { Name = "Тест возврата тарифа", Code = $"tariff_restore_{Guid.NewGuid():N}" };
+        var tariff = new Tariff { Name = $"Тариф возврата {Guid.NewGuid():N}", CalculationBase = "fixed", Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var automaticallyCanceled = new Accrual
+        {
+            Garage = new Garage { Number = $"AUTO-{Guid.NewGuid():N}", PeopleCount = 1, FloorCount = 1 },
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            DueDate = new DateOnly(2026, 8, 31),
+            OverdueFromDate = new DateOnly(2026, 10, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular,
+            IsCanceled = true
+        };
+        var manuallyCanceled = new Accrual
+        {
+            Garage = new Garage { Number = $"MANUAL-{Guid.NewGuid():N}", PeopleCount = 1, FloorCount = 1 },
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            DueDate = new DateOnly(2026, 9, 30),
+            OverdueFromDate = new DateOnly(2026, 11, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular,
+            IsCanceled = true
+        };
+        var firstEventAt = new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero);
+        context.AddRange(incomeType, tariff, automaticallyCanceled, manuallyCanceled,
+            new AuditEvent
+            {
+                Action = "finance.regular_accrual_canceled_without_tariff",
+                EntityType = "accrual",
+                EntityId = automaticallyCanceled.Id.ToString(),
+                Summary = "Автоматическая отмена",
+                CreatedAtUtc = firstEventAt
+            },
+            new AuditEvent
+            {
+                Action = "finance.regular_accrual_canceled_without_tariff",
+                EntityType = "accrual",
+                EntityId = manuallyCanceled.Id.ToString(),
+                Summary = "Предыдущая автоматическая отмена",
+                CreatedAtUtc = firstEventAt
+            },
+            new AuditEvent
+            {
+                Action = "finance.accrual_canceled",
+                EntityType = "accrual",
+                EntityId = manuallyCanceled.Id.ToString(),
+                Summary = "Последующая ручная отмена",
+                CreatedAtUtc = firstEventAt.AddMinutes(1)
+            });
+        await context.SaveChangesAsync();
+
+        var repository = new EfAccrualRepository(context);
+        var months = await repository.GetActiveRegularMonthsForRecalculationAsync(
+            incomeType.Id,
+            new DateOnly(2026, 8, 1),
+            CancellationToken.None);
+        var rows = await repository.GetActiveRegularForRecalculationAsync(
+            incomeType.Id,
+            new DateOnly(2026, 8, 1),
+            CancellationToken.None);
+
+        Assert.Equal([new DateOnly(2026, 8, 1)], months);
+        Assert.Equal(automaticallyCanceled.Id, Assert.Single(rows).Id);
+    }
+
     [PostgreSqlFact]
     public async Task TariffModeChange_CreatesVersionAndSwitchesServiceAtomicallyOnPostgreSql()
     {

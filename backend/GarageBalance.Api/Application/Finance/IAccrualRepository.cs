@@ -2,6 +2,14 @@ using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Finance;
 
+internal static class RegularAccrualRecalculationAuditActions
+{
+    public const string CanceledWithoutTariff = "finance.regular_accrual_canceled_without_tariff";
+    public const string SafelyRecalculated = "finance.regular_accrual_safely_recalculated";
+    public const string ManuallyCanceled = "finance.accrual_canceled";
+    public const string ManuallyRestored = "finance.accrual_restored";
+}
+
 public interface IAccrualRepository
 {
     Task<IReadOnlyList<Accrual>> GetListAsync(

@@ -2826,22 +2826,36 @@ public sealed class DictionaryService(
         foreach (var period in request.Periods.OrderBy(item => item.EffectiveFrom ?? OpenTariffScheduleStart))
         {
             var startsOn = period.EffectiveFrom ?? OpenTariffScheduleStart;
+            var exactExistingPeriod = allExisting.FirstOrDefault(item =>
+                item.EffectiveFrom == startsOn &&
+                !item.Tariff.IsArchived);
             var matchingExistingPeriod = period.TariffId.HasValue
                 && existingByTariff.TryGetValue(period.TariffId.Value, out var tariffPeriods)
                     ? tariffPeriods.FirstOrDefault(item => item.EffectiveFrom == startsOn) ?? tariffPeriods[0]
                     : null;
-            var source = matchingExistingPeriod?.Tariff ?? fallbackTariff;
+            var source = matchingExistingPeriod?.Tariff ?? exactExistingPeriod?.Tariff ?? fallbackTariff;
             if (period.TariffVersion.HasValue)
             {
                 OptimisticConcurrencyGuard.EnsureCurrent(period.TariffVersion, source);
             }
 
             var roundedRate = MoneyMath.RoundRate(period.Rate);
-            var canReuse = matchingExistingPeriod is not null
-                && matchingExistingPeriod.EffectiveFrom == startsOn
-                && source.Rate == roundedRate
-                && usedTariffIds.Add(source.Id);
-            var tariff = canReuse ? source : CloneTariffForSchedule(source, setting.Name, startsOn, roundedRate, request.ChangeReason);
+            var canReuse = exactExistingPeriod is not null && usedTariffIds.Add(exactExistingPeriod.TariffId);
+            var tariff = canReuse
+                ? exactExistingPeriod!.Tariff
+                : CloneTariffForSchedule(source, setting.Name, startsOn, roundedRate, request.ChangeReason);
+            if (canReuse && tariff.Rate != roundedRate)
+            {
+                CopyTariffVersionTerms(
+                    tariff,
+                    source,
+                    setting.Name,
+                    !string.IsNullOrWhiteSpace(source.ElectricityTiersJson) ? "metered_tiered" :
+                        source.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity ? "metered" : "regular",
+                    roundedRate,
+                    startsOn,
+                    NormalizeOptional(request.ChangeReason));
+            }
             if (!canReuse)
             {
                 usedTariffIds.Add(tariff.Id);
