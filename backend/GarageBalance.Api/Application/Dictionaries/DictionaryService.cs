@@ -2886,7 +2886,11 @@ public sealed class DictionaryService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         if (setting.IncomeTypeId.HasValue)
         {
-            var affectedFrom = replacements.Min(period => period.EffectiveFrom);
+            var affectedFrom = allExisting
+                .Select(period => period.EffectiveFrom)
+                .Append(fallbackTariff.EffectiveFrom)
+                .Concat(replacements.Select(period => period.EffectiveFrom))
+                .Min();
             await tariffAccrualRecalculationService.RecalculateExistingUnpaidAsync(
                 setting.Id,
                 setting.IncomeTypeId.Value,

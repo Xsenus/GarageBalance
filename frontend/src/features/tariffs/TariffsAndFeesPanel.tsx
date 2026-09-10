@@ -255,6 +255,10 @@ function parseTariffAmount(value: string, allowZero = false) {
   return Number.isFinite(parsed) && (allowZero ? parsed >= 0 : parsed > 0) ? parsed : null
 }
 
+function isConcurrentWriteConflict(error: unknown) {
+  return error instanceof DictionaryApiError && error.code === 'concurrent_write_conflict'
+}
+
 function getElectricityTariffTiers(tariff: TariffDto | null) {
   if (!tariff || !tariff.calculationBase.startsWith('meter_')) {
     return []
@@ -1391,14 +1395,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setTariffDrafts(createEditableDrafts(nextRows))
   }
 
-  function applySavedServiceTariff(
-    saved: { service: ChargeServiceSettingDto, tariff: TariffDto },
-    tariffs = backendTariffs,
-    settings = backendChargeServices,
-  ) {
+  function applySavedServiceTariff(saved: { service: ChargeServiceSettingDto, tariff: TariffDto }) {
     applyTariffRows(
-      [...tariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
-      [...settings.filter((setting) => setting.id !== saved.service.id), saved.service],
+      [...backendTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
+      [...backendChargeServices.filter((setting) => setting.id !== saved.service.id), saved.service],
     )
   }
 
@@ -1408,7 +1408,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
     ])
     const setting = settings.find((item) => item.id === serviceId)
-    return [tariffs, settings, setting, tariffs.find((item) => item.id === setting?.tariffId)] as const
+    return [setting, tariffs.find((item) => item.id === setting?.tariffId)] as const
   }
 
   async function persistServiceSettingRow(
@@ -1455,7 +1455,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const sourceTariffId = row.backendTariffId ?? serviceSetting?.tariffId
     const sourceTariff = sourceTariffId ? backendTariffs.find((tariff) => tariff.id === sourceTariffId) : null
     if (!serviceSetting || !sourceTariff) {
-      setTariffPersistenceError('Тариф услуги не найден.')
+      setTariffPersistenceError('Тариф не найден')
       return false
     }
 
@@ -1527,11 +1527,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applySavedServiceTariff(saved)
       return true
     } catch (caught) {
-      if (caught instanceof DictionaryApiError && caught.code === 'concurrent_write_conflict') {
+      if (isConcurrentWriteConflict(caught)) {
         let retryError: unknown = caught
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
-            const [latestTariffs, latestSettings, latestSetting, latestTariff] = await reloadServiceTariff(serviceSetting.id)
+            const [latestSetting, latestTariff] = await reloadServiceTariff(serviceSetting.id)
             if (!latestSetting || !latestTariff) {
               break
             }
@@ -1555,19 +1555,19 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 latestTariff.rate,
               ),
             )
-            applySavedServiceTariff(saved, latestTariffs, latestSettings)
+            applySavedServiceTariff(saved)
             return true
           } catch (currentRetryError) {
             retryError = currentRetryError
-            if (!(currentRetryError instanceof DictionaryApiError) || currentRetryError.code !== 'concurrent_write_conflict') {
+            if (!isConcurrentWriteConflict(currentRetryError)) {
               break
             }
           }
         }
-        setTariffPersistenceError(getErrorMessage(retryError, 'Не удалось сменить режим тарифа.'))
+        setTariffPersistenceError(getErrorMessage(retryError, 'Режим не сохранён.'))
         return false
       }
-      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось сменить режим тарифа.'))
+      setTariffPersistenceError(getErrorMessage(caught, 'Режим не сохранён.'))
       return false
     } finally {
       setTariffSavingRowId(null)
@@ -1673,9 +1673,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       applyTariffRows(nextTariffs)
       return true
     } catch (caught) {
-      if (caught instanceof DictionaryApiError && caught.code === 'concurrent_write_conflict' && linkedSetting && backendTariff) {
+      if (isConcurrentWriteConflict(caught) && linkedSetting && backendTariff) {
         try {
-          const [latestTariffs, latestSettings, latestSetting, latestTariff] = await reloadServiceTariff(linkedSetting.id)
+          const [latestSetting, latestTariff] = await reloadServiceTariff(linkedSetting.id)
           if (latestSetting && latestTariff) {
             const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, latestSetting.id, {
               service: { ...buildChargeServiceRequest(latestSetting, nextRows), tariffId: latestTariff.id },
@@ -1687,10 +1687,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               calculationBase: request.calculationBase,
               tariffVersion: latestTariff.version,
             })
-            applySavedServiceTariff(saved, latestTariffs, latestSettings)
+            applySavedServiceTariff(saved)
             return true
           }
         } catch (retryError) {
+          // Preserve the most useful server error if the automatic retry also fails.
+          // eslint-disable-next-line no-ex-assign
           caught = retryError
         }
       }
@@ -2179,17 +2181,25 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   async function updateChargeServiceTariffSchedule(request: UpsertChargeServiceTariffScheduleRequest) {
     if (!chargeServiceEditTarget || !dictionaryClient.updateChargeServiceTariffSchedule) {
-      throw new Error('Сохранение тарифной сетки недоступно.')
+      throw new Error()
     }
 
-    const saved = await dictionaryClient.updateChargeServiceTariffSchedule(auth.accessToken, chargeServiceEditTarget.id, {
-      ...request,
-      serviceVersion: chargeServiceEditTarget.version,
-    })
-    applySavedServiceTariff(saved)
-    setChargeServiceEditTarget(saved.service)
-    setChargeServiceTariffSchedule(saved.periods)
-    return saved.periods
+    const target = chargeServiceEditTarget
+    let version = target.version
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const saved = await dictionaryClient.updateChargeServiceTariffSchedule(auth.accessToken, target.id, { ...request, serviceVersion: version })
+        applySavedServiceTariff(saved)
+        setChargeServiceEditTarget(saved.service)
+        setChargeServiceTariffSchedule(saved.periods)
+        return saved.periods
+      } catch (caught) {
+        if (attempt > 0 || !isConcurrentWriteConflict(caught)) throw caught
+        const [latestTarget] = await reloadServiceTariff(target.id)
+        if (!latestTarget) throw caught
+        version = latestTarget.version
+      }
+    }
   }
 
   async function createIrregularService(request: UpsertIrregularPaymentRequest) {

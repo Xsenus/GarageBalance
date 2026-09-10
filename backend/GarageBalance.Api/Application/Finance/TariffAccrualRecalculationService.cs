@@ -42,8 +42,16 @@ public sealed class TariffAccrualRecalculationService(
                 : ResolveTariffId(schedule.Periods, month);
             if (!tariffId.HasValue)
             {
-                // An explicitly configured gap means there is intentionally no
-                // tariff for this month, so existing history must not be guessed.
+                var cancellationResult = await financeService.CancelUnpaidRegularAccrualsWithoutTariffAsync(
+                    incomeTypeId,
+                    month,
+                    actorUserId,
+                    reason,
+                    cancellationToken);
+                if (!cancellationResult.Succeeded)
+                {
+                    throw new InvalidOperationException(cancellationResult.ErrorMessage ?? "Не удалось отменить неоплаченные начисления за период без тарифа.");
+                }
                 continue;
             }
 

@@ -10,4 +10,11 @@ public interface IRegularAccrualRecalculationService
         ApplyRegularAccrualRecalculationRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+
+    Task<FinanceResult<int>> CancelUnpaidRegularAccrualsWithoutTariffAsync(
+        Guid incomeTypeId,
+        DateOnly accountingMonth,
+        Guid? actorUserId,
+        string reason,
+        CancellationToken cancellationToken);
 }

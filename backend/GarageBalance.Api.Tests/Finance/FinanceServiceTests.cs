@@ -6468,6 +6468,83 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RegularAccrualRecalculation_UsesTheServicesOwnMeterInsteadOfTheSharedMeterKind()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var month = new DateOnly(2026, 9, 1);
+        var serviceId = Guid.NewGuid();
+        var serviceMeterKind = MeterKinds.ForService(serviceId);
+        var tariff = new Tariff
+        {
+            Name = "Счётчиковый тариф услуги",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 2m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Id = serviceId,
+            Name = "Охрана по счётчику",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            TariffId = tariff.Id,
+            IsMetered = true,
+            MeterKind = serviceMeterKind,
+            UnitName = "ед."
+        };
+        var accrual = new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            AccountingMonth = month,
+            DueDate = new DateOnly(2026, 9, 30),
+            OverdueFromDate = new DateOnly(2026, 10, 31),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        database.Context.AddRange(
+            tariff,
+            setting,
+            accrual,
+            new MeterReading
+            {
+                Garage = fixtures.Garage,
+                MeterKind = serviceMeterKind,
+                AccountingMonth = month,
+                ReadingDate = new DateOnly(2026, 9, 30),
+                CurrentValue = 10m,
+                Consumption = 10m
+            },
+            new MeterReading
+            {
+                Garage = fixtures.Garage,
+                MeterKind = MeterKinds.Electricity,
+                AccountingMonth = month,
+                ReadingDate = new DateOnly(2026, 9, 30),
+                CurrentValue = 999m,
+                Consumption = 999m
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context)
+            .PreviewRegularAccrualRecalculationAsync(
+                new PreviewRegularAccrualRecalculationRequest(fixtures.IncomeType.Id, tariff.Id, month),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var row = Assert.Single(result.Value!.Rows);
+        Assert.Equal("update", row.Action);
+        Assert.Equal(20m, row.ProposedAmount);
+        Assert.Equal(0, result.Value.ErrorCount);
+    }
+
+    [Fact]
     public async Task ApplyRegularAccrualRecalculation_RejectsMissingReasonAndStalePreview()
     {
         await using var database = await TestDatabase.CreateAsync();

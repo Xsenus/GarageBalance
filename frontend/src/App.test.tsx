@@ -40,7 +40,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { ApiNetworkError } from './services/apiFetch'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceTariffScheduleRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import { expenseBatchesApi } from './services/expenseBatchesApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
@@ -6787,6 +6787,54 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('cell', { name: 'Охрана территории: Тариф охраны по счётчику: единица' })).toHaveTextContent('комплект')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: по счетчику' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
+  })
+
+  it('refreshes a stale service version and retries saving the tariff schedule', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-schedule-retry', name: 'Охрана', code: 'service_security' })
+    const initialTariff = createTariff({ id: 'tariff-schedule-retry', name: 'Охрана', calculationBase: 'fixed', rate: 100, version: 'tariff-schedule-v1' })
+    const refreshedTariff = createTariff({ ...initialTariff, version: 'tariff-schedule-v2' })
+    const initialService = createChargeServiceSetting({
+      id: 'service-schedule-retry', name: 'Охрана', isRegular: true, incomeTypeId: incomeType.id,
+      tariffId: initialTariff.id, unitName: 'руб.', version: 'service-schedule-v1',
+    })
+    const refreshedService = createChargeServiceSetting({ ...initialService, version: 'service-schedule-v2' })
+    const savedService = createChargeServiceSetting({ ...initialService, version: 'service-schedule-v3' })
+    const period = { tariffId: initialTariff.id, effectiveFrom: '2026-01-01', effectiveTo: null, rate: 100, tariffVersion: initialTariff.version }
+    let tariffLoads = 0
+    let serviceLoads = 0
+    const scheduleRequests: UpsertChargeServiceTariffScheduleRequest[] = []
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => (++tariffLoads === 1 ? [initialTariff] : [refreshedTariff]),
+      getChargeServiceSettings: async () => (++serviceLoads === 1 ? [initialService] : [refreshedService]),
+      getChargeServiceTariffSchedule: async () => [period],
+      updateChargeServiceTariffSchedule: async (_token, _id, request) => {
+        scheduleRequests.push(request)
+        if (scheduleRequests.length === 1) {
+          throw new DictionaryApiError('concurrent_write_conflict', 'Настройка услуги уже изменилась.', 409)
+        }
+        return { service: savedService, tariff: refreshedTariff, periods: [{ ...period, tariffVersion: refreshedTariff.version }] }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Охрана' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    await within(dialog).findByRole('table', { name: 'Тарифная сетка услуги' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить тарифную сетку' }))
+
+    expect(await within(dialog).findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+    expect(scheduleRequests).toHaveLength(2)
+    expect(scheduleRequests[0].serviceVersion).toBe(initialService.version)
+    expect(scheduleRequests[1].serviceVersion).toBe(refreshedService.version)
+    expect(tariffLoads).toBe(2)
+    expect(serviceLoads).toBe(2)
   })
 
   it('refreshes stale versions and retries a water service mode switch without changing its meter kind', async () => {

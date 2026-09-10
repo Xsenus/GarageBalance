@@ -4953,6 +4953,130 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_DatedRateRecalculatesOnlyAffectedMonths()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Охрана", 10);
+        var incomeType = new IncomeType { Name = "Охрана", Code = "service_security", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Охрана", CalculationBase = TariffCalculationBases.Fixed, Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Охрана",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            UnitName = "гараж"
+        };
+        var garage = new Garage { Number = "DATE-1", PeopleCount = 1, FloorCount = 1 };
+        var augustAccrual = CreateRegularAccrual(garage, incomeType, tariff, new DateOnly(2026, 8, 1), 100m);
+        var septemberAccrual = CreateRegularAccrual(garage, incomeType, tariff, new DateOnly(2026, 9, 1), 100m);
+        database.Context.AddRange(fund, incomeType, tariff, setting, garage, augustAccrual, septemberAccrual);
+        await database.Context.SaveChangesAsync();
+        var automaticRecalculation = new TariffAccrualRecalculationService(
+            new EfAccrualRepository(database.Context),
+            new EfChargeServiceSettingRepository(database.Context),
+            FinanceServiceTestFactory.Create(database.Context));
+        var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: automaticRecalculation);
+
+        var result = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(setting.Name, true, 1, 1, 30, null, 30, false, false, setting.UnitName, incomeType.Id, tariff.Id),
+                125m,
+                EffectiveFrom: new DateOnly(2026, 9, 1),
+                ChangeReason: "Новая ставка с сентября"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(100m, augustAccrual.Amount);
+        Assert.Equal(125m, septemberAccrual.Amount);
+        Assert.Equal(result.Value!.Tariff.Id, septemberAccrual.TariffId);
+        Assert.NotEqual(result.Value.Tariff.Id, augustAccrual.TariffId);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_TierChangesImmediatelyRecalculateExistingAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Электроэнергия", 10);
+        var incomeType = new IncomeType { Name = "Электроэнергия", Code = "electricity", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Электроэнергия", CalculationBase = TariffCalculationBases.MeterElectricity, Rate = 2m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Электроэнергия",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            IsMetered = true,
+            HasTieredTariff = true,
+            MeterKind = MeterKinds.ForService(Guid.NewGuid()),
+            UnitName = "кВт·ч"
+        };
+        var garage = new Garage { Number = "TIER-1", PeopleCount = 1, FloorCount = 1 };
+        var month = new DateOnly(2026, 9, 1);
+        var accrual = CreateRegularAccrual(garage, incomeType, tariff, month, 20m);
+        var reading = new MeterReading
+        {
+            Garage = garage,
+            MeterKind = setting.MeterKind!,
+            AccountingMonth = month,
+            ReadingDate = new DateOnly(2026, 9, 30),
+            CurrentValue = 10m,
+            Consumption = 10m
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting, garage, accrual, reading);
+        await database.Context.SaveChangesAsync();
+        var automaticRecalculation = new TariffAccrualRecalculationService(
+            new EfAccrualRepository(database.Context),
+            new EfChargeServiceSettingRepository(database.Context),
+            FinanceServiceTestFactory.Create(database.Context));
+        var service = DictionaryServiceTestFactory.Create(database.Context, tariffAccrualRecalculationService: automaticRecalculation);
+
+        var result = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(setting.Name, true, 1, 1, 30, null, 30, true, true, setting.UnitName, incomeType.Id, tariff.Id),
+                2m,
+                "metered_tiered",
+                month,
+                [
+                    new UpsertElectricityTariffTierRequest(null, "0–5 кВт·ч", 5m, 2m),
+                    new UpsertElectricityTariffTierRequest(null, "свыше 5 кВт·ч", null, 4m)
+                ],
+                "Изменение порогов",
+                TariffCalculationBases.MeterElectricity),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(30m, accrual.Amount);
+        Assert.Equal(result.Value!.Tariff.Id, accrual.TariffId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accrual_safely_recalculated" && item.EntityId == accrual.Id.ToString());
+    }
+
+    private static Accrual CreateRegularAccrual(Garage garage, IncomeType incomeType, Tariff tariff, DateOnly month, decimal amount) =>
+        new()
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = month,
+            DueDate = month.AddMonths(1).AddDays(-1),
+            OverdueFromDate = month.AddMonths(2),
+            Amount = amount,
+            Source = AccrualSources.Regular
+        };
+
+    [Fact]
     public async Task UpdateChargeServiceWithTariffAsync_VersionsMeteredAndTieredModesAtomically()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -5467,7 +5591,42 @@ public sealed class DictionaryServiceTests
             TariffId = tariff.Id,
             UnitName = "руб."
         };
-        database.Context.AddRange(fund, incomeType, tariff, setting);
+        var paidGarage = new Garage { Number = "GAP-P", PeopleCount = 1, FloorCount = 1 };
+        var unpaidGarage = new Garage { Number = "GAP-U", PeopleCount = 1, FloorCount = 1 };
+        var august = new DateOnly(2026, 8, 1);
+        var paidAccrual = new Accrual
+        {
+            Garage = paidGarage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = august,
+            DueDate = new DateOnly(2026, 8, 31),
+            OverdueFromDate = new DateOnly(2026, 10, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        var unpaidAccrual = new Accrual
+        {
+            Garage = unpaidGarage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = august,
+            DueDate = new DateOnly(2026, 8, 31),
+            OverdueFromDate = new DateOnly(2026, 10, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = august,
+            AccountingMonth = august,
+            Amount = 1m,
+            Garage = paidGarage,
+            IncomeType = incomeType
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting, paidGarage, unpaidGarage, paidAccrual, unpaidAccrual,
+            payment, new AccrualPaymentAllocation { FinancialOperation = payment, Accrual = paidAccrual, Amount = 1m, IsActive = true });
         await database.Context.SaveChangesAsync();
 
         var result = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceTariffScheduleAsync(
@@ -5484,7 +5643,13 @@ public sealed class DictionaryServiceTests
         Assert.Equal("tariff_schedule_gap", result.ErrorCode);
         Assert.Empty(database.Context.ChargeServiceTariffVersions);
 
-        var confirmed = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceTariffScheduleAsync(
+        var automaticRecalculation = new TariffAccrualRecalculationService(
+            new EfAccrualRepository(database.Context),
+            new EfChargeServiceSettingRepository(database.Context),
+            FinanceServiceTestFactory.Create(database.Context));
+        var confirmed = await DictionaryServiceTestFactory.Create(
+            database.Context,
+            tariffAccrualRecalculationService: automaticRecalculation).UpdateChargeServiceTariffScheduleAsync(
             setting.Id,
             new UpsertChargeServiceTariffScheduleRequest(
                 [new(null, new DateOnly(2026, 9, 1), null, 125m)],
@@ -5497,6 +5662,9 @@ public sealed class DictionaryServiceTests
         var repository = new EfChargeServiceSettingRepository(database.Context);
         Assert.Null((await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None)).Single().Tariff);
         Assert.Equal(125m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 9, 1), CancellationToken.None)).Single().Tariff!.Rate);
+        Assert.True(unpaidAccrual.IsCanceled);
+        Assert.False(paidAccrual.IsCanceled);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accrual_canceled_without_tariff" && item.EntityId == unpaidAccrual.Id.ToString());
     }
 
     [Fact]

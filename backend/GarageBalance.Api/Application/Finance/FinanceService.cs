@@ -5409,6 +5409,61 @@ public sealed class FinanceService(
         return FinanceResult<RegularAccrualRecalculationPreviewDto>.Success(preview with { Applied = true });
     }
 
+    public async Task<FinanceResult<int>> CancelUnpaidRegularAccrualsWithoutTariffAsync(
+        Guid incomeTypeId,
+        DateOnly accountingMonth,
+        Guid? actorUserId,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(accountingMonth);
+        await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(Guid.Empty, incomeTypeId)],
+            cancellationToken);
+        var accruals = await accrualRepository.GetActiveRegularForRecalculationAsync(
+            incomeTypeId,
+            month,
+            cancellationToken);
+        await using var garageLocks = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            accruals.Select(accrual => new AccrualPaymentAllocationKey(accrual.GarageId, incomeTypeId)).Distinct().ToArray(),
+            cancellationToken);
+        var paidIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
+            accruals.Select(accrual => accrual.Id).ToArray(),
+            cancellationToken);
+        var canceledCount = 0;
+        foreach (var accrual in accruals.Where(accrual => !paidIds.Contains(accrual.Id)))
+        {
+            accrual.IsCanceled = true;
+            accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+            canceledCount++;
+            AddAudit(
+                actorUserId,
+                "finance.regular_accrual_canceled_without_tariff",
+                accrual,
+                $"Отменено неоплаченное начисление по гаражу {accrual.Garage.Number} за {month:MM.yyyy}: в тарифной сетке нет действующего тарифа. Основание: {reason}",
+                new Dictionary<string, object?> { ["isCanceled"] = false, ["amount"] = accrual.Amount },
+                new Dictionary<string, object?> { ["isCanceled"] = true, ["amount"] = accrual.Amount },
+                reason: reason);
+        }
+
+        AddAudit(
+            actorUserId,
+            "finance.regular_accruals_without_tariff_canceled",
+            "accrual",
+            Guid.NewGuid(),
+            $"За {month:MM.yyyy} отменено неоплаченных начислений без действующего тарифа: {canceledCount}; оплаченных строк сохранено: {paidIds.Count}.",
+            reason: reason,
+            relatedAccountingMonth: month,
+            metadata: new Dictionary<string, object?>
+            {
+                ["incomeTypeId"] = incomeTypeId,
+                ["canceledCount"] = canceledCount,
+                ["protectedPaidCount"] = paidIds.Count
+            });
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return FinanceResult<int>.Success(canceledCount);
+    }
+
     private readonly Dictionary<Guid, AccrualCalculationDetailsDto> regularAccrualRecalculationDetails = [];
 
     private async Task<FinanceResult<RegularAccrualRecalculationPreviewDto>> BuildRegularAccrualRecalculationPreviewAsync(
@@ -5447,7 +5502,9 @@ public sealed class FinanceService(
             accruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
         var segments = BuildRegularAccrualSegments(month, setting, tariff);
-        var meterKind = ResolveMeterKind(segments.Select(segment => segment.CalculationBase));
+        var meterKind = setting is not null && MeterKinds.IsValid(setting.MeterKind)
+            ? setting.MeterKind
+            : ResolveMeterKind(segments.Select(segment => segment.CalculationBase));
         var readings = meterKind is null
             ? new Dictionary<Guid, MeterReading>()
             : await meterReadingRepository.GetActiveByGarageIdsAsync(
