@@ -4505,12 +4505,30 @@ input.meter-readings-control {
 }
 
 .payments-prototype-table--garage {
-  min-width: 1260px;
+  min-width: 1120px;
   table-layout: fixed;
 }
 
-.payments-prototype-table--garage th:nth-child(2) {
-  width: 32%;
+.payments-prototype-table--garage th:nth-child(1) {
+  width: 112px;
+}
+
+.payments-prototype-table--garage th:nth-child(3) {
+  width: 150px;
+}
+
+.payments-prototype-table--garage th:nth-child(4) {
+  width: 104px;
+}
+
+.payments-prototype-table--garage th:nth-child(5),
+.payments-prototype-table--garage th:nth-child(6) {
+  width: 152px;
+}
+
+.payments-prototype-table--garage th:nth-child(7),
+.payments-prototype-table--garage th:nth-child(8) {
+  width: 132px;
 }
 
 .payments-prototype-table--garage :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(7), :nth-child(8)) {
@@ -4818,6 +4836,7 @@ input.meter-readings-control {
 
 .payments-prototype-payment-input,
 .payments-prototype-meter-input {
+  box-sizing: border-box;
   width: 100%;
   min-height: 32px;
   border: 1px solid #d0d5dd;
@@ -4872,7 +4891,7 @@ input.meter-readings-control {
 
 .payments-prototype-meter-editor {
   display: grid;
-  grid-template-columns: minmax(72px, 110px) 30px;
+  grid-template-columns: minmax(0, 1fr) 30px;
   gap: 5px;
   align-items: center;
 }
