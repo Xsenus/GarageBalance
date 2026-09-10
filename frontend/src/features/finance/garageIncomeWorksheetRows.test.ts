@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
-import { formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import type { AccrualDto } from '../../services/financeApi'
 
@@ -55,6 +55,27 @@ describe('normalizeGarageDebtAfterForHistory', () => {
     expect(normalizeGarageDebtAfterForHistory(-125.456)).toBe(0)
     expect(normalizeGarageDebtAfterForHistory(125.456)).toBe(125.46)
     expect(normalizeGarageDebtAfterForHistory(null)).toBe(0)
+  })
+})
+
+describe('createGarageIncomeRowsFromWorksheet', () => {
+  it('includes a service overpayment in the visible paid amount', () => {
+    const [row] = createGarageIncomeRowsFromWorksheet({
+      garageId: 'garage-1', garageNumber: '1', ownerName: 'Тестовый владелец',
+      monthFrom: '2026-09-01', monthTo: '2026-09-01', openingBalance: 0, openingDebt: 0,
+      unrepresentedOpeningDebt: 0, accrualTotal: 125, incomeTotal: 125.05, advanceTotal: 0.05,
+      debtTotal: 0, closingBalance: -0.05, closingDebt: 0,
+      rows: [{
+        accountingMonth: '2026-09-01', incomeTypeId: 'waste', incomeTypeName: 'Мусор',
+        annualAccrualId: null, meterKind: null, meterReadingId: null, meterReadingVersion: null,
+        meterReadingDate: null, meterValue: null, meterConsumption: null, accrualAmount: 125,
+        payableAmount: 125, incomeAmount: 125, advanceAmount: 0.05, debt: 0,
+      }],
+    })
+
+    expect(row.paid).toBe(125.05)
+    expect(row.advance).toBe(0.05)
+    expect(row.debt).toBe(0)
   })
 })
 

@@ -41,7 +41,7 @@ import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, 
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
-import { overdueDebtDetailsPreference } from './financeDisplayPreferences'
+import { overdueDebtDetailsPreference, selectedGaragePreference, shouldRestoreSelectedGarageAfterReload } from './financeDisplayPreferences'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
@@ -3321,6 +3321,8 @@ function PaymentsPrototypePanel({
   const garageSearchWrapRef = useCloseOnOutsidePointer<HTMLDivElement>(garageSearchOpen, setGarageSearchOpen)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
+  const activateGarageRef = useRef<(garage: PaymentsPrototypeGarage) => void>(() => undefined)
+  const selectedGarageRestoreAttemptedRef = useRef(false)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
   const incomeWorksheetRequestControllerRef = useRef<AbortController | null>(null)
   const [selectedGarage, setSelectedGarage] = useState<PaymentsPrototypeGarage | null>(null)
@@ -3432,6 +3434,35 @@ function PaymentsPrototypePanel({
       })),
     [availableGarages],
   )
+  useEffect(() => {
+    if (loading || selectedGarageIdRef.current || selectedGarageRestoreAttemptedRef.current || !shouldRestoreSelectedGarageAfterReload()) return
+    const storedGarage = selectedGaragePreference(auth.user.id)
+    if (!storedGarage) return
+
+    selectedGarageRestoreAttemptedRef.current = true
+    const controller = new AbortController()
+    void dictionaryClient.getGarages(auth.accessToken, storedGarage.number, 20, false, controller.signal)
+      .then((foundGarages) => {
+        if (controller.signal.aborted || selectedGarageIdRef.current) return
+        const foundGarage = foundGarages.find(({ id, isArchived }) => id === storedGarage.id && !isArchived)
+        if (!foundGarage) {
+          selectedGaragePreference(auth.user.id, null)
+          return
+        }
+        activateGarageRef.current({
+          ...foundGarage,
+          id: foundGarage.id,
+          number: foundGarage.number,
+          ownerName: foundGarage.ownerName?.trim() || 'Владелец не указан',
+          phone: foundGarage.ownerPhone?.trim() || 'Не указан',
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      controller.abort()
+      if (!selectedGarageIdRef.current) selectedGarageRestoreAttemptedRef.current = false
+    }
+  }, [auth.accessToken, auth.user.id, dictionaryClient, loading])
   useEffect(() => () => {
     incomeWorksheetRequests.invalidate()
     incomeWorksheetRequestControllerRef.current?.abort()
@@ -4273,6 +4304,7 @@ function PaymentsPrototypePanel({
     const currentMonth = getCurrentMonthInputValue()
     const previousMonth = getPreviousMonthInputValue(currentMonth)
     selectedGarageIdRef.current = garage.id
+    selectedGaragePreference(auth.user.id, { id: garage.id, number: garage.number })
     incomeWorksheetRequestControllerRef.current?.abort()
     paymentHistoryRequests.invalidate()
     paymentHistoryRequestControllerRef.current?.abort()
@@ -4296,6 +4328,7 @@ function PaymentsPrototypePanel({
     setIncomeWorksheetMonthTo(currentMonth)
     void loadGarageIncomeWorksheet(garage, previousMonth, currentMonth, undefined, true)
   }
+  activateGarageRef.current = activateGarage
 
   function handleIncomeWorksheetMonthFromChange(value: string) {
     setIncomeWorksheetMonthFrom(value)
@@ -4499,7 +4532,7 @@ function PaymentsPrototypePanel({
     }
 
     const appliedAmount = Math.min(amount, row.debt)
-    const nextPaid = Math.min(row.paid + appliedAmount, row.payable)
+    const nextPaid = roundPaymentMoney(row.paid + amount)
     const nextAdvance = row.advance + Math.max(amount - appliedAmount, 0)
     const nextDebt = Math.max(row.debt - appliedAmount, 0)
     const accountingMonth = row.month.length === 7 ? `${row.month}-01` : row.month
@@ -4539,7 +4572,7 @@ function PaymentsPrototypePanel({
         irregularPaymentId: row.irregularPaymentId ?? undefined,
         comment: `Платеж из формы поступлений: ${row.service} ${row.monthLabel}`,
       })
-      const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+      const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       const historyDebtAfter = normalizeGarageDebtAfterForHistory(operation.garageDebtAfter ?? nextDebt)
 
       setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, advance: nextAdvance, debt: nextDebt } : currentRow))
@@ -4742,7 +4775,7 @@ function PaymentsPrototypePanel({
       } : row
     }))
 
-    const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setHistoryRows((currentRows) => [
       ...historyItems.map((item) => {
         const operation = item.operation
@@ -5069,7 +5102,7 @@ function PaymentsPrototypePanel({
   }, [])
 
   const paymentTotal = garageWorksheetSummary?.accrualTotal ?? garageRows.reduce((sum, row) => sum + row.accrued, 0)
-  const paidTotal = garageWorksheetSummary?.incomeTotal ?? garageRows.reduce((sum, row) => sum + row.paid + row.advance, 0)
+  const paidTotal = garageWorksheetSummary?.incomeTotal ?? garageRows.reduce((sum, row) => sum + row.paid, 0)
   const openingBalanceTotal = toSignedGarageNetBalance(garageWorksheetSummary?.openingBalance ?? 0)
   const closingBalanceTotal = garageWorksheetSummary
     ? toSignedGarageNetBalance(garageWorksheetSummary.closingBalance)
@@ -5082,7 +5115,7 @@ function PaymentsPrototypePanel({
     let runningBalance = garageWorksheetSummary.openingBalance
     for (const group of [...groupedGarageRows].sort((left, right) => left.month.localeCompare(right.month))) {
       const monthlyAccrual = group.rows.reduce((sum, row) => sum + row.accrued, 0)
-      const monthlyIncome = group.rows.reduce((sum, row) => sum + row.paid + row.advance, 0)
+      const monthlyIncome = group.rows.reduce((sum, row) => sum + row.paid, 0)
       runningBalance = roundPaymentMoney(runningBalance + monthlyAccrual - monthlyIncome)
       garageMonthlyBalances.set(group.month, toSignedGarageNetBalance(runningBalance))
     }
@@ -5563,7 +5596,7 @@ function PaymentsPrototypePanel({
                 <tbody>
                   {groupedGarageRows.map((group) => {
                     const groupPayable = group.rows.reduce((sum, row) => sum + row.accrued, 0)
-                    const groupPaid = group.rows.reduce((sum, row) => sum + row.paid + row.advance, 0)
+                    const groupPaid = group.rows.reduce((sum, row) => sum + row.paid, 0)
                     const groupAdvance = group.rows.reduce((sum, row) => sum + row.advance, 0)
                     const groupDebt = group.rows.reduce((sum, row) => sum + row.debt, 0)
                     const groupBalance = garageMonthlyBalances.get(group.month)
@@ -6417,27 +6450,29 @@ function GaragePaymentHistoryEditDialog({
         </form>
       </section>
       {pendingChanges ? (
-        <section ref={confirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-payment-edit-confirmation-title" aria-describedby="garage-payment-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-          <div className="detail-dialog-header">
-            <div>
-              <p className="eyebrow">Проверка изменения</p>
-              <h3 id="garage-payment-edit-confirmation-title">Подтвердить изменение платежа?</h3>
-              <p>{state.row.purpose}</p>
+        <div className="modal-backdrop nested-confirmation-backdrop" role="presentation" onMouseDown={() => !saving && setPendingChanges(null)}>
+          <section ref={confirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-payment-edit-confirmation-title" aria-describedby="garage-payment-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Проверка изменения</p>
+                <h3 id="garage-payment-edit-confirmation-title">Подтвердить изменение платежа?</h3>
+                <p>{state.row.purpose}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение платежа" onClick={() => setPendingChanges(null)} disabled={saving}>
+                <X size={18} aria-hidden="true" />
+              </button>
             </div>
-            <button className="icon-button" type="button" aria-label="Закрыть подтверждение платежа" onClick={() => setPendingChanges(null)} disabled={saving}>
-              <X size={18} aria-hidden="true" />
-            </button>
-          </div>
-          <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Изменения — в истории.</p>
-          <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingChanges} />
-          <div className="detail-dialog-actions contractors-dialog-actions">
-            <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingChanges(null)} disabled={saving}>Отмена</button>
-            <button className="secondary-button" type="button" onClick={confirmSubmit} disabled={saving}>
-              <Save size={16} aria-hidden="true" />
-              <span>{saving ? 'Сохраняем...' : 'Сохранить'}</span>
-            </button>
-          </div>
-        </section>
+            <p className="confirmation-text" id="garage-payment-edit-confirmation-description">Изменения — в истории.</p>
+            <ChangePreviewList ariaLabel="Изменяемые поля платежа" changes={pendingChanges} />
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingChanges(null)} disabled={saving}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={confirmSubmit} disabled={saving}>
+                <Save size={16} aria-hidden="true" />
+                <span>{saving ? 'Сохраняем...' : 'Сохранить'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   )

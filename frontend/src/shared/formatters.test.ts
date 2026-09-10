@@ -58,7 +58,7 @@ describe('shared formatters', () => {
   it('provides shared month inputs and operation time for payments and reports', () => {
     expect(getCurrentMonthInputValue('2026-07-13')).toBe('2026-07')
     expect(getPreviousMonthInputValue('2026-01')).toBe('2025-12')
-    expect(formatOperationTime('2026-07-13T14:05:00')).toMatch(/14:05/)
+    expect(formatOperationTime('2026-07-13T14:05:09')).toMatch(/14:05:09/)
     expect(formatOperationTime(null)).toBe('')
     expect(formatOperationTime('not-a-date')).toBe('')
   })

@@ -4333,6 +4333,7 @@ input.meter-readings-control {
 }
 
 .payments-prototype-card--history {
+  display: block;
   padding: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -4351,7 +4352,7 @@ input.meter-readings-control {
   grid-template-rows: auto minmax(0, 1fr);
   width: min(1280px, calc(100vw - 32px));
   height: min(620px, calc(100dvh - 32px));
-  min-width: 560px;
+  min-width: min(1040px, calc(100vw - 16px));
   min-height: 300px;
   max-width: calc(100vw - 16px);
   max-height: calc(100dvh - 16px);
@@ -4392,7 +4393,8 @@ input.meter-readings-control {
 
 .payments-prototype-mini-table {
   width: 100%;
-  min-width: 820px;
+  min-width: 1024px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   color: #101828;
@@ -4401,11 +4403,15 @@ input.meter-readings-control {
 
 .payments-prototype-mini-table th,
 .payments-prototype-mini-table td {
-  height: 34px;
+  height: 46px;
   border-right: 1px solid #e4e7ec;
   border-bottom: 1px solid #e4e7ec;
   padding: 6px 9px;
   text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .payments-prototype-mini-table th {
@@ -4422,8 +4428,8 @@ input.meter-readings-control {
 
 .payments-prototype-mini-table th:last-child,
 .payments-prototype-mini-table td:last-child {
-  width: 190px;
-  min-width: 190px;
+  width: 92px;
+  padding-inline: 8px;
 }
 
 .payments-prototype-history-actions {
@@ -5060,7 +5066,7 @@ input.meter-readings-control {
   white-space: nowrap;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1040px) {
   .detail-dialog.garage-payment-history-dialog {
     width: calc(100vw - 16px);
     height: calc(100dvh - 16px);

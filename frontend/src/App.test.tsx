@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { vi } from 'vitest'
 
 vi.mock('./services/settingsApi', () => ({
@@ -384,6 +385,43 @@ describe('App', () => {
     const settingsPanel = await screen.findByRole('region', { name: 'Настройки' })
     expect(within(settingsPanel).getByRole('tab', { name: 'Диагностика' })).toHaveAttribute('aria-selected', 'true')
     expect(window.sessionStorage.getItem('garagebalance.workspace.section')).toBe('settings')
+  })
+
+  it('restores the selected payment garage after page reload without reopening its history', async () => {
+    const auth = createAuthResponse({ accessToken: 'garage-restore-token' })
+    const garage = createGarage({ id: 'garage-restored-after-f5', number: '47', ownerName: 'Контрольный владелец' })
+    const getGarages = vi.fn(async (_accessToken: string, search?: string) => search === garage.number ? [garage] : [])
+    const navigationEntries = vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' }] as PerformanceEntry[])
+    window.sessionStorage.setItem('garagebalance.auth.session', JSON.stringify(auth))
+    window.sessionStorage.setItem('garagebalance.workspace.section', 'payments')
+    window.sessionStorage.setItem('garagebalance.workspace.payments.tab', 'income')
+    window.sessionStorage.setItem(
+      `garagebalance.finance.selectedGarage.${auth.user.id}`,
+      `${garage.id}\n${garage.number}`,
+    )
+
+    render(
+      <StrictMode>
+        <App
+          authClient={createAuthClient()}
+          dictionaryClient={createDictionaryClient({ getGarages })}
+          financeClient={createFinanceClient()}
+          importClient={createImportClient()}
+          integrationClient={createIntegrationClient()}
+          reportClient={createReportClient()}
+          releaseClient={createReleaseClient()}
+          userClient={createUserClient()}
+        />
+      </StrictMode>,
+    )
+
+    const payments = await screen.findByRole('region', { name: 'Платежи' })
+    const selectedGarage = await within(payments).findByRole('region', { name: 'Карточка выбранного гаража' })
+    expect(within(within(selectedGarage).getByRole('region', { name: 'Гараж' })).getByText('47')).toBeInTheDocument()
+    expect(within(selectedGarage).getByText('Контрольный владелец')).toBeInTheDocument()
+    expect(within(payments).queryByRole('dialog', { name: 'История платежей' })).not.toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledWith(auth.accessToken, garage.number, 20, false, expect.any(AbortSignal))
+    navigationEntries.mockRestore()
   })
 
   it('ignores expired stored auth session', () => {
@@ -11188,7 +11226,7 @@ describe('App', () => {
     expect(within(prototype).getByRole('region', { name: 'Финансы' })).toHaveTextContent('Баланс-700.00')
   })
 
-  it('caps a garage row payment and shows the excess as advance', async () => {
+  it('shows a garage overpayment in the paid amount and closing balance', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-overpayment', number: '78', ownerName: 'Смирнова Анна' })
     const waterIncomeType = createAccountingType({ id: 'income-water-overpayment', name: 'Водоснабжение', code: 'water' })
@@ -11266,10 +11304,9 @@ describe('App', () => {
     const serviceRow = within(incomeTable).getByText('Водоснабжение').closest('tr')
     expect(serviceRow).not.toBeNull()
     const cells = serviceRow!.querySelectorAll('td')
-    expect(cells[6]).toHaveTextContent('1 000.00')
+    expect(cells[6]).toHaveTextContent('1 250.00')
     expect(cells[7]).toHaveTextContent('250.00')
     expect(cells).toHaveLength(8)
-    expect(cells[6]).not.toHaveTextContent('1 250.00')
     const monthTotalCells = incomeTable.querySelector('.payments-prototype-month-total')!.querySelectorAll('td')
     expect(monthTotalCells[4]).toHaveTextContent('1 000.00')
     expect(monthTotalCells[6]).toHaveTextContent('1 250.00')
@@ -12970,7 +13007,7 @@ describe('App', () => {
       garageServiceDebtAfter: 480,
       operationDate: '2026-06-19',
       accountingMonth: '2026-06-01',
-      createdAtUtc: '2026-06-19T10:24:00',
+      createdAtUtc: '2026-06-19T10:24:37',
     })
     const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => ({
       items: params?.garageId === 'garage-77'
@@ -13048,7 +13085,7 @@ describe('App', () => {
     expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'true')
     const historyTable = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
-    expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
+    expect(within(historyTable).getByText('10:24:37')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('480.00')).toBeInTheDocument()
@@ -13101,6 +13138,7 @@ describe('App', () => {
     await user.type(within(editDialog).getByLabelText('Комментарий к изменяемому платежу'), 'Исправление суммы')
     await user.click(saveEdit)
     let paymentChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    expect(paymentChangeDialog.parentElement).toHaveClass('nested-confirmation-backdrop')
     expect(updateIncome).not.toHaveBeenCalled()
     const paymentChangeList = within(paymentChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
     expect(within(paymentChangeList).getByText('Сумма')).toBeInTheDocument()

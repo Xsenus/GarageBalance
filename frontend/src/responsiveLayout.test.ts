@@ -10,6 +10,7 @@ describe('responsive layout styles', () => {
   const contractorsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const tariffsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const settingsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
+  const financePanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
   it('allows the page to fit a 320px viewport with a classic vertical scrollbar', () => {
@@ -323,14 +324,17 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps payment history actions compact and horizontal', () => {
-    expect(normalizedAppCss).toContain('.payments-prototype-card--history {\n  padding: 0;\n  overflow-x: auto;')
-    expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 820px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-card--history {\n  display: block;\n  padding: 0;\n  overflow-x: auto;')
+    expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 1024px;\n  table-layout: fixed;')
+    expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:last-child,\n.payments-prototype-mini-table td:last-child {\n  width: 92px;')
+    expect(normalizedAppCss).toContain('white-space: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions {\n  display: flex;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 4px;\n  flex-wrap: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions .icon-button {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 32px;')
     expect(normalizedAppCss).toContain('.detail-dialog.garage-payment-history-dialog {\n  position: fixed;')
     expect(normalizedAppCss).toContain('resize: both;')
     expect(normalizedAppCss).toContain('.garage-payment-history-dialog .garage-payment-history-dialog__drag-handle {\n  position: static;')
-    expect(normalizedAppCss).toContain('.detail-dialog.garage-payment-history-dialog {\n    width: calc(100vw - 16px);\n    height: calc(100dvh - 16px);\n    min-width: 0;\n    min-height: 0;\n    resize: none;')
+    expect(normalizedAppCss).toContain('@media (max-width: 1040px) {\n  .detail-dialog.garage-payment-history-dialog {\n    width: calc(100vw - 16px);\n    height: calc(100dvh - 16px);\n    min-width: 0;\n    min-height: 0;\n    resize: none;')
+    expect(financePanel).toContain('className="modal-backdrop nested-confirmation-backdrop"')
   })
 
   it('keeps employee report dates and amounts intact inside local horizontal scrolling', () => {
