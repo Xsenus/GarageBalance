@@ -2961,7 +2961,7 @@ describe('App', () => {
     const garageNumber = within(garageDialog).getByLabelText('Номер гаража')
     const peopleCount = within(garageDialog).getByLabelText('Количество человек')
     const floorCount = within(garageDialog).getByLabelText('Этажи гаража')
-    expect(within(garageDialog).getByText(/Обязательные поля: красная рамка/)).toBeInTheDocument()
+    expect(within(garageDialog).queryByText(/Обязательные поля: красная рамка/)).not.toBeInTheDocument()
     expect(garageNumber).toBeRequired()
     expect(peopleCount).toBeRequired()
     expect(floorCount).toBeRequired()

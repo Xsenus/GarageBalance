@@ -3641,15 +3641,14 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
-            <p className="contractors-required-fields-note" id="garage-required-fields-note"><span aria-hidden="true">*</span> Обязательные поля: красная рамка означает, что значение нужно заполнить или исправить; зелёная — значение подходит.</p>
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <label className="form-field">
                   <span className="form-field-label">Номер *</span>
-                  <input className="contractors-required-input" data-required-state={requiredFieldStates.number} aria-describedby="garage-required-fields-note" aria-invalid={requiredFieldStates.number === 'invalid'} aria-label="Номер гаража" maxLength={80} required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+                  <input className="contractors-required-input" data-required-state={requiredFieldStates.number} aria-invalid={requiredFieldStates.number === 'invalid'} aria-label="Номер гаража" maxLength={80} required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
                 </label>
-                <FormField label="Количество человек *"><input className="contractors-required-input" data-required-state={requiredFieldStates.peopleCount} aria-describedby="garage-required-fields-note" aria-invalid={requiredFieldStates.peopleCount === 'invalid'} aria-label="Количество человек" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-                <FormField label="Этажи *"><input className="contractors-required-input" data-required-state={requiredFieldStates.floorCount} aria-describedby="garage-required-fields-note" aria-invalid={requiredFieldStates.floorCount === 'invalid'} aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+                <FormField label="Количество человек *"><input className="contractors-required-input" data-required-state={requiredFieldStates.peopleCount} aria-invalid={requiredFieldStates.peopleCount === 'invalid'} aria-label="Количество человек" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
+                <FormField label="Этажи *"><input className="contractors-required-input" data-required-state={requiredFieldStates.floorCount} aria-invalid={requiredFieldStates.floorCount === 'invalid'} aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {!item ? (

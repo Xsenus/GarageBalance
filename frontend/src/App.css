@@ -5987,22 +5987,6 @@ input.meter-readings-control {
   border-color: #d92d20;
 }
 
-.contractors-required-fields-note {
-  margin: 0;
-  border: 1px solid #fedf89;
-  border-radius: 8px;
-  background: #fffaeb;
-  padding: 9px 11px;
-  color: #7a2e0e;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.contractors-required-fields-note span {
-  color: #d92d20;
-  font-weight: 800;
-}
-
 .form-field .contractors-required-input[data-required-state='invalid'] {
   border-color: #f04438;
   background: #fffafa;

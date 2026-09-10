@@ -75,7 +75,7 @@ describe('accessible dynamic messages', () => {
     expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.number}')
     expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.peopleCount}')
     expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.floorCount}')
-    expect(contractorsPanelSource.match(/aria-describedby="garage-required-fields-note"/g)).toHaveLength(3)
+    expect(contractorsPanelSource).not.toContain('garage-required-fields-note')
     expect(contractorsPanelSource.match(/aria-invalid=\{requiredFieldStates\./g)).toHaveLength(3)
     expect(normalizedAppCss).toContain(".form-field .contractors-required-input[data-required-state='invalid'] {")
     expect(normalizedAppCss).toContain(".form-field .contractors-required-input[data-required-state='valid'] {")
