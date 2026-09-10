@@ -259,6 +259,23 @@ describe('styled form controls', () => {
   it('preserves native required validation for mandatory localized periods', () => {
     render(<LocalizedDatePicker ariaLabel="Обязательный месяц" mode="month" value="" required onChange={() => undefined} />)
 
-    expect(screen.getByLabelText('Обязательный месяц')).toBeRequired()
+    const input = screen.getByLabelText('Обязательный месяц')
+    expect(input).toBeRequired()
+    expect(input).toBeInvalid()
+  })
+
+  it('exposes the required state for custom selects', async () => {
+    const user = userEvent.setup()
+    function Example() {
+      const [value, setValue] = useState('')
+      return <SelectControl aria-label="Обязательный раздел" required value={value} options={[{ value: '', label: 'Выберите' }, { value: 'finance', label: 'Финансы' }]} onChange={setValue} />
+    }
+    render(<Example />)
+    const control = screen.getByRole('combobox', { name: 'Обязательный раздел' })
+    expect(control).toHaveAttribute('aria-required', 'true')
+    expect(control).toHaveAttribute('aria-invalid', 'true')
+    await user.click(control)
+    await user.click(screen.getByRole('option', { name: 'Финансы' }))
+    expect(control).toHaveAttribute('aria-invalid', 'false')
   })
 })

@@ -14,6 +14,7 @@ export function SelectControl({
   value,
   options,
   disabled = false,
+  required,
   placement = 'below',
   maxVisibleOptions,
   onChange,
@@ -23,6 +24,7 @@ export function SelectControl({
   value: string
   options: SelectControlOption[]
   disabled?: boolean
+  required?: boolean
   placement?: 'above' | 'below'
   maxVisibleOptions?: number
   onChange: (value: string) => void
@@ -99,6 +101,8 @@ export function SelectControl({
         role="combobox"
         aria-label={ariaLabel}
         aria-expanded={effectiveOpen}
+        aria-required={required}
+        aria-invalid={required ? !value : undefined}
         aria-controls={listboxId}
         aria-activedescendant={effectiveOpen && optionIds[safeActiveIndex] ? optionIds[safeActiveIndex] : undefined}
         disabled={disabled || options.length === 0}

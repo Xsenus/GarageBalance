@@ -973,6 +973,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }
 
     if (section === 'owners') {
+      const newGarageNumberRequired =
+        ownerGarageLinkForm.peopleCount !== 1 ||
+        ownerGarageLinkForm.floorCount !== 1 ||
+        ownerGarageLinkForm.startingBalance !== 0 ||
+        ownerGarageLinkForm.initialWaterMeterValue.trim() !== '' ||
+        ownerGarageLinkForm.initialElectricityMeterValue.trim() !== '' ||
+        ownerGarageLinkForm.comment.trim() !== ''
       return (
         <>
           <div className="owner-name-grid">
@@ -981,7 +988,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             {dictionaryField('ownerMiddleName', <input aria-label={fieldMeta('ownerMiddleName').ariaLabel} placeholder={fieldMeta('ownerMiddleName').placeholder} value={ownerForm.middleName ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, middleName: event.target.value })} />, { className: 'owner-name-grid__middle-name' })}
           </div>
           <div className="owner-contact-grid">
-            {dictionaryField('ownerPhone', <PhoneInput aria-label={fieldMeta('ownerPhone').ariaLabel} value={ownerForm.phone ?? ''} onValueChange={(phone) => setOwnerForm({ ...ownerForm, phone })} />)}
+            {dictionaryField('ownerPhone', <PhoneInput aria-label={fieldMeta('ownerPhone').ariaLabel} required value={ownerForm.phone ?? ''} onValueChange={(phone) => setOwnerForm({ ...ownerForm, phone })} />)}
             {dictionaryField('ownerAddress', (
               <>
                 <div className="suggestion-combobox">
@@ -1063,7 +1070,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               />
             ))}
             <div className="inline-fields">
-              {dictionaryField('ownerNewGarageNumber', <input aria-label={fieldMeta('ownerNewGarageNumber').ariaLabel} placeholder={fieldMeta('ownerNewGarageNumber').placeholder} value={ownerGarageLinkForm.newGarageNumber} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, newGarageNumber: event.target.value })} />)}
+              {dictionaryField('ownerNewGarageNumber', <input aria-label={fieldMeta('ownerNewGarageNumber').ariaLabel} placeholder={fieldMeta('ownerNewGarageNumber').placeholder} required={newGarageNumberRequired} value={ownerGarageLinkForm.newGarageNumber} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, newGarageNumber: event.target.value })} />)}
               {dictionaryField('ownerNewGaragePeopleCount', <input aria-label={fieldMeta('ownerNewGaragePeopleCount').ariaLabel} type="number" min="0" value={ownerGarageLinkForm.peopleCount} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, peopleCount: Number(event.target.value) })} />)}
               {dictionaryField('ownerNewGarageFloorCount', <input aria-label={fieldMeta('ownerNewGarageFloorCount').ariaLabel} type="number" min="0" value={ownerGarageLinkForm.floorCount} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, floorCount: Number(event.target.value) })} />)}
             </div>
@@ -1082,8 +1089,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         <>
           {dictionaryField('garageNumber', <input aria-label={fieldMeta('garageNumber').ariaLabel} placeholder={fieldMeta('garageNumber').placeholder} value={garageForm.number} onChange={(event) => setGarageForm({ ...garageForm, number: event.target.value })} required />)}
           <div className="inline-fields">
-            {dictionaryField('garagePeopleCount', <input aria-label={fieldMeta('garagePeopleCount').ariaLabel} type="number" min="0" value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />)}
-            {dictionaryField('garageFloorCount', <input aria-label={fieldMeta('garageFloorCount').ariaLabel} type="number" min="0" value={garageForm.floorCount} onChange={(event) => setGarageForm({ ...garageForm, floorCount: Number(event.target.value) })} />)}
+            {dictionaryField('garagePeopleCount', <input aria-label={fieldMeta('garagePeopleCount').ariaLabel} type="number" min="0" required value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />)}
+            {dictionaryField('garageFloorCount', <input aria-label={fieldMeta('garageFloorCount').ariaLabel} type="number" min="0" required value={garageForm.floorCount} onChange={(event) => setGarageForm({ ...garageForm, floorCount: Number(event.target.value) })} />)}
           </div>
           {dictionaryField('garageOwner', (
             <SelectControl
@@ -1381,7 +1388,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 <X size={18} />
               </button>
             </div>
-            <form className="dictionary-modal-form" onSubmit={saveEditor}>
+            <form className="dictionary-modal-form" noValidate onSubmit={saveEditor}>
               <fieldset disabled={saving === 'dictionary-editor'}>
                 {renderEditorFields(editor.section)}
               </fieldset>

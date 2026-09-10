@@ -84,7 +84,7 @@ export default function ExpenseBatchPaymentDialog({ accessToken, open, accountin
               {flow.preview.issues.map((issue, index) => <FormError key={index}>{issue}</FormError>)}
               {flow.preview.requiresNegativeFundConfirmation ? <label className="checkbox-field"><input type="checkbox" checked={confirmed} disabled={locked} onChange={(event) => setConfirmed(event.target.checked)} />Подтверждаю выплату сверх остатка фонда</label> : null}
               <FormField label="Комментарий" help={required ? 'Обязателен для проведения выплат. От 3 до 1000 символов.' : 'Необязательно. Если указан — от 3 до 1000 символов.'}>
-                <textarea aria-label="Комментарий к общей выплате" value={comment} maxLength={1000} disabled={locked} onChange={(event) => setComment(event.target.value)} />
+                <textarea aria-label="Комментарий к общей выплате" value={comment} maxLength={1000} required={required} disabled={locked} onChange={(event) => setComment(event.target.value)} />
               </FormField>
             </> : null}
             <div className="detail-dialog-actions">

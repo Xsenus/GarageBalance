@@ -7,7 +7,14 @@ export function NegativeFundBalanceConfirmation({ visible, checked, disabled, on
   if (!visible) return null
   return (
     <label className="payments-negative-fund-confirmation">
-      <input type="checkbox" aria-label="Подтвердить отрицательный остаток фонда" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      <input
+        type="checkbox"
+        aria-label="Подтвердить отрицательный остаток фонда"
+        required
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
       <span>
         <strong>После выплаты фонд станет отрицательным.</strong>
         <small>Банк будет проверен отдельно. Подтверждение сохранится в истории изменений.</small>

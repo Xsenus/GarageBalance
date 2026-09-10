@@ -876,7 +876,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <form className="dictionary-modal-form" onSubmit={saveFund}>
+            <form className="dictionary-modal-form" noValidate onSubmit={saveFund}>
               <FormField label="Название фонда">
                 <input
                   ref={fundNameRef}
@@ -998,10 +998,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </button>
             </div>
             <p className="confirmation-text" id="fund-operation-description">Проверьте сумму. Комментарий можно оставить для пояснения; обязательная причина для аудита сформируется автоматически.</p>
-            <form className="dictionary-modal-form" onSubmit={submitFundOperation}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitFundOperation}>
               <FormField label="Сумма">
                 <MoneyTextInput
                   aria-label="Сумма операции фонда"
+                  min={0.01}
+                  required
                   value={operation.amount}
                   onValueChange={(amount) => {
                     setOperation({ ...operation, amount })
@@ -1069,10 +1071,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </button>
             </div>
             <p className="confirmation-text" id="fund-operation-edit-description">Проверьте сумму и основание. Изменение пересчитает остаток фонда и попадет в историю изменений.</p>
-            <form className="dictionary-modal-form" onSubmit={submitFundOperationEdit}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitFundOperationEdit}>
               <FormField label="Сумма">
                 <MoneyTextInput
                   aria-label="Новая сумма операции фонда"
+                  min={0.01}
+                  required
                   value={operationEdit.amount}
                   onValueChange={(amount) => {
                     setOperationEdit({ ...operationEdit, amount })
@@ -1088,6 +1092,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   aria-label="Новое основание операции фонда"
                   rows={3}
                   maxLength={1000}
+                  required={actionCommentsRequired}
                   value={operationEdit.reason}
                   onChange={(event) => {
                     setOperationEdit({ ...operationEdit, reason: event.target.value })
@@ -1168,13 +1173,14 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </button>
             </div>
             <p className="confirmation-text" id="fund-operation-reverse-description">Исходная операция останется в истории, а система создаст новую противоположную операцию на ту же сумму и запишет причину в историю изменений.</p>
-            <form className="dictionary-modal-form" onSubmit={submitFundOperationReverse}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitFundOperationReverse}>
               <FormField label="Причина">
                 <textarea
                   ref={operationReverseReasonRef}
                   aria-label="Причина обратной операции фонда"
                   rows={3}
                   maxLength={1000}
+                  required={actionCommentsRequired}
                   value={operationReverse.reason}
                   onChange={(event) => {
                     setOperationReverse({ ...operationReverse, reason: event.target.value })
@@ -1230,7 +1236,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 ? 'Операция будет скрыта из активных расчётов.'
                 : 'Операция снова попадет в активные расчеты фонда, а действие будет записано в историю изменений.'}
             </p>
-            <form className="dictionary-modal-form" onSubmit={submitFundStatusAction}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitFundStatusAction}>
               {statusAction.action === 'cancel' ? (
                 <FormField label="Причина отмены">
                   <textarea
@@ -1238,6 +1244,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                     aria-label="Причина отмены операции фонда"
                     rows={3}
                     maxLength={1000}
+                    required={actionCommentsRequired}
                     value={statusAction.reason}
                     onChange={(event) => {
                       setStatusAction({ ...statusAction, reason: event.target.value })

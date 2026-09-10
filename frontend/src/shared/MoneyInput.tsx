@@ -7,13 +7,19 @@ type MoneyInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'val
   onValueChange: (value: number) => void
 }
 
+function requiredMoneyInvalid(value: number, props: InputHTMLAttributes<HTMLInputElement>, empty = false) {
+  return !!props.required && (empty || !Number.isFinite(value) || value < Number(props.min ?? -Infinity) || value > Number(props.max ?? Infinity))
+}
+
 export function MoneyInput({ value, onValueChange, onBlur, onFocus, placeholder = '0.00', ...inputProps }: MoneyInputProps) {
   const [draft, setDraft] = useState(() => formatMoneyInput(value))
   const [focused, setFocused] = useState(false)
+  const invalid = requiredMoneyInvalid(value, inputProps)
 
   return (
     <input
       {...inputProps}
+      aria-invalid={inputProps['aria-invalid'] ?? (invalid || undefined)}
       type="text"
       inputMode="decimal"
       placeholder={placeholder}
@@ -48,10 +54,12 @@ type MoneyTextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 
 
 export function MoneyTextInput({ value, onValueChange, onBlur, onFocus, placeholder = '0.00', ...inputProps }: MoneyTextInputProps) {
   const [focused, setFocused] = useState(false)
+  const invalid = requiredMoneyInvalid(Number(value.replace(',', '.').replace(/\s+/g, '')), inputProps, !value.trim())
 
   return (
     <input
       {...inputProps}
+      aria-invalid={inputProps['aria-invalid'] ?? (invalid || undefined)}
       type="text"
       inputMode="decimal"
       placeholder={placeholder}

@@ -6,7 +6,8 @@ type PhoneInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 
   onValueChange: (value: string) => void
 }
 
-export function PhoneInput({ value, onValueChange, placeholder = russianPhonePlaceholder, ...inputProps }: PhoneInputProps) {
+export function PhoneInput({ value, onValueChange, placeholder = russianPhonePlaceholder, required, ...inputProps }: PhoneInputProps) {
+  const formattedValue = formatRussianPhoneInput(value)
   return (
     <input
       {...inputProps}
@@ -15,7 +16,9 @@ export function PhoneInput({ value, onValueChange, placeholder = russianPhonePla
       autoComplete="tel"
       maxLength={18}
       placeholder={placeholder}
-      value={formatRussianPhoneInput(value)}
+      required={required}
+      aria-invalid={inputProps['aria-invalid'] ?? (required && formattedValue.length < 18 || undefined)}
+      value={formattedValue}
       onChange={(event) => onValueChange(formatRussianPhoneInput(event.target.value))}
     />
   )

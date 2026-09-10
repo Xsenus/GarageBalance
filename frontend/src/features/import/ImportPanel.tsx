@@ -913,7 +913,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               </button>
             </div>
             <p className="confirmation-text" id="import-apply-description">Заявка будет записана в историю импорта. До подключения reader Access система не переносит строки в рабочую базу, поэтому перед реальным переносом нужен свежий backup PostgreSQL.</p>
-            <form className="dictionary-modal-form" onSubmit={submitApplyRequest}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitApplyRequest}>
               <FormField label="Причина импорта">
                 <textarea
                   ref={applyReasonRef}
@@ -922,6 +922,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   aria-describedby={applyError ? 'import-apply-error' : undefined}
                   rows={3}
                   maxLength={1000}
+                  required={actionCommentsRequired}
                   value={applyReason}
                   onChange={(event) => {
                     setApplyReason(event.target.value)
@@ -937,6 +938,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                 <input
                   type="checkbox"
                   aria-label="Backup PostgreSQL создан перед фактическим импортом"
+                  required
                   checked={applyBackupConfirmed}
                   onChange={(event) => {
                     setApplyBackupConfirmed(event.target.checked)
@@ -988,7 +990,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               </button>
             </div>
             <p className="confirmation-text" id="import-apply-cancel-description">Отмена заявки будет записана в историю импорта. Это не rollback данных: строки Access еще не переносились в рабочую базу.</p>
-            <form className="dictionary-modal-form" onSubmit={submitApplyCancelRequest}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitApplyCancelRequest}>
               <FormField label="Причина отмены заявки">
                 <textarea
                   ref={applyCancelReasonRef}
@@ -997,6 +999,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   aria-describedby={applyCancelError ? 'import-apply-cancel-error' : undefined}
                   rows={3}
                   maxLength={1000}
+                  required={actionCommentsRequired}
                   value={applyCancelReason}
                   onChange={(event) => {
                     setApplyCancelReason(event.target.value)
@@ -1048,7 +1051,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               </button>
             </div>
             <p className="confirmation-text" id="import-rollback-description">Rollback будет записан в историю импорта с причиной. Для dry-run запуска фактический откат данных не выполняется, потому что данные еще не переносились в рабочую базу.</p>
-            <form className="dictionary-modal-form" onSubmit={submitRollbackRequest}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitRollbackRequest}>
               <FormField label="Причина rollback">
                 <textarea
                   ref={rollbackReasonRef}
@@ -1057,6 +1060,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   aria-describedby={rollbackError ? 'import-rollback-error' : undefined}
                   rows={3}
                   maxLength={1000}
+                  required={actionCommentsRequired}
                   value={rollbackReason}
                   onChange={(event) => {
                     setRollbackReason(event.target.value)
@@ -1108,7 +1112,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
               </button>
             </div>
             <p className="confirmation-text" id="import-quarantine-resolve-description">Строка исчезнет из списка открытого карантина, а комментарий будет записан в историю импорта. Убедитесь, что причина разобрана и перенос можно продолжать безопасно.</p>
-            <form className="dictionary-modal-form" onSubmit={submitQuarantineResolve}>
+            <form className="dictionary-modal-form" noValidate onSubmit={submitQuarantineResolve}>
               <FormField label="Комментарий">
                 <textarea
                   ref={quarantineResolveCommentRef}
@@ -1117,6 +1121,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
                   aria-describedby={quarantineResolveError ? 'import-quarantine-resolve-error' : undefined}
                   rows={3}
                   maxLength={1000}
+                  required={actionCommentsRequired}
                   value={quarantineResolveComment}
                   onChange={(event) => {
                     setQuarantineResolveComment(event.target.value)

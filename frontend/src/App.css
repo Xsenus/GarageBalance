@@ -5987,16 +5987,9 @@ input.meter-readings-control {
   border-color: #d92d20;
 }
 
-.form-field .contractors-required-input[data-required-state='invalid'] {
-  border-color: #f04438;
-  background: #fffafa;
-  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.12);
-}
-
-.form-field .contractors-required-input[data-required-state='valid'] {
-  border-color: #12b76a;
-  background: #f6fef9;
-  box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.1);
+[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label)::after {
+  color: #f04438;
+  content: ' *';
 }
 
 .audit-filter-grid {
@@ -6566,14 +6559,12 @@ input.meter-readings-control {
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }
 
-.dictionary-modal-form .form-field input.contractors-required-input[data-required-state='invalid']:focus {
-  border-color: #d92d20;
-  outline: 3px solid rgba(240, 68, 56, 0.16);
+[aria-modal] :is(:required:invalid, [aria-invalid='true']):not(:disabled,[readonly]) {
+  outline: 1px solid #f04438;
 }
 
-.dictionary-modal-form .form-field input.contractors-required-input[data-required-state='valid']:focus {
-  border-color: #039855;
-  outline: 3px solid rgba(18, 183, 106, 0.16);
+[aria-modal] :is(:required:valid:not([aria-invalid='true']), [aria-required='true'][aria-invalid='false']):not(:disabled,[readonly]) {
+  border-color: #12b76a;
 }
 
 .dictionary-toolbar input:disabled {

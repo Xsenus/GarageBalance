@@ -7,6 +7,7 @@ import type { FundsClient } from '../../services/fundsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
+import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatMoney, formatMonth } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { SelectControl } from '../../shared/SelectControl'
@@ -319,7 +320,7 @@ export function FinancialJournalPanel({
         <div className="modal-backdrop" role="presentation">
           <section ref={cancelDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="journal-cancel-title">
             <div className="detail-dialog-header"><div><p className="eyebrow">Единый журнал</p><h3 id="journal-cancel-title">Отменить запись?</h3><p>{cancelTarget.counterparty} · {formatMoney(cancelTarget.amount)}</p></div></div>
-            <label>Причина отмены<textarea ref={cancelReasonRef} aria-label="Причина отмены записи журнала" value={cancelReason} required={actionCommentsRequired} onChange={(event) => setCancelReason(event.target.value)} /></label>
+            <FormField label="Причина отмены"><textarea ref={cancelReasonRef} aria-label="Причина отмены записи журнала" value={cancelReason} required={actionCommentsRequired} onChange={(event) => setCancelReason(event.target.value)} /></FormField>
             {actionError ? <FormError>{actionError}</FormError> : null}
             <div className="detail-dialog-actions">
               <button className="ghost-button" type="button" disabled={actionPending} onClick={() => { setCancelTarget(null); setActionError(null); menuTriggerRef.current?.focus() }}>Оставить запись</button>

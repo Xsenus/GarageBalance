@@ -35,4 +35,18 @@ describe('PhoneInput', () => {
     await user.type(input, '88123456789')
     expect(input).toHaveValue('+7 (812) 345-67-89')
   })
+
+  it('marks a required number invalid until the mask is complete', async () => {
+    const user = userEvent.setup()
+    function TestHarness() {
+      const [value, setValue] = useState('')
+      return <PhoneInput aria-label="Телефон" required value={value} onValueChange={setValue} />
+    }
+    render(<TestHarness />)
+    const input = screen.getByRole('textbox', { name: 'Телефон' })
+    expect(input).toBeRequired()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await user.type(input, '9131234567')
+    expect(input).not.toHaveAttribute('aria-invalid')
+  })
 })

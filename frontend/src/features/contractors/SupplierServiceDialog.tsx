@@ -49,14 +49,14 @@ export function SupplierServiceDialog({ edit = false, services, onClose, onSave 
         <form className="dictionary-modal-form" onSubmit={submit} noValidate>
           {error ? <FormError>{error}</FormError> : null}
           {edit ? <FormField label="Услуга для изменения">
-            <SelectControl aria-label="Услуга для изменения" value={selectedId} disabled={saving} options={[{ value: '', label: 'Выберите услугу' }, ...services.filter((service) => !service.isArchived).map((service) => ({ value: service.id, label: service.name }))]} onChange={(id) => {
+            <SelectControl aria-label="Услуга для изменения" value={selectedId} required disabled={saving} options={[{ value: '', label: 'Выберите услугу' }, ...services.filter((service) => !service.isArchived).map((service) => ({ value: service.id, label: service.name }))]} onChange={(id) => {
               setSelectedId(id)
               setName(services.find((service) => service.id === id)?.name ?? '')
               setError(null)
             }} />
           </FormField> : null}
           <FormField label="Наименование услуги">
-            <input aria-label="Наименование услуги" value={name} maxLength={200} disabled={saving} onChange={(event) => setName(event.target.value)} />
+            <input aria-label="Наименование услуги" value={name} maxLength={200} required disabled={saving} onChange={(event) => setName(event.target.value)} />
           </FormField>
           <div className="detail-dialog-actions contractors-dialog-actions">
             <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>

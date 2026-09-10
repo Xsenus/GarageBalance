@@ -718,16 +718,16 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
                   <LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" value={replacementForm.date} disabled={pendingReadingSaving} onChange={(value) => updateReplacementForm('date', value)} required />
                 </FormField>
                 <FormField label="Номер нового счетчика">
-                  <input aria-label="Номер нового счетчика" maxLength={100} value={replacementForm.serial} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('serial', event.target.value)} />
+                  <input aria-label="Номер нового счетчика" maxLength={100} required value={replacementForm.serial} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('serial', event.target.value)} />
                 </FormField>
                 <FormField label="Начальное показание нового">
-                  <MeterReadingInput aria-label="Начальное показание нового счетчика" value={replacementForm.initialValue} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('initialValue', event.target.value)} />
+                  <MeterReadingInput aria-label="Начальное показание нового счетчика" required aria-invalid={parseMeterReadingInputValue(replacementForm.initialValue) === null} value={replacementForm.initialValue} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('initialValue', event.target.value)} />
                 </FormField>
                 <FormField label="Конечное показание старого">
-                  <MeterReadingInput aria-label="Конечное показание старого счетчика" value={replacementForm.finalValue} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('finalValue', event.target.value)} />
+                  <MeterReadingInput aria-label="Конечное показание старого счетчика" required aria-invalid={parseMeterReadingInputValue(replacementForm.finalValue) === null} value={replacementForm.finalValue} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('finalValue', event.target.value)} />
                 </FormField>
                 <FormField label="Причина замены">
-                  <textarea aria-label="Причина замены счетчика" maxLength={500} value={replacementForm.reason} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('reason', event.target.value)} />
+                  <textarea aria-label="Причина замены счетчика" maxLength={500} required={actionCommentsRequired} value={replacementForm.reason} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('reason', event.target.value)} />
                 </FormField>
                 </div>
               </>

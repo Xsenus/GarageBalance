@@ -71,14 +71,12 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps required garage fields visibly and accessibly distinguishable while they are filled', () => {
-    expect(contractorsPanelSource).toContain('function getGarageRequiredFieldStates(form: ContractorGarageRow)')
-    expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.number}')
-    expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.peopleCount}')
-    expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.floorCount}')
+    expect(contractorsPanelSource).toContain('aria-label="Номер гаража" maxLength={80} pattern=".*\\S.*" required')
+    expect(contractorsPanelSource).toContain('aria-label="Количество человек" type="number" min="0" max="1000" step="1" required')
+    expect(contractorsPanelSource).toContain('aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required')
     expect(contractorsPanelSource).not.toContain('garage-required-fields-note')
-    expect(contractorsPanelSource.match(/aria-invalid=\{requiredFieldStates\./g)).toHaveLength(3)
-    expect(normalizedAppCss).toContain(".form-field .contractors-required-input[data-required-state='invalid'] {")
-    expect(normalizedAppCss).toContain(".form-field .contractors-required-input[data-required-state='valid'] {")
+    expect(normalizedAppCss).toContain("[aria-modal] :is(:required:invalid, [aria-invalid='true'])")
+    expect(normalizedAppCss).toContain("[aria-modal] :is(:required:valid:not([aria-invalid='true']), [aria-required='true'][aria-invalid='false'])")
   })
 
   it('keeps detail dialogs named, described and modal', () => {

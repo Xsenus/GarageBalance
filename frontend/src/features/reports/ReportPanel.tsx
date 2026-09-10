@@ -9,6 +9,7 @@ import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, 
 import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
+import { FormField } from '../../shared/FormField'
 import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatCount, formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -72,6 +73,7 @@ function ReportCheckboxMultiSelect({
   selectedAriaLabel,
   options,
   selectedValues,
+  required,
   openOnFocus = false,
   loadOptions,
   onChange,
@@ -84,6 +86,7 @@ function ReportCheckboxMultiSelect({
   selectedAriaLabel: string
   options: ReportFilterOption[]
   selectedValues: string[]
+  required?: boolean
   openOnFocus?: boolean
   loadOptions?: (search: string, signal: AbortSignal) => Promise<ReportFilterOption[]>
   onChange: (values: string[]) => void
@@ -145,8 +148,8 @@ function ReportCheckboxMultiSelect({
   }
 
   return (
-    <div className="report-workbook-filter-wide report-checkbox-picker">
-      <label htmlFor={searchId}>{label}</label>
+    <div className="report-workbook-filter-wide report-checkbox-picker" data-required={required}>
+      <label className="form-field-label" htmlFor={searchId}>{label}</label>
       <div
         ref={wrapRef}
         className="payments-prototype-search-wrap"
@@ -168,6 +171,8 @@ function ReportCheckboxMultiSelect({
             aria-expanded={shouldShowResults}
             aria-controls={listId}
             aria-describedby={statusId}
+            aria-required={required || undefined}
+            aria-invalid={required ? selectedValues.length === 0 : undefined}
             placeholder={placeholder}
             value={search}
             onFocus={openSearch}
@@ -1708,12 +1713,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
               </button>
             </div>
             <p id="garage-quick-list-editor-description">Выбрано гаражей: {garageQuickListEditor.garageIds.length}. Доступен всем с правом отчётов.</p>
-            <form onSubmit={(event) => {
+            <form noValidate onSubmit={(event) => {
               event.preventDefault()
               void saveGarageQuickList()
             }}>
-              <label>
-                <span>Название списка</span>
+              <FormField label="Название списка">
                 <input
                   ref={garageQuickListNameRef}
                   aria-label="Название быстрого списка"
@@ -1726,7 +1730,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                     setGarageQuickListError(null)
                   }}
                 />
-              </label>
+              </FormField>
               <fieldset disabled={garageQuickListSaving} className="report-quick-list-garages">
                 <ReportCheckboxMultiSelect
                   label="Гаражи списка"
@@ -1738,6 +1742,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                   options={garageFilterOptions}
                   loadOptions={loadGarageFilterOptions}
                   selectedValues={garageQuickListEditor.garageIds}
+                  required
                   openOnFocus
                   onChange={(garageIds) => {
                     setGarageQuickListEditor({ ...garageQuickListEditor, garageIds })

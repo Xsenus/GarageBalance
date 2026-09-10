@@ -1211,6 +1211,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <FormField label="Сумма, ₽">
                   <MoneyTextInput
                     aria-label="Сумма операции"
+                    min={0.01}
                     value={balanceAdjustmentDraft.amount}
                     disabled={cashBankSaving}
                     onValueChange={(amount) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, amount })}
@@ -1730,6 +1731,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       {backupConfirmation ? (
         <BackupReasonDialog
           reason={backupConfirmation.reason}
+          required={actionCommentsRequired}
           error={backupConfirmation.error}
           busy={backupCreating}
           onReasonChange={(reason) => setBackupConfirmation({ reason, error: null })}
@@ -1741,6 +1743,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         <BackupReasonDialog
           fileName={backupDeleteConfirmation.backup.fileName}
           reason={backupDeleteConfirmation.reason}
+          required={actionCommentsRequired}
           error={backupDeleteConfirmation.error}
           busy={backupDeleting}
           onReasonChange={(reason) => setBackupDeleteConfirmation({ ...backupDeleteConfirmation, reason, error: null })}
@@ -1751,6 +1754,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       {databaseResetConfirmation ? (
         <BackupReasonDialog
           reason={databaseResetConfirmation.password}
+          required
           error={databaseResetConfirmation.error}
           busy={backupCreating}
           databaseReset
@@ -1834,12 +1838,13 @@ function getOneCFreshSyncConfirmationTitle(mode: 'preview' | 'start' | 'retry') 
     : 'Запустить синхронизацию 1C Fresh?'
 }
 
-function BackupReasonDialog({ fileName, reason, error, busy, databaseReset = false, onReasonChange, onCancel, onSubmit }: {
+function BackupReasonDialog({ fileName, reason, error, busy, databaseReset = false, required = false, onReasonChange, onCancel, onSubmit }: {
   fileName?: string
   reason: string
   error: string | null
   busy: boolean
   databaseReset?: boolean
+  required?: boolean
   onReasonChange: (reason: string) => void
   onCancel: () => void
   onSubmit: () => void
@@ -1862,10 +1867,11 @@ function BackupReasonDialog({ fileName, reason, error, busy, databaseReset = fal
           <div><p className="eyebrow">{deleting ? 'Удаление резервной копии' : 'Резервные копии'}</p><h3 id={titleId}>{resetting ? 'Очистить рабочие данные?' : deleting ? 'Удалить выбранную копию?' : 'Создать резервную копию базы?'}</h3></div>
         </div>
         <FormField label={resetting ? 'Пароль очистки' : `Причина ${action}`}>
-          {resetting ? <input aria-label="Пароль очистки базы данных" type="password" autoComplete="new-password" value={reason} onChange={(event) => onReasonChange(event.target.value)} disabled={busy} /> :
+          {resetting ? <input aria-label="Пароль очистки базы данных" type="password" autoComplete="new-password" required={required} value={reason} onChange={(event) => onReasonChange(event.target.value)} disabled={busy} /> :
           <textarea
             aria-label={`Причина ${action} резервной копии`}
             rows={3}
+            required={required}
             value={reason}
             onChange={(event) => onReasonChange(event.target.value)}
             disabled={busy}

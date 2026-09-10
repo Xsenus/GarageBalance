@@ -681,7 +681,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <X size={18} />
               </button>
             </div>
-            <form className="dictionary-modal-form" autoComplete="off" onSubmit={saveUser}>
+            <form className="dictionary-modal-form" autoComplete="off" noValidate onSubmit={saveUser}>
               {editor.mode === 'create' ? (
                 <FormField label="Email">
                   <input aria-label="Email пользователя" autoComplete="off" data-1p-ignore data-lpignore="true" name="managed-user-email" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" disabled={busy} required />
@@ -695,7 +695,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <input aria-label="Имя пользователя" autoComplete="off" name="managed-user-display-name" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} disabled={busy} required />
               </FormField>
               <FormField label="Роли">
-                <div className="user-role-assignment" role="group" aria-label="Роли пользователя">
+                <div className="user-role-assignment" role="group" aria-label="Роли пользователя" aria-required="true" aria-invalid={form.roleCodes.length === 0} data-required="true">
                   {roles.map((role) => (
                     <label className="contractors-check-row" key={role.code}>
                       <input
@@ -745,7 +745,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   onChange={(event) => setForm({ ...form, password: event.target.value })}
                   type="password"
                   minLength={editor.mode === 'create' ? 8 : undefined}
-                  required={editor.mode === 'create'}
+                  required={editor.mode === 'create' || Boolean(form.password)}
+                  aria-invalid={(editor.mode === 'create' || Boolean(form.password)) ? form.passwordConfirmation.length < 8 || form.passwordConfirmation !== form.password : undefined}
                 />
               </FormField>
               <FormField label={editor.mode === 'create' ? 'Повторите пароль' : 'Повторите новый пароль'}>
@@ -825,7 +826,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <X size={18} />
               </button>
             </div>
-            <form className="dictionary-modal-form" onSubmit={saveRolePermissions}>
+            <form className="dictionary-modal-form" noValidate onSubmit={saveRolePermissions}>
               <div className="role-permission-editor" role="group" aria-label={`Права роли ${roleEditor.role.name}`}>
                 {rolePermissionGroups.map((group) => {
                   const administratorUsersManage = roleEditor.role.code === 'administrator' && group.permission === permissions.usersManage
@@ -875,24 +876,25 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <X size={18} />
               </button>
             </div>
-            <label className="field-label" htmlFor="user-delete-reason">Причина отключения</label>
-            <textarea
-              id="user-delete-reason"
-              aria-label="Причина отключения пользователя"
-              aria-invalid={Boolean(deleteReasonError)}
-              aria-describedby={deleteReasonError ? 'user-delete-reason-error' : undefined}
-              maxLength={1000}
-              value={deleteReason}
-              onChange={(event) => {
-                setDeleteReason(event.target.value)
-                if (deleteReasonError && event.target.value.trim()) {
-                  setDeleteReasonError(null)
-                }
-              }}
-              placeholder="Например: сотрудник больше не работает"
-              disabled={saving === 'delete'}
-              required={actionCommentsRequired}
-            />
+            <FormField label="Причина отключения">
+              <textarea
+                id="user-delete-reason"
+                aria-label="Причина отключения пользователя"
+                aria-invalid={Boolean(deleteReasonError)}
+                aria-describedby={deleteReasonError ? 'user-delete-reason-error' : undefined}
+                maxLength={1000}
+                value={deleteReason}
+                onChange={(event) => {
+                  setDeleteReason(event.target.value)
+                  if (deleteReasonError && event.target.value.trim()) {
+                    setDeleteReasonError(null)
+                  }
+                }}
+                placeholder="Например: сотрудник больше не работает"
+                disabled={saving === 'delete'}
+                required={actionCommentsRequired}
+              />
+            </FormField>
             {deleteReasonError ? <p className="form-error" id="user-delete-reason-error">{deleteReasonError}</p> : null}
             {dialogErrorMessage}
             <div className="detail-dialog-actions">

@@ -2096,13 +2096,13 @@ export function FinancePanel({
           </div>
           {incomeGarageSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{incomeGarageSearchStatus}</p> : null}
           {financeField('incomeGarage', (
-            <SelectControl aria-label="Гараж для поступления" value={incomeForm.garageId} options={[
+            <SelectControl aria-label="Гараж для поступления" required value={incomeForm.garageId} options={[
               { value: '', label: 'Выберите гараж' },
               ...incomeGarageOptions.map((garage) => ({ value: garage.id, label: garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}` })),
             ]} onChange={(garageId) => setIncomeForm({ ...incomeForm, garageId })} />
           ))}
           {financeField('incomeType', (
-            <SelectControl aria-label="Вид поступления для платежа" value={incomeForm.incomeTypeId} options={[
+            <SelectControl aria-label="Вид поступления для платежа" required value={incomeForm.incomeTypeId} options={[
               { value: '', label: 'Выберите вид' },
               ...incomeTypes.map((item) => ({ value: item.id, label: item.name })),
             ]} onChange={(incomeTypeId) => setIncomeForm({ ...incomeForm, incomeTypeId })} />
@@ -2127,6 +2127,7 @@ export function FinancePanel({
           {financeField('expensePaymentSource', (
             <SelectControl
               aria-label="Источник выплаты"
+              required
               value={expenseForm.expensePaymentSource}
               options={[
                 { value: 'bank', label: 'Банк · регулярный поставщик' },
@@ -2147,6 +2148,7 @@ export function FinancePanel({
           {financeField('expenseSupplier', (
             <SelectControl
               aria-label="Поставщик для выплаты"
+              required
               value={expenseForm.supplierId}
               options={suppliers
                 .filter((supplier) => Boolean(getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId))
@@ -2165,6 +2167,7 @@ export function FinancePanel({
           {financeField('expenseType', (
             <SelectControl
               aria-label="Услуга выплаты"
+              required
               value={expenseForm.expenseTypeId}
               options={expenseForm.expenseTypeId
                 ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
@@ -2175,6 +2178,7 @@ export function FinancePanel({
           {financeField('expensePaymentType', (
             <SelectControl
               aria-label="Тип выплаты"
+              required
               value={expenseForm.expensePaymentType}
               options={expensePaymentTypeOptions}
               onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
@@ -2203,13 +2207,13 @@ export function FinancePanel({
       return (
         <>
           {financeField('accrualGarage', (
-            <SelectControl aria-label="Гараж для начисления" value={accrualForm.garageId} options={[
+            <SelectControl aria-label="Гараж для начисления" required value={accrualForm.garageId} options={[
               { value: '', label: 'Выберите гараж' },
               ...garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })),
             ]} onChange={(garageId) => setAccrualForm({ ...accrualForm, garageId })} />
           ))}
           {financeField('accrualIncomeType', (
-            <SelectControl aria-label="Вид начисления" value={accrualForm.incomeTypeId} options={isIrregular ? [
+            <SelectControl aria-label="Вид начисления" required value={accrualForm.incomeTypeId} options={isIrregular ? [
               { value: accrualForm.incomeTypeId, label: editedAccrual?.irregularPaymentName ?? editedAccrual?.basis ?? 'Разовое начисление' },
             ] : [
               { value: '', label: 'Выберите вид' },
@@ -2231,13 +2235,13 @@ export function FinancePanel({
       return (
         <>
           {financeField('supplierAccrualSupplier', (
-            <SelectControl aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} options={[
+            <SelectControl aria-label="Поставщик для начисления" required value={supplierAccrualForm.supplierId} options={[
               { value: '', label: 'Выберите поставщика' },
               ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })),
             ]} onChange={selectSupplierForAccrual} />
           ))}
           {financeField('supplierAccrualType', (
-            <SelectControl aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} options={supplierAccrualForm.expenseTypeId
+            <SelectControl aria-label="Услуга начисления поставщику" required value={supplierAccrualForm.expenseTypeId} options={supplierAccrualForm.expenseTypeId
               ? [{ value: supplierAccrualForm.expenseTypeId, label: expenseTypes.find((item) => item.id === supplierAccrualForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
               : [{ value: '', label: 'Для поставщика услуга не настроена' }]} onChange={() => undefined} disabled />
           ))}
@@ -2259,7 +2263,7 @@ export function FinancePanel({
       return (
         <>
           {financeField('salaryGroup', (
-            <SelectControl aria-label="Группа для зарплаты" disabled={saving === 'salary-accruals'} value={salaryForm.supplierGroupId} options={[
+            <SelectControl aria-label="Группа для зарплаты" required disabled={saving === 'salary-accruals'} value={salaryForm.supplierGroupId} options={[
               { value: '', label: 'Выберите группу' },
               ...supplierGroups.map((group) => ({ value: group.id, label: group.name })),
             ]} onChange={(supplierGroupId) => setSalaryForm({ ...salaryForm, supplierGroupId })} />
@@ -2281,13 +2285,13 @@ export function FinancePanel({
     return (
       <>
         {financeField('meterGarage', (
-          <SelectControl aria-label="Гараж для показания" value={meterForm.garageId} options={[
+          <SelectControl aria-label="Гараж для показания" required value={meterForm.garageId} options={[
             { value: '', label: 'Выберите гараж' },
             ...garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })),
           ]} onChange={(garageId) => setMeterForm({ ...meterForm, garageId })} />
         ))}
         {financeField('meterKind', (
-          <SelectControl aria-label="Тип счетчика" value={meterForm.meterKind} options={[
+          <SelectControl aria-label="Тип счетчика" required value={meterForm.meterKind} options={[
             { value: 'water', label: 'Вода' },
             { value: 'electricity', label: 'Электричество' },
           ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind })} />
@@ -2389,9 +2393,9 @@ export function FinancePanel({
               <button ref={recalculationCloseRef} className="icon-button" type="button" aria-label="Закрыть перерасчёт начислений" disabled={recalculationPending} onClick={() => setRecalculationOpen(false)}><X size={18} aria-hidden="true" /></button>
             </div>
             <div className="inline-fields">
-              <SelectControl aria-label="Вид начисления для перерасчёта" value={recalculationForm.incomeTypeId} options={[{ value: '', label: 'Выберите вид начисления' }, ...incomeTypes.map((item) => ({ value: item.id, label: item.name }))]} disabled={recalculationPending} onChange={(incomeTypeId) => { setRecalculationForm((current) => ({ ...current, incomeTypeId })); setRecalculationPreview(null) }} />
-              <SelectControl aria-label="Тариф для перерасчёта" value={recalculationForm.tariffId} options={[{ value: '', label: 'Выберите тариф' }, ...recalculationTariffs.map((item) => ({ value: item.id, label: item.name }))]} disabled={recalculationPending} onChange={(tariffId) => { setRecalculationForm((current) => ({ ...current, tariffId })); setRecalculationPreview(null) }} />
-              <LocalizedDatePicker ariaLabel="Месяц перерасчёта" mode="month" value={recalculationForm.accountingMonth} disabled={recalculationPending} onChange={(accountingMonth) => { setRecalculationForm((current) => ({ ...current, accountingMonth })); setRecalculationPreview(null) }} />
+              <SelectControl aria-label="Вид начисления для перерасчёта" required value={recalculationForm.incomeTypeId} options={[{ value: '', label: 'Выберите вид начисления' }, ...incomeTypes.map((item) => ({ value: item.id, label: item.name }))]} disabled={recalculationPending} onChange={(incomeTypeId) => { setRecalculationForm((current) => ({ ...current, incomeTypeId })); setRecalculationPreview(null) }} />
+              <SelectControl aria-label="Тариф для перерасчёта" required value={recalculationForm.tariffId} options={[{ value: '', label: 'Выберите тариф' }, ...recalculationTariffs.map((item) => ({ value: item.id, label: item.name }))]} disabled={recalculationPending} onChange={(tariffId) => { setRecalculationForm((current) => ({ ...current, tariffId })); setRecalculationPreview(null) }} />
+              <LocalizedDatePicker ariaLabel="Месяц перерасчёта" mode="month" value={recalculationForm.accountingMonth} required disabled={recalculationPending} onChange={(accountingMonth) => { setRecalculationForm((current) => ({ ...current, accountingMonth })); setRecalculationPreview(null) }} />
             </div>
             <button className="secondary-button" type="button" disabled={recalculationPending} onClick={() => void previewRecalculation()}>{recalculationPending ? 'Проверяем…' : 'Показать затронутые строки'}</button>
             {recalculationError ? <FormError>{recalculationError}</FormError> : null}
@@ -2888,7 +2892,7 @@ export function FinancePanel({
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <form className="dictionary-form finance-editor-form" onSubmit={handleFinanceEditorSubmit}>
+            <form className="dictionary-form finance-editor-form" noValidate onSubmit={handleFinanceEditorSubmit}>
               {renderFinanceEditorFields(financeEditor.section)}
               {financeEditorHasUnsavedChanges ? <p className="form-hint" id="finance-editor-unsaved-changes" role="status" aria-live="polite">{getFinanceEditorUiLabel('unsavedHint')}</p> : null}
               <div className="detail-dialog-actions">
@@ -6241,6 +6245,7 @@ function PaymentsPrototypePanel({
         <GaragePaymentHistoryCancelDialog
           state={historyCancel}
           saving={historyActionSaving}
+          required={actionCommentsRequired}
           onChange={(patch) => setHistoryCancel((value) => value ? { ...value, ...patch, error: null } : value)}
           onClose={closeHistoryCancelDialog}
           onConfirm={confirmHistoryCancel}
@@ -6423,15 +6428,15 @@ function GaragePaymentHistoryEditDialog({
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма изменяемого платежа" value={state.amount} onValueChange={(amount) => onChange({ amount })} disabled={saving} />
+            <MoneyTextInput aria-label="Сумма изменяемого платежа" min="0.01" required value={state.amount} onValueChange={(amount) => onChange({ amount })} disabled={saving} />
           </FormField>
           <FormField label="Дата">
-            <LocalizedDatePicker ariaLabel="Дата изменяемого платежа" mode="date" value={state.operationDate} onChange={(operationDate) => onChange({ operationDate })} disabled={saving} />
+            <LocalizedDatePicker ariaLabel="Дата изменяемого платежа" mode="date" value={state.operationDate} required onChange={(operationDate) => onChange({ operationDate })} disabled={saving} />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц изменяемого платежа" mode="month" value={state.accountingMonth} onChange={(accountingMonth) => onChange({ accountingMonth })} disabled={saving} />
+            <LocalizedDatePicker ariaLabel="Месяц изменяемого платежа" mode="month" value={state.accountingMonth} required onChange={(accountingMonth) => onChange({ accountingMonth })} disabled={saving} />
           </FormField>
           <FormField label="Документ">
             <input aria-label="Документ изменяемого платежа" value={state.documentNumber} onChange={(event) => onChange({ documentNumber: event.target.value })} disabled={saving} />
@@ -6481,12 +6486,14 @@ function GaragePaymentHistoryEditDialog({
 function GaragePaymentHistoryCancelDialog({
   state,
   saving,
+  required,
   onChange,
   onClose,
   onConfirm,
 }: {
   state: GaragePaymentHistoryCancelState
   saving: boolean
+  required: boolean
   onChange: (patch: Partial<Omit<GaragePaymentHistoryCancelState, 'row'>>) => void
   onClose: () => void
   onConfirm: () => void
@@ -6514,7 +6521,7 @@ function GaragePaymentHistoryCancelDialog({
         </div>
         <div className="dictionary-modal-form payments-prototype-modal-form">
           <FormField label="Причина отмены">
-            <textarea aria-label="Причина отмены платежа" rows={4} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
+            <textarea aria-label="Причина отмены платежа" rows={4} required={required} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
           </FormField>
           {state.error ? <FormError>{state.error}</FormError> : null}
           <div className="detail-dialog-actions">
@@ -6588,19 +6595,19 @@ function BankDepositPrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form bank-deposit-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form bank-deposit-form" noValidate onSubmit={handleSubmit}>
           <FormField
             className="bank-deposit-form__amount"
             label="Сумма"
             hint="Сумма будет списана из кассы и зачислена на банковский счет."
           >
-            <MoneyTextInput aria-label="Сумма в банке" value={amount} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма в банке" min="0.01" required value={amount} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} disabled={saving} />
           </FormField>
           <FormField className="bank-deposit-form__date" label="Дата">
-            <LocalizedDatePicker ariaLabel="Дата учета суммы в банке" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
+            <LocalizedDatePicker ariaLabel="Дата учета суммы в банке" mode="date" value={operationDate} required disabled={saving} onChange={(nextOperationDate) => {
               setOperationDate(nextOperationDate)
               setError(null)
             }} />
@@ -6750,10 +6757,11 @@ export function NewExpensePrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form expense-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form expense-form" noValidate onSubmit={handleSubmit}>
           <FormField className="full-payment-field" label="Источник и вид выплаты">
             <SelectControl
               aria-label="Источник выплаты"
+              required
               value={expensePaymentSource}
               options={[
                 { value: 'bank', label: 'Банк · поставщику' },
@@ -6782,6 +6790,7 @@ export function NewExpensePrototypeDialog({
           {!isCashExpense ? <FormField label="Поставщик">
             <SelectControl
               aria-label="Поставщик выплаты"
+              required
               value={supplierId}
               options={availableSuppliers.length > 0
                 ? availableSuppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))
@@ -6803,6 +6812,7 @@ export function NewExpensePrototypeDialog({
           <FormField label={isCashExpense ? 'Услуга или статья' : 'Услуга'}>
             <SelectControl
               aria-label="Услуга выплаты поставщику"
+              required
               value={expenseTypeId}
               options={isCashExpense
                 ? expenseTypes.filter((expenseType) => !expenseType.isArchived).map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
@@ -6845,6 +6855,7 @@ export function NewExpensePrototypeDialog({
             <FormField className="full-payment-field" label="Тип выплаты">
               <SelectControl
                 aria-label="Тип выплаты"
+                required
                 value={expensePaymentType}
                 options={expensePaymentTypeOptions}
                 disabled={saving}
@@ -6855,19 +6866,19 @@ export function NewExpensePrototypeDialog({
             </FormField>
           ) : null}
           <FormField label="Дата">
-            <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
+            <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={operationDate} required disabled={saving} onChange={(nextOperationDate) => {
               setOperationDate(nextOperationDate)
               setError(null)
             }} />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={accountingMonth} required disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма выплаты" value={amount} disabled={saving} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма выплаты" min="0.01" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               resetFundConfirmation()
               setError(null)
@@ -6984,12 +6995,13 @@ function StaffPaymentPrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
           <p className="form-hint">Источник выплаты: <strong>касса</strong>. Доступно {formatMoney(availableCashAmount)}. Фонд расходования не требуется.</p>
           {error ? <FormError>{error}</FormError> : null}
           <FormField label="Сотрудник">
             <SelectControl
               aria-label="Сотрудник выплаты"
+              required
               value={staffMemberId}
               options={staffMembers.length > 0
                 ? staffMembers.map((member) => ({ value: member.id, label: `${member.fullName} · ${member.departmentName}` }))
@@ -7001,19 +7013,19 @@ function StaffPaymentPrototypeDialog({
               }} />
           </FormField>
           <FormField label="Дата">
-            <LocalizedDatePicker ariaLabel="Дата выплаты сотруднику" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
+            <LocalizedDatePicker ariaLabel="Дата выплаты сотруднику" mode="date" value={operationDate} required disabled={saving} onChange={(nextOperationDate) => {
               setOperationDate(nextOperationDate)
               setError(null)
             }} />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц выплаты сотруднику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц выплаты сотруднику" mode="month" value={accountingMonth} required disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма выплаты сотруднику" value={amount} disabled={saving} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма выплаты сотруднику" min="0.01" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
@@ -7202,12 +7214,13 @@ function StaffSalaryAdjustmentPrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
           <FormField
             label="Сотрудник"
             hint={selectedStaffMember ? `Месячный оклад: ${formatPaymentMoney(selectedStaffMember.rate)}` : undefined}>
             <SelectControl
               aria-label={`Сотрудник для ${isBonus ? 'премии' : 'штрафа'}`}
+              required
               value={staffMemberId}
               options={staffMembers.length > 0
                 ? staffMembers.map((member) => ({ value: member.id, label: `${member.fullName} · ${member.departmentName}` }))
@@ -7219,13 +7232,13 @@ function StaffSalaryAdjustmentPrototypeDialog({
               }} />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel={`Месяц ${isBonus ? 'премии' : 'штрафа'}`} mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel={`Месяц ${isBonus ? 'премии' : 'штрафа'}`} mode="month" value={accountingMonth} required disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label={`Сумма ${isBonus ? 'премии' : 'штрафа'}`} value={amount} disabled={saving} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label={`Сумма ${isBonus ? 'премии' : 'штрафа'}`} min="0.01" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
@@ -7234,7 +7247,7 @@ function StaffSalaryAdjustmentPrototypeDialog({
             <input aria-label={`Документ ${isBonus ? 'премии' : 'штрафа'}`} value={documentNumber} disabled={saving} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
           <FormField label="Основание">
-            <textarea aria-label={`Основание ${isBonus ? 'премии' : 'штрафа'}`} rows={4} value={reason} disabled={saving} onChange={(event) => {
+            <textarea aria-label={`Основание ${isBonus ? 'премии' : 'штрафа'}`} rows={4} required={actionCommentsRequired} value={reason} disabled={saving} onChange={(event) => {
               setReason(event.target.value)
               setError(null)
             }} />
@@ -7339,10 +7352,11 @@ function NewAccrualPrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
           <FormField label="Поставщик">
             <SelectControl
               aria-label="Поставщик начисления"
+              required
               value={supplierId}
               options={suppliers.length > 0
                 ? suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))
@@ -7362,6 +7376,7 @@ function NewAccrualPrototypeDialog({
             hint={`Фонд расходования: ${selectedSupplier?.expenseFundName ?? 'не настроен'}`}>
             <SelectControl
               aria-label="Услуга начисления поставщику"
+              required
               value={expenseTypeId}
               options={expenseTypeId
                 ? [{
@@ -7373,13 +7388,13 @@ function NewAccrualPrototypeDialog({
               disabled />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={accountingMonth} required disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма начисления поставщику" value={amount} disabled={saving} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма начисления поставщику" min="0.01" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
@@ -7466,21 +7481,21 @@ function PenaltyAccrualPrototypeDialog({
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
           <FormField label="Сумма штрафа">
-            <MoneyTextInput aria-label="Сумма штрафа" value={amount} disabled={saving} onValueChange={(nextAmount) => {
+            <MoneyTextInput aria-label="Сумма штрафа" min="0.01" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц начисления штрафа" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц начисления штрафа" mode="month" value={accountingMonth} required disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
           <FormField label="Причина">
-            <textarea aria-label="Причина начисления штрафа" rows={5} value={reason} disabled={saving} onChange={(event) => {
+            <textarea aria-label="Причина начисления штрафа" rows={5} required={actionCommentsRequired} value={reason} disabled={saving} onChange={(event) => {
               setReason(event.target.value)
               setError(null)
             }} />
@@ -7563,12 +7578,13 @@ function GarageAccrualPrototypeDialog({
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
           <FormField label="Основание">
             <input
               aria-label="Основание начисления гаража"
               list={basisOptionsId}
               maxLength={200}
+              required
               value={basis}
               disabled={saving}
               placeholder="Выберите готовое основание или введите своё"
@@ -7589,6 +7605,8 @@ function GarageAccrualPrototypeDialog({
           <FormField label="Сумма">
             <MoneyTextInput
               aria-label="Сумма нерегулярного начисления гаража"
+              min="0.01"
+              required
               value={amount}
               disabled={saving}
               onValueChange={(nextAmount) => {
@@ -7598,7 +7616,7 @@ function GarageAccrualPrototypeDialog({
             />
           </FormField>
           <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц начисления гаража" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+            <LocalizedDatePicker ariaLabel="Месяц начисления гаража" mode="month" value={accountingMonth} required disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
@@ -7705,11 +7723,12 @@ function FullPaymentPrototypeDialog({
             </div>
           </>
         ) : (
-        <form className="dictionary-modal-form payments-prototype-modal-form full-payment-form" onSubmit={handleSubmit}>
+        <form className="dictionary-modal-form payments-prototype-modal-form full-payment-form" noValidate onSubmit={handleSubmit}>
           <div className="full-payment-fields">
             <FormField className="full-payment-field" label="Расчетный период">
               <SelectControl
                 aria-label="Период полной оплаты"
+                required
                 value={period}
                 options={periodOptions.filter((option) => option.debt > 0).map((option) => ({ value: option.value, label: option.label }))}
                 disabled={saving}
@@ -7722,7 +7741,7 @@ function FullPaymentPrototypeDialog({
               />
             </FormField>
             <FormField className="full-payment-field full-payment-amount" label="Сумма оплаты" hint={`Доступный долг: ${formatPaymentMoney(selectedDebt)} руб.`}>
-              <MoneyInput aria-label="Сумма полной оплаты" value={amount} onValueChange={(nextAmount) => {
+              <MoneyInput aria-label="Сумма полной оплаты" min="0.01" max={selectedDebt} required value={amount} onValueChange={(nextAmount) => {
                 setAmount(nextAmount)
                 setError(null)
               }} disabled={saving} />

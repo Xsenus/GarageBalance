@@ -131,4 +131,18 @@ describe('EditableCombobox', () => {
     expect(screen.getByRole('combobox', { name: 'Единица измерения' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Единица измерения: открыть список' })).toBeDisabled()
   })
+
+  it('exposes invalid and valid states for a required editable value', async () => {
+    const user = userEvent.setup()
+    function Example() {
+      const [value, setValue] = useState('')
+      return <EditableCombobox aria-label="Обязательная единица" required value={value} options={options} onChange={setValue} />
+    }
+    render(<Example />)
+    const input = screen.getByRole('combobox', { name: 'Обязательная единица' })
+    expect(input).toBeRequired()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await user.type(input, 'м³')
+    expect(input).toHaveAttribute('aria-invalid', 'false')
+  })
 })

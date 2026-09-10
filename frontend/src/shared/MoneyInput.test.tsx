@@ -89,4 +89,18 @@ describe('MoneyInput', () => {
     await user.click(input)
     expect(input).toHaveValue('4 500.00')
   })
+
+  it('marks required money invalid until it satisfies the minimum', async () => {
+    const user = userEvent.setup()
+    function Example() {
+      const [value, setValue] = useState('')
+      return <MoneyTextInput aria-label="Обязательная сумма" min="0.01" required value={value} onValueChange={setValue} />
+    }
+    render(<Example />)
+    const input = screen.getByLabelText('Обязательная сумма')
+    expect(input).toBeRequired()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await user.type(input, '12.50')
+    expect(input).not.toHaveAttribute('aria-invalid')
+  })
 })

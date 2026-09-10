@@ -10,6 +10,7 @@ export function EditableCombobox({
   value,
   options,
   disabled = false,
+  required,
   maxLength,
   placement = 'below',
   onChange,
@@ -18,6 +19,7 @@ export function EditableCombobox({
   value: string
   options: SelectControlOption[]
   disabled?: boolean
+  required?: boolean
   maxLength?: number
   placement?: 'above' | 'below'
   onChange: (value: string) => void
@@ -76,11 +78,13 @@ export function EditableCombobox({
         aria-label={ariaLabel}
         aria-autocomplete="list"
         aria-expanded={effectiveOpen}
+        aria-invalid={required ? !value.trim() : undefined}
         aria-controls={listboxId}
         aria-activedescendant={effectiveOpen && activeIndex >= 0 ? optionIds[activeIndex] : undefined}
         autoComplete="off"
         disabled={disabled}
         maxLength={maxLength}
+        required={required}
         value={value}
         onClick={() => openList()}
         onChange={(event) => changeValue(event.target.value)}

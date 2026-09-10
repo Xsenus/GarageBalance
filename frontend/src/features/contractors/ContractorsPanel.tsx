@@ -3166,18 +3166,6 @@ function createEmptyGaragePrototype(): ContractorGarageRow {
   }
 }
 
-function getGarageRequiredFieldStates(form: ContractorGarageRow) {
-  const number = form.number.trim()
-  const peopleCount = Number(form.peopleCount)
-  const floorCount = Number(form.floorCount)
-
-  return {
-    number: number.length > 0 && number.length <= 80 ? 'valid' : 'invalid',
-    peopleCount: form.peopleCount.trim() !== '' && Number.isInteger(peopleCount) && peopleCount >= 0 && peopleCount <= 1000 ? 'valid' : 'invalid',
-    floorCount: form.floorCount.trim() !== '' && Number.isInteger(floorCount) && floorCount >= 0 && floorCount <= 100 ? 'valid' : 'invalid',
-  } as const
-}
-
 function createEmptySupplierPrototype(): ContractorSupplierRow {
   return {
     id: `supplier-${Date.now()}`,
@@ -3557,11 +3545,11 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
 
   return (
     <ContractorDialogShell className="opening-balance-adjustment-dialog" closeDisabled={saving} closeLabel="Закрыть корректировку начального баланса" dialogRef={dialogRef} eyebrow="Начальные данные" onClose={onClose} title={`Корректировка: ${target.name}`} titleId="opening-balance-adjustment-title">
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => void submit(event)}>
+        <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={(event) => void submit(event)}>
           {error ? <FormError>{error}</FormError> : null}
           <div className="contractors-modal-grid">
             <FormField label="Действующее значение"><input aria-label="Действующий начальный баланс" value={formatMoney(target.currentAmount)} readOnly /></FormField>
-            <FormField label="Новое значение"><MoneyTextInput aria-label="Новое значение начального баланса" value={newAmount} onValueChange={setNewAmount} /></FormField>
+            <FormField label="Новое значение"><MoneyTextInput aria-label="Новое значение начального баланса" required value={newAmount} onValueChange={setNewAmount} /></FormField>
             <FormField label="Дата корректировки"><LocalizedDatePicker ariaLabel="Дата корректировки начального баланса" mode="date" value={effectiveDate} required onChange={setEffectiveDate} /></FormField>
           </div>
           <FormField label="Причина"><textarea aria-label="Причина корректировки начального баланса" maxLength={1000} required={actionCommentsRequired} value={reason} onChange={(event) => setReason(event.target.value)} /></FormField>
@@ -3597,7 +3585,6 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
   const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
   const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)
-  const requiredFieldStates = getGarageRequiredFieldStates(form)
 
   async function saveAndClose() {
     setSaving(true)
@@ -3639,16 +3626,16 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
             <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму гаража" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+          <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <label className="form-field">
-                  <span className="form-field-label">Номер *</span>
-                  <input className="contractors-required-input" data-required-state={requiredFieldStates.number} aria-invalid={requiredFieldStates.number === 'invalid'} aria-label="Номер гаража" maxLength={80} required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+                  <span className="form-field-label">Номер</span>
+                  <input aria-label="Номер гаража" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
                 </label>
-                <FormField label="Количество человек *"><input className="contractors-required-input" data-required-state={requiredFieldStates.peopleCount} aria-invalid={requiredFieldStates.peopleCount === 'invalid'} aria-label="Количество человек" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-                <FormField label="Этажи *"><input className="contractors-required-input" data-required-state={requiredFieldStates.floorCount} aria-invalid={requiredFieldStates.floorCount === 'invalid'} aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+                <FormField label="Количество человек"><input aria-label="Количество человек" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
+                <FormField label="Этажи"><input aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {!item ? (
@@ -3886,10 +3873,10 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
             <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+          <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
             <div className="contractors-supplier-primary-grid">
-              <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
+              <FormField label="Наименование"><input aria-label="Наименование поставщика" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
               <FormField label="Услуга">
                 <SelectControl
                   aria-label="Услуга поставщика"
@@ -3907,6 +3894,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
               >
                 <SelectControl
                   aria-label="Фонд расходования поставщика"
+                  required={Boolean(form.serviceId)}
                   value={form.expenseFundId ?? ''}
                   options={[
                     {
@@ -4180,9 +4168,9 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
             <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+          <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
-            <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
+            <FormField label="ФИО"><input aria-label="ФИО сотрудника" required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
             <div className="contractors-staff-fields">
               <FormField label="Дата принятия">
                 <LocalizedDatePicker ariaLabel="Дата принятия сотрудника" mode="date" placement="above" value={form.employmentStartDate} required onChange={(employmentStartDate) => { setForm({ ...form, employmentStartDate }); setSaveError(null) }} />
@@ -4193,6 +4181,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
               <FormField label="Отдел">
                 <SelectControl
                   aria-label="Отдел сотрудника"
+                  required
                   value={form.department}
                   placement="above"
                   maxVisibleOptions={3}
@@ -4206,6 +4195,8 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
                 <div className="contractors-inline-field contractors-staff-rate-field">
                   <MoneyTextInput
                     aria-label="Ставка сотрудника"
+                    min={0}
+                    required
                     value={form.rate}
                     onValueChange={(rate) => setForm({ ...form, rate })}
                   />
@@ -4285,7 +4276,7 @@ function DepartmentPrototypeDialog({ item, onClose, onSave }: { item?: Contracto
             <h3 id="department-dialog-title">{item ? form.name : 'Новый отдел'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму отдела" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+          <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
             <FormField label="Наименование"><input aria-label="Наименование отдела" maxLength={200} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
             <div className="detail-dialog-actions">

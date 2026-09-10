@@ -3336,7 +3336,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={confirmThresholdCreate}>
+            <form noValidate onSubmit={confirmThresholdCreate}>
               <div className="contractors-service-secondary-grid">
                 <FormField label={`От, ${thresholdCreateTarget?.unit ?? 'ед.'}`}>
                   <MeterReadingInput
@@ -3346,11 +3346,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   />
                 </FormField>
                 <FormField label={`До, ${thresholdCreateTarget?.unit ?? 'ед.'}`}>
-                  <MeterReadingInput aria-label="Верхняя граница нового порога" value={thresholdCreateUpperBound} onChange={(event) => setThresholdCreateUpperBound(event.target.value)} disabled={Boolean(tariffSavingRowId)} />
+                  <MeterReadingInput aria-label="Верхняя граница нового порога" required value={thresholdCreateUpperBound} onChange={(event) => setThresholdCreateUpperBound(event.target.value)} disabled={Boolean(tariffSavingRowId)} />
                   <small className="form-field-hint">Единица: {thresholdCreateTarget?.unit ?? 'по выбранному счетчику'}</small>
                 </FormField>
                 <FormField label="Ставка, руб.">
-                  <MoneyTextInput aria-label="Ставка нового порога" value={thresholdCreateRate} onValueChange={setThresholdCreateRate} disabled={Boolean(tariffSavingRowId)} />
+                  <MoneyTextInput aria-label="Ставка нового порога" min={0.01} required value={thresholdCreateRate} onValueChange={setThresholdCreateRate} disabled={Boolean(tariffSavingRowId)} />
                 </FormField>
               </div>
               {thresholdCreateError ? <FormError>{thresholdCreateError}</FormError> : null}
@@ -3380,17 +3380,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               </button>
             </div>
             <p className="confirmation-text" id="threshold-delete-description">Порог будет удалён из текущего тарифа.</p>
-            <label className="field-label" htmlFor="threshold-delete-reason">Причина удаления {actionCommentsRequired ? '*' : '(необязательно)'}</label>
-            <textarea
-              id="threshold-delete-reason"
-              aria-label="Причина удаления порога"
-              maxLength={1000}
-              value={thresholdDeleteReason}
-              onChange={(event) => setThresholdDeleteReason(event.target.value)}
-              placeholder="Например: лишний порог добавлен ошибочно"
-              disabled={Boolean(tariffSavingRowId)}
-              required={actionCommentsRequired}
-            />
+            <FormField label={actionCommentsRequired ? 'Причина удаления' : 'Причина удаления (необязательно)'}>
+              <textarea
+                id="threshold-delete-reason"
+                aria-label="Причина удаления порога"
+                maxLength={1000}
+                value={thresholdDeleteReason}
+                onChange={(event) => setThresholdDeleteReason(event.target.value)}
+                placeholder="Например: лишний порог добавлен ошибочно"
+                disabled={Boolean(tariffSavingRowId)}
+                required={actionCommentsRequired}
+              />
+            </FormField>
             <p className="form-hint">{actionCommentsRequired ? 'Причина обязательна. Настройка: «Настройки» → «Отображение».' : 'Причина необязательна; изменение всё равно сохранится в истории.'}</p>
             {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
@@ -3418,17 +3419,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               </button>
             </div>
             <p className="confirmation-text" id="one-time-delete-description">Платёж будет удалён из списка.</p>
-            <label className="field-label" htmlFor="one-time-delete-reason">Причина удаления</label>
-            <textarea
-              id="one-time-delete-reason"
-              aria-label="Причина удаления нерегулярного платежа"
-              maxLength={1000}
-              value={oneTimeDeleteReason}
-              onChange={(event) => setOneTimeDeleteReason(event.target.value)}
-              placeholder="Например: платеж больше не используется"
-              disabled={oneTimeSavingRowId === oneTimeDeleteTarget.id}
-              required={actionCommentsRequired}
-            />
+            <FormField label={actionCommentsRequired ? 'Причина удаления' : 'Причина удаления (необязательно)'}>
+              <textarea
+                id="one-time-delete-reason"
+                aria-label="Причина удаления нерегулярного платежа"
+                maxLength={1000}
+                value={oneTimeDeleteReason}
+                onChange={(event) => setOneTimeDeleteReason(event.target.value)}
+                placeholder="Например: платеж больше не используется"
+                disabled={oneTimeSavingRowId === oneTimeDeleteTarget.id}
+                required={actionCommentsRequired}
+              />
+            </FormField>
             {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={oneTimeDeleteCancelRef} className="ghost-button" type="button" onClick={closeOneTimeDeleteDialog} disabled={oneTimeSavingRowId === oneTimeDeleteTarget.id}>Отмена</button>
@@ -3485,17 +3487,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <p>Уже созданные начисления и связанные платежи не удалятся: задолженность можно будет погашать, а операции останутся в отчётах и истории.</p>
               <p>Причина и само действие попадут в историю изменений. После восстановления услуга снова будет участвовать только в будущих начислениях — прошлые периоды автоматически не пересчитаются.</p>
             </div>
-            <label className="field-label" htmlFor="charge-service-archive-reason">Причина деактивации</label>
-            <textarea
-              id="charge-service-archive-reason"
-              aria-label="Причина деактивации услуги"
-              maxLength={1000}
-              value={chargeServiceArchiveReason}
-              onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
-              placeholder="Например: услуга больше не используется"
-              disabled={Boolean(tariffSavingRowId)}
-              required={actionCommentsRequired}
-            />
+            <FormField label="Причина деактивации">
+              <textarea
+                id="charge-service-archive-reason"
+                aria-label="Причина деактивации услуги"
+                maxLength={1000}
+                value={chargeServiceArchiveReason}
+                onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
+                placeholder="Например: услуга больше не используется"
+                disabled={Boolean(tariffSavingRowId)}
+                required={actionCommentsRequired}
+              />
+            </FormField>
             {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
@@ -3548,17 +3551,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               </button>
             </div>
             <p className="confirmation-text" id="fee-campaign-archive-description">Сбор будет скрыт из активного списка.</p>
-            <label className="field-label" htmlFor="fee-campaign-archive-reason">Причина архивации</label>
-            <textarea
-              id="fee-campaign-archive-reason"
-              aria-label="Причина архивации сбора"
-              maxLength={1000}
-              value={feeCampaignArchiveReason}
-              onChange={(event) => setFeeCampaignArchiveReason(event.target.value)}
-              placeholder="Например: сбор больше не используется"
-              disabled={feeCampaignSavingId === feeCampaignArchiveTarget.id}
-              required={actionCommentsRequired}
-            />
+            <FormField label="Причина архивации">
+              <textarea
+                id="fee-campaign-archive-reason"
+                aria-label="Причина архивации сбора"
+                maxLength={1000}
+                value={feeCampaignArchiveReason}
+                onChange={(event) => setFeeCampaignArchiveReason(event.target.value)}
+                placeholder="Например: сбор больше не используется"
+                disabled={feeCampaignSavingId === feeCampaignArchiveTarget.id}
+                required={actionCommentsRequired}
+              />
+            </FormField>
             {confirmationErrorView}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={feeCampaignArchiveCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignArchiveDialog} disabled={feeCampaignSavingId === feeCampaignArchiveTarget.id}>Отмена</button>
@@ -3589,6 +3593,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <textarea
                 aria-label="Комментарий к закрытию сбора"
                 maxLength={1000}
+                required={feeCampaignCloseTarget.collectedAmount < feeCampaignCloseTarget.targetAmount}
                 value={feeCampaignClosureComment}
                 onChange={(event) => setFeeCampaignClosureComment(event.target.value)}
                 placeholder="Например: сбор прекращён по решению правления"
@@ -4006,7 +4011,7 @@ export function AddServicePrototypeDialog({
   const serviceHeading = (
     <div className="contractors-service-heading-grid contractors-service-heading-grid--name-only">
       <FormField label="Наименование услуги">
-        <input aria-label="Наименование услуги" value={name} disabled={dialogBusy} onChange={(event) => setName(event.target.value)} />
+        <input aria-label="Наименование услуги" required value={name} disabled={dialogBusy} onChange={(event) => setName(event.target.value)} />
       </FormField>
     </div>
   )
@@ -4030,7 +4035,7 @@ export function AddServicePrototypeDialog({
           </div>
         </div>
 
-        <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
+        <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} noValidate onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
           {isRegular ? (
             <>
@@ -4041,6 +4046,7 @@ export function AddServicePrototypeDialog({
                 <FormField label="Фонд поступления" help="Фонд, куда будут поступать оплаты по услуге.">
                   <SelectControl
                     aria-label="Фонд поступления регулярной услуги"
+                    required
                     value={incomeFundId}
                     options={[
                       { value: '', label: 'Выберите фонд поступления' },
@@ -4057,28 +4063,29 @@ export function AddServicePrototypeDialog({
               {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
               <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
                 <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
-                  <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} disabled={dialogBusy} onChange={setPeriodicityMonths} />
+                  <SelectControl aria-label="Периодичность регулярной услуги" required value={periodicityMonths} options={regularServicePeriodicityOptions} disabled={dialogBusy} onChange={setPeriodicityMonths} />
                 </FormField>
                 {!isMonthly ? <FormField label="Месяц начисления" help="В этом месяце ежегодная услуга попадёт в начисления.">
-                  <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setAccrualStartMonth} />
+                  <SelectControl aria-label="Месяц начисления ежегодной услуги" required value={accrualStartMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setAccrualStartMonth} />
                 </FormField> : null}
                 <FormField label="Оплатить до" help={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
                   <div className="contractors-inline-field contractors-inline-field--date">
-                    <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} disabled={dialogBusy} onChange={(event) => setPaymentDueDay(event.target.value)} />
+                    <input aria-label="День оплаты" inputMode="numeric" maxLength={2} required value={paymentDueDay} disabled={dialogBusy} onChange={(event) => setPaymentDueDay(event.target.value)} />
                     {!isMonthly
-                      ? <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setPaymentDueMonth} />
+                      ? <SelectControl aria-label="Месяц оплаты" required value={paymentDueMonth} options={contractorTariffMonthOptions} disabled={dialogBusy} onChange={setPaymentDueMonth} />
                       : <span className="contractors-date-suffix">числа следующего месяца</span>}
                   </div>
                 </FormField>
                 <FormField label="Перенос долга в просроченный" help="Количество дней после срока оплаты до переноса задолженности в просроченную.">
                   <div className="contractors-inline-field">
-                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} disabled={dialogBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" required value={overdueGraceDays} disabled={dialogBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
                     <span>дн.</span>
                   </div>
                 </FormField>
                 <FormField label="Единица измерения" help="Это обозначение показывается в тарифах, начислениях и показаниях.">
                   <EditableCombobox
                     aria-label="Единица измерения"
+                    required
                     maxLength={40}
                     placement="above"
                     value={unitName}
@@ -4194,6 +4201,8 @@ export function AddServicePrototypeDialog({
                             {isTiered ? <span className="tariff-schedule-tiered-value">По пороговой сетке</span> : (
                               <MoneyTextInput
                                 aria-label="Тариф регулярной услуги"
+                                min={0.01}
+                                required
                                 value={period.rateText}
                                 disabled={dialogBusy}
                                 onValueChange={(value) => {
@@ -4237,11 +4246,13 @@ export function AddServicePrototypeDialog({
                   </div>
                   <div className="tariff-schedule-row tariff-schedule-row--initial">
                     <FormField label="Начальная дата">
-                      <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} disabled={dialogBusy} onChange={setTariffEffectiveFrom} />
+                      <LocalizedDatePicker ariaLabel="Ставка с" mode="date" required value={tariffEffectiveFrom} disabled={dialogBusy} onChange={setTariffEffectiveFrom} />
                     </FormField>
                     <FormField label="Тариф" help="Ставка начисления.">
                       <MoneyTextInput
                         aria-label="Тариф регулярной услуги"
+                        min={0.01}
+                        required
                         value={regularRate}
                         disabled={dialogBusy}
                         onValueChange={(nextRate) => {
@@ -4278,6 +4289,7 @@ export function AddServicePrototypeDialog({
                             <div className="contractors-threshold-with-unit">
                               <MeterReadingInput
                                 aria-label={`${tier.name}: верхняя граница`}
+                                required={index < tariffTiers.length - 1}
                                 value={tier.upperBound ?? ''}
                                 placeholder="Без верхней границы"
                                 disabled={dialogBusy || index === tariffTiers.length - 1}
@@ -4296,6 +4308,8 @@ export function AddServicePrototypeDialog({
                             <div className="contractors-threshold-with-unit">
                               <MoneyInput
                                 aria-label={`${tier.name}: цена за единицу`}
+                                min={0.01}
+                                required
                                 value={tier.rate}
                                 disabled={dialogBusy}
                                 onValueChange={(parsedRate) => {
@@ -4364,6 +4378,7 @@ export function AddServicePrototypeDialog({
                   <div className="contractors-inline-field">
                     <MoneyTextInput
                       aria-label="Стоимость услуги"
+                      required
                       value={cost}
                       disabled={dialogBusy}
                       onValueChange={setCost}
@@ -4602,17 +4617,18 @@ function AddFeePrototypeDialog({
             </button>
           </div>
 
-          <form className="dictionary-modal-form contractors-modal-form contractors-fee-form" onSubmit={submitFee}>
+          <form className="dictionary-modal-form contractors-modal-form contractors-fee-form" noValidate onSubmit={submitFee}>
             {error ? <FormError>{error}</FormError> : null}
             <div className="contractors-fee-layout">
               <section className="contractors-fee-card" aria-labelledby="fee-settings-title">
                 <h4 id="fee-settings-title">Настройки сбора</h4>
                 <FormField label="Наименование сбора">
-                  <input aria-label="Наименование сбора" value={name} disabled={formBusy} onChange={(event) => setName(event.target.value)} />
+                  <input aria-label="Наименование сбора" required value={name} disabled={formBusy} onChange={(event) => setName(event.target.value)} />
                 </FormField>
                 <FormField label="Фонд" help="В этот фонд будут зачисляться оплаты по сбору.">
                   <SelectControl
                     aria-label="Фонд сбора"
+                    required
                     value={selectedFundId}
                     options={fundOptions.length > 0 ? fundOptions : [{ value: '', label: 'Нет доступных фондов' }]}
                     maxVisibleOptions={6}
@@ -4647,6 +4663,8 @@ function AddFeePrototypeDialog({
                     <div className="contractors-inline-field contractors-fee-money-field">
                       <MoneyTextInput
                         aria-label="Сумма взноса"
+                        min={0.01}
+                        required
                         value={amountCalculationMode === 'target' ? formatTariffDecimal(parsedContributionAmount ?? 0) : contributionAmount}
                         disabled={formBusy}
                         onValueChange={(value) => {
@@ -4664,6 +4682,8 @@ function AddFeePrototypeDialog({
                     <div className="contractors-inline-field contractors-fee-money-field">
                       <MoneyTextInput
                         aria-label="Сумма сбора"
+                        min={0.01}
+                        required
                         value={amountCalculationMode === 'contribution' ? formatTariffDecimal(targetAmount) : targetAmountInput}
                         disabled={formBusy}
                         onValueChange={(value) => {
@@ -4685,7 +4705,7 @@ function AddFeePrototypeDialog({
                 </small>
                 <div className="contractors-fee-date-grid">
                   <FormField label="Дата начала">
-                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" value={startsOn} disabled={formBusy} onChange={setStartsOn} />
+                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" required value={startsOn} disabled={formBusy} onChange={setStartsOn} />
                   </FormField>
                   <FormField label="Дата окончания сбора">
                     <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" value={endsOn} disabled={formBusy} onChange={setEndsOn} />
@@ -4693,15 +4713,15 @@ function AddFeePrototypeDialog({
                 </div>
                 <FormField label="Перенос долга по сбору в просроченный">
                   <div className="contractors-inline-field">
-                    <input aria-label="Перенос долга по сбору в просроченный" inputMode="numeric" value={overdueGraceDays} disabled={formBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <input aria-label="Перенос долга по сбору в просроченный" inputMode="numeric" required value={overdueGraceDays} disabled={formBusy} onChange={(event) => setOverdueGraceDays(event.target.value)} />
                     <span>дн.</span>
                   </div>
                 </FormField>
               </section>
 
               {!appliesToAllGarages ? (
-                <fieldset className="contractors-participant-list contractors-fee-participant-list">
-                  <legend>Выбранные гаражи</legend>
+                <fieldset className="contractors-participant-list contractors-fee-participant-list" aria-required="true" aria-invalid={participantGarageIds.length === 0} data-required="true">
+                  <legend className="form-field-label">Выбранные гаражи</legend>
                   {garageOptions.length > 0 ? garageOptions.map((garage) => (
                     <label key={garage.id} className="contractors-participant-option">
                       <input
