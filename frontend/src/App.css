@@ -5987,6 +5987,34 @@ input.meter-readings-control {
   border-color: #d92d20;
 }
 
+.contractors-required-fields-note {
+  margin: 0;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  background: #fffaeb;
+  padding: 9px 11px;
+  color: #7a2e0e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.contractors-required-fields-note span {
+  color: #d92d20;
+  font-weight: 800;
+}
+
+.form-field .contractors-required-input[data-required-state='invalid'] {
+  border-color: #f04438;
+  background: #fffafa;
+  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.12);
+}
+
+.form-field .contractors-required-input[data-required-state='valid'] {
+  border-color: #12b76a;
+  background: #f6fef9;
+  box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.1);
+}
+
 .audit-filter-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(140px, 1fr));
@@ -6552,6 +6580,16 @@ input.meter-readings-control {
 .dictionary-modal-form textarea:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.dictionary-modal-form .form-field input.contractors-required-input[data-required-state='invalid']:focus {
+  border-color: #d92d20;
+  outline: 3px solid rgba(240, 68, 56, 0.16);
+}
+
+.dictionary-modal-form .form-field input.contractors-required-input[data-required-state='valid']:focus {
+  border-color: #039855;
+  outline: 3px solid rgba(18, 183, 106, 0.16);
 }
 
 .dictionary-toolbar input:disabled {

@@ -70,6 +70,17 @@ describe('accessible dynamic messages', () => {
     expect(normalizedAppCss).toMatch(/\.payments-prototype-meter-required-hint \{[\s\S]*?color: #b42318;/u)
   })
 
+  it('keeps required garage fields visibly and accessibly distinguishable while they are filled', () => {
+    expect(contractorsPanelSource).toContain('function getGarageRequiredFieldStates(form: ContractorGarageRow)')
+    expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.number}')
+    expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.peopleCount}')
+    expect(contractorsPanelSource).toContain('data-required-state={requiredFieldStates.floorCount}')
+    expect(contractorsPanelSource.match(/aria-describedby="garage-required-fields-note"/g)).toHaveLength(3)
+    expect(contractorsPanelSource.match(/aria-invalid=\{requiredFieldStates\./g)).toHaveLength(3)
+    expect(normalizedAppCss).toContain(".form-field .contractors-required-input[data-required-state='invalid'] {")
+    expect(normalizedAppCss).toContain(".form-field .contractors-required-input[data-required-state='valid'] {")
+  })
+
   it('keeps detail dialogs named, described and modal', () => {
     const dialogLines = workspaceSource
       .split(/\r?\n/)

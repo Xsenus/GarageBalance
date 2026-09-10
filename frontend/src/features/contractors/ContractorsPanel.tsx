@@ -3166,6 +3166,18 @@ function createEmptyGaragePrototype(): ContractorGarageRow {
   }
 }
 
+function getGarageRequiredFieldStates(form: ContractorGarageRow) {
+  const number = form.number.trim()
+  const peopleCount = Number(form.peopleCount)
+  const floorCount = Number(form.floorCount)
+
+  return {
+    number: number.length > 0 && number.length <= 80 ? 'valid' : 'invalid',
+    peopleCount: form.peopleCount.trim() !== '' && Number.isInteger(peopleCount) && peopleCount >= 0 && peopleCount <= 1000 ? 'valid' : 'invalid',
+    floorCount: form.floorCount.trim() !== '' && Number.isInteger(floorCount) && floorCount >= 0 && floorCount <= 100 ? 'valid' : 'invalid',
+  } as const
+}
+
 function createEmptySupplierPrototype(): ContractorSupplierRow {
   return {
     id: `supplier-${Date.now()}`,
@@ -3585,6 +3597,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
   const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
   const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)
+  const requiredFieldStates = getGarageRequiredFieldStates(form)
 
   async function saveAndClose() {
     setSaving(true)
@@ -3628,14 +3641,15 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
+            <p className="contractors-required-fields-note" id="garage-required-fields-note"><span aria-hidden="true">*</span> Обязательные поля: красная рамка означает, что значение нужно заполнить или исправить; зелёная — значение подходит.</p>
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <label className="form-field">
                   <span className="form-field-label">Номер *</span>
-                  <input aria-label="Номер гаража" required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+                  <input className="contractors-required-input" data-required-state={requiredFieldStates.number} aria-describedby="garage-required-fields-note" aria-invalid={requiredFieldStates.number === 'invalid'} aria-label="Номер гаража" maxLength={80} required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
                 </label>
-                <FormField label="Количество человек"><input aria-label="Количество человек" value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-                <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+                <FormField label="Количество человек *"><input className="contractors-required-input" data-required-state={requiredFieldStates.peopleCount} aria-describedby="garage-required-fields-note" aria-invalid={requiredFieldStates.peopleCount === 'invalid'} aria-label="Количество человек" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
+                <FormField label="Этажи *"><input className="contractors-required-input" data-required-state={requiredFieldStates.floorCount} aria-describedby="garage-required-fields-note" aria-invalid={requiredFieldStates.floorCount === 'invalid'} aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {!item ? (
