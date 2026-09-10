@@ -4419,26 +4419,59 @@ input.meter-readings-control {
   color: #475467;
   font-size: 11px;
   font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
-.payments-prototype-mini-table th:nth-child(4),
+.payments-prototype-mini-table th:nth-child(1),
+.payments-prototype-mini-table td:nth-child(1) {
+  width: 104px;
+  text-align: center;
+}
+
+.payments-prototype-mini-table th:nth-child(2),
+.payments-prototype-mini-table td:nth-child(2) {
+  width: 88px;
+  text-align: center;
+}
+
+.payments-prototype-mini-table th:nth-child(3),
+.payments-prototype-mini-table td:nth-child(3) {
+  width: 126px;
+}
+
 .payments-prototype-mini-table td:nth-child(4) {
   text-align: left;
+}
+
+.payments-prototype-mini-table th:nth-child(5),
+.payments-prototype-mini-table td:nth-child(5) {
+  width: 204px;
+}
+
+.payments-prototype-mini-table th:nth-child(6),
+.payments-prototype-mini-table td:nth-child(6) {
+  width: 156px;
 }
 
 .payments-prototype-mini-table th:last-child,
 .payments-prototype-mini-table td:last-child {
   width: 92px;
   padding-inline: 8px;
+  text-align: center;
 }
 
 .payments-prototype-history-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 4px;
   flex-wrap: nowrap;
   min-width: max-content;
+  min-height: 100%;
 }
 
 .payments-prototype-history-actions .icon-button {
