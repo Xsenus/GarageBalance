@@ -311,7 +311,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 1120px;\n  table-layout: fixed;')
     expect(normalizedAppCss).toContain('.payments-prototype-table-scroll {\n  min-width: 0;\n  max-width: 100%;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(3) {\n  width: 150px;')
-    expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(4) {\n  width: 104px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(4) {\n  width: 100px;')
     expect(normalizedAppCss).toContain('.payments-prototype-meter-editor {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) 30px;')
     expect(normalizedAppCss).toContain('.payments-prototype-payment-input,\n.payments-prototype-meter-input {\n  box-sizing: border-box;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(7), :nth-child(8)) {')
