@@ -9,7 +9,7 @@ import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationC
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, StatusMessage, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDebouncedRequest, scheduleDelayedAction } from '../../shared/debouncedRequest'
-import { FormError } from '../../shared/formFeedback'
+import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
@@ -453,6 +453,24 @@ function parsePrototypeNullableNumber(value: string) {
 
   const parsed = Number(normalized)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function getGaragePrototypeValidationErrors(row: ContractorGarageRow) {
+  const errors: string[] = []
+  const peopleCount = Number(row.peopleCount)
+  const floorCount = Number(row.floorCount)
+
+  if (!row.number.trim()) {
+    errors.push('Укажите номер гаража.')
+  }
+  if (!row.peopleCount.trim() || !Number.isInteger(peopleCount) || peopleCount < 0 || peopleCount > 1000) {
+    errors.push('Количество человек должно быть целым числом от 0 до 1000.')
+  }
+  if (!row.floorCount.trim() || !Number.isInteger(floorCount) || floorCount < 0 || floorCount > 100) {
+    errors.push('Количество этажей должно быть целым числом от 0 до 100.')
+  }
+
+  return errors
 }
 
 function normalizeOwnerName(value: string) {
@@ -3579,6 +3597,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const formRef = useRef<HTMLFormElement>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
   useEscapeKey(saveChanges.length === 0 && !saving && !financialReportOpen, onClose)
@@ -3604,6 +3624,14 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    const nextValidationErrors = getGaragePrototypeValidationErrors(form)
+    setValidationErrors(nextValidationErrors)
+    setSaveError(null)
+    if (nextValidationErrors.length > 0) {
+      formRef.current?.querySelector<HTMLElement>(':invalid')?.focus()
+      return
+    }
+
     if (!item) {
       void saveAndClose()
       return
@@ -3626,8 +3654,9 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
             <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму гаража" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
-          <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
+          <form ref={formRef} className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
+            <FormValidationSummary title="Проверьте данные гаража" items={validationErrors} />
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <label className="form-field">

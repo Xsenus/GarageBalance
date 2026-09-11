@@ -3487,11 +3487,11 @@ function PaymentsPrototypePanel({
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = rankGarageSearchResults(garageOptions, normalizedSearch)
     .slice(0, 20)
-  const shouldShowGarageResults = garageSearchOpen
+  const shouldShowGarageResults = garageSearchOpen && normalizedSearch.length > 0
   const garageSearchListId = useId()
   useEffect(() => {
     const query = garageSearch.trim()
-    if (!query && !garageSearchOpen) {
+    if (!query) {
       setGarageSearchGarages([])
       setGarageSearchLoading(false)
       setGarageSearchError(null)
@@ -3521,7 +3521,7 @@ function PaymentsPrototypePanel({
         setGarageSearchLoading(false)
       },
     })
-  }, [auth.accessToken, dictionaryClient, garageSearch, garageSearchOpen])
+  }, [auth.accessToken, dictionaryClient, garageSearch])
 
   useEffect(() => {
     if (!selectedGarageId || selectedGarageOverdueDebt <= 0) {
@@ -5316,9 +5316,10 @@ function PaymentsPrototypePanel({
         </div>
       </div>
       {headingNotices}
-      {activeTab === 'income' ? <div className="payments-prototype-topline">
-        <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">
-          <label className="payments-prototype-search">
+      <div className="payments-prototype-commandbar">
+        {activeTab === 'income' ? <div className="payments-prototype-topline">
+          <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">
+            <label className="payments-prototype-search">
             <Search size={18} aria-hidden="true" />
             <input
               aria-label="Поиск номера гаража или ФИО владельца"
@@ -5345,9 +5346,9 @@ function PaymentsPrototypePanel({
                 }
               }}
             />
-          </label>
-          {shouldShowGarageResults ? (
-            <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи" aria-busy={garageSearchLoading}>
+            </label>
+            {shouldShowGarageResults ? (
+              <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи" aria-busy={garageSearchLoading}>
               {garageSearchLoading && garageSearchResults.length === 0 ? <LoadingSkeleton className="payments-prototype-search-empty" label="Ищем гаражи..." rows={3} columns={2} /> : null}
               {garageSearchError ? <ForegroundDialogError><span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span></ForegroundDialogError> : null}
               {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
@@ -5370,23 +5371,23 @@ function PaymentsPrototypePanel({
                   </span>
                 </button>
               )) : !garageSearchLoading && !garageSearchError ? <span className="payments-prototype-search-empty">Ничего не найдено</span> : null}
-            </div>
-          ) : null}
-        </div>
-      </div> : null}
-      {paymentError ? <FormError>{paymentError}</FormError> : null}
-      {activeTab === 'income' && garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
-
-      <div className="payments-prototype-toolbar">
-        <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
-          <button type="button" role="tab" aria-selected={activeTab === 'income'} className={activeTab === 'income' ? 'is-active' : undefined} onClick={() => setActiveTab('income')}>
-            Поступления
-          </button>
-          <button type="button" role="tab" aria-selected={activeTab === 'expense'} className={activeTab === 'expense' ? 'is-active' : undefined} onClick={activateExpenseTab}>
-            Выплаты
-          </button>
+              </div>
+            ) : null}
+          </div>
+        </div> : null}
+        <div className="payments-prototype-toolbar">
+          <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
+            <button type="button" role="tab" aria-selected={activeTab === 'income'} className={activeTab === 'income' ? 'is-active' : undefined} onClick={() => setActiveTab('income')}>
+              Поступления
+            </button>
+            <button type="button" role="tab" aria-selected={activeTab === 'expense'} className={activeTab === 'expense' ? 'is-active' : undefined} onClick={activateExpenseTab}>
+              Выплаты
+            </button>
+          </div>
         </div>
       </div>
+      {paymentError ? <FormError>{paymentError}</FormError> : null}
+      {activeTab === 'income' && garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
       {selectedGarage && activeTab === 'income' ? (
         <section className="payments-prototype-workspace-header" aria-label="Карточка выбранного гаража">
@@ -5551,7 +5552,7 @@ function PaymentsPrototypePanel({
             />
           ) : null}
 
-          <div className="payments-prototype-sheet">
+          <div className="payments-prototype-sheet payments-prototype-sheet--income">
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц с</span>
@@ -7584,9 +7585,9 @@ function GarageAccrualPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
-          <FormField label="Основание">
+          <FormField label="Начисление">
             <input
-              aria-label="Основание начисления гаража"
+              aria-label="Начисление гаража"
               list={basisOptionsId}
               maxLength={200}
               required

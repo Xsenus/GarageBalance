@@ -71,9 +71,17 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps required garage fields visibly and accessibly distinguishable while they are filled', () => {
-    expect(contractorsPanelSource).toContain('aria-label="Номер гаража" maxLength={80} pattern=".*\\S.*" required')
-    expect(contractorsPanelSource).toContain('aria-label="Количество человек" type="number" min="0" max="1000" step="1" required')
-    expect(contractorsPanelSource).toContain('aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required')
+    const sourceLines = contractorsPanelSource.split(/\r?\n/u)
+    const numberInput = sourceLines.find((line) => line.includes('<input aria-label="Номер гаража"'))
+    const peopleInput = sourceLines.find((line) => line.includes('<input aria-label="Количество человек"'))
+    const floorInput = sourceLines.find((line) => line.includes('<input aria-label="Этажи гаража"'))
+
+    expect(numberInput).toContain('maxLength={80}')
+    expect(numberInput).toContain('pattern=".*\\S.*"')
+    expect(numberInput).toContain('required')
+    expect(peopleInput).toContain('type="number" min="0" max="1000" step="1" required')
+    expect(floorInput).toContain('type="number" min="0" max="100" step="1" required')
+    expect(contractorsPanelSource).toContain('<FormValidationSummary title="Проверьте данные гаража"')
     expect(contractorsPanelSource).not.toContain('garage-required-fields-note')
     expect(normalizedAppCss).toContain("[aria-modal] :is(:required:invalid, [aria-invalid='true'])")
     expect(normalizedAppCss).toContain("[aria-modal] :is(:required:valid:not([aria-invalid='true']), [aria-required='true'][aria-invalid='false'])")

@@ -528,7 +528,21 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .contractors-modal-form {\n  gap: 10px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-details,\n.contractors-garage-form-notes {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-garage-form-notes textarea {\n  min-height: 64px;')
+    expect(normalizedAppCss).toContain('@media (min-width: 1000px) and (max-width: 1440px), (min-width: 1000px) and (max-height: 820px) {')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-column--financial {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-details {\n    grid-template-columns: repeat(3, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-notes textarea {\n    min-height: 52px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-details,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')
+  })
+
+  it('uses a compact payments workspace on the customer laptop viewport', () => {
+    expect(financePanel).toContain('className="payments-prototype-commandbar"')
+    expect(financePanel).toContain('className="payments-prototype-sheet payments-prototype-sheet--income"')
+    expect(normalizedAppCss).toContain('.payments-prototype-commandbar {\n  display: grid;\n  grid-template-columns: minmax(320px, 680px) max-content;')
+    expect(normalizedAppCss).toContain('.payments-prototype-workspace-header {\n    grid-template-columns: minmax(0, 1fr) minmax(264px, 320px);')
+    expect(normalizedAppCss).toContain('.payments-prototype-sheet--income {\n    display: grid;\n    grid-template-columns: minmax(390px, 0.85fr) minmax(500px, 1.15fr);')
+    expect(normalizedAppCss).toContain('.payments-prototype-sheet--income > .payments-prototype-table-scroll {\n    grid-column: 1 / -1;\n    max-height: calc(100dvh - 430px);\n    overflow: auto;')
+    expect(normalizedAppCss).toContain('.payments-prototype-commandbar {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
   it('adapts the tariff service dialog to irregular and regular creation modes', () => {

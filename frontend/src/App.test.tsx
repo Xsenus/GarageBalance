@@ -2971,6 +2971,11 @@ describe('App', () => {
     expect(peopleCount).toBeInvalid()
     expect(floorCount).toBeInvalid()
     await user.click(within(garageDialog).getByRole('button', { name: 'Сохранить' }))
+    const validationSummary = within(garageDialog).getByRole('alert', { name: 'Проверьте данные гаража' })
+    expect(validationSummary).toHaveTextContent('Укажите номер гаража.')
+    expect(validationSummary).toHaveTextContent('Количество человек должно быть целым числом от 0 до 1000.')
+    expect(validationSummary).toHaveTextContent('Количество этажей должно быть целым числом от 0 до 100.')
+    expect(garageNumber).toHaveFocus()
     expect(garageNumber).toBeInvalid()
     fireEvent.change(garageNumber, { target: { value: '1'.repeat(81) } })
     expect(garageNumber).toHaveValue('1'.repeat(81))
@@ -3002,6 +3007,31 @@ describe('App', () => {
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить сотрудника' }))
     const employeeDialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
     expect(within(employeeDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+  }, 20000)
+
+  it('explains invalid required values in the contractor garage form before saving', async () => {
+    const user = userEvent.setup()
+    const createGarageRequest = vi.fn()
+    const dictionaryClient = createDictionaryClient({ createGarage: createGarageRequest })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+
+    await user.type(within(dialog).getByLabelText('Номер гаража'), 'ПРОВЕРКА')
+    await user.type(within(dialog).getByLabelText('Количество человек'), '1001')
+    await user.type(within(dialog).getByLabelText('Этажи гаража'), '-1')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    const summary = within(dialog).getByRole('alert', { name: 'Проверьте данные гаража' })
+    expect(summary).toHaveTextContent('Количество человек должно быть целым числом от 0 до 1000.')
+    expect(summary).toHaveTextContent('Количество этажей должно быть целым числом от 0 до 100.')
+    expect(createGarageRequest).not.toHaveBeenCalled()
+    expect(within(dialog).getByLabelText('Количество человек')).toHaveFocus()
   }, 20000)
 
   it('creates a garage with overdue debt and derives the negative opening balance', async () => {
@@ -6789,6 +6819,56 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
   })
 
+  it('refreshes stale versions and retries an inline tariff value save', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-inline-retry', name: 'Электроэнергия', code: 'electricity' })
+    const initialTariff = createTariff({ id: 'tariff-inline-retry', name: 'Тариф на электроэнергию', calculationBase: 'meter_electricity', rate: 101, version: 'tariff-inline-v1' })
+    const refreshedTariff = createTariff({ ...initialTariff, version: 'tariff-inline-v2' })
+    const savedTariff = createTariff({ ...initialTariff, rate: 155, version: 'tariff-inline-v3' })
+    const initialService = createChargeServiceSetting({
+      id: 'service-inline-retry', name: 'Электроэнергия', isRegular: true, incomeTypeId: incomeType.id,
+      tariffId: initialTariff.id, isMetered: true, unitName: 'кВт·ч', meterKind: 'electricity', version: 'service-inline-v1',
+    })
+    const refreshedService = createChargeServiceSetting({ ...initialService, version: 'service-inline-v2' })
+    const savedService = createChargeServiceSetting({ ...initialService, version: 'service-inline-v3' })
+    let tariffLoads = 0
+    let serviceLoads = 0
+    const updateRequests: UpdateChargeServiceWithTariffRequest[] = []
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => (++tariffLoads === 1 ? [initialTariff] : [refreshedTariff]),
+      getChargeServiceSettings: async () => (++serviceLoads === 1 ? [initialService] : [refreshedService]),
+      updateChargeServiceWithTariff: async (_token, _id, request) => {
+        updateRequests.push(request)
+        if (updateRequests.length === 1) {
+          throw new DictionaryApiError('concurrent_write_conflict', 'Запись уже была изменена другим запросом.', 409)
+        }
+        return { service: savedService, tariff: savedTariff }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const rateInput = await within(tariffsPanel).findByLabelText('Электроэнергия: 0.00 и выше: значение')
+
+    await user.clear(rateInput)
+    await user.type(rateInput, '155{Enter}')
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateRequests).toHaveLength(2))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
+    expect(updateRequests[0]).toMatchObject({ rate: 155, tariffVersion: 'tariff-inline-v1', service: { version: 'service-inline-v1' } })
+    expect(updateRequests[1]).toMatchObject({ rate: 155, tariffVersion: 'tariff-inline-v2', service: { version: 'service-inline-v2' } })
+    expect(rateInput).toHaveValue('155.00')
+    expect(within(tariffsPanel).queryByText('Запись уже была изменена другим запросом.')).not.toBeInTheDocument()
+    expect(tariffLoads).toBe(2)
+    expect(serviceLoads).toBe(2)
+  })
+
   it('refreshes a stale service version and retries saving the tariff schedule', async () => {
     const user = userEvent.setup()
     const incomeType = createAccountingType({ id: 'income-schedule-retry', name: 'Охрана', code: 'service_security' })
@@ -9570,9 +9650,8 @@ describe('App', () => {
     await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж для платежей'))
 
     await user.click(garageSearchInput)
-    const initialGarageResults = within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })
-    expect(within(initialGarageResults).getByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })).toBeInTheDocument()
-    await user.keyboard('{Escape}')
+    expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
+    expect(searchGaragesPage).not.toHaveBeenCalled()
 
     await user.type(garageSearchInput, 'Иванов')
     await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
@@ -9731,7 +9810,7 @@ describe('App', () => {
     expect(penaltyAccrualButton.querySelector('.lucide-gavel')).not.toBeNull()
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
-    const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Основание начисления гаража' })
+    const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Начисление гаража' })
     const garageAccrualAmount = within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')
     expect(garageIncomeTypeCombobox).toHaveValue('')
     expect(garageIncomeTypeCombobox).toHaveAttribute('placeholder', 'Выберите готовое основание или введите своё')
@@ -9757,7 +9836,7 @@ describe('App', () => {
     expect(within(garageAccrualDialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
     expect(within(garageAccrualDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
     expect(within(garageAccrualDialog).getByRole('button', { name: 'Закрыть начисление гаража' })).toBeDisabled()
-    expect(within(garageAccrualDialog).getByLabelText('Основание начисления гаража')).toBeDisabled()
+    expect(within(garageAccrualDialog).getByLabelText('Начисление гаража')).toBeDisabled()
     expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toBeDisabled()
     expect(within(garageAccrualDialog).getByLabelText('Месяц начисления гаража')).toBeDisabled()
     expect(within(garageAccrualDialog).getByLabelText('Комментарий к начислению гаража')).toBeDisabled()
@@ -9784,7 +9863,7 @@ describe('App', () => {
 
     await user.click(addGarageAccrualButton)
     const customAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
-    const customBasisInput = within(customAccrualDialog).getByRole('combobox', { name: 'Основание начисления гаража' })
+    const customBasisInput = within(customAccrualDialog).getByRole('combobox', { name: 'Начисление гаража' })
     await user.clear(customBasisInput)
     await user.type(customBasisInput, 'Замена пульта ворот')
     const customAmountInput = within(customAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')
@@ -10379,7 +10458,7 @@ describe('App', () => {
     expect(dialog).toBeInTheDocument()
   })
 
-  it('reopens the focused payments garage search after Escape and waits before declaring it empty', async () => {
+  it('keeps the payments garage suggestions closed for an empty query and reopens them after typing', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-reopen', number: '77', ownerName: 'Контрольный владелец' })
     let complete!: (page: PagedResult<GarageDto>) => void
@@ -10391,21 +10470,28 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const input = await screen.findByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
     await user.click(input)
+    expect(screen.queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
+    expect(getGaragesPage).not.toHaveBeenCalled()
+    await user.type(input, '77')
     expect(screen.getByRole('status', { name: 'Ищем гаражи...' })).toHaveClass('loading-skeleton')
     expect(screen.queryByText('Ничего не найдено')).not.toBeInTheDocument()
     await waitFor(() => expect(getGaragesPage).toHaveBeenCalledOnce())
     expect(screen.getByRole('listbox', { name: 'Найденные гаражи' })).toHaveAttribute('aria-busy', 'true')
     await act(async () => complete({ items: [], totalCount: 0, offset: 0, limit: 20 }))
     expect(screen.getByText('Ничего не найдено')).toBeVisible()
+    await user.clear(input)
+    expect(screen.queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
     await user.click(input)
-    expect(screen.getByText('Ничего не найдено')).toBeVisible()
+    expect(screen.queryByText('Ничего не найдено')).not.toBeInTheDocument()
     expect(getGaragesPage).toHaveBeenCalledOnce()
     await user.keyboard('{Escape}')
     expect(input).toHaveFocus()
     expect(input).toHaveAttribute('aria-expanded', 'false')
     await user.click(input)
-    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(input).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Ничего не найдено')).not.toBeInTheDocument()
+    await user.type(input, '77')
+    expect(input).toHaveAttribute('aria-expanded', 'true')
     const option = await screen.findByRole('option', { name: /Гараж 77 Контрольный владелец/ })
     await user.click(option)
     expect(screen.queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
@@ -11603,7 +11689,7 @@ describe('App', () => {
     await user.click(await within(panel).findByRole('option', { name: /Гараж\s*105/ }))
     await user.click(within(panel).getByRole('button', { name: kind === 'manual' ? 'Добавить начисление гаражу' : 'Начислить штраф' }))
     const dialog = await screen.findByRole('dialog', { name: kind === 'manual' ? 'Новое начисление' : 'Начислить штраф' })
-    if (kind === 'manual') await user.type(within(dialog).getByRole('combobox', { name: 'Основание начисления гаража' }), 'Проверка')
+    if (kind === 'manual') await user.type(within(dialog).getByRole('combobox', { name: 'Начисление гаража' }), 'Проверка')
     else await user.type(within(dialog).getByLabelText('Причина начисления штрафа'), 'Проверка')
     await user.type(within(dialog).getByLabelText(kind === 'manual' ? 'Сумма нерегулярного начисления гаража' : 'Сумма штрафа'), '150')
     await user.click(within(dialog).getByRole('button', { name: kind === 'manual' ? 'Ок' : 'Начислить', exact: true }))
@@ -11648,7 +11734,7 @@ describe('App', () => {
     await user.click(await within(panel).findByRole('option', { name: /Гараж\s*109/ }))
     await user.click(within(panel).getByRole('button', { name: kind === 'penalty' ? 'Начислить штраф' : 'Добавить начисление гаражу' }))
     const dialog = await screen.findByRole('dialog', { name: kind === 'penalty' ? 'Начислить штраф' : 'Новое начисление' })
-    await user.type(within(dialog).getByLabelText(kind === 'penalty' ? 'Причина начисления штрафа' : 'Основание начисления гаража'), basis)
+    await user.type(within(dialog).getByLabelText(kind === 'penalty' ? 'Причина начисления штрафа' : 'Начисление гаража'), basis)
     const amountInput = within(dialog).getByLabelText(kind === 'penalty' ? 'Сумма штрафа' : 'Сумма нерегулярного начисления гаража')
     await user.clear(amountInput)
     await user.type(amountInput, '150')

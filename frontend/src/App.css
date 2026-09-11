@@ -3928,6 +3928,15 @@ input.meter-readings-control {
   margin-bottom: 0;
 }
 
+.payments-prototype-commandbar {
+  display: grid;
+  grid-template-columns: minmax(320px, 680px) max-content;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .payments-prototype-topline {
   display: grid;
   gap: 10px;
@@ -4725,6 +4734,124 @@ input.meter-readings-control {
   font-size: 15px;
 }
 
+@media (min-width: 1000px) and (max-width: 1440px), (min-width: 1000px) and (max-height: 820px) {
+  .payments-prototype {
+    gap: 9px;
+    margin-bottom: 10px;
+  }
+
+  .payments-prototype-search {
+    min-height: 38px;
+    box-shadow: none;
+  }
+
+  .payments-prototype-workspace-header {
+    grid-template-columns: minmax(0, 1fr) minmax(264px, 320px);
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .payments-prototype-summary-group {
+    padding: 7px 9px;
+  }
+
+  .payments-prototype-workspace-header > .payments-prototype-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: stretch;
+    gap: 7px;
+  }
+
+  .payments-prototype-workspace-header .payments-prototype-action-button {
+    min-height: 44px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .payments-prototype-workspace-header > .payments-prototype-balance-explanation,
+  .payments-prototype-workspace-header > .payments-prototype-overdue-details {
+    grid-column: 1 / -1;
+  }
+
+  .payments-prototype-sheet--income {
+    display: grid;
+    grid-template-columns: minmax(390px, 0.85fr) minmax(500px, 1.15fr);
+  }
+
+  .payments-prototype-sheet--income > .payments-prototype-period-row {
+    border-right: 1px solid #e4e7ec;
+  }
+
+  .payments-prototype-sheet--income > .payments-prototype-period-summary {
+    border-left: 0;
+  }
+
+  .payments-prototype-sheet--income > .payments-prototype-table-scroll {
+    grid-column: 1 / -1;
+    max-height: calc(100dvh - 430px);
+    overflow: auto;
+  }
+
+  .payments-prototype-period-row {
+    gap: 7px;
+    padding: 7px;
+  }
+
+  .payments-prototype-period-row label {
+    min-width: 142px;
+  }
+
+  .payments-prototype-period-summary div {
+    min-height: 48px;
+    padding: 7px 9px;
+  }
+
+  .detail-dialog.contractors-dialog--garage {
+    max-height: calc(100dvh - 24px);
+    padding: 14px;
+  }
+
+  .contractors-dialog--garage .detail-dialog-header {
+    top: -14px;
+    margin: -14px -14px 10px;
+    padding: 12px 14px;
+  }
+
+  .contractors-dialog--garage .contractors-modal-form,
+  .contractors-garage-form-column {
+    gap: 7px;
+  }
+
+  .contractors-garage-form-column--financial,
+  .contractors-garage-form-details {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .contractors-garage-form-column--financial {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contractors-garage-form-details {
+    gap: 7px 12px;
+  }
+
+  .contractors-garage-form-details .form-field:last-child {
+    grid-column: auto;
+  }
+
+  .contractors-garage-form-notes {
+    gap: 7px 12px;
+  }
+
+  .contractors-garage-form-notes textarea {
+    min-height: 52px;
+  }
+
+  .contractors-dialog--garage .detail-dialog-actions {
+    margin-top: 6px;
+    padding-top: 10px;
+  }
+}
+
 .payments-prototype-payment-editor {
   display: grid;
   grid-template-columns: minmax(82px, 130px) 30px;
@@ -5182,6 +5309,10 @@ input.meter-readings-control {
 }
 
 @media (max-width: 640px) {
+  .payments-prototype-commandbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .full-payment-fields {
     grid-template-columns: minmax(0, 1fr);
   }
