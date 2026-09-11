@@ -3505,6 +3505,12 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
         }
+        if (request.ExpectedVersion.HasValue && operation.Version != request.ExpectedVersion.Value)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "operation_version_conflict",
+                "Поступление уже изменено другим пользователем. Обновите данные и повторите действие.");
+        }
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {

@@ -971,6 +971,34 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task UpdateIncome_ReturnsConflictForStaleVersion()
+    {
+        var operationId = Guid.NewGuid();
+        var controller = CreateController(new FakeFinanceService
+        {
+            UpdateIncomeResult = FinanceResult<FinancialOperationDto>.Failure(
+                "operation_version_conflict",
+                "Поступление уже изменено другим пользователем.")
+        });
+
+        var result = await controller.UpdateIncome(
+            operationId,
+            new CreateIncomeOperationRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 9, 11),
+                new DateOnly(2026, 9, 1),
+                350m,
+                null,
+                null,
+                ExpectedVersion: Guid.NewGuid()),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal("operation_version_conflict", Assert.IsType<ProblemDetails>(conflict.Value).Title);
+    }
+
+    [Fact]
     public async Task CreateExpense_ReturnsConflictForDuplicateOperation()
     {
         var controller = CreateController(new FakeFinanceService

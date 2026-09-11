@@ -146,6 +146,59 @@ describe('редактор тарифной сетки услуги', () => {
     expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
   })
 
+  it('не переносит будущую ставку на действующий период при сохранении карточки услуги', async () => {
+    const user = userEvent.setup()
+    const onUpdateWithTariff = vi.fn().mockResolvedValue(undefined)
+    const onUpdateTariffSchedule = vi.fn().mockImplementation(async (request) => request.periods.map((period: {
+      tariffId: string | null
+      effectiveFrom: string | null
+      effectiveTo: string | null
+      rate: number
+      tariffVersion: string | null
+    }, index: number) => ({
+      ...period,
+      tariffId: period.tariffId ?? `tariff-${index + 1}`,
+      tariffVersion: period.tariffVersion ?? `tariff-version-${index + 1}`,
+    })))
+
+    render(<AddServicePrototypeDialog
+      initialSetting={{
+        id: 'service-1', name: 'Охрана', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+        paymentDueDay: 30, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income-1',
+        tariffId: 'tariff-1', isMetered: false, hasTieredTariff: false, unitName: 'руб.', isArchived: false,
+        version: 'service-version-1',
+      }}
+      isSaving={false}
+      funds={[{ id: 'fund-1', name: 'Прочее', allowOperations: true }]}
+      incomeTypes={[{ id: 'income-1', name: 'Охрана', code: 'other_income', isArchived: false, destinationFundId: 'fund-1', destinationFundName: 'Прочее' }]}
+      measurementUnits={[]}
+      tariffs={[{
+        id: 'tariff-1', name: 'Охрана', calculationBase: 'fixed', rate: 101,
+        electricityFirstThreshold: null, electricitySecondThreshold: null, electricityFirstTierName: null,
+        electricitySecondTierName: null, electricityThirdTierName: null, electricityFirstRate: null,
+        electricitySecondRate: null, electricityThirdRate: null, effectiveFrom: '2026-09-01', comment: null,
+        isArchived: false, version: 'tariff-version-1',
+      }]}
+      tariffSchedule={[
+        { tariffId: 'tariff-1', effectiveFrom: '2026-09-01', effectiveTo: '2026-09-30', rate: 101, tariffVersion: 'tariff-version-1' },
+        { tariffId: 'tariff-2', effectiveFrom: '2026-10-01', effectiveTo: null, rate: 102, tariffVersion: 'tariff-version-2' },
+      ]}
+      onClose={vi.fn()}
+      onUpdateWithTariff={onUpdateWithTariff}
+      onUpdateTariffSchedule={onUpdateTariffSchedule}
+    />)
+
+    const rateInputs = screen.getAllByLabelText('Тариф регулярной услуги')
+    await user.clear(rateInputs[1])
+    await user.type(rateInputs[1], '150')
+    await user.click(screen.getByRole('button', { name: 'Сохранить тарифную сетку' }))
+    expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+
+    await waitFor(() => expect(onUpdateWithTariff).toHaveBeenCalledWith(expect.objectContaining({ rate: 101 })))
+  })
+
   it('не отправляет повторный запрос при двух нажатиях до завершения сохранения', async () => {
     const savedPeriods = [
       { tariffId: 'tariff-1', effectiveFrom: '2026-01-01', effectiveTo: null, rate: 101, tariffVersion: 'tariff-version-2' },

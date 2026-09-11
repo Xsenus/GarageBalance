@@ -394,6 +394,7 @@ public sealed class FinanceController(
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPut("operations/{operationId:guid}/income")]
+    [RequireConcurrencyVersion("request.ExpectedVersion")]
     [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -446,6 +447,7 @@ public sealed class FinanceController(
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("operations/{operationId:guid}/cancel")]
+    [RequireConcurrencyVersion("request.ExpectedVersion")]
     [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

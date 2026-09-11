@@ -407,14 +407,101 @@ public sealed class RegularAccrualCalculatorTests
         Assert.Equal(expectedAmount, result.Amount);
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(10, 10)]
+    [InlineData(50, 150)]
+    [InlineData(190, 1900)]
+    [InlineData(205, 2200)]
+    public void Calculate_TwentyProgressiveTiers_HandleEveryBoundaryAndOpenRemainder(
+        decimal consumption,
+        decimal expectedAmount)
+    {
+        var tiers = Enumerable.Range(1, 20)
+            .Select(index => new RegularAccrualTariffTier(index == 20 ? null : index * 10m, index))
+            .ToArray();
+
+        var result = RegularAccrualCalculator.Calculate(
+            Garage(),
+            August,
+            Reading(previous: 1000m, current: 1000m + consumption),
+            [Segment(1, 31, TariffCalculationBases.MeterElectricity, 1m, tiers)]);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(expectedAmount, result.Amount);
+        Assert.Equal(consumption == 0m ? 1 : Math.Min((int)Math.Ceiling(consumption / 10m), 20),
+            result.Details!.Lines.Single().Tiers.Count);
+        Assert.Equal(expectedAmount, result.Details.Lines.Single().Tiers.Sum(tier => tier.Amount));
+    }
+
+    [Fact]
+    public void Calculate_TierThresholdAndRateChangeInsideMonth_UsesBothCompleteGrids()
+    {
+        var result = RegularAccrualCalculator.Calculate(
+            Garage(),
+            August,
+            Reading(previous: 0m, current: 12m),
+            [
+                Segment(1, 15, TariffCalculationBases.MeterWater, 0m,
+                    new RegularAccrualTariffTier(10m, 1m),
+                    new RegularAccrualTariffTier(null, 2m)),
+                Segment(16, 31, TariffCalculationBases.MeterWater, 0m,
+                    new RegularAccrualTariffTier(5m, 3m),
+                    new RegularAccrualTariffTier(null, 4m))
+            ]);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(28.96m, result.Amount);
+        Assert.Equal(28.96m, result.Details!.Lines.Sum(line => line.Amount));
+        Assert.Equal([5m, 5m, 2m], result.Details.Lines
+            .SelectMany(line => line.Tiers)
+            .GroupBy(tier => (tier.From, tier.To))
+            .Select(group => group.Sum(tier => tier.Quantity))
+            .ToArray());
+    }
+
+    [Theory]
+    [InlineData(2025, 2, 28)]
+    [InlineData(2024, 2, 29)]
+    [InlineData(2026, 4, 30)]
+    [InlineData(2026, 8, 31)]
+    public void Calculate_FixedPeopleAndMeterModes_PreserveMoneyAcrossEveryMonthLength(
+        int year,
+        int monthNumber,
+        int monthDays)
+    {
+        var month = new DateOnly(year, monthNumber, 1);
+        var fixedResult = RegularAccrualCalculator.Calculate(
+            Garage(), month, null,
+            [Segment(month, 1, monthDays, TariffCalculationBases.Fixed, 123.4567m)]);
+        var peopleResult = RegularAccrualCalculator.Calculate(
+            Garage(), month, null,
+            [Segment(month, 1, monthDays, TariffCalculationBases.People, 123.4567m)]);
+        var meterResult = RegularAccrualCalculator.Calculate(
+            Garage(), month, Reading(previous: 10m, current: 11.234m, accountingMonth: month),
+            [Segment(month, 1, monthDays, TariffCalculationBases.MeterWater, 123.4567m)]);
+
+        Assert.True(fixedResult.Succeeded, fixedResult.ErrorMessage);
+        Assert.True(peopleResult.Succeeded, peopleResult.ErrorMessage);
+        Assert.True(meterResult.Succeeded, meterResult.ErrorMessage);
+        Assert.Equal(123.46m, fixedResult.Amount);
+        Assert.Equal(246.91m, peopleResult.Amount);
+        Assert.Equal(152.35m, meterResult.Amount);
+        Assert.All(new[] { fixedResult, peopleResult, meterResult }, result =>
+        {
+            Assert.Equal(result.Amount, result.Details!.Lines.Sum(line => line.Amount));
+            Assert.Equal(monthDays, result.Details.Lines.Sum(line => line.Days));
+        });
+    }
+
     private static Garage Garage() => new() { Number = "1", PeopleCount = 2 };
 
-    private static MeterReading Reading(decimal previous, decimal current) => new()
+    private static MeterReading Reading(decimal previous, decimal current, DateOnly? accountingMonth = null) => new()
     {
         Garage = Garage(),
         MeterKind = MeterKinds.Water,
-        AccountingMonth = August,
-        ReadingDate = new DateOnly(2026, 8, 31),
+        AccountingMonth = accountingMonth ?? August,
+        ReadingDate = (accountingMonth ?? August).AddMonths(1).AddDays(-1),
         PreviousValue = previous,
         CurrentValue = current,
         Consumption = current - previous

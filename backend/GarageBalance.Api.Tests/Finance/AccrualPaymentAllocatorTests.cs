@@ -124,6 +124,43 @@ public sealed class AccrualPaymentAllocatorTests
             item => Assert.Equal((irregular.Id, 3_000m), (item.AccrualId, item.Amount)));
     }
 
+    [Fact]
+    public void Allocate_ExhaustiveMoneyMatrixConservesEveryKopeckWithoutOverpaying()
+    {
+        var amounts = new[] { 0.01m, 0.02m, 0.99m, 1m, 10.01m, 999.99m };
+        var sequence = 1;
+
+        foreach (var firstAccrualAmount in amounts)
+            foreach (var secondAccrualAmount in amounts)
+                foreach (var firstPaymentAmount in amounts)
+                    foreach (var secondPaymentAmount in amounts)
+                    {
+                        var firstAccrual = MatrixAccrual(new DateOnly(2026, 8, 10), firstAccrualAmount);
+                        var secondAccrual = MatrixAccrual(new DateOnly(2026, 8, 20), secondAccrualAmount);
+                        var firstPayment = MatrixPayment(new DateOnly(2026, 8, 5), firstPaymentAmount);
+                        var secondPayment = MatrixPayment(new DateOnly(2026, 8, 15), secondPaymentAmount);
+
+                        var result = AccrualPaymentAllocator.Allocate(
+                            [secondAccrual, firstAccrual],
+                            [secondPayment, firstPayment]);
+
+                        var accrualTotal = firstAccrualAmount + secondAccrualAmount;
+                        var paymentTotal = firstPaymentAmount + secondPaymentAmount;
+                        Assert.Equal(decimal.Min(accrualTotal, paymentTotal), result.Sum(item => item.Amount));
+                        Assert.All(result, item => Assert.True(item.Amount > 0m));
+                        Assert.True(result.Where(item => item.AccrualId == firstAccrual.Id).Sum(item => item.Amount) <= firstAccrualAmount);
+                        Assert.True(result.Where(item => item.AccrualId == secondAccrual.Id).Sum(item => item.Amount) <= secondAccrualAmount);
+                        Assert.True(result.Where(item => item.FinancialOperationId == firstPayment.Id).Sum(item => item.Amount) <= firstPaymentAmount);
+                        Assert.True(result.Where(item => item.FinancialOperationId == secondPayment.Id).Sum(item => item.Amount) <= secondPaymentAmount);
+                    }
+
+        AccrualPaymentAllocationAccrual MatrixAccrual(DateOnly dueDate, decimal amount) =>
+            new(new Guid(sequence++, 0, 0, new byte[8]), dueDate, new DateOnly(2026, 8, 1), amount, DateTimeOffset.UnixEpoch);
+
+        AccrualPaymentAllocationPayment MatrixPayment(DateOnly operationDate, decimal amount) =>
+            new(new Guid(sequence++, 0, 0, new byte[8]), operationDate, new DateOnly(2026, 8, 1), amount, DateTimeOffset.UnixEpoch);
+    }
+
     private static AccrualPaymentAllocationAccrual Accrual(DateOnly dueDate, decimal amount, byte id) =>
         new(new Guid(id, 0, 0, new byte[8]), dueDate, new DateOnly(dueDate.Year, dueDate.Month, 1), amount, DateTimeOffset.UnixEpoch);
 

@@ -3668,6 +3668,61 @@ public sealed class DictionaryServiceTests
         Assert.Equal("tariff_electricity_tier_not_found", unknown.ErrorCode);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(21)]
+    public async Task CreateTariffAsync_RejectsTierCountOutsideSupportedRange(int tierCount)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var tiers = Enumerable.Range(1, tierCount)
+            .Select(index => new UpsertElectricityTariffTierRequest(
+                null,
+                $"Ступень {index}",
+                index == tierCount ? null : index * 10m,
+                index))
+            .ToArray();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Недопустимое число ступеней",
+                TariffCalculationBases.MeterElectricity,
+                1m,
+                new DateOnly(2026, 9, 1),
+                null,
+                ElectricityTiers: tiers),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_electricity_tier_count_invalid", result.ErrorCode);
+        Assert.Empty(database.Context.Tariffs);
+    }
+
+    [Fact]
+    public async Task CreateTariffAsync_RejectsNonPositiveVariableTierRate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Нулевая ставка ступени",
+                TariffCalculationBases.MeterWater,
+                1m,
+                new DateOnly(2026, 9, 1),
+                null,
+                ElectricityTiers:
+                [
+                    new(null, "Первая", 10m, 0m),
+                    new(null, "Последняя", null, 2m)
+                ]),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_electricity_tier_rate_positive_required", result.ErrorCode);
+        Assert.Empty(database.Context.Tariffs);
+    }
+
     [Fact]
     public async Task CreateChargeServiceSettingAsync_RequiresSupportedPeriodicityAndMatchingPaymentDeadline()
     {
@@ -5711,6 +5766,71 @@ public sealed class DictionaryServiceTests
         Assert.True(changedAgain.Succeeded, changedAgain.ErrorMessage);
         Assert.True(unpaidAccrual.IsCanceled);
         Assert.Equal(150m, unpaidAccrual.Amount);
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceTariffScheduleAsync_RejectsInvalidCountsRatesRangesAndOverlapsWithoutMutation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Фонд проверки сетки", 10);
+        var incomeType = new IncomeType { Name = "Проверка сетки", Code = "schedule_validation", DestinationFundId = fund.Id };
+        var tariff = new Tariff
+        {
+            Name = "Исходный тариф проверки сетки",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 100m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Услуга проверки сетки",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var empty = await UpdateAsync([]);
+        var tooMany = await UpdateAsync(Enumerable.Range(0, 121)
+            .Select(index => new UpsertChargeServiceTariffPeriodRequest(
+                null,
+                new DateOnly(2020, 1, 1).AddDays(index),
+                new DateOnly(2020, 1, 1).AddDays(index),
+                100m))
+            .ToArray());
+        var zeroRate = await UpdateAsync([new(null, null, null, 0m)]);
+        var reversed = await UpdateAsync([
+            new(null, new DateOnly(2026, 9, 2), new DateOnly(2026, 9, 1), 100m)
+        ]);
+        var overlapping = await UpdateAsync([
+            new(null, null, new DateOnly(2026, 9, 10), 100m),
+            new(null, new DateOnly(2026, 9, 10), null, 200m)
+        ]);
+
+        Assert.Equal("tariff_schedule_count_invalid", empty.ErrorCode);
+        Assert.Equal("tariff_schedule_count_invalid", tooMany.ErrorCode);
+        Assert.Equal("tariff_schedule_rate_invalid", zeroRate.ErrorCode);
+        Assert.Equal("tariff_schedule_range_invalid", reversed.ErrorCode);
+        Assert.Equal("tariff_schedule_overlap", overlapping.ErrorCode);
+        Assert.Empty(database.Context.ChargeServiceTariffVersions);
+        Assert.Equal(tariff.Id, setting.TariffId);
+        Assert.Equal(100m, tariff.Rate);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_schedule_updated");
+
+        Task<DictionaryResult<UpdatedChargeServiceTariffScheduleDto>> UpdateAsync(
+            IReadOnlyList<UpsertChargeServiceTariffPeriodRequest> periods) =>
+            service.UpdateChargeServiceTariffScheduleAsync(
+                setting.Id,
+                new UpsertChargeServiceTariffScheduleRequest(periods, true, "Проверка невалидной сетки", setting.Version),
+                null,
+                CancellationToken.None);
     }
 
     [Fact]

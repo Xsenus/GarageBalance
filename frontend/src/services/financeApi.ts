@@ -568,6 +568,7 @@ export type CreateIncomeOperationRequest = {
   comment?: string
   feeCampaignId?: string
   irregularPaymentId?: string
+  expectedVersion?: string
 }
 
 export type CreateFullGaragePaymentLineRequest = {

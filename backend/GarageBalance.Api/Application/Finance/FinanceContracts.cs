@@ -63,7 +63,8 @@ public sealed record CreateIncomeOperationRequest(
     [MaxLength(1000)] string? Comment,
     Guid? ReceiptBatchId = null,
     Guid? FeeCampaignId = null,
-    Guid? IrregularPaymentId = null);
+    Guid? IrregularPaymentId = null,
+    Guid? ExpectedVersion = null);
 
 public sealed record CreateFullGaragePaymentLineRequest(
     Guid? IncomeTypeId,

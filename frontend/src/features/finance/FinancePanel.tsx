@@ -1114,6 +1114,7 @@ export function FinancePanel({
 
     setIncomeValidationErrors([])
     if (financeEditor?.mode === 'edit' && financeEditor.record && 'operationKind' in financeEditor.record) {
+      request.expectedVersion = financeEditor.record.version
       const changes = getIncomeEditChangePreview(financeEditor.record, request)
       if (changes.length === 0) {
         closeFinanceEditor({ skipConfirmation: true })
@@ -1492,7 +1493,7 @@ export function FinancePanel({
       if (target.section === 'income' || target.section === 'expense') {
         const operation = target.record as FinancialOperationDto
         await financeClient.restoreOperation(auth.accessToken, operation.id)
-        refreshFinanceWorkbenchAfterSave(operation.operationKind === 'income' ? 'income' : 'expense')
+        refreshFinanceWorkbenchAfterSave(operation.operationKind)
       } else if (target.section === 'accruals') {
         await financeClient.restoreAccrual(auth.accessToken, target.record.id)
         refreshFinanceWorkbenchAfterSave('accruals')
@@ -1525,8 +1526,8 @@ export function FinancePanel({
     const saved = await runSaving(getCancelFinanceSavingScope(target), async () => {
       if (target.section === 'income' || target.section === 'expense') {
         const operation = target.record as FinancialOperationDto
-        await financeClient.cancelOperation(auth.accessToken, operation.id, { reason })
-        refreshFinanceWorkbenchAfterSave(operation.operationKind === 'income' ? 'income' : 'expense')
+        await financeClient.cancelOperation(auth.accessToken, operation.id, { reason, expectedVersion: operation.version })
+        refreshFinanceWorkbenchAfterSave(operation.operationKind)
       } else if (target.section === 'accruals') {
         await financeClient.cancelAccrual(auth.accessToken, target.record.id, { reason })
         refreshFinanceWorkbenchAfterSave('accruals')
@@ -4242,7 +4243,7 @@ function PaymentsPrototypePanel({
     const operation = historyEdit.row.operation
     const amount = parsePaymentMoney(historyEdit.amount)
     if (!operation.garageId || !operation.incomeTypeId) {
-      setHistoryEdit((state) => state ? { ...state, error: 'Платеж нельзя изменить: в операции не хватает гаража или вида поступления.' } : state)
+      setHistoryEdit((state) => state ? { ...state, error: 'Не выбран гараж или вид.' } : state)
       return
     }
 
@@ -4262,6 +4263,7 @@ function PaymentsPrototypePanel({
         amount,
         documentNumber: historyEdit.documentNumber.trim() || undefined,
         comment: historyEdit.comment.trim() || undefined,
+        expectedVersion: operation.version,
       })
       const balanceDelta = operation.amount - amount
       setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
@@ -4270,7 +4272,7 @@ function PaymentsPrototypePanel({
       closeHistoryEditDialog()
       refreshGarageAfterIncomeSave(selectedGarage)
     } catch (error) {
-      setHistoryEdit((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось изменить платеж.' } : state)
+      setHistoryEdit((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Ошибка изменения.' } : state)
     } finally {
       setHistoryActionSaving(false)
     }
@@ -4291,14 +4293,17 @@ function PaymentsPrototypePanel({
     setHistoryCancel((state) => state ? { ...state, error: null } : state)
     try {
       const canceledAmount = historyCancel.row.operation.amount
-      await financeClient.cancelOperation(auth.accessToken, historyCancel.row.operation.id, { reason })
+      await financeClient.cancelOperation(auth.accessToken, historyCancel.row.operation.id, {
+        reason,
+        expectedVersion: historyCancel.row.operation.version,
+      })
       setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + canceledAmount) }
         : currentGarage)
       closeHistoryCancelDialog()
       refreshGarageAfterIncomeSave(selectedGarage)
     } catch (error) {
-      setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось отменить платеж.' } : state)
+      setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Ошибка отмены.' } : state)
     } finally {
       setHistoryActionSaving(false)
     }

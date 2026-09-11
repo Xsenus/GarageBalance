@@ -37,6 +37,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/full-project-remediation-2026-08-04-roadmap.md",
         "roadmaps/full-visual-product-audit-2026-09-06-roadmap.md",
         "roadmaps/income-accrual-integrity-2026-09-04-roadmap.md",
+        "roadmaps/tariffs-and-income-full-audit-2026-09-11-roadmap.md",
         "roadmaps/ui-forms-and-dictionaries-audit-2026-08-01-roadmap.md",
         "roadmaps/visual-audit-remediation-2026-09-07-roadmap.md",
         "security-data-protection.md",

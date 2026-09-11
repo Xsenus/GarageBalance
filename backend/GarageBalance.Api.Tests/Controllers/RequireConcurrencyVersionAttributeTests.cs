@@ -84,6 +84,64 @@ public sealed class RequireConcurrencyVersionAttributeTests
         }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("981fbaed-e292-4a4b-ae1b-5529d47c9460")]
+    public void IncomeUpdate_RequiresNonemptyVersionAtHttpBoundary(string? version)
+    {
+        var attribute = Assert.Single(typeof(FinanceController).GetMethod(nameof(FinanceController.UpdateIncome))!
+            .GetCustomAttributes(typeof(RequireConcurrencyVersionAttribute), true).Cast<RequireConcurrencyVersionAttribute>());
+        var request = new GarageBalance.Api.Application.Finance.CreateIncomeOperationRequest(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new DateOnly(2026, 9, 11),
+            new DateOnly(2026, 9, 1),
+            100m,
+            null,
+            null,
+            ExpectedVersion: version is null ? null : Guid.Parse(version));
+        var context = CreateContext(request);
+
+        attribute.OnActionExecuting(context);
+
+        if (request.ExpectedVersion is null || request.ExpectedVersion == Guid.Empty)
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(context.Result);
+            Assert.Equal("concurrency_version_required", Assert.IsType<ValidationProblemDetails>(result.Value).Title);
+        }
+        else
+        {
+            Assert.Null(context.Result);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("981fbaed-e292-4a4b-ae1b-5529d47c9460")]
+    public void FinancialOperationCancellation_RequiresNonemptyVersionAtHttpBoundary(string? version)
+    {
+        var attribute = Assert.Single(typeof(FinanceController).GetMethod(nameof(FinanceController.CancelOperation))!
+            .GetCustomAttributes(typeof(RequireConcurrencyVersionAttribute), true).Cast<RequireConcurrencyVersionAttribute>());
+        var request = new GarageBalance.Api.Application.Finance.CancelFinanceEntryRequest(
+            "Исправление операции",
+            version is null ? null : Guid.Parse(version));
+        var context = CreateContext(request);
+
+        attribute.OnActionExecuting(context);
+
+        if (request.ExpectedVersion is null || request.ExpectedVersion == Guid.Empty)
+        {
+            var result = Assert.IsType<BadRequestObjectResult>(context.Result);
+            Assert.Equal("concurrency_version_required", Assert.IsType<ValidationProblemDetails>(result.Value).Title);
+        }
+        else
+        {
+            Assert.Null(context.Result);
+        }
+    }
+
     [Fact]
     public void OnActionExecuting_RejectsMissingAndEmptyVersions()
     {

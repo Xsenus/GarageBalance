@@ -222,6 +222,87 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task IncomeUpdates_WithSameLoadedVersion_CannotSilentlyOverwriteEachOther()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var fixture = await SeedIncomeAsync(database, 100m);
+        await using var firstContext = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(new NpgsqlConnectionStringBuilder(database.ConnectionString) { ApplicationName = "income-update-first" }.ConnectionString).Options);
+        await using var secondContext = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(new NpgsqlConnectionStringBuilder(database.ConnectionString) { ApplicationName = "income-update-second" }.ConnectionString).Options);
+        await using var blocker = new NpgsqlConnection(database.ConnectionString);
+        await blocker.OpenAsync();
+        const long fundAllocationLockKey = 0x474246554E44;
+        await using (var acquire = new NpgsqlCommand($"SELECT pg_advisory_lock({fundAllocationLockKey})", blocker))
+        {
+            await acquire.ExecuteNonQueryAsync();
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var first = UpdateAsync(firstContext, 120m, timeout.Token);
+        var second = UpdateAsync(secondContext, 130m, timeout.Token);
+        try
+        {
+            await using var waiting = new NpgsqlCommand("""
+                SELECT count(*) FROM pg_stat_activity
+                WHERE datname = current_database() AND wait_event = 'advisory'
+                  AND application_name IN ('income-update-first', 'income-update-second')
+                """, blocker);
+            while ((long)(await waiting.ExecuteScalarAsync(timeout.Token))! < 2)
+            {
+                await Task.Delay(20, timeout.Token);
+            }
+        }
+        finally
+        {
+            await using var release = new NpgsqlCommand($"SELECT pg_advisory_unlock({fundAllocationLockKey})", blocker);
+            await release.ExecuteNonQueryAsync();
+        }
+
+        var results = await Task.WhenAll(CaptureAsync(first), CaptureAsync(second));
+
+        Assert.Single(results, result => result == "success");
+        Assert.Single(results, result => result == "concurrency");
+        await using var assertionContext = database.CreateContext();
+        var stored = await assertionContext.FinancialOperations.SingleAsync(item => item.Id == fixture.OperationId);
+        Assert.Contains(stored.Amount, new[] { 120m, 130m });
+        Assert.Single(await assertionContext.AuditEvents
+            .Where(item => item.Action == "finance.income_updated")
+            .ToListAsync());
+
+        Task<FinanceResult<FinancialOperationDto>> UpdateAsync(
+            GarageBalanceDbContext context,
+            decimal amount,
+            CancellationToken cancellationToken) =>
+            FinanceServiceTestFactory.Create(context).UpdateIncomeAsync(
+                fixture.OperationId,
+                new CreateIncomeOperationRequest(
+                    fixture.GarageId,
+                    fixture.IncomeTypeId,
+                    June.AddDays(10),
+                    June,
+                    amount,
+                    "INCOME-RACE",
+                    null,
+                    ExpectedVersion: fixture.Version),
+                Guid.NewGuid(),
+                cancellationToken);
+
+        static async Task<string> CaptureAsync(Task<FinanceResult<FinancialOperationDto>> update)
+        {
+            try
+            {
+                var result = await update;
+                return result.Succeeded ? "success" : result.ErrorCode ?? "failure";
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return "concurrency";
+            }
+        }
+    }
+
+    [PostgreSqlFact]
     public async Task RestoredStaffPayments_CannotOverdrawSharedCashBalance()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -262,7 +343,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
             .SumAsync(operation => operation.Amount));
     }
 
-    private static async Task<(Guid OperationId, Guid GarageId, Guid IncomeTypeId)> SeedIncomeAsync(
+    private static async Task<(Guid OperationId, Guid GarageId, Guid IncomeTypeId, Guid Version)> SeedIncomeAsync(
         PostgreSqlTestDatabase database,
         decimal amount)
     {
@@ -281,7 +362,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
         };
         context.AddRange(garage, incomeType, operation);
         await context.SaveChangesAsync();
-        return (operation.Id, garage.Id, incomeType.Id);
+        return (operation.Id, garage.Id, incomeType.Id, operation.Version);
     }
 
     private static CashBankBalanceOperation OpeningBalance(string account, decimal amount) => new()

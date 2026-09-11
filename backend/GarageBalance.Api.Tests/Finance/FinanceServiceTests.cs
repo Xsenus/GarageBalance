@@ -2434,6 +2434,113 @@ public sealed class FinanceServiceTests
         Assert.Equal("4", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
+    [Fact]
+    public async Task UpdateIncomeAsync_RejectsStaleVersionWithoutChangingPaymentAllocationsOrFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var destination = AddOtherIncomeDestination(database.Context);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(
+                fixtures.Garage.Id,
+                destination.Id,
+                new DateOnly(2026, 9, 1),
+                500m,
+                "manual",
+                "Проверка конкурентного изменения"),
+            null,
+            CancellationToken.None)).Succeeded);
+        var request = new CreateIncomeOperationRequest(
+            fixtures.Garage.Id,
+            destination.Id,
+            new DateOnly(2026, 9, 11),
+            new DateOnly(2026, 9, 1),
+            300m,
+            "PKO-CONCURRENCY",
+            null);
+        var created = await service.CreateIncomeAsync(request, null, CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        var allocationBefore = await database.Context.AccrualPaymentAllocations
+            .AsNoTracking()
+            .SingleAsync(item => item.IsActive);
+        var fundBefore = await database.Context.Funds
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == destination.DestinationFundId);
+
+        var rejected = await service.UpdateIncomeAsync(
+            created.Value!.Id,
+            request with { Amount = 450m, ExpectedVersion = Guid.NewGuid() },
+            null,
+            CancellationToken.None);
+
+        Assert.False(rejected.Succeeded);
+        Assert.Equal("operation_version_conflict", rejected.ErrorCode);
+        var stored = await database.Context.FinancialOperations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == created.Value.Id);
+        var allocationAfter = await database.Context.AccrualPaymentAllocations
+            .AsNoTracking()
+            .SingleAsync(item => item.IsActive);
+        var fundAfter = await database.Context.Funds
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == destination.DestinationFundId);
+        Assert.Equal(300m, stored.Amount);
+        Assert.Equal(allocationBefore.Amount, allocationAfter.Amount);
+        Assert.Equal(fundBefore.Balance, fundAfter.Balance);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.income_updated");
+    }
+
+    [Fact]
+    public async Task CancelIncomeAsync_RejectsStaleVersionWithoutCancelingPaymentOrAllocation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 1),
+                500m,
+                "manual",
+                "Проверка конкурентной отмены"),
+            null,
+            CancellationToken.None)).Succeeded);
+        var created = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 11),
+                new DateOnly(2026, 9, 1),
+                300m,
+                "PKO-CANCEL-CONCURRENCY",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+
+        var rejected = await service.CancelOperationAsync(
+            created.Value!.Id,
+            new CancelFinanceEntryRequest("Устаревшая отмена", Guid.NewGuid()),
+            null,
+            CancellationToken.None);
+
+        Assert.False(rejected.Succeeded);
+        Assert.Equal("operation_version_conflict", rejected.ErrorCode);
+        Assert.False((await database.Context.FinancialOperations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == created.Value.Id)).IsCanceled);
+        Assert.Single(await database.Context.AccrualPaymentAllocations
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .ToListAsync());
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -13244,6 +13244,7 @@ describe('App', () => {
       accountingMonth: '2026-06-01',
       amount: 1500,
       comment: 'Исправление суммы',
+      expectedVersion: serverOperation.version,
     })))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить платеж' })).not.toBeInTheDocument())
     await user.click(within(historyTable).getByRole('button', { name: 'Изменить платеж Серверная оплата' }))
@@ -13268,7 +13269,10 @@ describe('App', () => {
     await user.type(within(cancelDialog).getByLabelText('Причина отмены платежа'), 'Ошибочный платеж')
     holdWorksheetRefresh()
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
-    await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
+    await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', {
+      reason: 'Ошибочный платеж',
+      expectedVersion: serverOperation.version,
+    }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить платеж?' })).not.toBeInTheDocument())
     await user.click(within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' }))
     const immediatelyReopenedCancelDialog = await screen.findByRole('dialog', { name: 'Отменить платеж?' })
@@ -20591,7 +20595,8 @@ describe('App', () => {
       }
       return statefulFinanceClient.getOperationsPage(...args)
     })
-    const financeClient = { ...statefulFinanceClient, getOperationsPage }
+    const updateIncome = vi.fn(statefulFinanceClient.updateIncome)
+    const financeClient = { ...statefulFinanceClient, getOperationsPage, updateIncome }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -20635,6 +20640,8 @@ describe('App', () => {
     blockEditedIncomeRefresh = true
     await user.click(within(paymentChangeDialog).getByRole('button', { name: 'Сохранить' }))
 
+    await waitFor(() => expect(updateIncome).toHaveBeenCalled())
+    expect(updateIncome.mock.calls[0][2]).toEqual(expect.objectContaining({ expectedVersion: 'operation-version' }))
     await editedIncomeRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить поступление' })).not.toBeInTheDocument())
     releaseEditedIncomeRefresh()
@@ -22494,7 +22501,8 @@ describe('App', () => {
       }
       return statefulFinanceClient.getOperationsPage(...args)
     })
-    const financeClient = { ...statefulFinanceClient, getOperationsPage }
+    const cancelOperation = vi.fn(statefulFinanceClient.cancelOperation)
+    const financeClient = { ...statefulFinanceClient, getOperationsPage, cancelOperation }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -22534,6 +22542,10 @@ describe('App', () => {
     await user.type(within(reopenedCancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный документ')
     blockOperationRefresh = true
     await user.click(within(reopenedCancelDialog).getByRole('button', { name: 'Отменить запись' }))
+    await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', expect.any(String), {
+      reason: 'Ошибочный документ',
+      expectedVersion: 'operation-version',
+    }))
     await operationRefreshStarted
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить поступление?' })).not.toBeInTheDocument())
     releaseOperationRefresh()
@@ -29536,6 +29548,9 @@ function createStatefulFinanceClient(): FinanceClient {
       if (!operation) {
         throw new Error('Финансовая операция не найдена.')
       }
+      if (!request.expectedVersion || request.expectedVersion !== operation.version) {
+        throw new Error('Финансовая операция уже изменена другим пользователем.')
+      }
 
       operations = operations.filter((item) => item.id !== operationId)
       return { ...operation, isCanceled: true, comment: `Отменено: ${request.reason}` }
@@ -29549,6 +29564,9 @@ function createStatefulFinanceClient(): FinanceClient {
       const operation = operations.find((item) => item.id === operationId && item.operationKind === 'income')
       if (!operation) {
         throw new Error('Поступление не найдено.')
+      }
+      if (!request.expectedVersion || request.expectedVersion !== operation.version) {
+        throw new Error('Поступление уже изменено другим пользователем.')
       }
 
       const updated = {
@@ -30448,6 +30466,7 @@ function createFinancialOperation(overrides: Partial<FinancialOperationDto>): Fi
     staffMemberName: null,
     staffDepartmentName: null,
     createdAtUtc: '2026-06-19T10:24:00Z',
+    version: 'operation-version',
     ...overrides,
   }
 }

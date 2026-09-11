@@ -4234,7 +4234,9 @@ export function AddServicePrototypeDialog({
                                 value={period.rateText}
                                 disabled={dialogBusy}
                                 onValueChange={(value) => {
-                                  setRegularRate(value)
+                                  if (period.tariffId === selectedTariff?.id) {
+                                    setRegularRate(value)
+                                  }
                                   setScheduleDraft((current) => current.map((item) => item.key === period.key
                                     ? { ...item, rateText: value }
                                     : item))

@@ -68,6 +68,39 @@ describe('financeApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/accruals/page?limit=25', expect.any(Object))
   })
 
+  it('sends the loaded operation version when updating an income payment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.updateIncome('token', 'income-77', {
+      garageId: 'garage-77',
+      incomeTypeId: 'income-type-77',
+      operationDate: '2026-09-11',
+      accountingMonth: '2026-09-01',
+      amount: 350,
+      expectedVersion: '981fbaed-e292-4a4b-ae1b-5529d47c9460',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/operations/income-77/income', {
+      method: 'PUT',
+      body: JSON.stringify({
+        garageId: 'garage-77',
+        incomeTypeId: 'income-type-77',
+        operationDate: '2026-09-11',
+        accountingMonth: '2026-09-01',
+        amount: 350,
+        expectedVersion: '981fbaed-e292-4a4b-ae1b-5529d47c9460',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('passes every financial journal filter, pagination value, and cancellation signal', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       items: [],
