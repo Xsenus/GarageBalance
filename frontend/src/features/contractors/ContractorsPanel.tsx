@@ -36,6 +36,10 @@ function normalizeContractorTargetText(value?: string | null) {
   return (value ?? '').trim().toLocaleLowerCase('ru-RU')
 }
 
+function isInteractiveContractorRowTarget(target: EventTarget | null) {
+  return target instanceof Element && target.closest('button, a, input, textarea, select, [role="button"], [role="link"], [role="menuitem"]') !== null
+}
+
 function extractGarageNumberFromTarget(target: ContractorOpenTarget) {
   if (target.garageNumber?.trim()) {
     return target.garageNumber.trim()
@@ -455,19 +459,47 @@ function parsePrototypeNullableNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function getGaragePrototypeValidationErrors(row: ContractorGarageRow) {
-  const errors: string[] = []
+type GaragePrototypeField = 'number' | 'peopleCount' | 'floorCount' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity'
+type GaragePrototypeValidationErrors = Partial<Record<GaragePrototypeField, string>>
+
+function getGaragePrototypeValidationErrors(row: ContractorGarageRow, isCreate: boolean) {
+  const errors: GaragePrototypeValidationErrors = {}
   const peopleCount = Number(row.peopleCount)
   const floorCount = Number(row.floorCount)
 
   if (!row.number.trim()) {
-    errors.push('Укажите номер гаража.')
+    errors.number = 'Укажите номер гаража.'
   }
   if (!row.peopleCount.trim() || !Number.isInteger(peopleCount) || peopleCount < 0 || peopleCount > 1000) {
-    errors.push('Количество человек должно быть целым числом от 0 до 1000.')
+    errors.peopleCount = 'Количество человек должно быть целым числом от 0 до 1000.'
   }
   if (!row.floorCount.trim() || !Number.isInteger(floorCount) || floorCount < 0 || floorCount > 100) {
-    errors.push('Количество этажей должно быть целым числом от 0 до 100.')
+    errors.floorCount = 'Количество этажей должно быть целым числом от 0 до 100.'
+  }
+
+  if (isCreate) {
+    const startingBalance = row.startingBalance?.trim() ?? ''
+    const startingOverdueDebt = row.startingOverdueDebt?.trim() ?? ''
+    const parsedStartingBalance = startingBalance ? parseStaffRate(startingBalance) : 0
+    const parsedStartingOverdueDebt = startingOverdueDebt ? parseStaffRate(startingOverdueDebt) : 0
+    if (!Number.isFinite(parsedStartingBalance)) {
+      errors.startingBalance = 'Начальный баланс должен быть числом: отрицательное значение означает долг, положительное — аванс.'
+    }
+    if (!Number.isFinite(parsedStartingOverdueDebt) || parsedStartingOverdueDebt < 0 || parsedStartingOverdueDebt > 999999999) {
+      errors.startingOverdueDebt = 'Начальная просрочка должна быть числом от 0 до 999 999 999.'
+    } else if (Number.isFinite(parsedStartingBalance) && parsedStartingOverdueDebt > Math.max(toStoredGarageStartingBalance(parsedStartingBalance, parsedStartingOverdueDebt), 0)) {
+      errors.startingOverdueDebt = 'Начальная просрочка не может превышать общую начальную задолженность.'
+    }
+  }
+
+  for (const meter of [
+    ['initialWater', 'Стартовое значение счётчика воды', row.initialWater],
+    ['initialElectricity', 'Стартовое значение счётчика электричества', row.initialElectricity],
+  ] as const) {
+    const parsed = parsePrototypeNullableNumber(meter[2])
+    if (meter[2].trim() && (parsed === null || parsed < 0 || parsed > 999999999)) {
+      errors[meter[0]] = `${meter[1]} должно быть числом от 0 до 999 999 999.`
+    }
   }
 
   return errors
@@ -2396,7 +2428,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               ))}
             </div>
             {visibleGarages.map((row) => (
-              <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openGarageContextMenu(event, row)}>
+              <div
+                className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'}
+                role="row"
+                key={row.id}
+                onDoubleClick={(event) => {
+                  if (!row.isDeleted && canWriteContractors && contractorReferenceLoading !== 'garages' && !isInteractiveContractorRowTarget(event.target)) {
+                    void openGarageEditor(row)
+                  }
+                }}
+                onContextMenu={(event) => openGarageContextMenu(event, row)}
+              >
                 <span role="cell" className="contractors-directory-cell--center">{row.number}</span>
                 <span role="cell" className="contractors-directory-cell--center">{row.peopleCount}</span>
                 <span role="cell" className="contractors-directory-cell--center">{row.floorCount}</span>
@@ -2475,7 +2517,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             {visibleSuppliers.map((row) => {
               const primaryContact = getSupplierPrimaryContact(row)
               return (
-                <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openSupplierContextMenu(event, row)}>
+                <div
+                  className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'}
+                  role="row"
+                  key={row.id}
+                  onDoubleClick={(event) => {
+                    if (!row.isDeleted && canWriteContractors && supplierEditorLoadingId !== row.id && !isInteractiveContractorRowTarget(event.target)) {
+                      void openSupplierEditor(row)
+                    }
+                  }}
+                  onContextMenu={(event) => openSupplierContextMenu(event, row)}
+                >
                   <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--name">{row.name}</span>
                   <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--service">{row.service}</span>
                   <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--contact">{primaryContact?.fullName ?? row.contactPerson}</span>
@@ -2555,7 +2607,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 ))}
               </div>
               {visibleStaff.map((row) => (
-                <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
+                <div
+                  className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'}
+                  role="row"
+                  key={row.id}
+                  onDoubleClick={(event) => {
+                    if (!row.isDeleted && canWriteContractors && !isInteractiveContractorRowTarget(event.target)) {
+                      openEmployeeEditor(row)
+                    }
+                  }}
+                  onContextMenu={(event) => openEmployeeContextMenu(event, row)}
+                >
                   <span role="cell">{row.fullName}</span>
                   <span role="cell">{row.department}</span>
                   <span role="cell" className="contractors-directory-cell--right contractors-staff-rate-cell">{row.isDeleted ? 'Удален' : formatStaffRate(row.rate)}</span>
@@ -3597,7 +3659,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [validationErrors, setValidationErrors] = useState<GaragePrototypeValidationErrors>({})
   const formRef = useRef<HTMLFormElement>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
@@ -3605,6 +3667,15 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
   const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
   const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)
+
+  function clearValidationError(field: GaragePrototypeField) {
+    setValidationErrors((current) => {
+      if (!current[field]) return current
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
 
   async function saveAndClose() {
     setSaving(true)
@@ -3624,11 +3695,12 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const nextValidationErrors = getGaragePrototypeValidationErrors(form)
+    const nextValidationErrors = getGaragePrototypeValidationErrors(form, !item)
     setValidationErrors(nextValidationErrors)
     setSaveError(null)
-    if (nextValidationErrors.length > 0) {
-      formRef.current?.querySelector<HTMLElement>(':invalid')?.focus()
+    const firstInvalidField = Object.keys(nextValidationErrors)[0]
+    if (firstInvalidField) {
+      formRef.current?.querySelector<HTMLElement>(`[data-garage-field="${firstInvalidField}"]`)?.focus()
       return
     }
 
@@ -3656,24 +3728,25 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
           </div>
           <form ref={formRef} className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
-            <FormValidationSummary title="Проверьте данные гаража" items={validationErrors} />
+            <FormValidationSummary title="Проверьте данные гаража" items={Object.values(validationErrors)} />
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <label className="form-field">
                   <span className="form-field-label">Номер</span>
-                  <input aria-label="Номер гаража" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+                  <input aria-label="Номер гаража" aria-invalid={Boolean(validationErrors.number)} data-garage-field="number" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => { clearValidationError('number'); setForm({ ...form, number: event.target.value }) }} />
                 </label>
-                <FormField label="Количество человек"><input aria-label="Количество человек" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => setForm({ ...form, peopleCount: event.target.value })} /></FormField>
-                <FormField label="Этажи"><input aria-label="Этажи гаража" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
+                <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
+                <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {!item ? (
                   <>
                     <FormField label="Начальный баланс" help={garageBalanceWithOverdueHelp}>
-                      <MoneyTextInput aria-label="Начальный баланс гаража" value={form.startingBalance ?? ''} onValueChange={(startingBalance) => setForm({ ...form, startingBalance })} />
+                      <MoneyTextInput aria-label="Начальный баланс гаража" aria-invalid={Boolean(validationErrors.startingBalance)} data-garage-field="startingBalance" value={form.startingBalance ?? ''} onValueChange={(startingBalance) => { clearValidationError('startingBalance'); setForm({ ...form, startingBalance }) }} />
                     </FormField>
                     <FormField label="Начальная просрочка" help={garageOverdueHelp}>
-                      <MoneyTextInput aria-label="Начальная просрочка" value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => {
+                      <MoneyTextInput aria-label="Начальная просрочка" aria-invalid={Boolean(validationErrors.startingOverdueDebt)} data-garage-field="startingOverdueDebt" value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => {
+                        clearValidationError('startingOverdueDebt')
                         const previousOverdueDebt = parsePrototypeMoney(form.startingOverdueDebt ?? '')
                         const nextOverdueDebt = parsePrototypeMoney(startingOverdueDebt)
                         const currentStartingBalance = parsePrototypeMoney(form.startingBalance ?? '')
@@ -3693,8 +3766,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                     <FormField label="Срок оплаты не наступил"><input aria-label="Непросроченная часть задолженности гаража" value={`${formatMoney(notYetOverdueDebt)} руб.`} readOnly /></FormField>
                   </>
                 )}
-                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
-                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" value={form.initialElectricity} onChange={(event) => setForm({ ...form, initialElectricity: event.target.value })} /></FormField>
+                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
+                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
               </div>
             </div>
             <div className="contractors-garage-form-details">

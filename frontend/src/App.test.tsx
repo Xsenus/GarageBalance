@@ -3009,7 +3009,7 @@ describe('App', () => {
     expect(within(employeeDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
   }, 20000)
 
-  it('explains invalid required values in the contractor garage form before saving', async () => {
+  it('explains every invalid value in the contractor garage form before saving', async () => {
     const user = userEvent.setup()
     const createGarageRequest = vi.fn()
     const dictionaryClient = createDictionaryClient({ createGarage: createGarageRequest })
@@ -3025,13 +3025,25 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Номер гаража'), 'ПРОВЕРКА')
     await user.type(within(dialog).getByLabelText('Количество человек'), '1001')
     await user.type(within(dialog).getByLabelText('Этажи гаража'), '-1')
+    fireEvent.change(within(dialog).getByLabelText('Начальный баланс гаража'), { target: { value: 'не число' } })
+    await user.type(within(dialog).getByLabelText('Начальная просрочка'), '-2')
+    await user.type(within(dialog).getByLabelText('Стартовое значение счетчика воды'), 'abc')
+    await user.type(within(dialog).getByLabelText('Стартовое значение счетчика электричества'), '1000000000')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     const summary = within(dialog).getByRole('alert', { name: 'Проверьте данные гаража' })
     expect(summary).toHaveTextContent('Количество человек должно быть целым числом от 0 до 1000.')
     expect(summary).toHaveTextContent('Количество этажей должно быть целым числом от 0 до 100.')
+    expect(summary).toHaveTextContent('Начальный баланс должен быть числом')
+    expect(summary).toHaveTextContent('Начальная просрочка должна быть числом от 0 до 999 999 999.')
+    expect(summary).toHaveTextContent('Стартовое значение счётчика воды должно быть числом от 0 до 999 999 999.')
+    expect(summary).toHaveTextContent('Стартовое значение счётчика электричества должно быть числом от 0 до 999 999 999.')
     expect(createGarageRequest).not.toHaveBeenCalled()
     expect(within(dialog).getByLabelText('Количество человек')).toHaveFocus()
+    await user.clear(within(dialog).getByLabelText('Количество человек'))
+    await user.type(within(dialog).getByLabelText('Количество человек'), '2')
+    expect(summary).not.toHaveTextContent('Количество человек должно быть целым числом от 0 до 1000.')
+    expect(within(dialog).getByLabelText('Количество человек')).toHaveAttribute('aria-invalid', 'false')
   }, 20000)
 
   it('creates a garage with overdue debt and derives the negative opening balance', async () => {
@@ -3597,7 +3609,10 @@ describe('App', () => {
     expect(overdueDebtCell).toHaveClass('contractors-directory-cell--right')
     expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
 
-    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 1' }))
+    const initialGarageRow = within(contractorsPanel).getByText('Иванов Иван').closest('[role="row"]')!
+    fireEvent.doubleClick(within(initialGarageRow as HTMLElement).getByRole('button', { name: 'Изменить гараж 1' }))
+    expect(screen.queryByRole('dialog', { name: 'Гараж 1' })).not.toBeInTheDocument()
+    await user.dblClick(initialGarageRow as HTMLElement)
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
     expect(within(garageDialog).getByLabelText('Общая задолженность гаража')).toHaveAttribute('readonly')
     expect(within(garageDialog).getByLabelText('Общая задолженность гаража')).toHaveValue('5 300.00 руб.')
@@ -3932,7 +3947,7 @@ describe('App', () => {
     let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     expect(within(supplierRow as HTMLElement).getByText('Смирнов С.С.')).toBeInTheDocument()
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
-    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
+    await user.dblClick(supplierRow as HTMLElement)
     const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
     expect(getContractorSupplierContacts).not.toHaveBeenCalled()
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
@@ -4243,7 +4258,7 @@ describe('App', () => {
 
     const employeeRow = within(staffTable).getByText('Смирнов Алексей').closest('[role="row"]')!
     expect(within(employeeRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Смирнов Алексей' })).toBeInTheDocument()
-    await user.click(within(employeeRow as HTMLElement).getByRole('button', { name: 'Изменить сотрудника Смирнов Алексей' }))
+    await user.dblClick(employeeRow as HTMLElement)
     const editEmployeeDialog = await screen.findByRole('dialog', { name: 'Смирнов Алексей' })
     expect(within(editEmployeeDialog).getByLabelText('Отдел сотрудника').tagName).toBe('BUTTON')
     expect(within(editEmployeeDialog).getByLabelText('Ставка сотрудника')).toHaveValue('25 000.00')
@@ -5911,6 +5926,9 @@ describe('App', () => {
       throw new Error('Строка архивного поставщика не найдена.')
     }
 
+    await user.dblClick(archivedRow)
+    expect(screen.queryByRole('dialog', { name: archivedSupplier.name })).not.toBeInTheDocument()
+    expect(getSupplierContacts).not.toHaveBeenCalled()
     await user.click(within(archivedRow).getByRole('button', { name: `Восстановить поставщика ${archivedSupplier.name}` }))
     const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
     await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
@@ -18909,6 +18927,9 @@ describe('App', () => {
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
     expect(within(contractorsPanel).getByText('Режим просмотра: для добавления, изменения и удаления контрагентов нужно право dictionaries.write.')).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' })).toBeDisabled()
+    const readOnlyGarageRow = (await within(contractorsPanel).findByText('Наблюдаемый владелец')).closest('[role="row"]')!
+    await user.dblClick(readOnlyGarageRow as HTMLElement)
+    expect(screen.queryByRole('dialog', { name: 'Гараж 95' })).not.toBeInTheDocument()
 
     await openSection(user, 'Фонды')
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
