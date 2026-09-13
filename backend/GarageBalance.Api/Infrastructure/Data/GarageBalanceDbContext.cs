@@ -323,6 +323,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(adjustment => adjustment.TargetKind).HasMaxLength(20).IsRequired();
             entity.Property(adjustment => adjustment.PreviousAmount).HasPrecision(18, 2);
             entity.Property(adjustment => adjustment.NewAmount).HasPrecision(18, 2);
+            entity.Property(adjustment => adjustment.PreviousOverdueDebt).HasPrecision(18, 2);
+            entity.Property(adjustment => adjustment.NewOverdueDebt).HasPrecision(18, 2);
             entity.Property(adjustment => adjustment.Reason).HasMaxLength(1000).IsRequired();
             entity.HasIndex(adjustment => new { adjustment.TargetKind, adjustment.TargetId, adjustment.EffectiveDate });
             entity.HasIndex(adjustment => adjustment.CreatedByUserId);

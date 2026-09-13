@@ -184,10 +184,10 @@ describe('dictionariesApi response cache', () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(adjustment), { status: 201 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const created = await dictionariesApi.adjustGarageOpeningBalance?.('token', 'garage-1', { effectiveDate: '2026-07-01', newAmount: 120, reason: 'Сверка' })
+    const created = await dictionariesApi.adjustGarageOpeningBalance?.('token', 'garage-1', { effectiveDate: '2026-07-01', newAmount: 120, reason: 'Сверка', newOverdueDebt: 40 })
 
     expect(created).toEqual(adjustment)
-    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/garage-1/opening-balance-adjustments', expect.objectContaining({ method: 'POST', body: JSON.stringify({ effectiveDate: '2026-07-01', newAmount: 120, reason: 'Сверка' }) }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/garage-1/opening-balance-adjustments', expect.objectContaining({ method: 'POST', body: JSON.stringify({ effectiveDate: '2026-07-01', newAmount: 120, reason: 'Сверка', newOverdueDebt: 40 }) }))
   })
 
   it('keeps unrelated cached dictionaries after a successful mutation', async () => {

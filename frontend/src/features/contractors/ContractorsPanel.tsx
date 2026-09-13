@@ -216,7 +216,7 @@ type ContractorRestoreTarget =
   | { type: 'department'; item: ContractorDepartmentRow }
 
 type OpeningBalanceAdjustmentTarget =
-  | { type: 'garage'; id: string; name: string; currentAmount: number }
+  | { type: 'garage'; id: string; name: string; currentAmount: number; currentOverdueDebt: number }
   | { type: 'supplier'; id: string; name: string; currentAmount: number }
 
 const contractorSectionLabels: Record<ContractorSection, string> = {
@@ -2232,7 +2232,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   function openGarageOpeningBalanceAdjustment(row: ContractorGarageRow) {
     setModal(null)
-    setOpeningBalanceAdjustmentTarget({ type: 'garage', id: row.id, name: `Гараж ${row.number}`, currentAmount: parsePrototypeMoney(row.startingBalance ?? '') })
+    setOpeningBalanceAdjustmentTarget({
+      type: 'garage',
+      id: row.id,
+      name: `Гараж ${row.number}`,
+      currentAmount: parsePrototypeMoney(row.startingBalance ?? ''),
+      currentOverdueDebt: parsePrototypeMoney(row.startingOverdueDebt ?? ''),
+    })
   }
 
   function openSupplierOpeningBalanceAdjustment(row: ContractorSupplierRow) {
@@ -3585,6 +3591,7 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
   const [actionCommentsRequired] = useActionCommentSettings()
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toLocaleDateString('sv-SE'))
   const [newAmount, setNewAmount] = useState(String(target.currentAmount))
+  const [newOverdueDebt, setNewOverdueDebt] = useState(target.type === 'garage' ? String(target.currentOverdueDebt) : '')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -3595,8 +3602,24 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const parsedAmount = parseStaffRate(newAmount)
-    if (!effectiveDate || parsedAmount === null || (actionCommentsRequired && !reason.trim())) {
-      setError(actionCommentsRequired ? 'Укажите дату, новое значение и причину корректировки.' : 'Укажите дату и новое значение корректировки.')
+    const parsedOverdueDebt = target.type === 'garage' ? parseStaffRate(newOverdueDebt) : null
+    if (!effectiveDate || parsedAmount === null || (target.type === 'garage' && parsedOverdueDebt === null) || (actionCommentsRequired && !reason.trim())) {
+      setError(actionCommentsRequired ? 'Укажите дату, новые значения и причину корректировки.' : 'Укажите дату и новые значения корректировки.')
+      return
+    }
+    if (target.type === 'garage' && parsedOverdueDebt !== null) {
+      const storedAmount = toStoredGarageStartingBalance(parsedAmount, parsedOverdueDebt)
+      if (parsedOverdueDebt < 0 || parsedOverdueDebt > 999999999) {
+        setError('Начальная просрочка должна быть числом от 0 до 999 999 999.')
+        return
+      }
+      if (parsedOverdueDebt > Math.max(storedAmount, 0)) {
+        setError('Начальная просрочка не может превышать общую начальную задолженность.')
+        return
+      }
+    }
+    if (Math.abs(parsedAmount) > 999999999) {
+      setError('Начальный баланс должен быть числом от −999 999 999 до 999 999 999.')
       return
     }
 
@@ -3612,9 +3635,14 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
     setError(null)
     try {
       const storedAmount = target.type === 'garage'
-        ? toStoredGarageStartingBalance(parsedAmount)
+        ? toStoredGarageStartingBalance(parsedAmount, parsedOverdueDebt ?? 0)
         : toStoredSupplierStartingBalance(parsedAmount)
-      await save(accessToken, target.id, { effectiveDate, newAmount: storedAmount, reason: reason.trim() })
+      await save(accessToken, target.id, {
+        effectiveDate,
+        newAmount: storedAmount,
+        reason: reason.trim(),
+        ...(target.type === 'garage' ? { newOverdueDebt: parsedOverdueDebt } : {}),
+      })
       onSaved()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить корректировку.')
@@ -3624,15 +3652,17 @@ function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target,
   }
 
   return (
-    <ContractorDialogShell className="opening-balance-adjustment-dialog" closeDisabled={saving} closeLabel="Закрыть корректировку начального баланса" dialogRef={dialogRef} eyebrow="Начальные данные" onClose={onClose} title={`Корректировка: ${target.name}`} titleId="opening-balance-adjustment-title">
+    <ContractorDialogShell className="opening-balance-adjustment-dialog" closeDisabled={saving} closeLabel={`Закрыть корректировку ${target.type === 'garage' ? 'начальных данных' : 'начального баланса'}`} dialogRef={dialogRef} eyebrow="Начальные данные" onClose={onClose} title={`Корректировка: ${target.name}`} titleId="opening-balance-adjustment-title">
         <form className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={(event) => void submit(event)}>
           {error ? <FormError>{error}</FormError> : null}
           <div className="contractors-modal-grid">
-            <FormField label="Действующее значение"><input aria-label="Действующий начальный баланс" value={formatMoney(target.currentAmount)} readOnly /></FormField>
-            <FormField label="Новое значение"><MoneyTextInput aria-label="Новое значение начального баланса" required value={newAmount} onValueChange={setNewAmount} /></FormField>
-            <FormField label="Дата корректировки"><LocalizedDatePicker ariaLabel="Дата корректировки начального баланса" mode="date" value={effectiveDate} required onChange={setEffectiveDate} /></FormField>
+            <FormField label="Действующий баланс"><input aria-label="Действующий начальный баланс" value={formatMoney(target.currentAmount)} readOnly /></FormField>
+            <FormField label="Новый баланс" help={target.type === 'garage' ? garageBalanceWithOverdueHelp : undefined}><MoneyTextInput aria-label="Новое значение начального баланса" required value={newAmount} onValueChange={setNewAmount} /></FormField>
+            {target.type === 'garage' ? <FormField label="Действующая просрочка"><input aria-label="Действующая начальная просрочка" value={formatMoney(target.currentOverdueDebt)} readOnly /></FormField> : null}
+            {target.type === 'garage' ? <FormField label="Новая просрочка" help={garageOverdueHelp}><MoneyTextInput aria-label="Новое значение начальной просрочки" required value={newOverdueDebt} onValueChange={setNewOverdueDebt} /></FormField> : null}
+            <FormField label="Дата корректировки"><LocalizedDatePicker ariaLabel={`Дата корректировки ${target.type === 'garage' ? 'начальных данных' : 'начального баланса'}`} mode="date" value={effectiveDate} required onChange={setEffectiveDate} /></FormField>
           </div>
-          <FormField label="Причина"><textarea aria-label="Причина корректировки начального баланса" maxLength={1000} required={actionCommentsRequired} value={reason} onChange={(event) => setReason(event.target.value)} /></FormField>
+          <FormField label="Причина"><textarea aria-label={`Причина корректировки ${target.type === 'garage' ? 'начальных данных' : 'начального баланса'}`} maxLength={1000} required={actionCommentsRequired} value={reason} onChange={(event) => setReason(event.target.value)} /></FormField>
           <p className="form-field-hint">Документ и его автор сохраняются в разделе «История изменений».</p>
           <div className="detail-dialog-actions contractors-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить корректировку'}</span></button>
@@ -3789,7 +3819,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
               {item && canAdjustOpeningData ? (
                 <button className="secondary-button" type="button" disabled={saving} onClick={() => onAdjustOpeningBalance(form)}>
                   <Pencil size={16} />
-                  <span>Корректировать начальный баланс</span>
+                  <span>Корректировать начальные данные</span>
                 </button>
               ) : null}
               <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>

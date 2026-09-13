@@ -4412,13 +4412,14 @@ describe('App', () => {
     expect(screen.queryByText('Не удалось загрузить финансовый отчет гаража.')).not.toBeInTheDocument()
   })
 
-  it('keeps the accounting sign when adjusting a garage opening balance', async () => {
+  it('adjusts the garage opening balance and overdue part independently', async () => {
     const user = userEvent.setup()
-    let garage = createGarage({ id: 'garage-opening-adjustment', number: '125', startingBalance: 125, startingOverdueDebt: 125, balance: 125, overdueDebt: 125 })
-    const adjustGarageOpeningBalance = vi.fn(async (_token: string, id: string, request: { effectiveDate: string; newAmount: number; reason: string }) => {
+    let garage = createGarage({ id: 'garage-opening-adjustment', number: '125', startingBalance: 125, startingOverdueDebt: 40, balance: 125, overdueDebt: 40 })
+    const adjustGarageOpeningBalance = vi.fn(async (_token: string, id: string, request: { effectiveDate: string; newAmount: number; reason: string; newOverdueDebt?: number | null }) => {
       const previousAmount = garage.startingBalance
-      garage = createGarage({ ...garage, startingBalance: request.newAmount, startingOverdueDebt: request.newAmount, balance: request.newAmount, overdueDebt: request.newAmount })
-      return { id: 'garage-adjustment-new', targetKind: 'garage' as const, targetId: id, effectiveDate: request.effectiveDate, previousAmount, newAmount: request.newAmount, reason: request.reason, createdByUserId: null, createdAtUtc: '2026-07-01T00:00:00Z' }
+      const previousOverdueDebt = garage.startingOverdueDebt
+      garage = createGarage({ ...garage, startingBalance: request.newAmount, startingOverdueDebt: request.newOverdueDebt ?? 0, balance: request.newAmount, overdueDebt: request.newOverdueDebt ?? 0 })
+      return { id: 'garage-adjustment-new', targetKind: 'garage' as const, targetId: id, effectiveDate: request.effectiveDate, previousAmount, newAmount: request.newAmount, reason: request.reason, createdByUserId: null, createdAtUtc: '2026-07-01T00:00:00Z', previousOverdueDebt, newOverdueDebt: request.newOverdueDebt }
     })
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage],
@@ -4432,19 +4433,48 @@ describe('App', () => {
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
     await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 125' }))
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 125' })
-    await user.click(within(garageDialog).getByRole('button', { name: 'Корректировать начальный баланс' }))
+    await user.click(within(garageDialog).getByRole('button', { name: 'Корректировать начальные данные' }))
     const adjustmentDialog = await screen.findByRole('dialog', { name: 'Корректировка: Гараж 125' })
     expect(within(adjustmentDialog).getByLabelText('Действующий начальный баланс')).toHaveValue('-125.00')
+    expect(within(adjustmentDialog).getByLabelText('Действующая начальная просрочка')).toHaveValue('40.00')
     const newAmount = within(adjustmentDialog).getByLabelText('Новое значение начального баланса')
     await user.clear(newAmount)
     await user.type(newAmount, '-200')
-    await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начального баланса'), 'Уточнение входящего долга')
+    const newOverdueDebt = within(adjustmentDialog).getByLabelText('Новое значение начальной просрочки')
+    await user.clear(newOverdueDebt)
+    await user.type(newOverdueDebt, '75')
+    await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начальных данных'), 'Уточнение входящего долга')
     await user.click(within(adjustmentDialog).getByRole('button', { name: 'Сохранить корректировку' }))
 
     await waitFor(() => expect(adjustGarageOpeningBalance).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({
       newAmount: 200,
+      newOverdueDebt: 75,
       reason: 'Уточнение входящего долга',
     })))
+  }, 20000)
+
+  it('rejects a garage opening overdue part greater than the total debt', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-opening-invalid-overdue', number: '126', startingBalance: 100, startingOverdueDebt: 20, balance: 100, overdueDebt: 20 })
+    const adjustGarageOpeningBalance = vi.fn()
+    const dictionaryClient = createDictionaryClient({ getGarages: async () => [garage], adjustGarageOpeningBalance })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 126' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Гараж 126' })).getByRole('button', { name: 'Корректировать начальные данные' }))
+    const adjustmentDialog = await screen.findByRole('dialog', { name: 'Корректировка: Гараж 126' })
+    const newOverdueDebt = within(adjustmentDialog).getByLabelText('Новое значение начальной просрочки')
+    await user.clear(newOverdueDebt)
+    await user.type(newOverdueDebt, '120')
+    await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начальных данных'), 'Проверка ограничения')
+    await user.click(within(adjustmentDialog).getByRole('button', { name: 'Сохранить корректировку' }))
+
+    expect(await within(adjustmentDialog).findByRole('alert')).toHaveTextContent('Начальная просрочка не может превышать общую начальную задолженность.')
+    expect(adjustGarageOpeningBalance).not.toHaveBeenCalled()
   }, 20000)
 
   it('creates an auditable supplier opening-balance adjustment from the contractor card', async () => {

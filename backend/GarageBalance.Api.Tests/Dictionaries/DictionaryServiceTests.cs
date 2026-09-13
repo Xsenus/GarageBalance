@@ -1742,7 +1742,7 @@ public sealed class DictionaryServiceTests
         await database.Context.SaveChangesAsync();
         var actorId = actor.Id;
         var garage = await service.CreateGarageAsync(
-            new UpsertGarageRequest("ADJ-1", 1, 1, null, 100m, null, null, null),
+            new UpsertGarageRequest("ADJ-1", 1, 1, null, 100m, null, null, null, StartingOverdueDebt: 30m),
             actorId,
             CancellationToken.None);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Корректировки"), actorId, CancellationToken.None);
@@ -1753,7 +1753,7 @@ public sealed class DictionaryServiceTests
 
         var garageAdjustment = await service.AdjustGarageOpeningBalanceAsync(
             garage.Value!.Id,
-            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 125.555m, "Исправление акта сверки"),
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 125.555m, "Исправление акта сверки", 40.555m),
             actorId,
             CancellationToken.None);
         var supplierAdjustment = await service.AdjustSupplierOpeningBalanceAsync(
@@ -1765,10 +1765,14 @@ public sealed class DictionaryServiceTests
         Assert.True(garageAdjustment.Succeeded);
         Assert.Equal(100m, garageAdjustment.Value!.PreviousAmount);
         Assert.Equal(125.56m, garageAdjustment.Value.NewAmount);
+        Assert.Equal(30m, garageAdjustment.Value.PreviousOverdueDebt);
+        Assert.Equal(40.56m, garageAdjustment.Value.NewOverdueDebt);
         Assert.True(supplierAdjustment.Succeeded);
         Assert.Equal(200m, supplierAdjustment.Value!.PreviousAmount);
         Assert.Equal(180m, supplierAdjustment.Value.NewAmount);
-        Assert.Equal(125.56m, (await database.Context.Garages.FindAsync(garage.Value.Id))!.StartingBalance);
+        var adjustedGarage = (await database.Context.Garages.FindAsync(garage.Value.Id))!;
+        Assert.Equal(125.56m, adjustedGarage.StartingBalance);
+        Assert.Equal(40.56m, adjustedGarage.StartingOverdueDebt);
         var adjustedSupplier = (await database.Context.Suppliers.FindAsync(supplier.Value.Id))!;
         Assert.Equal(180m, adjustedSupplier.StartingBalance);
         Assert.Equal(180m, adjustedSupplier.StartingDebt);
@@ -1776,6 +1780,14 @@ public sealed class DictionaryServiceTests
         Assert.Single(await service.GetSupplierOpeningBalanceAdjustmentsAsync(supplier.Value.Id, CancellationToken.None));
         Assert.Equal(2, await database.Context.OpeningBalanceAdjustments.CountAsync());
         Assert.Equal(2, await database.Context.AuditEvents.CountAsync(item => item.Action.EndsWith("opening_balance_adjusted")));
+        var garageAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.garage_opening_balance_adjusted");
+        using var garageAuditMetadata = JsonDocument.Parse(garageAudit.MetadataJson!);
+        Assert.Equal("2", garageAuditMetadata.RootElement.GetProperty("changesCount").GetString());
+        Assert.Equal("Стартовый баланс; Начальная просрочка", garageAuditMetadata.RootElement.GetProperty("fieldName").GetString());
+        Assert.Contains("100", garageAuditMetadata.RootElement.GetProperty("oldValue").GetString(), StringComparison.Ordinal);
+        Assert.Contains("30", garageAuditMetadata.RootElement.GetProperty("oldValue").GetString(), StringComparison.Ordinal);
+        Assert.Contains("125.56", garageAuditMetadata.RootElement.GetProperty("newValue").GetString(), StringComparison.Ordinal);
+        Assert.Contains("40.56", garageAuditMetadata.RootElement.GetProperty("newValue").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1802,6 +1814,47 @@ public sealed class DictionaryServiceTests
         Assert.Equal("opening_balance_reason_required", missingReason.ErrorCode);
         Assert.Equal("opening_balance_unchanged", unchanged.ErrorCode);
         Assert.Empty(database.Context.OpeningBalanceAdjustments);
+    }
+
+    [Fact]
+    public async Task GarageOpeningBalanceAdjustment_ValidatesOverdueDebtAndAllowsOverdueOnlyCorrection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var garage = await service.CreateGarageAsync(
+            new UpsertGarageRequest("ADJ-OVERDUE", 1, 1, null, 100m, null, null, null, StartingOverdueDebt: 30m),
+            null,
+            CancellationToken.None);
+
+        var invalid = await service.AdjustGarageOpeningBalanceAsync(
+            garage.Value!.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 100m, "Некорректная просрочка", 120m),
+            null,
+            CancellationToken.None);
+        var invalidAmount = await service.AdjustGarageOpeningBalanceAsync(
+            garage.Value.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 1000000000m, "Некорректный баланс", 30m),
+            null,
+            CancellationToken.None);
+        var corrected = await service.AdjustGarageOpeningBalanceAsync(
+            garage.Value.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 2), 100m, "Уточнение просрочки", 40m),
+            null,
+            CancellationToken.None);
+
+        Assert.False(invalid.Succeeded);
+        Assert.Equal("garage_starting_overdue_debt_invalid", invalid.ErrorCode);
+        Assert.False(invalidAmount.Succeeded);
+        Assert.Equal("opening_balance_amount_invalid", invalidAmount.ErrorCode);
+        Assert.True(corrected.Succeeded);
+        Assert.Equal(100m, corrected.Value!.PreviousAmount);
+        Assert.Equal(100m, corrected.Value.NewAmount);
+        Assert.Equal(30m, corrected.Value.PreviousOverdueDebt);
+        Assert.Equal(40m, corrected.Value.NewOverdueDebt);
+        var adjustedGarage = (await database.Context.Garages.FindAsync(garage.Value.Id))!;
+        Assert.Equal(100m, adjustedGarage.StartingBalance);
+        Assert.Equal(40m, adjustedGarage.StartingOverdueDebt);
+        Assert.Single(database.Context.OpeningBalanceAdjustments);
     }
 
     [Fact]

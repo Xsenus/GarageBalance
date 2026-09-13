@@ -89,7 +89,7 @@ public sealed class PostgreSqlOpeningDataLockIntegrationTests
     public async Task OpeningBalanceAdjustments_SerializeConcurrentGarageCorrections()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
-        var garage = new Garage { Number = "OPENING-ADJUST-RACE", StartingBalance = 100m };
+        var garage = new Garage { Number = "OPENING-ADJUST-RACE", StartingBalance = 100m, StartingOverdueDebt = 20m };
         await using (var setupContext = database.CreateContext())
         {
             setupContext.Garages.Add(garage);
@@ -104,12 +104,12 @@ public sealed class PostgreSqlOpeningDataLockIntegrationTests
         var results = await Task.WhenAll(
             firstService.AdjustGarageOpeningBalanceAsync(
                 garage.Id,
-                new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 120m, "Первая сверка"),
+                new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 120m, "Первая сверка", 30m),
                 null,
                 CancellationToken.None),
             secondService.AdjustGarageOpeningBalanceAsync(
                 garage.Id,
-                new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 2), 140m, "Вторая сверка"),
+                new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 2), 140m, "Вторая сверка", 40m),
                 null,
                 CancellationToken.None));
 
@@ -121,7 +121,10 @@ public sealed class PostgreSqlOpeningDataLockIntegrationTests
         Assert.Equal(2, documents.Count);
         var firstDocument = Assert.Single(documents, item => item.PreviousAmount == 100m);
         var secondDocument = Assert.Single(documents, item => item.PreviousAmount == firstDocument.NewAmount);
-        var finalBalance = await assertionContext.Garages.Where(item => item.Id == garage.Id).Select(item => item.StartingBalance).SingleAsync();
-        Assert.Equal(secondDocument.NewAmount, finalBalance);
+        Assert.Equal(20m, firstDocument.PreviousOverdueDebt);
+        Assert.Equal(firstDocument.NewOverdueDebt, secondDocument.PreviousOverdueDebt);
+        var finalValues = await assertionContext.Garages.Where(item => item.Id == garage.Id).Select(item => new { item.StartingBalance, item.StartingOverdueDebt }).SingleAsync();
+        Assert.Equal(secondDocument.NewAmount, finalValues.StartingBalance);
+        Assert.Equal(secondDocument.NewOverdueDebt, finalValues.StartingOverdueDebt);
     }
 }

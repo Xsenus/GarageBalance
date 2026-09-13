@@ -142,6 +142,7 @@ export type CreateOpeningBalanceAdjustmentRequest = {
   effectiveDate: string
   newAmount: number
   reason: string
+  newOverdueDebt?: number | null
 }
 
 export type TariffDto = {

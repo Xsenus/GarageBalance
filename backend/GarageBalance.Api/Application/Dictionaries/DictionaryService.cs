@@ -52,6 +52,7 @@ public sealed class DictionaryService(
         ["floorCount"] = "Количество этажей",
         ["owner"] = "Владелец",
         ["startingBalance"] = "Стартовый баланс",
+        ["startingOverdueDebt"] = "Начальная просрочка",
         ["initialWaterMeterValue"] = "Стартовое показание воды",
         ["initialElectricityMeterValue"] = "Стартовое показание электроэнергии",
         ["comment"] = "Комментарий",
@@ -588,12 +589,13 @@ public sealed class DictionaryService(
             garage.Id,
             garage.Number,
             garage.StartingBalance,
+            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt),
             request,
             actorUserId,
-            amount =>
+            (amount, overdueDebt) =>
             {
                 garage.StartingBalance = amount;
-                garage.StartingOverdueDebt = Math.Max(amount, 0m);
+                garage.StartingOverdueDebt = overdueDebt;
             },
             () => garage.UpdatedAtUtc = DateTimeOffset.UtcNow,
             cancellationToken);
@@ -1074,9 +1076,10 @@ public sealed class DictionaryService(
             supplier.Id,
             supplier.Name,
             supplier.StartingBalance,
+            null,
             request,
             actorUserId,
-            amount =>
+            (amount, _) =>
             {
                 supplier.StartingBalance = amount;
                 supplier.StartingDebt = Math.Max(amount, 0m);
@@ -3864,18 +3867,40 @@ public sealed class DictionaryService(
         Guid targetId,
         string targetName,
         decimal previousAmount,
+        decimal? previousOverdueDebt,
         CreateOpeningBalanceAdjustmentRequest request,
         Guid? actorUserId,
-        Action<decimal> updateAmount,
+        Action<decimal, decimal?> updateValues,
         Action touchTarget,
         CancellationToken cancellationToken)
     {
         var newAmount = MoneyMath.RoundMoney(request.NewAmount);
         previousAmount = MoneyMath.RoundMoney(previousAmount);
-        var reason = request.Reason?.Trim() ?? string.Empty;
-        if (newAmount == previousAmount)
+        if (newAmount < -999999999m || newAmount > 999999999m)
         {
-            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_unchanged", "Новое значение совпадает с действующим начальным балансом.");
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure(
+                "opening_balance_amount_invalid",
+                "Начальный баланс должен быть от -999999999 до 999999999.");
+        }
+
+        decimal? newOverdueDebt = targetKind == OpeningBalanceAdjustmentTargetKinds.Garage
+            ? MoneyMath.RoundMoney(request.NewOverdueDebt ?? Math.Max(newAmount, 0m))
+            : null;
+        if (newOverdueDebt.HasValue)
+        {
+            newAmount = NormalizeGarageStartingBalance(newAmount, newOverdueDebt.Value);
+            if (newOverdueDebt.Value < 0m || newOverdueDebt.Value > 999999999m || newOverdueDebt.Value > Math.Max(newAmount, 0m))
+            {
+                return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure(
+                    "garage_starting_overdue_debt_invalid",
+                    "Начальная просроченная задолженность должна быть от 0 до 999999999 и не может превышать общую начальную задолженность.");
+            }
+        }
+
+        var reason = request.Reason?.Trim() ?? string.Empty;
+        if (newAmount == previousAmount && newOverdueDebt == previousOverdueDebt)
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_unchanged", "Новые начальные значения совпадают с действующими.");
         }
 
         var adjustment = new OpeningBalanceAdjustment
@@ -3885,10 +3910,12 @@ public sealed class DictionaryService(
             EffectiveDate = request.EffectiveDate,
             PreviousAmount = previousAmount,
             NewAmount = newAmount,
+            PreviousOverdueDebt = previousOverdueDebt,
+            NewOverdueDebt = newOverdueDebt,
             Reason = reason,
             CreatedByUserId = actorUserId
         };
-        updateAmount(newAmount);
+        updateValues(newAmount, newOverdueDebt);
         touchTarget();
         openingBalanceAdjustmentRepository.Add(adjustment);
 
@@ -3900,8 +3927,16 @@ public sealed class DictionaryService(
             adjustment.Id,
             $"Скорректирован начальный баланс {entityLabel} {targetName}.",
             adjustment.Reason,
-            new Dictionary<string, object?> { ["startingBalance"] = previousAmount },
-            new Dictionary<string, object?> { ["startingBalance"] = newAmount });
+            new Dictionary<string, object?>
+            {
+                ["startingBalance"] = previousAmount,
+                ["startingOverdueDebt"] = previousOverdueDebt
+            },
+            new Dictionary<string, object?>
+            {
+                ["startingBalance"] = newAmount,
+                ["startingOverdueDebt"] = newOverdueDebt
+            });
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<OpeningBalanceAdjustmentDto>.Success(ToOpeningBalanceAdjustmentDto(adjustment));
     }
@@ -3915,7 +3950,9 @@ public sealed class DictionaryService(
         adjustment.NewAmount,
         adjustment.Reason,
         adjustment.CreatedByUserId,
-        adjustment.CreatedAtUtc);
+        adjustment.CreatedAtUtc,
+        adjustment.PreviousOverdueDebt,
+        adjustment.NewOverdueDebt);
 
     private static MeasurementUnitDto ToMeasurementUnitDto(MeasurementUnit unit) => new(unit.Id, unit.Name, unit.IsArchived);
 

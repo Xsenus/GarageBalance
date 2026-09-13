@@ -8,6 +8,8 @@ public sealed class OpeningBalanceAdjustment
     public DateOnly EffectiveDate { get; set; }
     public decimal PreviousAmount { get; set; }
     public decimal NewAmount { get; set; }
+    public decimal? PreviousOverdueDebt { get; set; }
+    public decimal? NewOverdueDebt { get; set; }
     public required string Reason { get; set; }
     public Guid? CreatedByUserId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

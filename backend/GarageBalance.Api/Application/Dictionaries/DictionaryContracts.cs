@@ -106,8 +106,9 @@ public sealed record UpsertSupplierRequest(
 
 public sealed record CreateOpeningBalanceAdjustmentRequest(
     DateOnly EffectiveDate,
-    decimal NewAmount,
-    [ActionComment, MaxLength(1000)] string Reason);
+    [Range(-999999999, 999999999)] decimal NewAmount,
+    [ActionComment, MaxLength(1000)] string Reason,
+    [Range(0, 999999999)] decimal? NewOverdueDebt = null);
 
 public sealed record OpeningBalanceAdjustmentDto(
     Guid Id,
@@ -118,7 +119,9 @@ public sealed record OpeningBalanceAdjustmentDto(
     decimal NewAmount,
     string Reason,
     Guid? CreatedByUserId,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    decimal? PreviousOverdueDebt = null,
+    decimal? NewOverdueDebt = null);
 
 public sealed record SupplierContactDto(
     Guid Id,
