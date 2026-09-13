@@ -19,18 +19,18 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { getMeterReadingDateForMonth } from './meterReadingPeriod'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 const meterReadingMonths = [
-  { key: '01', label: 'Январь' },
-  { key: '02', label: 'Февраль' },
-  { key: '03', label: 'Март' },
-  { key: '04', label: 'Апрель' },
-  { key: '05', label: 'Май' },
-  { key: '06', label: 'Июнь' },
-  { key: '07', label: 'Июль' },
-  { key: '08', label: 'Август' },
-  { key: '09', label: 'Сентябрь' },
-  { key: '10', label: 'Октябрь' },
-  { key: '11', label: 'Ноябрь' },
-  { key: '12', label: 'Декабрь' },
+  { key: '01', label: 'Январь', shortLabel: 'Янв' },
+  { key: '02', label: 'Февраль', shortLabel: 'Фев' },
+  { key: '03', label: 'Март', shortLabel: 'Мар' },
+  { key: '04', label: 'Апрель', shortLabel: 'Апр' },
+  { key: '05', label: 'Май', shortLabel: 'Май' },
+  { key: '06', label: 'Июнь', shortLabel: 'Июн' },
+  { key: '07', label: 'Июль', shortLabel: 'Июл' },
+  { key: '08', label: 'Август', shortLabel: 'Авг' },
+  { key: '09', label: 'Сентябрь', shortLabel: 'Сен' },
+  { key: '10', label: 'Октябрь', shortLabel: 'Окт' },
+  { key: '11', label: 'Ноябрь', shortLabel: 'Ноя' },
+  { key: '12', label: 'Декабрь', shortLabel: 'Дек' },
 ]
 
 type MeterReadingTypeId = string
@@ -132,8 +132,9 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
         <div className="meter-readings-month-row" role="row">
           <span role="columnheader">Гараж</span>
           {meterReadingMonths.map((month) => (
-            <span role="columnheader" key={month.key}>
-              <strong>{month.label}</strong>
+            <span role="columnheader" aria-label={`${month.label}${selectedMeterType.unit}`} key={month.key}>
+              <strong className="meter-readings-month-full" aria-hidden="true">{month.label}</strong>
+              <strong className="meter-readings-month-short" aria-hidden="true">{month.shortLabel}</strong>
               <small>{selectedMeterType.unit}</small>
             </span>
           ))}

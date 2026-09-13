@@ -1,4 +1,14 @@
 .app-shell {
+  --app-sidebar-collapsed-width: 84px;
+  --app-sidebar-expanded-width: 280px;
+  --app-sidebar-padding-block: 18px;
+  --app-sidebar-padding-inline: 10px;
+  --app-sidebar-nav-size: 48px;
+  --app-workspace-padding: 18px;
+  --app-topbar-gap: 12px;
+  --app-topbar-margin-bottom: 14px;
+  --app-dialog-viewport-gap: 48px;
+  --app-dialog-padding: 18px;
   min-height: 100vh;
   display: grid;
   background: #f5f7fb;
@@ -6,11 +16,11 @@
 }
 
 .app-shell--sidebar-collapsed {
-  grid-template-columns: 84px 1fr;
+  grid-template-columns: var(--app-sidebar-collapsed-width) minmax(0, 1fr);
 }
 
 .app-shell--sidebar-expanded {
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: var(--app-sidebar-expanded-width) minmax(0, 1fr);
 }
 
 .sidebar {
@@ -20,7 +30,7 @@
   flex-direction: column;
   border-right: 1px solid #dce3ee;
   background: #ffffff;
-  padding: 18px 10px;
+  padding: var(--app-sidebar-padding-block) var(--app-sidebar-padding-inline);
 }
 
 .sidebar--collapsed {
@@ -115,8 +125,8 @@
 }
 
 .sidebar--collapsed .nav-item {
-  width: 48px;
-  height: 48px;
+  width: var(--app-sidebar-nav-size);
+  height: var(--app-sidebar-nav-size);
   justify-content: center;
   padding: 0;
 }
@@ -146,7 +156,7 @@
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
-  padding: 18px;
+  padding: var(--app-workspace-padding);
 }
 
 .workspace--meter-readings {
@@ -209,8 +219,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--app-topbar-gap);
+  margin-bottom: var(--app-topbar-margin-bottom);
 }
 
 .topbar--dashboard {
@@ -1217,8 +1227,9 @@ h1 {
   overflow: hidden;
   color: #101828;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .settings-backup-table .dictionary-row-actions {
@@ -1865,6 +1876,10 @@ h1 {
 .contractors-sort-button > span:first-child {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.contractors-sort-label--compact {
+  display: none;
 }
 
 .contractors-sort-indicator {
@@ -3369,6 +3384,10 @@ input.meter-readings-control {
   font-size: 10px;
 }
 
+.meter-readings-month-short {
+  display: none;
+}
+
 .meter-readings-data-row > span:first-child {
   position: sticky;
   left: 0;
@@ -3926,6 +3945,18 @@ input.meter-readings-control {
 
 .payments-prototype-section-heading {
   margin-bottom: 0;
+}
+
+.workspace--users {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace--users > .topbar {
+  flex: 0 0 auto;
 }
 
 .payments-prototype-commandbar {
@@ -7144,7 +7175,7 @@ input.meter-readings-control {
   overflow-x: hidden;
 }
 
-.dictionary-editor-dialog--owners {
+.detail-dialog.dictionary-editor-dialog--owners {
   width: min(860px, calc(100vw - 32px));
   max-width: 860px;
 }
@@ -7580,7 +7611,7 @@ input.meter-readings-control {
   padding: 6px;
 }
 
-.audit-detail-dialog {
+.detail-dialog.audit-detail-dialog {
   width: min(1120px, calc(100vw - 48px));
 }
 
@@ -8140,8 +8171,22 @@ button.operation-row:focus-visible {
 
 .report-quick-list-garages .payments-prototype-search-results {
   position: static;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  width: 100%;
   max-height: 220px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.report-quick-list-garages .payments-prototype-search-option {
+  min-width: 0;
+  width: 100%;
+  border-right: 0;
+}
+
+.report-quick-list-garages .payments-prototype-search-option :is(span, strong, small) {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .report-garage-quick-list-dialog form,
@@ -8778,12 +8823,12 @@ button.operation-row:focus-visible {
   place-items: center;
   overflow-y: auto;
   background: rgba(16, 24, 40, 0.36);
-  padding: 24px;
+  padding: calc(var(--app-dialog-viewport-gap, 48px) / 2);
 }
 
 .detail-dialog {
   width: min(560px, 100%);
-  max-height: min(860px, calc(100dvh - 48px));
+  max-height: min(860px, calc(100dvh - var(--app-dialog-viewport-gap, 48px)));
   overflow-y: auto;
   box-sizing: border-box;
   min-width: 0;
@@ -8793,7 +8838,7 @@ button.operation-row:focus-visible {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 18px 45px rgba(16, 24, 40, 0.18);
-  padding: 18px;
+  padding: var(--app-dialog-padding, 18px);
   overflow-wrap: anywhere;
 }
 
@@ -8927,15 +8972,15 @@ button.operation-row:focus-visible {
 .detail-dialog-header {
   position: sticky;
   z-index: 2;
-  top: -18px;
+  top: calc(-1 * var(--app-dialog-padding, 18px));
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin: -18px -18px 16px;
+  margin: calc(-1 * var(--app-dialog-padding, 18px)) calc(-1 * var(--app-dialog-padding, 18px)) 16px;
   border-bottom: 1px solid #eaecf0;
   background: #ffffff;
-  padding: 18px 18px 14px;
+  padding: var(--app-dialog-padding, 18px) var(--app-dialog-padding, 18px) 14px;
 }
 
 .detail-dialog-header h3 {
@@ -9080,15 +9125,15 @@ button.operation-row:focus-visible {
 .detail-dialog-actions {
   position: sticky;
   z-index: 2;
-  bottom: -18px;
+  bottom: calc(-1 * var(--app-dialog-padding, 18px));
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  margin: 6px -18px -18px;
+  margin: 6px calc(-1 * var(--app-dialog-padding, 18px)) calc(-1 * var(--app-dialog-padding, 18px));
   border-top: 1px solid #eaecf0;
   background: #ffffff;
-  padding: 12px 18px 18px;
+  padding: 12px var(--app-dialog-padding, 18px) var(--app-dialog-padding, 18px);
 }
 
 @media (max-width: 720px) {
@@ -9147,6 +9192,632 @@ button.operation-row:focus-visible {
 .status-disabled {
   background: #f2f4f7;
   color: #667085;
+}
+
+@media (max-width: 1499px), (max-height: 849px) {
+  .app-shell {
+    --app-sidebar-collapsed-width: 68px;
+    --app-sidebar-expanded-width: 224px;
+    --app-sidebar-padding-block: 12px;
+    --app-sidebar-padding-inline: 8px;
+    --app-sidebar-nav-size: 40px;
+    --app-workspace-padding: 12px;
+    --app-topbar-gap: 8px;
+    --app-topbar-margin-bottom: 8px;
+    --app-dialog-viewport-gap: 24px;
+    --app-dialog-padding: 14px;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .brand {
+    gap: 8px;
+    padding: 2px 6px 10px;
+  }
+
+  .sidebar--collapsed .brand {
+    gap: 6px;
+    padding: 2px 0 10px;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .nav-list {
+    gap: 2px;
+  }
+
+  .nav-item {
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
+  .topbar-back-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .user-panel {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .detail-dialog-header {
+    margin-bottom: 10px;
+  }
+
+  .detail-dialog-actions {
+    margin-top: 10px;
+  }
+
+  .expense-form {
+    gap: 7px 12px;
+  }
+
+  .expense-form textarea {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .users-workbench {
+    min-height: 0;
+    max-height: none;
+    flex: 0 0 auto;
+  }
+
+  .users-workbench .dictionary-table-scroll {
+    min-height: 84px;
+    max-height: 180px;
+    flex: 0 1 auto;
+  }
+
+  .users-panel-v2 .role-matrix {
+    min-height: 0;
+    flex: 1 1 auto;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workspace--users > .users-panel-v2 {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .role-matrix-table-scroll {
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .role-matrix-table {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .role-matrix-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .role-matrix-table tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+
+  .role-matrix-table tbody tr {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .role-matrix-table tbody tr > :is(th, td) {
+    position: static;
+    min-width: 0;
+    width: auto;
+    border-top: 1px solid #eaecf0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .role-matrix-table tbody tr > th {
+    grid-column: 1 / -1;
+    padding-right: 52px;
+    border-top: 0;
+  }
+
+  .role-matrix-table tbody tr > td:not(.role-matrix-actions) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    text-align: left;
+  }
+
+  .role-matrix-table tbody td[data-permission-label]::before {
+    content: attr(data-permission-label);
+    display: block;
+    min-width: 0;
+    color: #475467;
+    line-height: 1.25;
+    overflow-wrap: normal;
+  }
+
+  .role-matrix-table .status-active,
+  .role-matrix-table .status-disabled {
+    min-width: 42px;
+  }
+
+  .role-matrix-actions {
+    position: absolute !important;
+    z-index: 2;
+    top: 5px;
+    right: 5px;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+
+  .role-matrix-table tbody tr:only-child > td[colspan] {
+    grid-column: 1 / -1;
+  }
+
+  :is(
+    .workspace--tariffs,
+    .workspace--dictionaries,
+    .workspace--payments,
+    .workspace--import,
+    .workspace--audit,
+    .workspace--releases,
+    .workspace--settings
+  ) {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  :is(
+    .workspace--tariffs,
+    .workspace--dictionaries,
+    .workspace--payments,
+    .workspace--import,
+    .workspace--audit,
+    .workspace--releases,
+    .workspace--settings
+  ) > .topbar {
+    flex: 0 0 auto;
+  }
+
+  .workspace--tariffs > .tariffs-page,
+  .workspace--import > .dictionary-panel,
+  .workspace--releases > .release-panel,
+  .workspace--settings > .settings-layout {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tariffs-page :is(.contractors-sheet-header, .contractors-sheet-row),
+  .tariffs-page :is(.tariffs-show-periodicity, .tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row),
+  .tariffs-page .tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {
+    --tariffs-schedule-columns: minmax(0, 0.68fr);
+    grid-template-columns:
+      minmax(0, 1.55fr)
+      minmax(0, 0.42fr)
+      minmax(0, 0.78fr)
+      var(--tariffs-schedule-columns)
+      minmax(0, 1.08fr)
+      minmax(0, 0.58fr)
+      minmax(0, 0.72fr)
+      minmax(0, 0.62fr)
+      112px;
+    min-width: 0;
+  }
+
+  .tariffs-page .contractors-sheet:not(.tariffs-show-periodicity):not(.tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row) {
+    --tariffs-schedule-columns: ;
+  }
+
+  .tariffs-page .tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {
+    --tariffs-schedule-columns: repeat(2, minmax(0, 0.68fr));
+  }
+
+  .tariffs-page .contractors-sheet {
+    min-height: min(420px, calc(100dvh - 190px));
+    max-height: min(420px, calc(100dvh - 190px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .tariffs-page .contractors-sheet-header span,
+  .tariffs-page .contractors-sheet-row > span {
+    padding-inline: 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .tariffs-page .contractors-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .tariffs-panels-splitter {
+    display: none;
+  }
+
+  .contractors-mini-header--fees,
+  .contractors-mini-row--fees {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.8fr) repeat(3, minmax(0, 0.58fr)) minmax(0, 0.9fr) minmax(0, 1fr) 116px;
+  }
+
+  .fee-campaign-table-scroll {
+    overflow-x: hidden;
+  }
+
+  .contractors-directory-table--garages {
+    overflow-x: hidden;
+  }
+
+  .contractors-directory-table--garages .contractors-directory-row {
+    grid-template-columns: 110px 110px 100px minmax(160px, 1.25fr) minmax(135px, 0.9fr) minmax(150px, 0.75fr) 106px;
+    min-width: 0;
+  }
+
+  .contractors-directory-table--garages .contractors-sort-label--full {
+    display: none;
+  }
+
+  .contractors-directory-table--garages .contractors-sort-label--compact {
+    display: inline;
+  }
+
+  .contractors-directory-table--suppliers {
+    overflow-x: hidden;
+  }
+
+  .contractors-directory-table--suppliers .contractors-directory-row {
+    grid-template-columns: minmax(190px, 1.2fr) minmax(125px, 0.8fr) minmax(145px, 0.9fr) 160px minmax(160px, 1fr) 135px 106px;
+    min-width: 0;
+  }
+
+  .contractors-dialog--supplier .contractors-contacts-preview--editable {
+    min-height: 136px;
+    max-height: 136px;
+  }
+
+  .contractors-dialog--supplier .contractors-supplier-footer-grid .form-field > :is(input, textarea) {
+    height: 54px;
+    min-height: 54px;
+  }
+
+  .contractors-directory-table--staff {
+    overflow-x: hidden;
+  }
+
+  .contractors-directory-table--staff .contractors-directory-row {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.15fr) minmax(104px, 0.62fr) 106px;
+    min-width: 0;
+  }
+
+  .dictionary-editor-dialog--owners .owner-name-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dictionary-editor-dialog--owners .owner-name-grid__middle-name {
+    grid-column: auto;
+  }
+
+  .dictionary-editor-dialog--owners textarea {
+    min-height: 48px;
+  }
+
+  .meter-readings-table-shell {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .meter-readings-table {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .meter-readings-title-row,
+  .meter-readings-month-row,
+  .meter-readings-data-row {
+    grid-template-columns: minmax(112px, 1.7fr) repeat(12, minmax(0, 1fr));
+  }
+
+  .meter-readings-month-row span,
+  .meter-readings-data-row > span {
+    min-width: 0;
+  }
+
+  .meter-readings-month-row span {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    padding-inline: 2px;
+    font-size: 10px;
+  }
+
+  .meter-readings-month-row small {
+    display: none;
+  }
+
+  .meter-readings-month-full {
+    display: none;
+  }
+
+  .meter-readings-month-short {
+    display: inline;
+  }
+
+  .meter-readings-data-row > span:first-child {
+    padding-inline: 7px;
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .meter-readings-data-row input {
+    padding-inline: 2px;
+    font-size: 11px;
+  }
+
+  .funds-content {
+    grid-template-columns: minmax(420px, 0.85fr) minmax(0, 1.15fr);
+    gap: 12px;
+  }
+
+  .funds-operations-table-scroll {
+    overflow-x: hidden;
+  }
+
+  .funds-operations-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    font-size: 11px;
+  }
+
+  .funds-operations-table th,
+  .funds-operations-table td {
+    height: auto;
+    padding: 6px 4px;
+    overflow-wrap: anywhere;
+  }
+
+  .funds-operations-table th:last-child,
+  .funds-operations-table td:last-child {
+    width: 94px;
+  }
+
+  .funds-operations-table .funds-action-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .funds-operation-actions {
+    gap: 3px;
+  }
+
+  .workspace--payments > .finance-panel {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .workspace--payments .payments-prototype {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .workspace--payments .payments-prototype-workspace-header {
+    flex: 0 0 auto;
+  }
+
+  .workspace--payments .payments-prototype-overdue-details--expanded {
+    max-height: 104px;
+    overflow-y: auto;
+  }
+
+  .workspace--payments .payments-prototype-sheet--income {
+    min-height: 180px;
+    flex: 1 1 auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .workspace--payments .payments-prototype-sheet--income > .payments-prototype-table-scroll {
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: auto;
+  }
+
+  .workspace--payments .payments-prototype-period-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .workspace--payments .payments-prototype-period-row label {
+    min-width: 0;
+  }
+
+  .workspace--payments .payments-prototype-period-row > .report-quick-periods {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .workspace--payments .payments-prototype-period-row .report-quick-periods__button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 4px 5px;
+    font-size: 11px;
+    line-height: 1.15;
+    white-space: normal;
+  }
+
+  .payments-prototype-table,
+  .payments-prototype-table--garage,
+  .finance-data-table {
+    width: calc(100% - 16px);
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .finance-data-table {
+    width: 100%;
+  }
+
+  .payments-prototype-table th,
+  .payments-prototype-table td {
+    padding-inline: 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .payments-prototype-table--garage th:nth-child(1) {
+    width: 84px;
+  }
+
+  .payments-prototype-table--garage th:nth-child(3) {
+    width: 126px;
+  }
+
+  .payments-prototype-table--garage th:nth-child(4) {
+    width: 74px;
+  }
+
+  .payments-prototype-table--garage th:nth-child(5),
+  .payments-prototype-table--garage th:nth-child(6) {
+    width: 132px;
+  }
+
+  .payments-prototype-table--garage th:nth-child(7),
+  .payments-prototype-table--garage th:nth-child(8) {
+    width: 116px;
+  }
+
+  .finance-panel--show-overview .dictionary-table-scroll {
+    overflow-x: hidden;
+  }
+
+  .finance-panel--show-overview .finance-tabs {
+    min-width: 0;
+  }
+
+  .finance-panel--show-overview .finance-tabs button {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .report-tabs--workbook {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    overflow-x: hidden;
+    scrollbar-gutter: auto;
+  }
+
+  .report-tabs--workbook button {
+    min-width: 0;
+    min-height: 46px;
+  }
+
+  .report-garage-filter-panel {
+    top: auto;
+    bottom: calc(100% + 8px);
+    height: min(var(--report-garage-filter-panel-height, 480px), calc(100dvh - 48px));
+    max-height: calc(100dvh - 48px);
+  }
+
+  .workspace--audit > .dictionary-panel {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .workspace--audit .audit-filter-grid {
+    flex: 0 0 auto;
+  }
+
+  .workspace--audit .audit-event-table {
+    min-height: 120px;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .audit-event-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-width: 0;
+    gap: 6px 10px;
+    padding: 8px 10px;
+  }
+
+  .audit-event-row:not(.header) > span::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    color: #667085;
+    font-size: 10px;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+
+  .detail-dialog.audit-detail-dialog .audit-detail-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workspace--releases .release-panel {
+    margin-top: 0;
+  }
+}
+
+.user-editor-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.user-editor-form > :is(.user-editor-field--wide, .form-hint, .validation-summary, .form-error, .async-error-state, .detail-dialog-actions) {
+  grid-column: 1 / -1;
+}
+
+.user-editor-form textarea {
+  min-height: 60px;
 }
 
 @media (max-width: 1100px) {
@@ -9594,6 +10265,14 @@ button.operation-row:focus-visible {
 
   .payments-prototype-modal-form {
     grid-template-columns: 1fr;
+  }
+
+  .user-editor-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .user-editor-form > :is(.user-editor-field--wide, .form-hint, .validation-summary, .form-error, .async-error-state, .detail-dialog-actions) {
+    grid-column: 1;
   }
 
   .payments-prototype-modal-form > .form-field:not(.full-payment-field) {

@@ -116,10 +116,18 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
   const workspaceClassName = [
     'workspace',
+    effectiveActiveSection === 'users' ? 'workspace--users' : '',
+    effectiveActiveSection === 'tariffsAndFees' ? 'workspace--tariffs' : '',
     effectiveActiveSection === 'meterReadings' ? 'workspace--meter-readings' : '',
     effectiveActiveSection === 'contractors' ? 'workspace--contractors' : '',
+    effectiveActiveSection === 'dictionaries' ? 'workspace--dictionaries' : '',
+    effectiveActiveSection === 'payments' ? 'workspace--payments' : '',
     effectiveActiveSection === 'reports' ? 'workspace--reports' : '',
     effectiveActiveSection === 'funds' ? 'workspace--funds' : '',
+    effectiveActiveSection === 'import' ? 'workspace--import' : '',
+    effectiveActiveSection === 'audit' ? 'workspace--audit' : '',
+    effectiveActiveSection === 'releases' ? 'workspace--releases' : '',
+    effectiveActiveSection === 'settings' ? 'workspace--settings' : '',
   ].filter(Boolean).join(' ')
 
   const handleToggleSidebar = useCallback(() => {

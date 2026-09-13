@@ -11,6 +11,7 @@ describe('responsive layout styles', () => {
   const tariffsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const settingsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8')
   const financePanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8')
+  const usersPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'users', 'UserManagementPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
   it('allows the page to fit a 320px viewport with a classic vertical scrollbar', () => {
@@ -157,13 +158,13 @@ describe('responsive layout styles', () => {
 
   it('keeps tall dialogs scrollable inside the viewport', () => {
     expect(normalizedAppCss).toContain('.modal-backdrop {\n  position: fixed;\n  inset: 0;\n  z-index: 20;\n  display: grid;\n  place-items: center;\n  overflow-y: auto;')
-    expect(normalizedAppCss).toContain('.detail-dialog {\n  width: min(560px, 100%);\n  max-height: min(860px, calc(100dvh - 48px));\n  overflow-y: auto;')
+    expect(normalizedAppCss).toContain('.detail-dialog {\n  width: min(560px, 100%);\n  max-height: min(860px, calc(100dvh - var(--app-dialog-viewport-gap, 48px)));\n  overflow-y: auto;')
     expect(appCss).toContain('box-sizing: border-box;')
     expect(appCss).toContain('overscroll-behavior: contain;')
     expect(appCss).toContain('scrollbar-gutter: stable;')
     expect(appCss).toContain('overflow-wrap: anywhere;')
-    expect(normalizedAppCss).toContain('.detail-dialog-header {\n  position: sticky;')
-    expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
+    expect(normalizedAppCss).toContain('.detail-dialog-header {\n  position: sticky;\n  z-index: 2;\n  top: calc(-1 * var(--app-dialog-padding, 18px));')
+    expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;\n  z-index: 2;\n  bottom: calc(-1 * var(--app-dialog-padding, 18px));')
   })
 
   it('groups garage filters into shared compact fields and responsive ranges', () => {
@@ -648,13 +649,25 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.funds-table-row-actions {\n  display: inline-flex;\n  align-items: center;')
   })
 
-  it('keeps the access matrix in one horizontally scrollable table', () => {
+  it('recomposes the access matrix into compact role groups without horizontal scrolling', () => {
     expect(normalizedAppCss).toContain('.role-matrix-table-scroll {\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.role-matrix-table {\n  width: max-content;\n  min-width: 100%;')
-    expect(normalizedAppCss).toContain('.role-matrix-table thead th {')
-    expect(normalizedAppCss).toContain('white-space: nowrap;')
-    expect(normalizedAppCss).toContain('.role-matrix-table th:first-child,\n.role-matrix-table td:first-child {\n  position: sticky;\n  left: 0;')
-    expect(normalizedAppCss).not.toContain('.role-matrix-row {')
+    const compactDesktopCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1499px), (max-height: 849px) {'))
+    expect(compactDesktopCss).toContain('.role-matrix-table-scroll {\n    min-height: 0;\n    max-height: none;\n    overflow-x: hidden;\n    overflow-y: auto;')
+    expect(compactDesktopCss).toContain('.users-workbench {\n    min-height: 0;\n    max-height: none;\n    flex: 0 0 auto;')
+    expect(compactDesktopCss).toContain('.users-workbench .dictionary-table-scroll {\n    min-height: 84px;\n    max-height: 180px;')
+    expect(compactDesktopCss).toContain('.role-matrix-table tbody {\n    display: grid;\n    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));')
+    expect(compactDesktopCss).toContain('.role-matrix-table tbody td[data-permission-label]::before {\n    content: attr(data-permission-label);')
+    expect(usersPanel).toContain('data-permission-label={group.label}')
+  })
+
+  it('lays out the user editor in paired fields while preserving a single mobile column', () => {
+    expect(usersPanel).toContain('className="dictionary-modal-form user-editor-form"')
+    expect(usersPanel).toContain('className="user-editor-field--wide" label="Роли"')
+    expect(normalizedAppCss).toContain('.user-editor-form {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.user-editor-form > :is(.user-editor-field--wide, .form-hint, .validation-summary, .form-error, .async-error-state, .detail-dialog-actions) {\n  grid-column: 1 / -1;')
+    const mobileCss = normalizedAppCss.slice(normalizedAppCss.lastIndexOf('@media (max-width: 640px) {'))
+    expect(mobileCss).toContain('.user-editor-form {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
   it('lays out release notes as an adaptive card grid', () => {

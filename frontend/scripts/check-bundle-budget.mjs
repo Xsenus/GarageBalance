@@ -6,7 +6,7 @@ const budget = {
   mainJsGzipBytes: 180 * 1024,
   initialJsGzipBytes: 110 * 1024,
   mainCssGzipBytes: 40 * 1024,
-  totalAssetsGzipBytes: 285 * 1024,
+  totalAssetsGzipBytes: 288 * 1024,
 }
 
 function formatBytes(bytes) {

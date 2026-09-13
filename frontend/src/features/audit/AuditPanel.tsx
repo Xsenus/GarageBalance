@@ -566,27 +566,27 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           const beforeAfter = getAuditBeforeAfter(auditEvent)
           return (
             <div className="audit-event-row" role="row" key={auditEvent.id}>
-              <span role="cell">{formatAuditDateTime(auditEvent.createdAtUtc)}</span>
-              <span role="cell" className="audit-actor-cell">
+              <span role="cell" data-label="Время">{formatAuditDateTime(auditEvent.createdAtUtc)}</span>
+              <span role="cell" data-label="Кто" className="audit-actor-cell">
                 <strong>{formatAuditActor(auditEvent)}</strong>
                 {auditEvent.actorEmail ? <small>{auditEvent.actorEmail}</small> : null}
                 <small>{formatAuditActorId(auditEvent.actorUserId)}</small>
               </span>
-              <span role="cell">{getAuditEventSectionLabel(auditEvent)}</span>
-              <span role="cell">
+              <span role="cell" data-label="Раздел">{getAuditEventSectionLabel(auditEvent)}</span>
+              <span role="cell" data-label="Объект">
                 <strong>{getAuditEntityTypeLabel(auditEvent.entityType)}</strong>
                 {auditEvent.entityDisplayName ? <small>{auditEvent.entityDisplayName}</small> : null}
                 <small>{auditEvent.entityId ?? 'без идентификатора'}</small>
               </span>
-              <span role="cell">
+              <span role="cell" data-label="Действие">
                 <strong>{getAuditEventActionKindLabel(auditEvent)}</strong>
                 <small>{auditEvent.summary}</small>
               </span>
-              <span role="cell">{auditEvent.fieldName ?? (auditEvent.actionKind === 'update' ? 'не указано' : '—')}</span>
-              <span role="cell">{beforeAfter.before}</span>
-              <span role="cell">{beforeAfter.after}</span>
-              <span role="cell">{auditEvent.reason ?? 'не указано'}</span>
-              <span role="cell">
+              <span role="cell" data-label="Поле">{auditEvent.fieldName ?? (auditEvent.actionKind === 'update' ? 'не указано' : '—')}</span>
+              <span role="cell" data-label="Было">{beforeAfter.before}</span>
+              <span role="cell" data-label="Стало">{beforeAfter.after}</span>
+              <span role="cell" data-label="Причина">{auditEvent.reason ?? 'не указано'}</span>
+              <span role="cell" data-label="Карточка">
                 <button className="icon-button audit-detail-button" type="button" aria-label={`Открыть карточку события ${getAuditEventActionKindLabel(auditEvent)}`} title="Карточка события" disabled={loading} onClick={() => void openAuditEventDetail(auditEvent)}>
                   <FileText size={15} aria-hidden="true" />
                 </button>

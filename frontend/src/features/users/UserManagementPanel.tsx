@@ -681,7 +681,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <X size={18} />
               </button>
             </div>
-            <form className="dictionary-modal-form" autoComplete="off" noValidate onSubmit={saveUser}>
+            <form className="dictionary-modal-form user-editor-form" autoComplete="off" noValidate onSubmit={saveUser}>
               {editor.mode === 'create' ? (
                 <FormField label="Email">
                   <input aria-label="Email пользователя" autoComplete="off" data-1p-ignore data-lpignore="true" name="managed-user-email" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" disabled={busy} required />
@@ -694,7 +694,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               <FormField label="Имя сотрудника">
                 <input aria-label="Имя пользователя" autoComplete="off" name="managed-user-display-name" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} disabled={busy} required />
               </FormField>
-              <FormField label="Роли">
+              <FormField className="user-editor-field--wide" label="Роли">
                 <div className="user-role-assignment" role="group" aria-label="Роли пользователя" aria-required="true" aria-invalid={form.roleCodes.length === 0} data-required="true">
                   {roles.map((role) => (
                     <label className="contractors-check-row" key={role.code}>
@@ -982,7 +982,7 @@ function RolePermissionMatrix({ roles, onEditRole }: { roles: ManagedRoleDto[]; 
                 {rolePermissionGroups.map((group) => {
                   const allowed = role.permissions.includes(group.permission)
                   return (
-                    <td aria-label={`${role.name}: ${group.label} - ${allowed ? 'разрешено' : 'нет доступа'}`} key={group.permission}>
+                    <td aria-label={`${role.name}: ${group.label} - ${allowed ? 'разрешено' : 'нет доступа'}`} data-permission-label={group.label} key={group.permission}>
                       <span className={allowed ? 'status-active' : 'status-disabled'}>{allowed ? 'Да' : 'Нет'}</span>
                     </td>
                   )

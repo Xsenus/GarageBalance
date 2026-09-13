@@ -238,7 +238,7 @@ type ContractorSortState = {
   key: ContractorSortKey
   direction: ContractorSortDirection
 }
-type ContractorColumnDefinition<TKey extends string> = { key: TKey; label: string; defaultWidth: number; minWidth: number }
+type ContractorColumnDefinition<TKey extends string> = { key: TKey; label: string; compactLabel?: string; defaultWidth: number; minWidth: number }
 
 const contractorGarageColumnStorageKey = 'garagebalance.contractors.garageColumnWidths'
 const contractorSupplierColumnStorageKey = 'garagebalance.contractors.supplierColumnWidths'
@@ -260,11 +260,11 @@ const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 const contractorGarageColumnDefinitions: Array<ContractorColumnDefinition<ContractorGarageColumnKey>> = [
   { key: 'number', label: 'Номер', defaultWidth: 96, minWidth: 72 },
-  { key: 'peopleCount', label: 'Количество человек', defaultWidth: 170, minWidth: 132 },
-  { key: 'floorCount', label: 'Количество этажей', defaultWidth: 170, minWidth: 132 },
+  { key: 'peopleCount', label: 'Количество человек', compactLabel: 'Людей', defaultWidth: 170, minWidth: 132 },
+  { key: 'floorCount', label: 'Количество этажей', compactLabel: 'Этажей', defaultWidth: 170, minWidth: 132 },
   { key: 'owner', label: 'Владелец', defaultWidth: 260, minWidth: 160 },
   { key: 'phone', label: 'Телефон', defaultWidth: 220, minWidth: 150 },
-  { key: 'overdueDebt', label: 'Просроченная задолженность', defaultWidth: 220, minWidth: 170 },
+  { key: 'overdueDebt', label: 'Просроченная задолженность', compactLabel: 'Просроченный долг', defaultWidth: 220, minWidth: 170 },
   { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
 ]
 
@@ -2201,7 +2201,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const renderContractorSortHeader = (section: ContractorSortableSection, key: ContractorSortKey, label: string) => {
+  const renderContractorSortHeader = (section: ContractorSortableSection, key: ContractorSortKey, label: string, compactLabel = label) => {
     const isActiveSort = contractorSort.section === section && contractorSort.key === key
     const indicator = isActiveSort ? (contractorSort.direction === 'asc' ? '↑' : '↓') : ''
 
@@ -2210,10 +2210,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         className="ghost-button contractors-sort-button"
         type="button"
         title={`Сортировать: ${label}`}
+        aria-label={label}
         aria-pressed={isActiveSort}
         onClick={() => changeContractorSort(section, key)}
       >
-        <span>{label}</span>
+        <span className="contractors-sort-label contractors-sort-label--full">{label}</span>
+        <span className="contractors-sort-label contractors-sort-label--compact" aria-hidden="true">{compactLabel}</span>
         <span className="contractors-sort-indicator" aria-hidden="true">{indicator}</span>
       </button>
     )
@@ -2417,7 +2419,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorGarageColumnDefinitions.map((column) => (
                 <span className={`contractors-directory-header-cell${column.key === 'actions' ? ' table-actions-column' : ''}`} role="columnheader" key={column.key}>
-                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('garages', column.key, column.label)}
+                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('garages', column.key, column.label, column.compactLabel)}
                   {column.key !== 'actions' ? (
                     <button
                       className="icon-button contractors-column-resizer"
@@ -2504,7 +2506,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorSupplierColumnDefinitions.map((column) => (
                 <span className={`contractors-directory-header-cell contractors-directory-header-cell--${column.key}${column.key === 'actions' ? ' table-actions-column' : ''}`} role="columnheader" key={column.key}>
-                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('suppliers', column.key, column.label)}
+                  {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('suppliers', column.key, column.label, column.compactLabel)}
                   {column.key !== 'actions' ? (
                     <button
                       className="icon-button contractors-column-resizer"
@@ -2596,7 +2598,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 {contractorStaffColumnDefinitions.map((column) => (
                   <span className={`contractors-directory-header-cell${column.key === 'actions' ? ' table-actions-column' : ''}`} role="columnheader" key={column.key}>
-                    {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('staff', column.key, column.label)}
+                    {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('staff', column.key, column.label, column.compactLabel)}
                     {column.key !== 'actions' ? (
                       <button
                         className="icon-button contractors-column-resizer"
