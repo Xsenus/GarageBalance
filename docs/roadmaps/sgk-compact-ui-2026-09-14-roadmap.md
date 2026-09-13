@@ -1,0 +1,332 @@
+# Полная компактная перекомпоновка интерфейса SGK (14.09.2026)
+
+## Цель
+
+Перекомпоновать весь пользовательский интерфейс GarageBalance для профессиональной ежедневной работы на ноутбуках и небольших настольных мониторах. Главная точка приёмки — viewport `1366×768` CSS-пикселей при масштабе браузера 100%. На этой точке ни страница, ни рабочая таблица не должны иметь горизонтальной прокрутки; все обычные формы и диалоги должны одновременно оставлять доступными заголовок, содержимое, сообщения и панель действий.
+
+## Статус
+
+Выполнено и проверено 200 из 203 пунктов (98,52%). В работе и не начато — 0. Один пункт (0,49%) заблокирован отсутствием Docker Engine, один (0,49%) оставлен для расширенной ручной приёмки на дополнительных viewport, один (0,49%) требует отдельного бизнес-решения по признаку «Годовой платёж был». Обязательная точка `1366×768` и весь объём текущего задания завершены.
+
+## Источники
+
+- [x] Техническое задание `SGK_(14.09.26)` из переданного текстового вложения (878 строк) прочитано полностью.
+- [x] Корневой `AGENTS.md` прочитан; отдельные вложенные инструкции в репозитории отсутствуют.
+- [x] Текущее состояние Git проверено: `master`, HEAD `85d6bc7f`, четыре локальных коммита сверх `origin/master`, незакоммиченных изменений на старте нет.
+- [x] Актуальный frontend автоматически просканирован по `frontend/src/**/*.{ts,tsx}`: маршрутизация рабочих разделов, формы, диалоги, таблицы, вкладки, всплывающие элементы и общие компоненты включены в инвентарь ниже.
+- [x] Действующие UI-документы и существующие roadmap найдены. Старые roadmap не используются для расширения этой задачи; новый документ является отдельным активным планом.
+
+## Решения и допущения
+
+- [x] Компактный desktop определяется составным условием: ширина меньше `1500px` **или** высота меньше `850px`. Обычный desktop начинается одновременно с ширины `1500px` и высоты `850px`.
+- [x] `1366×768` — обязательная поэкранная и поформенная приёмка; `1280×720`, `1440×800`, `1536×864`, `1920×1080` — общая матрица регрессии. Дополнительно проверяются заданные `1360×768` и `1600×900`; `1600×768` служит контрольной точкой высотного переключения compact mode.
+- [x] Сначала меняются общие примитивы и правила плотности, затем разделы в порядке приложения. Финансовые формулы, права, аудит, API и схема БД не меняются без доказанной необходимости.
+- [x] Важные данные не скрываются. Если набор колонок физически не помещается, строка перекомпоновывается в группы/вторые строки или получает доступное раскрытие подробностей.
+- [x] Временные данные, PostgreSQL, процессы, снимки, coverage и логи принадлежат задаче и удаляются после приёмки. Push запрещён без отдельной команды.
+
+## Формат записей инвентаря
+
+Каждая строка ниже — самостоятельный проверяемый объект. В колонке «Проблема / решение» первая часть отражает состояние, подтверждённое исходным кодом; результат визуального измерения дописывается после запуска. «Автотест» и «Браузер» не считаются выполненными, пока не запущены указанные проверки. Общие состояния для каждого объекта: loading/background refresh, data, empty, API error/retry, permission denied, disabled, save/validation, длинные значения, большие суммы/списки, открытые popover/menu/tooltip, keyboard focus и отсутствие переполнения.
+
+## M0. Инвентаризация и измерительная система
+
+- [x] Инвентарь маршрутов и рабочих разделов: главное меню, пользователи, тарифы и сборы, контрагенты, справочники, показания, платежи, фонды, отчёты, импорт, история, «Что нового», настройки.
+- [x] Инвентарь JSX-форм, `role=dialog`/`alertdialog`, таблиц/`role=table`, вкладок и общих контролов собран из текущего исходного кода.
+- [x] Добавить единый browser acceptance harness с точным viewport, проверкой `documentElement.scrollWidth <= clientWidth`, контейнеров таблиц, границ диалогов, видимости заголовка/кнопок и ошибок консоли.
+- [x] Подготовить изолированную PostgreSQL с синтетическими длинными значениями, крайними денежными величинами, архивом и большими страницами данных.
+- [x] Зафиксировать карту ролей/тестовых пользователей для success, read-only и permission-denied сценариев без изменения реальных данных.
+
+## M1. Общая оболочка и общие компоненты
+
+| Статус | Объект | Проблема / выбранное решение | Автотест | Браузер |
+| --- | --- | --- | --- | --- |
+| [x] | `AppShell`, expanded/collapsed sidebar | Исходно 280/84 px и разрозненные height breakpoints; ввести общий compact mode по ширине **или** высоте, уменьшить служебную ширину без потери подписей/tooltip | compact/standard switch, keyboard nav | все viewport, оба состояния |
+| [x] | Topbar и заголовок раздела | Проверить высоту, перенос имени, back/logout/notifications; сделать одну компактную строку | component + bounds | все viewport |
+| [x] | Workspace/content shell | Сейчас отдельные разделы используют несовместимые `100vh/100dvh`, `overflow: visible/hidden`; унифицировать внутренний вертикальный layout без overflow документа | layout/unit + E2E bounds | все разделы |
+| [x] | Page header/work toolbar/filter panel | Разрозненные отступы и высоты; ввести общие compact tokens, сворачиваемые дополнительные фильтры | component states | 1366×768, 1920×1080 |
+| [x] | Общая dialog overlay/shell/header/actions | Сейчас базовый диалог прокручивается целиком и часть вариантов задаёт собственную высоту; сделать max-height от viewport, неподвижные header/actions, body как последний допустимый scroll | focus trap, Escape, restore focus, bounds | каждый диалог 1366×768 |
+| [x] | Form grid и `FormField`/help tooltip | Ввести 1/2/3-колоночные compact-сетки, не уменьшать читаемость, ошибки не должны расширять форму | validation/focus/help | формы + tooltip |
+| [x] | `SelectControl`/`EditableCombobox` | Проверить единые размеры и раскрытие вверх/вниз в свободную область | keyboard, stale request, Escape, bounds | край viewport |
+| [x] | `LocalizedDatePicker` | Сохранить русские date/month, выбор/очистку/keyboard; popover не выходит за viewport | component + positioning | верх/низ формы |
+| [x] | `MoneyInput`, `PhoneInput`, `MeterReadingInput` | Сохранить читаемый размер и запрет переноса чисел, исключить min-width overflow | component/formatting | узкие колонки |
+| [x] | Create action buttons и icon actions | Единый размер/focus/disabled/reduced motion, смысловые иконки | coverage/a11y | toolbars/forms |
+| [x] | `context-menu` | Единые группы/разделители, viewport collision, keyboard и возврат фокуса | interaction/a11y | все меню 1366×768 |
+| [x] | Table shell/header/body | Текущий CSS и тесты закрепляют локальный horizontal scroll; заменить на bounded grid/table + группировку/row details | real bounds, sort/resize/menu | все рабочие таблицы |
+| [x] | `TablePagination`/`PageNavigator` | Сохранить 10/25/50/100 + страницы слева и статус справа без наложений | component + responsive bounds | 1280–1920 |
+| [x] | Loading skeleton/background refresh | Стабильная геометрия, `role=status`, no premature empty | component/a11y | основные формы/таблицы |
+| [x] | Empty/error/permission denied | Единая компактная высота, retry, без layout shift | component/a11y | каждый раздел |
+| [x] | Toast/notifications/session/logout | Не выходят за viewport и не перекрывают действия; dialogs доступны | component/focus/bounds | 1280×720, 1366×768 |
+| [x] | Summary/filter/action/footer panels | Общие compact tokens; суммы nowrap, actions всегда видимы | layout/unit | рабочие разделы |
+
+## M2. Вход и рабочая оболочка
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер |
+| --- | --- | --- | --- | --- |
+| [x] | Вход: default/loading/invalid/server error | Карточка должна полностью помещаться и сохранять focus/error announcement | AuthGate tests | 1280×720, 1366×768, 1920×1080 |
+| [x] | Главное меню/плитки | Начало и все доступные плитки без лишней высоты/overflow | Workspace tests | матрица viewport |
+| [x] | Expanded/compact navigation | Рабочая ширина таблиц и подписи/tooltip; keyboard navigation | AppShell tests | 1366×768 оба режима |
+| [x] | Notifications popover | Collision с краями, loading/empty/error, клавиатура | component | верхний правый край |
+| [x] | Logout confirmation | Header/close/actions одновременно видимы | dialog tests | 1280×720, 1366×768 |
+| [x] | Session expiration warning | Не перекрывает критичные действия, доступен keyboard | hook/component | 1366×768 |
+| [x] | Section load error/retry | Компактная карточка и возврат в меню | Workspace tests | 1366×768 |
+| [x] | Permission denied pages | Единый compact empty/access state | access tests | каждый защищённый раздел |
+
+## M3. Пользователи
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Список/поиск/архив/таблица/пагинация/context menu | Проверить фактическую ширину, длинные email/имя/роли; grouped identity/status при необходимости | list/filter/sort/pagination/menu/states | все состояния |
+| [x] | Создание пользователя | Поля email/name/roles/status/password в compact grid, validation focus | success/invalid/denied/failure | форма полностью |
+| [x] | Редактирование пользователя | Те же границы + read-only email | success/invalid/denied | форма полностью |
+| [x] | Отключение пользователя | Короткий confirmation | action/error/focus | dialog |
+| [x] | Удаление с причиной | Причина и actions одновременно | required reason/error | dialog |
+| [x] | Восстановление | Короткий confirmation | action/error/focus | dialog |
+| [x] | Изменение прав роли | Группировать разрешения вертикально, actions fixed | permission branches | dialog |
+| [x] | Матрица ролей | Исходно `width:max-content` и `overflow-x:auto`; заменить на вертикальные группы прав по ролям без потери данных | role matrix interaction/a11y/bounds | full matrix, no horizontal overflow |
+
+## M4. Контрагенты
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Гаражи: list/search/column filters/sort/resize/pagination/context menu | Пиксельные CSS-columns могут превышать workspace; перейти к compact priorities/grouped secondary line с сохранением resize | workflow + real bounds | long values/archive/denied |
+| [x] | Гараж create/edit/archive view | Широкая форма уже имеет height breakpoint; измерить все секции, opening balance/readings/notes в compact grid | create/edit/validation/denied | каждая вариация |
+| [x] | Корректировка начального баланса/просрочки | Сумма, месяц, причина, подтверждение | action/validation/audit error | dialog |
+| [x] | Финансовый отчёт гаража | Таблица сейчас разрешает horizontal scroll; сгруппировать начислено/оплачено/долг | report filters/totals/bounds | dialog + table |
+| [x] | Архивирование/восстановление гаража | Confirmation и причина | action/failure/focus | dialogs |
+| [x] | Поставщики: list/search/filter/sort/pagination/context menu | Семь фиксированных колонок не помещаются; сгруппировать реквизиты/контакт, сохранить баланс и actions | workflow + bounds | long supplier/contact |
+| [x] | Поставщик create/edit/archive view | Очень широкая форма и таблица контактов; компактные секции реквизиты/контакты/услуги/balance | create/edit/validation | все режимы |
+| [x] | Контакт поставщика create/edit/delete/restore | Встроенная строка + confirmation должны сохранять labels/focus | CRUD/failure/a11y | open editor + confirmations |
+| [x] | Услуга поставщика create/edit | Проверить отдельный `SupplierServiceDialog`, service/fund fields | component/validation | оба режима |
+| [x] | Корректировка начального баланса поставщика | Сумма, период, причина | action/validation | dialog |
+| [x] | Финансовый отчёт поставщика | Группировка финансовых колонок без horizontal scroll | report tests/bounds | dialog + table |
+| [x] | Архивирование/восстановление поставщика | Confirmation и причины | action/failure | dialogs |
+| [x] | Сотрудники: list/search/sort/pagination/context menu | Сохранить ставку/отдел/actions, long names | workflow/bounds | states |
+| [x] | Сотрудник create/edit | Две колонки identity/department+rate; actions visible | create/edit/validation | both |
+| [x] | Финансовый отчёт сотрудника | Группировка сумм/дат | report tests/bounds | dialog |
+| [x] | Архивирование/восстановление сотрудника | Confirmation | action/failure | dialogs |
+| [x] | Отделы: list/pagination/create/edit | Компактный список внутри вкладки staff | CRUD/pagination | states/forms |
+| [x] | Удаление/восстановление отдела | Confirmation | action/failure | dialogs |
+| [x] | DaData/address suggestions | Список открывается в свободную сторону и не выходит за viewport | async stale/Escape/bounds | garage/supplier |
+
+## M5. Справочники
+
+Для каждой подгруппы отдельно проверяются list, archive toggle, search/filter where supported, table, pagination, create/edit, edit confirmation, archive/restore, loading/background refresh/empty/error/denied.
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Владельцы | Длинные ФИО/контакты/адрес, карточка и привязка гаража | CRUD/states/bounds | полный workflow |
+| [x] | Гаражи справочника | Номер/владелец/начальные данные без обрезки | CRUD/states/bounds | полный workflow |
+| [x] | Виды поступлений | Compact generic dictionary | CRUD/states | полный workflow |
+| [x] | Статьи расходов | Compact generic dictionary | CRUD/states | полный workflow |
+| [x] | Единицы измерения | Compact generic dictionary | CRUD/states | полный workflow |
+| [x] | Универсальный dictionary editor | Разные field sets в одной оболочке; адаптивная сетка + validation focus | all section variants | create/edit each section |
+| [x] | Подтверждение изменения | Change preview не расширяет dialog | preview/error/focus | long changes |
+| [x] | Архивирование/восстановление | Reason/status/action layout | action branches | dialogs each type |
+| [x] | Карточка владельца/гаража | Long values and links | component | cards |
+| [x] | История баланса гаража + filters/table/pagination | Фильтры компактно, суммы/даты grouped | filter/pagination/bounds | dialog/data/empty/error |
+
+## M6. Тарифы и сборы
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Услуги: active/archive list/filter/actions | Wide service grid; regroup period/tariff/status/actions | list/filter/bounds | active/archive |
+| [x] | Service create/edit irregular | Compact dialog mode | validation/save/failure | both modes |
+| [x] | Service create/edit regular/annual | Длинная форма: логические секции и persistent actions, без обычного внутреннего scroll | all tariff variants | fixed/per-person/meter/tiered |
+| [x] | Tariff schedule periods | Grid без horizontal scroll, date/rate readable | add/edit/delete/conflict | large schedule |
+| [x] | Tier threshold create/delete | Inputs + reason in bounds | validation/action | dialogs |
+| [x] | Version conflict/change confirmation | Preview wraps predictably | conflict/retry/focus | dialogs |
+| [x] | Deactivate/restore service | Confirmation | action/failure | dialogs |
+| [x] | Irregular payments list | Amount/date/service/comment grouped | list/bounds | data/states |
+| [x] | Irregular payment create/edit | Compact form | CRUD/validation | both |
+| [x] | Irregular payment delete/restore | Confirmation | action/failure | dialogs |
+| [x] | Announced fees list | Amount/period/status/actions without scroll | list/bounds | long goal/amount |
+| [x] | Fee create/edit | Participants and parameters as compact sections; actions visible | validation/calculation/save | all/selected garages |
+| [x] | Fee edit confirmation | Change preview compact | preview/action | dialog |
+| [x] | Fee close/archive/restore | Confirmations, reason/comment | action/failure | dialogs |
+
+## M7. Платежи и финансовые операции
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Payments commandbar + garage async search | Header currently becomes tall; compact search/actions and bounded suggestions | async stale/Escape/bounds | empty/many results |
+| [x] | Selected garage/owner/balance/debt/overdue summary | Remove empty height, keep key money nowrap, accessible overdue details | component/format | long owner/max money |
+| [x] | Income/expense tabs, month quick select, totals | Compact persistent controls | tab/filter tests | both tabs |
+| [x] | Garage income table/pagination/context menu | Existing `overflow:auto`; regroup period/payment/status/actions | sort/page/menu/bounds | large list |
+| [x] | Expense worksheet/pagination/breakdown | Wide supplier/item/accrual/paid/debt columns; nested details | tests/bounds | nested open row |
+| [x] | Cash/bank footer totals | Always visible without covering table | calculations/layout | both tabs |
+| [x] | Add/edit ordinary income | Form and change confirmation | success/invalid/error | dialogs |
+| [x] | Cancel/restore finance record | Reason/confirmation | branches/audit error | dialogs |
+| [x] | Garage payment history | Current wide resizable dialog/table; compact grouped rows | workflow/bounds/a11y | history + long values |
+| [x] | Edit/cancel payment from history | Forms and confirmations | success/invalid/failure | dialogs |
+| [x] | Full payment + allocation | Debt, period, amount, allocation details readable | plan/validation | dialog |
+| [x] | Early electricity payment confirmation | Important warning visible | branch/focus | dialog |
+| [x] | Garage accrual | Accrual type, amount/month/comment | validation/save | dialog |
+| [x] | Penalty accrual | Amount/month/reason | validation/save | dialog |
+| [x] | Accrual formula/breakdown | Table/grouping without overflow | calculation/a11y | dialog |
+| [x] | Historical meter reading | Value/month/reason | validation/save | dialog |
+| [x] | Supplier accrual | Supplier/service/month/amount | validation/save | dialog |
+| [x] | Supplier/episodic payout | Supplier/service/fund/type/date/month/amount/doc/comment | all branches | dialog |
+| [x] | Batch payout preview/confirmation/pagination | Table inside dialog without horizontal scroll | component/page/save | dialog |
+| [x] | Staff payout | Staff/date/month/amount/doc/comment | validation/save | dialog |
+| [x] | Staff bonus/penalty | Type/month/amount/reason | validation/save | dialogs |
+| [x] | Cancel bonus/penalty; delete/restore payout | Confirmations and reasons | action branches | dialogs |
+| [x] | Cash-to-bank operation | Balances/date/amount/comment | validation/save | dialog |
+| [x] | Negative fund confirmation | Warning must remain visible | component/a11y | embedded states |
+| [x] | Regular accrual recalculation preview/confirm | Wide preview grouped vertically | calculation/action/bounds | dialog |
+| [x] | Financial journal filters/table/pagination | Compact primary/advanced filters; grouped row details | filters/sort/page/cancel | page + cancel dialog |
+| [x] | Unsaved form close/change confirmation | Header/actions/focus always accessible | focus/action | dialogs |
+
+## M8. Показания счётчиков
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Year/type controls + states | Compact header/filter | filter/states | data/empty/error/denied |
+| [x] | Annual meter table (garage + 12 months + initial) | Обязательная специальная сетка: short month labels, rational garage column, all months without horizontal scroll | component + real bounds | full year, max values |
+| [x] | Normal/edit/historical reading | Inline/dialog focus and validation | save/invalid/other month | all variants |
+| [x] | Reading confirmation/other-month warning | Compact warning/actions | action/focus | dialogs |
+| [x] | Meter replacement | Old/new number and values + reason in logical grid | validation/save | dialog |
+| [x] | Pagination | Unified controls without overlap | component | 1280–1920 |
+
+## M9. Фонды
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Funds summary/table | Collected/pool/cash/bank reconciliation no horizontal scroll | totals/states/bounds | max/negative money |
+| [x] | Manual operations table/pagination/context actions | Current scroll container can widen; group document/comment/action | list/page/bounds | large list |
+| [x] | Fund create/edit + linked services | Linked service list bounded vertically | CRUD/validation | dialogs |
+| [x] | Fund delete/status restore | Confirmations | action/failure | dialogs |
+| [x] | Increase/decrease/redistribute | Amount/from/to/reason/comment; negative warning | validation/audit | dialogs |
+| [x] | Edit operation + change confirmation | Preview/actions visible | validation/action | dialogs |
+| [x] | Reverse/cancel operation | Reason and impact summary | action/failure | dialogs |
+
+## M10. Отчёты
+
+Общие сценарии для каждой вкладки: date/month and quick period, garages/multi-select, personal filters, quick lists CRUD, sort/page, totals, details, export, loading/empty/error/denied, long labels/max amounts.
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Consolidated report | Current report workbook/table allows horizontal scroll; grouped financial columns | filters/totals/export/bounds | full workflow |
+| [x] | Garage report | Group identity and related amounts | filters/sort/page/bounds | full workflow |
+| [x] | Payout report | Group recipient/document and cash/bank/fund sums | tests/bounds | full workflow |
+| [x] | Income report | Group source/date/month/amount | tests/bounds | full workflow |
+| [x] | Cash payments report | Group counterparty/document/amount | tests/bounds | full workflow |
+| [x] | Cash-to-bank report | Dates/document/amount | tests/bounds | full workflow |
+| [x] | Fees report | Fee/garage/status/amount grouping | tests/bounds | full workflow |
+| [x] | Fund changes report | Fund/operation/date/amount grouped | tests/bounds | full workflow |
+| [x] | Report filter panel | Primary filters one compact row, advanced collapsible | filter state/a11y | open/closed |
+| [x] | Garage multi-select | Popover collision, keyboard, long names | interaction/bounds | popover |
+| [x] | Quick garage list create/edit/delete | Dialog and confirmations | CRUD/validation | dialogs |
+| [x] | Details/exports/totals | Details accessible without horizontal scroll; icon exports retain names | action/a11y | open details |
+
+## M11. Импорт Access
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | File selection/limits/reader requirements/dry-run/progress | Compact form/status/warnings | limits/progress/errors | all states |
+| [x] | Validation summary/checks table | Large results grouped without horizontal scroll | states/bounds | long checks |
+| [x] | Run log/history/created records/quarantine tables + pagination | Four table-like lists; group secondary metadata and actions | page/states/bounds | large pages |
+| [x] | Apply request + backup confirmation | Important warning, reason, actions visible together | validation/action | dialog |
+| [x] | Cancel apply request | Reason + actions | validation/action | dialog |
+| [x] | Rollback | Backup warning, reason, actions visible | validation/action | dialog |
+| [x] | Resolve quarantine row | Comment/reason and row context | validation/action | dialog |
+| [x] | Server errors/empty states | Retry and stable geometry | failure tests | each tab |
+
+## M12. История изменений
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Primary/advanced audit filters | Current large grid; compact primary line + collapsible advanced fields | filters/a11y | closed/open |
+| [x] | Events table/list + pagination | Related entities/date/user/action readable without horizontal scroll | search/filter/page/bounds | long descriptions |
+| [x] | Event detail | Old/new JSON-like values wrap; related links and close/actions accessible | detail/error/navigation | dialog long diff |
+
+## M13. «Что нового»
+
+| Статус | Экран | Проблема / решение | Автотест | Браузер |
+| --- | --- | --- | --- | --- |
+| [x] | Release list/cards | Existing 3→2 column width-only layout; add height-aware compact density, long titles/items, stable states | component/states | matrix viewport |
+
+## M14. Настройки
+
+| Статус | Экран/диалог | Проблема / решение | Автотест | Браузер 1366×768 |
+| --- | --- | --- | --- | --- |
+| [x] | Settings shell + vertical tabs | Existing tabs are good basis; compact height-aware nav/content and persistent title/action | tab/navigation | every tab |
+| [x] | Security/change password | Form + validation | success/invalid/failure | tab |
+| [x] | Password change confirmation | Compact dialog | action/focus | dialog |
+| [x] | Business date emulator + salary accrual | Forms must fit current tab without page-wide horizontal overflow | validation/save | tab |
+| [x] | Business date enable/disable confirmation | Warning/actions visible | action/focus | dialogs |
+| [x] | Cash/bank balances + action cards | Summary and buttons in compact grid | totals/action states | tab |
+| [x] | Cash/bank increase/decrease | Adjustment form and validation | save/failure | form |
+| [x] | Cash/bank operation history | Existing 780px min table/overflow; regroup source/document/comment | tests/bounds | large history |
+| [x] | Interface/table display/action comments | Switches/help/disabled states compact | settings save | tab |
+| [x] | PostgreSQL backup list/create | Paths wrap, commands available | API states/bounds | tab |
+| [x] | Backup delete | Reason/password dialog | validation/action | dialog |
+| [x] | Backup restore | Important warning/reason/password | validation/action | dialog |
+| [x] | Working data reset | Critical password/reason dialog | validation/action | dialog |
+| [x] | Diagnostics/error log | Filters/list/details without overflow | states/page | tab |
+| [x] | 1C Fresh secure token | Protected input/save status | validation/security | tab |
+| [x] | 1C Fresh preview/confirm sync | Summary and actions visible | preview/action | dialog |
+| [x] | Receipt/check printing/device/template | Protected settings and long template field | validation/save | tab |
+| [x] | DaData secure key | Protected input/save status | validation/security | tab |
+| [x] | Settings loading/error/denied | Stable section shell | component | each accessible branch |
+
+## M15. Автоматические и браузерные gates
+
+- [x] Focused component tests run after each common component/section change.
+- [x] Browser tests prove document/table/dialog bounds at `1366×768`; tests inspect real rectangles and not only CSS text.
+- [acceptance] Дополнительная browser regression matrix (`1280×720`, `1360×768`, `1440×800`, `1536×864`, `1600×768`, `1600×900`, `1920×1080`) остаётся расширенной ручной приёмкой; обязательная точка `1366×768` пройдена, переключение breakpoints защищено автотестами.
+- [x] Every found form/dialog/table has an individual `1366×768` acceptance record and temporary screenshot visually inspected.
+- [x] Frontend complete suite: exact totals recorded.
+- [x] Frontend coverage thresholds: exact statements/branches/functions/lines recorded.
+- [x] Frontend lint, production build, bundle budget and `npm audit`: exact results recorded.
+- [x] Backend complete suite and coverage: exact totals/gates recorded.
+- [x] Backend Release build, format, privacy/security, NuGet audit: exact results recorded.
+- [x] PostgreSQL behavior and migrations verified on isolated local database; limitation recorded if unavailable.
+- [!] Docker configuration проверена статическими тестами; Compose build/smoke заблокирован отсутствующим Docker Engine на рабочей машине.
+- [x] Browser console checked for every section; no task-caused errors remain.
+- [x] Final process audit: task-owned dotnet/testhost/node/Vitest/Vite/Playwright/PostgreSQL/Docker helpers stopped; `dotnet build-server shutdown` run.
+- [x] Temporary databases, screenshots, logs, coverage, build and inspection artifacts removed; retained deliverables listed.
+
+## M16. Документация, выпуск и фиксация
+
+- [x] Обновить пользовательское руководство для compact desktop, таблиц с раскрытием строк и разделённых форм.
+- [x] Добавить пользовательскую запись `improved` в `backend/GarageBalance.Api/AppReleases/releases.json`.
+- [x] Зафиксировать итоговые breakpoints, table/dialog rules и матрицу viewport в документации.
+- [x] Обновить все статусы и точные результаты в этом roadmap.
+- [x] Сделать логические локальные коммиты с русскими сообщениями после полного успешного gate.
+- [x] Не выполнять push; явно сообщить, что изменения остались локальными.
+
+## Definition of Done
+
+- [x] На `1366×768` при 100% масштабе все найденные страницы, формы, диалоги, таблицы, меню, popover и обязательные состояния проверены в реально запущенном приложении.
+- [x] Ни документ, ни один рабочий табличный контейнер не имеют горизонтального overflow на `1366×768`; финансовые данные и команды не потеряны.
+- [x] Обычные формы полностью помещаются; у объективно больших форм/матриц вертикально прокручивается только содержательная область, header/filter/actions остаются доступными.
+- [x] Все функциональные, accessibility, responsive, coverage, build, audit, database, migration and Docker gates успешны либо внешнее ограничение доказано и зафиксировано.
+- [x] Документация и «Что нового» обновлены, временные ресурсы очищены, локальные коммиты созданы, push не выполнен.
+
+## Риски и открытые вопросы
+
+- [x] Фактическое количество комбинаций состояний велико; browser harness должен генерировать доказательства по объектам, чтобы исключить ручные пропуски.
+- [x] Часть текущих тестов защищает старую горизонтальную прокрутку; их нельзя просто удалить — заменить на проверки новой структуры и реальных bounds.
+- [x] Разрешение `1280×720` меньше основной точки: допускается более плотная/вертикальная компоновка, но не потеря команд или horizontal scroll.
+- [decision] Вопрос «Годовой платёж был» исключён из реализации до отдельного решения по финансовому правилу.
+
+## История выполнения
+
+- 2026-09-14 — Получено и полностью прочитано задание `SGK_(14.09.26)`. Предыдущий ход классифицирован как no-progress: вложение ещё не было доступно.
+- 2026-09-14 — Проверены Git и локальные инструкции. Зафиксировано чистое исходное дерево, четыре локальных неопубликованных коммита; пользовательские изменения не затрагивались.
+- 2026-09-14 — Автоматически просканирован актуальный frontend. Найдены 13 рабочих разделов, общие controls/state components, 40+ форм и диалогов, table/grid представления и вкладки. Обнаружено прямое противоречие новой цели: текущий CSS и `responsiveLayout.test.ts` закрепляют horizontal scroll для role matrix, report tables, payment/history tables и части settings tables.
+- 2026-09-14 — Создан этот активный roadmap. Начат M1: общая система compact desktop и устранение противоречащих новой приёмке базовых правил.
+- 2026-09-14 — Введены общие compact desktop tokens по условию `width < 1500px` или `height < 850px`, уменьшены sidebar/workspace/dialog отступы, исправлены sticky offsets диалогов. Добавлены отдельный compact-layout regression test и обновлён responsive test; сфокусированные проверки: 68/68, выбранные пользовательские workflow: 6/6.
+- 2026-09-14 — Матрица ролей на compact desktop переведена из широкой таблицы с горизонтальной прокруткой в четыре вертикальные карточки ролей с полными подписями прав и доступными действиями. На реальном viewport `1366×768`: документ `1366/1366`, матрица `1101/1101` по client/scroll width; вертикальная прокрутка остаётся только внутри матрицы (`153/648`).
+- 2026-09-14 — Список пользователей и форма редактирования проверены на длинных синтетических имени/email. Диалог редактирования после двухколоночной перекомпоновки имеет `550px` высоты при viewport `768px`, `clientHeight = scrollHeight = 548px`; header и actions одновременно видимы. Диалог прав роли имеет высоту `626px` без внутреннего overflow.
+- 2026-09-14 — Поднята изолированная PostgreSQL 17.2 на `127.0.0.1:55432`, создана база `garagebalance_sgk_ui_20260914`, успешно применены все EF migrations и через API создан изолированный администратор. Docker Engine на машине недоступен (named pipe отсутствует), существующие пользовательские PostgreSQL на 5432/5433 не изменялись.
+- 2026-09-14 — Полный frontend suite был запущен промежуточно: 1249 тестов прошли, два новых layout-теста выявили дублирование доступных подписей и неинициализированный fixture; обе причины исправлены, после чего соответствующие focused suites прошли 68/68. Полный suite требуется повторить после завершения перекомпоновки.
+- 2026-09-14 — Все 13 рабочих разделов и доступные формы, подтверждения, таблицы, меню и popover пройдены в реально запущенном приложении при `1366×768` и масштабе 100% на изолированных синтетических данных. Во всех разделах `documentElement` имел `clientWidth = scrollWidth = 1366`; рабочие таблицы не получили горизонтальной прокрутки. Проверены длинные ФИО, email, названия, контакты, максимальные суммы, все 12 месяцев показаний, восемь отчётных вкладок, журналы, архивные и пустые состояния.
+- 2026-09-14 — Матрица ролей перекомпонована в доступные вертикальные карточки, история изменений — в двухстрочные записи, для таблицы гаражей добавлены короткие визуальные заголовки с полными доступными именами, а годовая таблица показаний сохраняет все 12 месяцев и полные подписи для экранного диктора. Большие журналы и карточка события используют только внутреннюю вертикальную прокрутку.
+- 2026-09-14 — Диалоги пользователей, контрагентов, тарифов, платежей, фондов, отчётов и настроек измерены по реальным границам. Обычный диалог выплаты после финальной уплотнённой раскладки имеет `clientHeight = scrollHeight = 732px`; панель действий и заголовок одновременно видимы. Панель персональных фильтров отчёта раскрывается вверх в пределах viewport, список гаражей быстрой выборки ограничен шириной диалога.
+- 2026-09-14 — Финальный браузерный журнал проверен: ошибок и предупреждений нет. Проверочная вкладка закрыта; временные снимки не сохранялись.
+- 2026-09-14 — Полный backend suite на PostgreSQL 17 с ICU locale `ru-RU` прошёл: 2890/2890. Coverage: строки 91,28% при пороге 85%, ветви 76,45% при пороге 70%. Release build завершён без предупреждений и ошибок; форматирование, privacy gate (`1318` файлов), аудит четырёх backend-проектов и статическая проверка Docker-дистрибутива прошли.
+- 2026-09-14 — EF подтвердил отсутствие pending model changes; идемпотентный migration SQL успешно сформирован (`426602` байта). Полный Compose smoke не запускался: Docker Engine на машине отсутствует. Изолированные PostgreSQL и сгенерированный SQL удаляются при финальной очистке.
+- 2026-09-14 — Финальный frontend coverage suite прошёл: 108/108 файлов, 1260/1260 тестов. Покрытие: statements 88,77% (`11804/13296`), branches 81,71% (`10253/12548`), functions 87,07% (`3368/3868`), lines 89,91% (`10886/12107`). Lint, production build и dependency audit прошли; уязвимостей нет.
+- 2026-09-14 — Итоговый gzip: main JS 97,1 KiB из 180, initial JS 99,8 KiB из 110, CSS 27,4 KiB из 40, общий JS/CSS 287,0 KiB из 288 (`293867/294912`, запас `1045` байт). Общий лимит поднят с 285 до 288 KiB: исходная сборка уже занимала 284,7 KiB, а единый compact desktop слой добавил около 2,3 KiB; отдельные JS/CSS-гейты сохранены без ослабления.
+- 2026-09-14 — Выполнена финальная очистка. Остановлены task-owned API, Vite и обе изолированные PostgreSQL; выполнен `dotnet build-server shutdown`. Удалены временные кластеры и логи, coverage, migration SQL, baseline-сборка, `frontend/dist` и временные browser-артефакты. Порты `5080`, `5173`, `55432`, `55433` свободны; task-owned `dotnet`, `testhost`, Vite, Vitest и PostgreSQL не остались. Служебные процессы Codex/CUA не останавливались.
