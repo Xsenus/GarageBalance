@@ -3487,12 +3487,11 @@ function PaymentsPrototypePanel({
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = rankGarageSearchResults(garageOptions, normalizedSearch)
     .slice(0, 20)
-  const shouldShowGarageResults = garageSearchOpen && normalizedSearch.length > 0
+  const shouldShowGarageResults = garageSearchOpen
   const garageSearchListId = useId()
   useEffect(() => {
     const query = garageSearch.trim()
-    if (!query) {
-      setGarageSearchGarages([])
+    if (!garageSearchOpen) {
       setGarageSearchLoading(false)
       setGarageSearchError(null)
       return
@@ -3501,7 +3500,7 @@ function PaymentsPrototypePanel({
     setGarageSearchLoading(true)
     setGarageSearchError(null)
     return scheduleDebouncedRequest({
-      delay: 250,
+      delay: query ? 250 : 0,
       requestTimeout: garageSearchTimeoutMs,
       timeoutError: new Error('Поиск гаражей занял слишком много времени. Повторите запрос.'),
       request: (signal) => dictionaryClient.getGaragesPage
@@ -3521,7 +3520,7 @@ function PaymentsPrototypePanel({
         setGarageSearchLoading(false)
       },
     })
-  }, [auth.accessToken, dictionaryClient, garageSearch])
+  }, [auth.accessToken, dictionaryClient, garageSearch, garageSearchOpen])
 
   useEffect(() => {
     if (!selectedGarageId || selectedGarageOverdueDebt <= 0) {
@@ -5531,9 +5530,7 @@ function PaymentsPrototypePanel({
       ) : null}
 
       {activeTab === 'income' ? !selectedGarage ? (
-        loading
-          ? <TableLoadingState label="Загружаем раздел платежей" />
-          : <p className="empty-state" role="status">Выберите гараж для платежей.</p>
+        loading ? <TableLoadingState label="Загружаем раздел платежей" /> : null
       ) : (
         <>
           {paymentHistoryOpen ? (

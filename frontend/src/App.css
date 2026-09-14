@@ -9549,10 +9549,6 @@ button.operation-row:focus-visible {
     width: 100%;
   }
 
-  .workspace--payments .payments-prototype > .empty-state {
-    padding-left: 327px;
-  }
-
   .workspace--payments .payments-prototype-actions--sheet {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -9998,6 +9994,21 @@ button.operation-row:focus-visible {
 
   .workspace--releases .release-panel {
     margin-top: 0;
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1499px), (min-width: 1200px) and (max-height: 849px) {
+  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 2fr);
+    align-items: end;
+  }
+
+  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row > .report-quick-periods {
+    grid-column: auto;
+  }
+
+  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row .report-quick-periods__button {
+    white-space: nowrap;
   }
 }
 

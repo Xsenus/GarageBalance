@@ -108,7 +108,7 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.workspace--payments .payments-prototype-commandbar {\n    grid-template-columns: max-content minmax(0, 1fr);\n    grid-template-areas: "tabs search";')
     expect(appCss).toContain('column-gap: 15px;\n    padding-left: 46px;')
     expect(appCss).toContain('.workspace--payments .payments-prototype-search {\n    width: 100%;')
-    expect(appCss).toContain('.workspace--payments .payments-prototype > .empty-state {\n    padding-left: 327px;')
+    expect(appCss).toContain('@media (min-width: 1200px) and (max-width: 1499px), (min-width: 1200px) and (max-height: 849px) {\n  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row {\n    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 2fr);')
     expect(appCss).toContain('.workspace--settings .settings-tab-list {\n    margin-top: 50px;')
     expect(appCss).toContain(') > .topbar {\n    position: absolute;\n    z-index: 2;')
     expect(settingsSource).toContain('aria-orientation="vertical"')
