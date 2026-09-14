@@ -30,6 +30,7 @@ import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
+import { useColumnResize } from '../../shared/useColumnResize'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 import { formatFinanceGarageReference, formatFinanceReference } from './financeChangePreview'
@@ -68,6 +69,50 @@ const financeScreenRequestLimit = 50
 const financePreviewRequestLimit = 8
 const dictionaryScreenRequestLimit = 100
 const garageSearchTimeoutMs = 10_000
+type ExpenseWorksheetColumnKey = 'recipient' | 'service' | 'opening' | 'cost' | 'paid' | 'closing' | 'fund' | 'action'
+type ExpenseWorksheetColumnDefinition = { key: ExpenseWorksheetColumnKey; label: string; defaultWidth: number; minWidth: number }
+const expenseWorksheetColumnStorageKey = 'garagebalance.payments.expenseWorksheetColumnWidths'
+const expenseWorksheetColumnDefinitions: ExpenseWorksheetColumnDefinition[] = [
+  { key: 'recipient', label: 'Получатель', defaultWidth: 190, minWidth: 130 },
+  { key: 'service', label: 'Услуга', defaultWidth: 180, minWidth: 120 },
+  { key: 'opening', label: 'Входящий баланс', defaultWidth: 135, minWidth: 96 },
+  { key: 'cost', label: 'Стоимость', defaultWidth: 115, minWidth: 88 },
+  { key: 'paid', label: 'Оплачено', defaultWidth: 110, minWidth: 82 },
+  { key: 'closing', label: 'Исходящий баланс', defaultWidth: 135, minWidth: 96 },
+  { key: 'fund', label: 'Текущий размер фонда', defaultWidth: 150, minWidth: 112 },
+  { key: 'action', label: 'Действие', defaultWidth: 86, minWidth: 72 },
+]
+
+function getDefaultExpenseWorksheetColumnWidths() {
+  return expenseWorksheetColumnDefinitions.reduce<Record<ExpenseWorksheetColumnKey, number>>((widths, column) => {
+    widths[column.key] = column.defaultWidth
+    return widths
+  }, {} as Record<ExpenseWorksheetColumnKey, number>)
+}
+
+function loadExpenseWorksheetColumnWidths() {
+  const defaults = getDefaultExpenseWorksheetColumnWidths()
+  try {
+    const value = window.localStorage.getItem(expenseWorksheetColumnStorageKey)
+    if (!value) return defaults
+    const stored = JSON.parse(value) as Partial<Record<ExpenseWorksheetColumnKey, number>>
+    return expenseWorksheetColumnDefinitions.reduce<Record<ExpenseWorksheetColumnKey, number>>((widths, column) => {
+      const width = stored[column.key]
+      widths[column.key] = typeof width === 'number' && Number.isFinite(width) ? Math.max(column.minWidth, width) : defaults[column.key]
+      return widths
+    }, {} as Record<ExpenseWorksheetColumnKey, number>)
+  } catch {
+    return defaults
+  }
+}
+
+function saveExpenseWorksheetColumnWidths(widths: Record<ExpenseWorksheetColumnKey, number>) {
+  try {
+    window.localStorage.setItem(expenseWorksheetColumnStorageKey, JSON.stringify(widths))
+  } catch {
+    // Column widths are an optional local UI preference.
+  }
+}
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
 type FinancePreviewStatuses = {
   operations: boolean
@@ -3352,6 +3397,7 @@ function PaymentsPrototypePanel({
   const [overdueDebtDetailsExpanded, setOverdueDebtDetailsExpanded] = useState(() => overdueDebtDetailsPreference(auth.user.id))
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
+  const [expenseWorksheetColumnWidths, setExpenseWorksheetColumnWidths] = useState(loadExpenseWorksheetColumnWidths)
   const [expenseWorksheetMonthFrom, setExpenseWorksheetMonthFrom] = useState(() => getCurrentMonthInputValue())
   const [expenseWorksheetMonthTo, setExpenseWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
@@ -5302,6 +5348,17 @@ function PaymentsPrototypePanel({
         .replace(/\s+г\.$/u, '')
     : `${formatMonth(`${expenseWorksheetMonthFrom}-01`)} — ${formatMonth(`${expenseWorksheetMonthTo}-01`)}`
   const expenseWorksheetTableLabel = `Форма выплат за ${expensePeriodLabel}`
+  const visibleExpenseWorksheetColumns = isEditableExpenseWorksheetPeriod
+    ? expenseWorksheetColumnDefinitions
+    : expenseWorksheetColumnDefinitions.slice(0, 6)
+  const expenseWorksheetTableStyle = useMemo<CSSProperties>(() => ({
+    width: `${visibleExpenseWorksheetColumns.reduce((total, column) => total + expenseWorksheetColumnWidths[column.key], 0)}px`,
+  }), [expenseWorksheetColumnWidths, visibleExpenseWorksheetColumns])
+  const expenseWorksheetColumnResize = useColumnResize(expenseWorksheetColumnDefinitions, expenseWorksheetColumnWidths, setExpenseWorksheetColumnWidths)
+
+  useEffect(() => {
+    saveExpenseWorksheetColumnWidths(expenseWorksheetColumnWidths)
+  }, [expenseWorksheetColumnWidths])
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -5822,21 +5879,29 @@ function PaymentsPrototypePanel({
               />
             </div>
             <div className="payments-prototype-table-scroll">
-              <table className="payments-prototype-table" aria-label={expenseWorksheetTableLabel}>
+              <table className="payments-prototype-table payments-prototype-table--resizable" aria-label={expenseWorksheetTableLabel} style={expenseWorksheetTableStyle}>
+                <colgroup>
+                  {visibleExpenseWorksheetColumns.map((column) => (
+                    <col key={column.key} style={{ width: expenseWorksheetColumnWidths[column.key] }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr>
-                    <th scope="col">Получатель</th>
-                    <th scope="col">Услуга</th>
-                    <th scope="col">Входящий баланс</th>
-                    <th scope="col">Стоимость</th>
-                    <th scope="col">Оплачено</th>
-                    <th scope="col">Исходящий баланс</th>
-                    {isEditableExpenseWorksheetPeriod ? (
-                      <>
-                        <th scope="col">Текущий размер фонда</th>
-                        <th scope="col">Действие</th>
-                      </>
-                    ) : null}
+                    {visibleExpenseWorksheetColumns.map((column) => (
+                      <th scope="col" key={column.key} aria-label={column.label}>
+                        <span>{column.label}</span>
+                        <button
+                          className="icon-button contractors-column-resizer"
+                          type="button"
+                          aria-label={`Изменить ширину столбца ${column.label}`}
+                          onPointerDown={(event) => expenseWorksheetColumnResize.startResize(column.key, event)}
+                          onPointerMove={expenseWorksheetColumnResize.continueResize}
+                          onPointerUp={expenseWorksheetColumnResize.finishResize}
+                          onPointerCancel={expenseWorksheetColumnResize.cancelResize}
+                          onKeyDown={(event) => expenseWorksheetColumnResize.resizeWithKeyboard(column.key, event)}
+                        />
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>

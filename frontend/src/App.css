@@ -4572,6 +4572,11 @@ input.meter-readings-control {
   font-size: 14px;
 }
 
+.payments-prototype-table--resizable {
+  min-width: calc(100% - 4px);
+  table-layout: fixed;
+}
+
 .payments-prototype-table--garage {
   min-width: 1120px;
   table-layout: fixed;
@@ -9898,6 +9903,10 @@ button.operation-row:focus-visible {
     width: calc(100% - 16px);
     min-width: 0;
     table-layout: fixed;
+  }
+
+  .payments-prototype-table--resizable {
+    min-width: calc(100% - 4px);
   }
 
   .finance-data-table {

@@ -124,6 +124,14 @@ describe('compact desktop layout contract', () => {
     }
   })
 
+  it('keeps payout columns adjustable inside a local horizontal scroller', () => {
+    expect(financeSource).toContain("const expenseWorksheetColumnStorageKey = 'garagebalance.payments.expenseWorksheetColumnWidths'")
+    expect(financeSource).toContain('useColumnResize(expenseWorksheetColumnDefinitions')
+    expect(financeSource).toContain('<div className="payments-prototype-table-scroll">')
+    expect(financeSource).toContain('payments-prototype-table payments-prototype-table--resizable')
+    expect(appCss).toContain('.payments-prototype-table--resizable {\n  min-width: calc(100% - 4px);\n  table-layout: fixed;')
+  })
+
   it('keeps report tabs in a single horizontally scrollable strip', () => {
     expect(appCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
     expect(appCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 auto;')
