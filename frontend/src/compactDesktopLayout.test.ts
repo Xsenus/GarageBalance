@@ -72,4 +72,12 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.expense-form {\n    gap: 7px 12px;')
     expect(appCss).toContain('.expense-form textarea {\n    min-height: 48px;\n    height: 48px;')
   })
+
+  it('keeps both tariff summary panels beside each other and protects their pagination', () => {
+    expect(appCss).toContain('.tariffs-page > .dictionary-pagination {\n  min-height: 54px;')
+    expect(appCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 8px minmax(0, 1fr);')
+    expect(appCss).toContain('.tariffs-summary-card {\n    min-height: 280px;')
+    expect(appCss).toContain('.tariffs-row-action-button.icon-button {\n    width: 30px;\n    min-width: 30px;')
+    expect(appCss).toContain('.tariffs-threshold-range__input {\n  width: 62px;\n  min-width: 62px;')
+  })
 })

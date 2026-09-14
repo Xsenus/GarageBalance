@@ -50,14 +50,19 @@ describe('responsive layout styles', () => {
     })
   }
 
-  it('keeps configurable tariff panels level on desktop and stacks them on narrow screens', () => {
+  it('keeps configurable tariff panels level on desktop and compact laptops, then stacks them on narrow screens', () => {
     expect(normalizedAppCss).toContain('.tariffs-page .contractors-bottom-grid {\n  grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 12px minmax(0, 1fr);\n  gap: 0;\n  align-items: stretch;')
     expect(normalizedAppCss).toContain('.tariffs-summary-card {\n  display: flex;\n  min-height: 390px;\n  flex-direction: column;')
     expect(normalizedAppCss).toContain('.tariffs-summary-card > .dictionary-pagination {\n  margin-top: auto;')
     expect(normalizedAppCss).toContain('.fee-campaign-table-scroll {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n  align-self: stretch;\n  min-height: 48px;')
-    expect(normalizedAppCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: 1fr;\n    gap: 12px;')
-    expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n    display: none;')
+    const compactDesktopCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1499px), (max-height: 849px) {'))
+    expect(compactDesktopCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 8px minmax(0, 1fr);\n    gap: 0;\n    align-items: stretch;')
+    expect(compactDesktopCss).toContain('.tariffs-panels-splitter {\n    display: block;')
+    expect(compactDesktopCss).toContain('.tariffs-summary-card {\n    min-height: 280px;')
+    const narrowCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1100px) {'))
+    expect(narrowCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: 1fr;\n    gap: 12px;')
+    expect(narrowCss).toContain('.tariffs-panels-splitter {\n    display: none;')
   })
 
   it('uses shared controls instead of browser-native selects and date pickers', () => {
@@ -218,6 +223,10 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.tariffs-row-actions {\n  display: flex;\n  min-height: 34px;')
     expect(normalizedAppCss).toContain('.tariffs-due-date-cell .contractors-date-value {\n  grid-template-columns: minmax(52px, 64px) minmax(112px, 1fr);\n  align-items: center;')
     expect(normalizedAppCss).toContain('height: 36px;\n  min-height: 36px;\n  box-sizing: border-box;')
+    expect(normalizedAppCss).toContain('.tariffs-page > .dictionary-pagination {\n  min-height: 54px;')
+    expect(normalizedAppCss).toContain('.tariffs-threshold-range__input {\n  width: 62px;\n  min-width: 62px;')
+    const compactDesktopCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1499px), (max-height: 849px) {'))
+    expect(compactDesktopCss).toContain('.tariffs-row-action-button.icon-button {\n    width: 30px;\n    min-width: 30px;\n    height: 30px;')
   })
 
   it('anchors report filters to their disclosure instead of inheriting the fixed calendar position', () => {

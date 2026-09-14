@@ -3649,7 +3649,7 @@ input.meter-readings-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-inline: 18px;
+  padding-inline: 8px;
 }
 
 .tariffs-page .tariffs-salary-summary-row {
@@ -3729,15 +3729,19 @@ input.meter-readings-control {
 
 .tariffs-threshold-range {
   display: flex;
-  flex-wrap: wrap;
+  width: 100%;
+  flex-wrap: nowrap;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   color: #475467;
   font-size: inherit;
+  text-align: center;
 }
 
 .tariffs-threshold-range__input {
-  width: 82px;
+  width: 62px;
+  min-width: 62px;
   text-align: right;
 }
 
@@ -3754,6 +3758,13 @@ input.meter-readings-control {
   grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 12px minmax(0, 1fr);
   gap: 0;
   align-items: stretch;
+}
+
+.tariffs-page > .dictionary-pagination {
+  min-height: 54px;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
 }
 
 .tariffs-panels-splitter {
@@ -9451,17 +9462,42 @@ button.operation-row:focus-visible {
 
   .tariffs-page .contractors-sheet-header span,
   .tariffs-page .contractors-sheet-row > span {
-    padding-inline: 6px;
+    padding: 5px;
     overflow-wrap: anywhere;
   }
 
   .tariffs-page .contractors-bottom-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 8px minmax(0, 1fr);
+    gap: 0;
+    align-items: stretch;
   }
 
   .tariffs-panels-splitter {
-    display: none;
+    display: block;
+  }
+
+  .tariffs-summary-card {
+    min-height: 280px;
+  }
+
+  .tariffs-page .contractors-sheet-header > span:last-child,
+  .tariffs-page .contractors-sheet-row > .tariffs-row-actions-cell {
+    padding-inline: 4px;
+  }
+
+  .tariffs-row-actions {
+    gap: 3px;
+  }
+
+  .tariffs-row-action-button.icon-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+
+  .tariffs-threshold-range {
+    gap: 4px;
   }
 
   .contractors-mini-header--fees,
