@@ -108,7 +108,8 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.workspace--payments .payments-prototype-commandbar {\n    grid-template-columns: max-content minmax(0, 1fr);\n    grid-template-areas: "tabs search";')
     expect(appCss).toContain('column-gap: 15px;\n    padding-left: 46px;')
     expect(appCss).toContain('.workspace--payments .payments-prototype-search {\n    width: 100%;')
-    expect(appCss).toContain('@media (min-width: 1200px) and (max-width: 1499px), (min-width: 1200px) and (max-height: 849px) {\n  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row {\n    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 2fr);')
+    expect(appCss).toContain('@media (min-width: 1200px) and (max-width: 1499px), (min-width: 1200px) and (max-height: 849px) {\n  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row {\n    grid-template-columns: repeat(2, 100px) minmax(0, 1fr);')
+    expect(appCss).toContain('.localized-date-picker input {\n  padding: 9px 40px 9px 10px;\n  text-align: center;')
     expect(appCss).toContain('.workspace--settings .settings-tab-list {\n    margin-top: 50px;')
     expect(appCss).toContain(') > .topbar {\n    position: absolute;\n    z-index: 2;')
     expect(settingsSource).toContain('aria-orientation="vertical"')
@@ -116,6 +117,7 @@ describe('compact desktop layout contract', () => {
 
   it('keeps all payout actions in one compact row with shorter visual labels', () => {
     expect(appCss).toContain('.workspace--payments .payments-prototype-actions--sheet {\n    display: grid;\n    grid-template-columns: repeat(6, minmax(0, 1fr));')
+    expect(appCss).toContain('.payments-prototype-period-row .report-quick-periods__button {\n    min-width: 0;\n    min-height: 40px;')
     for (const label of ['Начисление', 'Выплата', 'Оклад', 'Премия', 'Штраф']) {
       expect(financeSource).toContain(`data-compact-label="${label}"`)
     }
