@@ -9521,10 +9521,9 @@ button.operation-row:focus-visible {
   }
 
   .workspace--payments .payments-prototype-commandbar {
-    grid-template-columns: max-content 1fr;
-    grid-template-areas:
-      "tabs empty"
-      "search search";
+    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-areas: "tabs search";
+    align-items: center;
     padding-left: 50px;
   }
 
@@ -9534,6 +9533,14 @@ button.operation-row:focus-visible {
 
   .workspace--payments .payments-prototype-topline {
     grid-area: search;
+  }
+
+  .workspace--payments .payments-prototype-search {
+    width: 100%;
+  }
+
+  .workspace--payments .payments-prototype > .empty-state {
+    padding-left: 326px;
   }
 
   .workspace--payments .payments-prototype-actions--sheet {
