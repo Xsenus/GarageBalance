@@ -293,7 +293,7 @@
 - [x] Зафиксировать итоговые breakpoints, table/dialog rules и матрицу viewport в документации.
 - [x] Обновить все статусы и точные результаты в этом roadmap.
 - [x] Сделать логические локальные коммиты с русскими сообщениями после полного успешного gate.
-- [x] Не выполнять push; явно сообщить, что изменения остались локальными.
+- [x] Push выполнен после отдельной команды пользователя; дождаться успешного GitHub Actions и проверить staging.
 
 ## Definition of Done
 
@@ -330,3 +330,4 @@
 - 2026-09-14 — Финальный frontend coverage suite прошёл: 108/108 файлов, 1260/1260 тестов. Покрытие: statements 88,77% (`11804/13296`), branches 81,71% (`10253/12548`), functions 87,07% (`3368/3868`), lines 89,91% (`10886/12107`). Lint, production build и dependency audit прошли; уязвимостей нет.
 - 2026-09-14 — Итоговый gzip: main JS 97,1 KiB из 180, initial JS 99,8 KiB из 110, CSS 27,4 KiB из 40, общий JS/CSS 287,0 KiB из 288 (`293867/294912`, запас `1045` байт). Общий лимит поднят с 285 до 288 KiB: исходная сборка уже занимала 284,7 KiB, а единый compact desktop слой добавил около 2,3 KiB; отдельные JS/CSS-гейты сохранены без ослабления.
 - 2026-09-14 — Выполнена финальная очистка. Остановлены task-owned API, Vite и обе изолированные PostgreSQL; выполнен `dotnet build-server shutdown`. Удалены временные кластеры и логи, coverage, migration SQL, baseline-сборка, `frontend/dist` и временные browser-артефакты. Порты `5080`, `5173`, `55432`, `55433` свободны; task-owned `dotnet`, `testhost`, Vite, Vitest и PostgreSQL не остались. Служебные процессы Codex/CUA не останавливались.
+- 2026-09-14 — По отдельной команде пользователя коммиты `e8a62060` и `b22e330a` отправлены в `master`. GitHub Actions `Deploy staging` №34792144239 полностью успешен: backend 2890/2890, coverage строк 91,30% и ветвей 76,45%; frontend 1260/1260, statements 88,77%, branches 81,71%, functions 87,07%, lines 89,91%; audit, privacy, format, lint, production build, bundle и миграции прошли. На VPS применён релиз `b22e330a490f7ae2c3d787f8ac4a58937f7ee35a-309`: backup создан, restore-check подтвердил 50 таблиц, обе проверки `nginx -t` успешны, `garagebalance-staging.service` перезапущен. Независимая внешняя проверка подтвердила HTTP 200 для `/health/ready`, frontend, entry JS и compact CSS; PostgreSQL имеет статус `ok`, защищённый `/api/users` без токена штатно вернул 401.
