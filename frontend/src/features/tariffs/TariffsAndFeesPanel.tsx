@@ -2855,29 +2855,29 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                           disabled
                           value={formatTariffNumber(electricityLowerBound)}
                         />
-                        <span>До</span>
-                        {row.electricityUpperBound == null ? (
-                          <span className="tariffs-threshold-range__unbounded">без границы</span>
-                        ) : (
-                          <MeterReadingInput
-                            aria-label={`${row.category}: ${row.title}: до`}
-                            aria-invalid={Boolean(thresholdRangeErrors[row.id])}
-                            className="contractors-editable-input tariffs-threshold-range__input"
-                            disabled={!canManageTariffs || isRowDisabled}
-                            value={tariffDrafts[row.id]?.electricityUpperBoundText ?? ''}
-                            onChange={(event) => {
-                              setThresholdRangeErrors((errors) => {
-                                const nextErrors = { ...errors }
-                                delete nextErrors[row.id]
-                                return nextErrors
-                              })
-                              setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], electricityUpperBoundText: event.target.value } }))
-                            }}
-                            onBlur={(event) => {
-                              if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitElectricityThresholdBound(row)
-                            }}
-                            onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitElectricityThresholdBound(row))}
-                          />
+                        {row.electricityUpperBound == null ? null : (
+                          <>
+                            <span>До</span>
+                            <MeterReadingInput
+                              aria-label={`${row.category}: ${row.title}: до`}
+                              aria-invalid={Boolean(thresholdRangeErrors[row.id])}
+                              className="contractors-editable-input tariffs-threshold-range__input"
+                              disabled={!canManageTariffs || isRowDisabled}
+                              value={tariffDrafts[row.id]?.electricityUpperBoundText ?? ''}
+                              onChange={(event) => {
+                                setThresholdRangeErrors((errors) => {
+                                  const nextErrors = { ...errors }
+                                  delete nextErrors[row.id]
+                                  return nextErrors
+                                })
+                                setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], electricityUpperBoundText: event.target.value } }))
+                              }}
+                              onBlur={(event) => {
+                                if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitElectricityThresholdBound(row)
+                              }}
+                              onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitElectricityThresholdBound(row))}
+                            />
+                          </>
                         )}
                         <span className="tariffs-threshold-range__unit">{row.unit}</span>
                         {thresholdRangeErrors[row.id] ? <ForegroundDialogError><small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small></ForegroundDialogError> : null}

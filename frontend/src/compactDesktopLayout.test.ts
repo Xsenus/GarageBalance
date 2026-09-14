@@ -80,6 +80,8 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.tariffs-summary-card {\n    min-height: 280px;')
     expect(appCss).toContain('.tariffs-row-action-button.icon-button {\n    width: 30px;\n    min-width: 30px;')
     expect(appCss).toContain('.tariffs-threshold-range__input {\n  width: 62px;\n  min-width: 62px;')
+    expect(appCss).toContain('justify-content: flex-start;')
+    expect(tariffsSource).not.toContain('tariffs-threshold-range__unbounded')
     expect(appCss).toContain('.dictionary-pagination--compact {\n  display: flex;\n  flex-wrap: nowrap;')
     expect(appCss).toContain('.irregular-payments-table-scroll,\n.fee-campaign-table-scroll {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow-x: auto;')
     expect(appCss).toContain('var(--fee-campaign-col-actions, 120px);')

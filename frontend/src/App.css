@@ -3748,7 +3748,7 @@ input.meter-readings-control {
   width: 100%;
   flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
   color: #475467;
   font-size: inherit;
@@ -3761,7 +3761,6 @@ input.meter-readings-control {
   text-align: right;
 }
 
-.tariffs-threshold-range__unbounded,
 .tariffs-threshold-range__unit {
   white-space: nowrap;
 }

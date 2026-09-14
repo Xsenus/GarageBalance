@@ -2470,6 +2470,11 @@ describe('App', () => {
     expect(within(electricityGroupRow!).getAllByRole('cell')).toHaveLength(1)
     expect(firstElectricityThresholdRow).toHaveClass('tariffs-threshold-tier-row')
     expect(firstElectricityThreshold.closest('[role="cell"]')).toHaveClass('tariffs-threshold-tier-cell')
+    const unboundedElectricityThreshold = within(tariffsTable).getByLabelText('Электроэнергия: 4.00 и выше: от')
+    const unboundedElectricityRange = unboundedElectricityThreshold.closest('[role="group"]')!
+    expect(within(unboundedElectricityRange).queryByText('До')).not.toBeInTheDocument()
+    expect(within(unboundedElectricityRange).queryByText('без границы')).not.toBeInTheDocument()
+    expect(within(unboundedElectricityRange).getByText('кВт·ч')).toBeInTheDocument()
     expect(Boolean(electricityGroupRow!.compareDocumentPosition(firstElectricityThresholdRow!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     expect(within(firstElectricityThresholdRow!).queryByText('Электроэнергия', { selector: '.tariffs-service-name' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: пороговая тарификация' })).not.toBeInTheDocument()
