@@ -75,6 +75,7 @@ describe('compact desktop layout contract', () => {
   })
 
   it('keeps both tariff summary panels beside each other and protects their pagination', () => {
+    expect(appCss).toContain('.topbar-back-button {\n    width: 43px;\n    height: 43px;')
     expect(appCss).toContain('.workspace--tariffs > .topbar {\n    position: absolute;')
     expect(appCss).toContain('.workspace--tariffs .user-panel {\n    display: none;')
     expect(appCss).toContain('.tariffs-page .contractors-heading {\n    padding-left: 50px;')

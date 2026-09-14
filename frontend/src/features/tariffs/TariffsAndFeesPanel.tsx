@@ -2688,32 +2688,32 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               retrying={tariffsLoading || oneTimeLoading || feeCampaignsLoading || tariffReferencesLoading}
             />
           ) : tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
-        </div>
-        <div className="contractors-prototype-tabs" role="tablist" aria-label="Режимы списка услуг">
-          <button
-            className={chargeServiceView === 'active' ? 'is-active' : ''}
-            type="button"
-            role="tab"
-            aria-selected={chargeServiceView === 'active'}
-            onClick={() => {
-              setChargeServiceView('active')
-              setTariffPageNumber(1)
-            }}
-          >
-            Действующие услуги ({backendChargeServices.length - archivedServiceCount})
-          </button>
-          <button
-            className={chargeServiceView === 'deleted' ? 'is-active' : ''}
-            type="button"
-            role="tab"
-            aria-selected={chargeServiceView === 'deleted'}
-            onClick={() => {
-              setChargeServiceView('deleted')
-              setTariffPageNumber(1)
-            }}
-          >
-            Удалённые услуги ({archivedServiceCount})
-          </button>
+          <div className="contractors-prototype-tabs" role="tablist" aria-label="Режимы списка услуг">
+            <button
+              className={chargeServiceView === 'active' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={chargeServiceView === 'active'}
+              onClick={() => {
+                setChargeServiceView('active')
+                setTariffPageNumber(1)
+              }}
+            >
+              Действующие услуги ({backendChargeServices.length - archivedServiceCount})
+            </button>
+            <button
+              className={chargeServiceView === 'deleted' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={chargeServiceView === 'deleted'}
+              onClick={() => {
+                setChargeServiceView('deleted')
+                setTariffPageNumber(1)
+              }}
+            >
+              Удалённые услуги ({archivedServiceCount})
+            </button>
+          </div>
         </div>
         <div className="contractors-actions">
           <button
