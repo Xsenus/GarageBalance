@@ -9514,17 +9514,27 @@ button.operation-row:focus-visible {
     margin-left: auto;
   }
 
-  .workspace--payments > .finance-panel,
+  .workspace--payments > .finance-panel {
+    margin-top: 0;
+    padding-top: 12px;
+  }
+
   .workspace--reports > .reports-workbook-panel {
     margin-top: 0;
     padding-top: 0;
+  }
+
+  .workspace--payments > .topbar {
+    top: 25px;
+    left: 27px;
   }
 
   .workspace--payments .payments-prototype-commandbar {
     grid-template-columns: max-content minmax(0, 1fr);
     grid-template-areas: "tabs search";
     align-items: center;
-    padding-left: 50px;
+    column-gap: 15px;
+    padding-left: 46px;
   }
 
   .workspace--payments .payments-prototype-toolbar {
@@ -9540,7 +9550,7 @@ button.operation-row:focus-visible {
   }
 
   .workspace--payments .payments-prototype > .empty-state {
-    padding-left: 326px;
+    padding-left: 327px;
   }
 
   .workspace--payments .payments-prototype-actions--sheet {
