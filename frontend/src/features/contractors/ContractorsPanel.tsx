@@ -2305,6 +2305,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       <div className="contractors-heading">
         <div>
           <h1>Контрагенты</h1>
+          <div className="contractors-prototype-tabs" role="tablist" aria-label="Разделы контрагентов">
+            {Object.entries(contractorSectionLabels).map(([section, label]) => (
+              <button type="button" role="tab" aria-selected={activeSection === section} className={activeSection === section ? 'is-active' : ''} onClick={() => setActiveSection(section as ContractorSection)} key={section}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="contractors-actions">
           {activeSection === 'garages' ? (
@@ -2350,14 +2357,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       {formStateError && !modal ? (
         <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || contractorReferenceLoading !== null || supplierEditorLoadingId !== null} />
       ) : null}
-
-      <div className="contractors-prototype-tabs" role="tablist" aria-label="Разделы контрагентов">
-        {Object.entries(contractorSectionLabels).map(([section, label]) => (
-          <button type="button" role="tab" aria-selected={activeSection === section} className={activeSection === section ? 'is-active' : ''} onClick={() => setActiveSection(section as ContractorSection)} key={section}>
-            {label}
-          </button>
-        ))}
-      </div>
 
       {activeSection === 'garages' ? (
         <section className="contractors-directory-card" aria-label="Гаражи">

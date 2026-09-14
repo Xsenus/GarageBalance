@@ -8,6 +8,8 @@ const meterReadingsSource = readFileSync(resolve(process.cwd(), 'src', 'features
 const auditSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'audit', 'AuditPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 const contractorsSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 const tariffsSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
+const financeSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
+const settingsSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'settings', 'PasswordPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 
 describe('compact desktop layout contract', () => {
   it('switches to compact geometry by width or viewport height', () => {
@@ -76,8 +78,8 @@ describe('compact desktop layout contract', () => {
 
   it('keeps both tariff summary panels beside each other and protects their pagination', () => {
     expect(appCss).toContain('.topbar-back-button {\n    width: 43px;\n    height: 43px;')
-    expect(appCss).toContain('.workspace--tariffs > .topbar {\n    position: absolute;')
-    expect(appCss).toContain('.workspace--tariffs .user-panel {\n    display: none;')
+    expect(appCss).toContain('.workspace--settings\n  ) > .topbar {\n    position: absolute;')
+    expect(appCss).toContain('.workspace--settings\n  ) .user-panel {\n    display: none;')
     expect(appCss).toContain('.tariffs-page .contractors-heading {\n    padding-left: 50px;')
     expect(appCss).toContain('.tariffs-page > .dictionary-pagination {\n  min-height: 54px;')
     expect(appCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 8px minmax(0, 1fr);')
@@ -92,5 +94,34 @@ describe('compact desktop layout contract', () => {
     expect(tariffsSource.match(/compactPageSizeSelect/g)).toHaveLength(2)
     expect(tariffsSource).toContain('useColumnResize(irregularPaymentColumnDefinitions')
     expect(tariffsSource).toContain('useColumnResize(feeCampaignColumnDefinitions')
+  })
+
+  it('uses the approved compact toolbar pattern across the pictured sections', () => {
+    for (const section of ['contractors', 'meter-readings', 'payments', 'funds', 'reports', 'settings']) {
+      expect(appCss).toContain(`.workspace--${section}`)
+    }
+    expect(contractorsSource).toContain('aria-label="Разделы контрагентов"')
+    expect(appCss).toContain('.workspace--contractors .contractors-heading > div:first-child {\n    display: flex;')
+    expect(appCss).toContain('.workspace--meter-readings .meter-readings-heading,\n  .workspace--funds .funds-heading {\n    min-height: 43px;\n    padding-left: 50px;')
+    expect(appCss).toContain('.workspace--payments .payments-prototype-commandbar {\n    grid-template-columns: max-content 1fr;')
+    expect(appCss).toContain('.workspace--settings .settings-tab-list {\n    margin-top: 50px;')
+    expect(appCss).toContain(') > .topbar {\n    position: absolute;\n    z-index: 2;')
+    expect(settingsSource).toContain('aria-orientation="vertical"')
+  })
+
+  it('keeps all payout actions in one compact row with shorter visual labels', () => {
+    expect(appCss).toContain('.workspace--payments .payments-prototype-actions--sheet {\n    display: grid;\n    grid-template-columns: repeat(6, minmax(0, 1fr));')
+    for (const label of ['Начисление', 'Выплата', 'Оклад', 'Премия', 'Штраф']) {
+      expect(financeSource).toContain(`data-compact-label="${label}"`)
+    }
+    for (const accessibleLabel of ['Добавить начисление', 'Добавить выплату', 'Оплатить все', 'Выплатить оклад', 'Начислить премию', 'Начислить штраф']) {
+      expect(financeSource).toContain(`aria-label="${accessibleLabel}"`)
+    }
+  })
+
+  it('keeps report tabs in a single horizontally scrollable strip', () => {
+    expect(appCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
+    expect(appCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 auto;')
+    expect(appCss).not.toContain('grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));')
   })
 })

@@ -5768,29 +5768,29 @@ function PaymentsPrototypePanel({
       ) : (
         <>
           <div className="payments-prototype-actions payments-prototype-actions--sheet">
-            <button className="secondary-button create-action-button" type="button" onClick={(event) => openSupplierAccrualDialog(event)}>
+            <button className="secondary-button create-action-button" type="button" aria-label="Добавить начисление" onClick={(event) => openSupplierAccrualDialog(event)}>
               <FileText size={16} aria-hidden="true" />
-              <span>Добавить начисление</span>
+              <span className="payments-action-label" data-compact-label="Начисление">Добавить начисление</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openExpenseDialog(event, { expensePaymentSource: 'cash' })}>
+            <button className="secondary-button create-action-button" type="button" aria-label="Добавить выплату" disabled={!canWritePayments} onClick={(event) => openExpenseDialog(event, { expensePaymentSource: 'cash' })}>
               <WalletCards size={16} aria-hidden="true" />
-              <span>Добавить выплату</span>
+              <span className="payments-action-label" data-compact-label="Выплата">Добавить выплату</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments || !isEditableExpenseWorksheetPeriod || expenseWorksheetLoading} title="Оплата задолженности за один текущий или будущий месяц" onClick={(event) => { event.currentTarget.focus(); setExpenseBatchDialogOpen(true) }}>
+            <button className="secondary-button create-action-button" type="button" aria-label="Оплатить все" disabled={!canWritePayments || !isEditableExpenseWorksheetPeriod || expenseWorksheetLoading} title="Оплата задолженности за один текущий или будущий месяц" onClick={(event) => { event.currentTarget.focus(); setExpenseBatchDialogOpen(true) }}>
               <WalletCards size={16} aria-hidden="true" />
-              <span>Оплатить все</span>
+              <span className="payments-action-label">Оплатить все</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffPaymentDialog(event)}>
+            <button className="secondary-button create-action-button" type="button" aria-label="Выплатить оклад" disabled={!canWritePayments} onClick={(event) => openStaffPaymentDialog(event)}>
               <UserRound size={16} aria-hidden="true" />
-              <span>Выплатить оклад</span>
+              <span className="payments-action-label" data-compact-label="Оклад">Выплатить оклад</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'bonus')}>
+            <button className="secondary-button create-action-button" type="button" aria-label="Начислить премию" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'bonus')}>
               <UserRound size={16} aria-hidden="true" />
-              <span>Начислить премию</span>
+              <span className="payments-action-label" data-compact-label="Премия">Начислить премию</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'penalty')}>
+            <button className="secondary-button create-action-button" type="button" aria-label="Начислить штраф" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'penalty')}>
               <Gavel size={16} aria-hidden="true" />
-              <span>Начислить штраф</span>
+              <span className="payments-action-label" data-compact-label="Штраф">Начислить штраф</span>
             </button>
           </div>
 

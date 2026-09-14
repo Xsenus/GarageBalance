@@ -727,6 +727,11 @@ h1 {
   gap: 16px;
 }
 
+.contractors-heading > div:first-child {
+  display: grid;
+  gap: 18px;
+}
+
 .contractors-heading h1 {
   margin: 0;
 }
@@ -9449,16 +9454,119 @@ button.operation-row:focus-visible {
     flex: 0 0 auto;
   }
 
-  .workspace--tariffs > .topbar {
+  :is(
+    .workspace--tariffs,
+    .workspace--contractors,
+    .workspace--meter-readings,
+    .workspace--payments,
+    .workspace--funds,
+    .workspace--reports,
+    .workspace--settings
+  ) > .topbar {
     position: absolute;
+    z-index: 2;
   }
 
-  .workspace--tariffs .user-panel {
+  :is(
+    .workspace--tariffs,
+    .workspace--contractors,
+    .workspace--meter-readings,
+    .workspace--payments,
+    .workspace--funds,
+    .workspace--reports,
+    .workspace--settings
+  ) .user-panel {
     display: none;
   }
 
   .tariffs-page .contractors-heading {
     padding-left: 50px;
+  }
+
+  .workspace--contractors .contractors-heading {
+    min-height: 43px;
+    align-items: center;
+  }
+
+  .workspace--contractors .contractors-heading > div:first-child {
+    display: flex;
+    align-items: center;
+    padding-left: 50px;
+  }
+
+  .workspace--contractors .contractors-heading h1,
+  .workspace--meter-readings .meter-readings-heading h1,
+  .workspace--funds .funds-heading h1,
+  .workspace--reports .section-heading,
+  .workspace--payments .payments-prototype-heading {
+    position: absolute;
+    left: -9999px;
+  }
+
+  .workspace--meter-readings .meter-readings-heading,
+  .workspace--funds .funds-heading {
+    min-height: 43px;
+    padding-left: 50px;
+  }
+
+  .workspace--meter-readings .meter-readings-controls,
+  .workspace--funds .funds-heading > .create-action-button {
+    margin-left: auto;
+  }
+
+  .workspace--payments > .finance-panel,
+  .workspace--reports > .reports-workbook-panel {
+    margin-top: 0;
+    padding-top: 0;
+  }
+
+  .workspace--payments .payments-prototype-commandbar {
+    grid-template-columns: max-content 1fr;
+    grid-template-areas:
+      "tabs empty"
+      "search search";
+    padding-left: 50px;
+  }
+
+  .workspace--payments .payments-prototype-toolbar {
+    grid-area: tabs;
+  }
+
+  .workspace--payments .payments-prototype-topline {
+    grid-area: search;
+  }
+
+  .workspace--payments .payments-prototype-actions--sheet {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .workspace--payments .payments-prototype-actions--sheet .secondary-button {
+    min-width: 0;
+  }
+
+  .workspace--payments .payments-action-label[data-compact-label] {
+    font-size: 0;
+  }
+
+  .workspace--payments .payments-action-label[data-compact-label]::after {
+    content: attr(data-compact-label);
+    font-size: 14px;
+  }
+
+  .workspace--reports .report-tabs--workbook {
+    min-height: 43px;
+    margin-left: 50px;
+  }
+
+  .workspace--settings .settings-section-nav > div:first-child {
+    position: absolute;
+    left: -9999px;
+  }
+
+  .workspace--settings .settings-tab-list {
+    margin-top: 50px;
   }
 
   .workspace--tariffs > .tariffs-page,
@@ -9822,18 +9930,6 @@ button.operation-row:focus-visible {
   .finance-panel--show-overview .finance-tabs button {
     min-width: 0;
     overflow-wrap: anywhere;
-  }
-
-  .report-tabs--workbook {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    overflow-x: hidden;
-    scrollbar-gutter: auto;
-  }
-
-  .report-tabs--workbook button {
-    min-width: 0;
-    min-height: 46px;
   }
 
   .report-garage-filter-panel {
