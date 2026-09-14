@@ -7,6 +7,7 @@ const appShellSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'w
 const meterReadingsSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'meterReadings', 'MeterReadingsPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 const auditSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'audit', 'AuditPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 const contractorsSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
+const tariffsSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 
 describe('compact desktop layout contract', () => {
   it('switches to compact geometry by width or viewport height', () => {
@@ -79,5 +80,11 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.tariffs-summary-card {\n    min-height: 280px;')
     expect(appCss).toContain('.tariffs-row-action-button.icon-button {\n    width: 30px;\n    min-width: 30px;')
     expect(appCss).toContain('.tariffs-threshold-range__input {\n  width: 62px;\n  min-width: 62px;')
+    expect(appCss).toContain('.dictionary-pagination--compact {\n  display: flex;\n  flex-wrap: nowrap;')
+    expect(appCss).toContain('.irregular-payments-table-scroll,\n.fee-campaign-table-scroll {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow-x: auto;')
+    expect(appCss).toContain('var(--fee-campaign-col-actions, 120px);')
+    expect(tariffsSource.match(/compactPageSizeSelect/g)).toHaveLength(2)
+    expect(tariffsSource).toContain('useColumnResize(irregularPaymentColumnDefinitions')
+    expect(tariffsSource).toContain('useColumnResize(feeCampaignColumnDefinitions')
   })
 })

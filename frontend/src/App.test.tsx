@@ -1037,7 +1037,11 @@ describe('App', () => {
       const pagination = within(tariffsPanel).getByRole('navigation', { name: paginationName })
       expect(pagination.firstElementChild).toHaveClass('pagination-primary')
       expect(within(pagination).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
-      expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
+      if (paginationName === 'Пагинация тарифов и услуг') {
+        expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
+      } else {
+        expect(within(pagination).getByRole('combobox')).toBeInTheDocument()
+      }
     }
     expect(within(tariffsPanel).queryByText('x')).not.toBeInTheDocument()
 
@@ -1523,6 +1527,40 @@ describe('App', () => {
 
     await user.keyboard('{ArrowRight}')
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Не удалось сохранить ширину таблиц.')
+  })
+
+  it('keeps compact lower pagination on one line and saves resizable column widths', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const irregularSection = within(tariffsPanel).getByRole('region', { name: 'Нерегулярные платежи' })
+    const feeSection = within(tariffsPanel).getByRole('region', { name: 'Объявленные сборы' })
+    const irregularPagination = within(irregularSection).getByRole('navigation', { name: 'Пагинация нерегулярных платежей' })
+    const feePagination = within(feeSection).getByRole('navigation', { name: 'Пагинация объявленных сборов' })
+
+    expect(irregularPagination).toHaveClass('dictionary-pagination--compact')
+    expect(feePagination).toHaveClass('dictionary-pagination--compact')
+    expect(within(irregularPagination).getByRole('combobox', { name: 'Количество строк нерегулярных платежей' })).toBeInTheDocument()
+    expect(within(feePagination).getByRole('combobox', { name: 'Количество строк объявленных сборов' })).toBeInTheDocument()
+
+    const irregularTable = within(irregularSection).getByRole('table', { name: 'Таблица нерегулярных платежей' })
+    const feeTable = within(feeSection).getByRole('table', { name: 'Таблица объявленных сборов' })
+    const irregularResizer = within(irregularTable).getByRole('button', { name: 'Изменить ширину столбца Основание' })
+    const feeResizer = within(feeTable).getByRole('button', { name: 'Изменить ширину столбца Фонд' })
+
+    irregularResizer.focus()
+    await user.keyboard('{ArrowRight}')
+    feeResizer.focus()
+    await user.keyboard('{Shift>}{ArrowLeft}{/Shift}')
+
+    expect(irregularTable).toHaveStyle('--irregular-payment-col-name: 286px')
+    expect(feeTable).toHaveStyle('--fee-campaign-col-fund: 110px')
+    expect(JSON.parse(window.localStorage.getItem('garagebalance.tariffs.irregularPaymentColumnWidths') ?? '{}')).toMatchObject({ name: 286, amount: 160 })
+    expect(JSON.parse(window.localStorage.getItem('garagebalance.tariffs.feeCampaignColumnWidths') ?? '{}')).toMatchObject({ fund: 110 })
   })
 
   it('shows a fee campaign creation failure inside the open form', async () => {
@@ -2558,7 +2596,7 @@ describe('App', () => {
     }))
     expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 2.00–3.00: до')).toBeInTheDocument()
 
-    expect(within(tariffsPanel).queryByLabelText(/наименование$/i)).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('textbox', { name: /наименование$/i })).not.toBeInTheDocument()
     const firstTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 0.00–1.00: до')
     await user.clear(firstTierUpperBound)
     await user.type(firstTierUpperBound, '0{Enter}')

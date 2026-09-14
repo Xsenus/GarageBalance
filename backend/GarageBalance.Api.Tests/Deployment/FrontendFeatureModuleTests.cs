@@ -138,8 +138,11 @@ public sealed class FrontendFeatureModuleTests
         Assert.DoesNotContain("financeClient.generateFeeCampaignAccruals", featureText, StringComparison.Ordinal);
         Assert.DoesNotContain("Доначислить", featureText, StringComparison.Ordinal);
         Assert.Contains("fee-campaign-table-scroll", featureText, StringComparison.Ordinal);
+        Assert.Contains("useColumnResize", featureText, StringComparison.Ordinal);
+        Assert.Contains("compactPageSizeSelect", featureText, StringComparison.Ordinal);
         Assert.Contains(".fee-campaign-table-scroll", stylesText, StringComparison.Ordinal);
-        Assert.Contains("grid-template-columns: minmax(210px, 1.45fr) minmax(130px, 0.8fr) repeat(3, minmax(86px, 0.55fr)) minmax(130px, 0.8fr) minmax(150px, 0.9fr) 150px;", stylesText, StringComparison.Ordinal);
+        Assert.Contains("var(--fee-campaign-col-name, 220px)", stylesText, StringComparison.Ordinal);
+        Assert.Contains("overflow-x: auto;", stylesText, StringComparison.Ordinal);
         Assert.Contains(".contractors-mini-row--fees > span", stylesText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/tariffs/TariffsAndFeesPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -25,7 +25,7 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEdi
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
-import { usePointerResize } from '../../shared/useColumnResize'
+import { useColumnResize, usePointerResize } from '../../shared/useColumnResize'
 import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
@@ -38,6 +38,58 @@ const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0
 const defaultTariffPanelsSplitPercent = 40
 const minimumTariffPanelsSplitPercent = 25
 const maximumTariffPanelsSplitPercent = 60
+
+type TariffSummaryColumnDefinition<TKey extends string> = { key: TKey; label: string; defaultWidth: number; minWidth: number }
+type IrregularPaymentColumnKey = 'name' | 'amount'
+type FeeCampaignColumnKey = 'name' | 'fund' | 'contribution' | 'target' | 'collected' | 'participants' | 'period' | 'actions'
+
+const irregularPaymentColumnStorageKey = 'garagebalance.tariffs.irregularPaymentColumnWidths'
+const feeCampaignColumnStorageKey = 'garagebalance.tariffs.feeCampaignColumnWidths'
+const irregularPaymentColumnDefinitions: Array<TariffSummaryColumnDefinition<IrregularPaymentColumnKey>> = [
+  { key: 'name', label: 'Основание', defaultWidth: 270, minWidth: 180 },
+  { key: 'amount', label: 'Сумма, руб.', defaultWidth: 160, minWidth: 130 },
+]
+const feeCampaignColumnDefinitions: Array<TariffSummaryColumnDefinition<FeeCampaignColumnKey>> = [
+  { key: 'name', label: 'Наименование', defaultWidth: 220, minWidth: 170 },
+  { key: 'fund', label: 'Фонд', defaultWidth: 140, minWidth: 110 },
+  { key: 'contribution', label: 'Взнос', defaultWidth: 100, minWidth: 86 },
+  { key: 'target', label: 'План', defaultWidth: 100, minWidth: 86 },
+  { key: 'collected', label: 'Собрано', defaultWidth: 100, minWidth: 86 },
+  { key: 'participants', label: 'Участники', defaultWidth: 150, minWidth: 120 },
+  { key: 'period', label: 'Период', defaultWidth: 160, minWidth: 140 },
+  { key: 'actions', label: 'Действия', defaultWidth: 120, minWidth: 96 },
+]
+
+function getDefaultTariffSummaryColumnWidths<TKey extends string>(definitions: Array<TariffSummaryColumnDefinition<TKey>>) {
+  return definitions.reduce<Record<TKey, number>>((widths, column) => {
+    widths[column.key] = column.defaultWidth
+    return widths
+  }, {} as Record<TKey, number>)
+}
+
+function loadTariffSummaryColumnWidths<TKey extends string>(storageKey: string, definitions: Array<TariffSummaryColumnDefinition<TKey>>) {
+  const defaults = getDefaultTariffSummaryColumnWidths(definitions)
+  try {
+    const rawValue = window.localStorage.getItem(storageKey)
+    if (!rawValue) return defaults
+    const parsed = JSON.parse(rawValue) as Partial<Record<TKey, number>>
+    return definitions.reduce<Record<TKey, number>>((widths, column) => {
+      const value = parsed[column.key]
+      widths[column.key] = typeof value === 'number' && Number.isFinite(value) ? Math.max(column.minWidth, value) : defaults[column.key]
+      return widths
+    }, {} as Record<TKey, number>)
+  } catch {
+    return defaults
+  }
+}
+
+function saveTariffSummaryColumnWidths<TKey extends string>(storageKey: string, widths: Record<TKey, number>) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(widths))
+  } catch {
+    // Column widths are an optional local UI preference.
+  }
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
@@ -865,6 +917,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffPanelsLayoutError, setTariffPanelsLayoutError] = useState<string | null>(null)
   const tariffPanelsGridRef = useRef<HTMLDivElement>(null)
   const tariffPanelsWidthRef = useRef(defaultTariffPanelsSplitPercent)
+  const [irregularPaymentColumnWidths, setIrregularPaymentColumnWidths] = useState(() => loadTariffSummaryColumnWidths(irregularPaymentColumnStorageKey, irregularPaymentColumnDefinitions))
+  const [feeCampaignColumnWidths, setFeeCampaignColumnWidths] = useState(() => loadTariffSummaryColumnWidths(feeCampaignColumnStorageKey, feeCampaignColumnDefinitions))
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
@@ -873,6 +927,25 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [oneTimeActionMessage, setOneTimeActionMessage] = useState<string | null>(null)
   const setOneTimeConfirmationError = setConfirmationError
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
+
+  useEffect(() => {
+    saveTariffSummaryColumnWidths(irregularPaymentColumnStorageKey, irregularPaymentColumnWidths)
+  }, [irregularPaymentColumnWidths])
+
+  useEffect(() => {
+    saveTariffSummaryColumnWidths(feeCampaignColumnStorageKey, feeCampaignColumnWidths)
+  }, [feeCampaignColumnWidths])
+
+  const irregularPaymentTableStyle = useMemo(() => irregularPaymentColumnDefinitions.reduce<CSSProperties>((style, column) => ({
+    ...style,
+    [`--irregular-payment-col-${column.key}`]: `${irregularPaymentColumnWidths[column.key]}px`,
+  }), {}), [irregularPaymentColumnWidths])
+  const feeCampaignTableStyle = useMemo(() => feeCampaignColumnDefinitions.reduce<CSSProperties>((style, column) => ({
+    ...style,
+    [`--fee-campaign-col-${column.key}`]: `${feeCampaignColumnWidths[column.key]}px`,
+  }), {}), [feeCampaignColumnWidths])
+  const irregularPaymentColumnResize = useColumnResize(irregularPaymentColumnDefinitions, irregularPaymentColumnWidths, setIrregularPaymentColumnWidths)
+  const feeCampaignColumnResize = useColumnResize(feeCampaignColumnDefinitions, feeCampaignColumnWidths, setFeeCampaignColumnWidths)
 
   useEffect(() => {
     let ignore = false
@@ -3106,56 +3179,72 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Нерегулярные платежи">
               <div className="contractors-mini-title">Нерегулярные платежи</div>
               {oneTimeActionMessage ? <ForegroundDialogError><p className="contractors-action-message" role="alert">{oneTimeActionMessage}</p></ForegroundDialogError> : null}
-              <div className="contractors-mini-header contractors-mini-header--editable">
-                <span>Основание</span>
-                <span>Сумма, руб.</span>
-              </div>
-              {oneTimeLoading && !oneTimeLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
-              {oneTimeLoading && oneTimeLoaded ? <BackgroundRefreshStatus label="Обновляем нерегулярные платежи" /> : null}
-              {oneTimePage.items.map((row) => (
-                <div
-                  aria-label={`Нерегулярный платеж ${row.name}`}
-                  className={[
-                    'contractors-mini-row contractors-mini-row--editable',
-                    row.isDeleted ? 'contractors-mini-row--deleted' : '',
-                    !row.isActive ? 'contractors-mini-row--inactive' : '',
-                  ].filter(Boolean).join(' ')}
-                  key={row.id}
-                    onContextMenu={oneTimeLoading ? undefined : (event) => openOneTimeContextMenu(event, row)}
-                >
-                  <span className="contractors-irregular-name-cell">
-                    <span>{row.name}</span>
-                    {!row.isActive && !row.isDeleted ? <small className="dictionary-status-pill dictionary-status-pill-archived">Отключён</small> : null}
-                  </span>
-                  <span>
-                    {row.isDeleted ? (
-                      <span className="contractors-mini-actions">
-                        <span>{row.amount}</span>
-                        <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeLoading || oneTimeSavingRowId === row.id} onClick={() => {
-                          setOneTimeConfirmationError(null)
-                          setOneTimeRestoreTarget(row)
-                        }}>
-                          <RotateCcw size={16} />
-                          <span>Вернуть</span>
-                        </button>
-                      </span>
-                    ) : (
-                      <MoneyTextInput
-                        aria-label={`Сумма: ${row.name}`}
-                        className="contractors-editable-input"
-                        disabled={!canManageTariffs || oneTimeLoading || !row.isActive || oneTimeSavingRowId === row.id}
-                        value={oneTimeDrafts[row.id]?.amount ?? ''}
-                        onValueChange={(amount) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
-                        onBlur={(event) => {
-                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitOneTimeAmountChange(row)
-                        }}
-                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
+              <div className="irregular-payments-table-scroll" role="table" aria-label="Таблица нерегулярных платежей" style={irregularPaymentTableStyle}>
+                <div className="contractors-mini-header contractors-mini-header--editable" role="row">
+                  {irregularPaymentColumnDefinitions.map((column) => (
+                    <span className="tariffs-summary-header-cell" role="columnheader" key={column.key}>
+                      <span>{column.label}</span>
+                      <button
+                        className="icon-button contractors-column-resizer"
+                        type="button"
+                        aria-label={`Изменить ширину столбца ${column.label}`}
+                        onPointerDown={(event) => irregularPaymentColumnResize.startResize(column.key, event)}
+                        onPointerMove={irregularPaymentColumnResize.continueResize}
+                        onPointerUp={irregularPaymentColumnResize.finishResize}
+                        onPointerCancel={irregularPaymentColumnResize.cancelResize}
+                        onKeyDown={(event) => irregularPaymentColumnResize.resizeWithKeyboard(column.key, event)}
                       />
-                    )}
-                  </span>
+                    </span>
+                  ))}
                 </div>
-              ))}
-              {oneTimeRows.length === 0 && oneTimeLoaded && !oneTimeLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
+                {oneTimeLoading && !oneTimeLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
+                {oneTimeLoading && oneTimeLoaded ? <BackgroundRefreshStatus label="Обновляем нерегулярные платежи" /> : null}
+                {oneTimePage.items.map((row) => (
+                  <div
+                    aria-label={`Нерегулярный платеж ${row.name}`}
+                    className={[
+                      'contractors-mini-row contractors-mini-row--editable',
+                      row.isDeleted ? 'contractors-mini-row--deleted' : '',
+                      !row.isActive ? 'contractors-mini-row--inactive' : '',
+                    ].filter(Boolean).join(' ')}
+                    role="row"
+                    key={row.id}
+                    onContextMenu={oneTimeLoading ? undefined : (event) => openOneTimeContextMenu(event, row)}
+                  >
+                    <span className="contractors-irregular-name-cell" role="cell">
+                      <span>{row.name}</span>
+                      {!row.isActive && !row.isDeleted ? <small className="dictionary-status-pill dictionary-status-pill-archived">Отключён</small> : null}
+                    </span>
+                    <span role="cell">
+                      {row.isDeleted ? (
+                        <span className="contractors-mini-actions">
+                          <span>{row.amount}</span>
+                          <button className="ghost-button" type="button" disabled={!canManageTariffs || oneTimeLoading || oneTimeSavingRowId === row.id} onClick={() => {
+                            setOneTimeConfirmationError(null)
+                            setOneTimeRestoreTarget(row)
+                          }}>
+                            <RotateCcw size={16} />
+                            <span>Вернуть</span>
+                          </button>
+                        </span>
+                      ) : (
+                        <MoneyTextInput
+                          aria-label={`Сумма: ${row.name}`}
+                          className="contractors-editable-input"
+                          disabled={!canManageTariffs || oneTimeLoading || !row.isActive || oneTimeSavingRowId === row.id}
+                          value={oneTimeDrafts[row.id]?.amount ?? ''}
+                          onValueChange={(amount) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
+                          onBlur={(event) => {
+                            if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitOneTimeAmountChange(row)
+                          }}
+                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
+                        />
+                      )}
+                    </span>
+                  </div>
+                ))}
+                {oneTimeRows.length === 0 && oneTimeLoaded && !oneTimeLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
+              </div>
               <TablePagination
                 ariaLabel="Пагинация нерегулярных платежей"
                 totalCount={oneTimePage.totalCount}
@@ -3164,6 +3253,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 visibleCount={oneTimePage.items.length}
                 disabled={oneTimeLoading}
                 pageSizeLabel="Количество строк нерегулярных платежей"
+                compactPageSizeSelect
                 onPageChange={setOneTimePageNumber}
                 onPageSizeChange={(limit) => {
                   setOneTimePageNumber(1)
@@ -3191,16 +3281,23 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Объявленные сборы">
               <div className="contractors-mini-title">Объявленные сборы</div>
               {feeCampaignActionMessage ? <ForegroundDialogError><p className="contractors-action-message" role="alert">{feeCampaignActionMessage}</p></ForegroundDialogError> : null}
-              <div className="fee-campaign-table-scroll">
-                <div className="contractors-mini-header contractors-mini-header--fees">
-                  <span>Наименование</span>
-                  <span>Фонд</span>
-                  <span>Взнос</span>
-                  <span>План</span>
-                  <span>Собрано</span>
-                  <span>Участники</span>
-                  <span className="fee-period">Период</span>
-                  <span>Действия</span>
+              <div className="fee-campaign-table-scroll" role="table" aria-label="Таблица объявленных сборов" style={feeCampaignTableStyle}>
+                <div className="contractors-mini-header contractors-mini-header--fees" role="row">
+                  {feeCampaignColumnDefinitions.map((column) => (
+                    <span className="tariffs-summary-header-cell" role="columnheader" key={column.key}>
+                      <span className={column.key === 'period' ? 'fee-period' : undefined}>{column.label}</span>
+                      <button
+                        className="icon-button contractors-column-resizer"
+                        type="button"
+                        aria-label={`Изменить ширину столбца ${column.label}`}
+                        onPointerDown={(event) => feeCampaignColumnResize.startResize(column.key, event)}
+                        onPointerMove={feeCampaignColumnResize.continueResize}
+                        onPointerUp={feeCampaignColumnResize.finishResize}
+                        onPointerCancel={feeCampaignColumnResize.cancelResize}
+                        onKeyDown={(event) => feeCampaignColumnResize.resizeWithKeyboard(column.key, event)}
+                      />
+                    </span>
+                  ))}
                 </div>
                 {feeCampaignsLoading && !feeCampaignsLoaded ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
                 {feeCampaignsLoading && feeCampaignsLoaded ? <BackgroundRefreshStatus label="Обновляем объявленные сборы" /> : null}
@@ -3213,9 +3310,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       'contractors-mini-row contractors-mini-row--fees',
                       isPeriodMuted ? 'contractors-mini-row--deleted' : '',
                     ].filter(Boolean).join(' ')}
+                    role="row"
                     key={campaign.id}
                   >
-                    <span className="contractors-fee-name-cell">
+                    <span className="contractors-fee-name-cell" role="cell">
                       <span>{campaign.name}</span>
                       {campaign.closedAtUtc && campaign.isClosedEarly ? (
                         <small>
@@ -3224,16 +3322,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         </small>
                       ) : null}
                     </span>
-                    <span className="contractors-fee-fund-cell">{campaign.destinationFundName ?? 'Не назначен'}</span>
-                    <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
-                    <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
-                    <span className="contractors-fee-money-cell money-income">{formatTariffDecimal(campaign.collectedAmount)}</span>
-                    <span className="contractors-fee-participants-cell">{formatFeeCampaignParticipantSummary(campaign)}</span>
-                    <span className="fee-period">
+                    <span className="contractors-fee-fund-cell" role="cell">{campaign.destinationFundName ?? 'Не назначен'}</span>
+                    <span className="contractors-fee-money-cell" role="cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
+                    <span className="contractors-fee-money-cell" role="cell">{formatTariffDecimal(campaign.targetAmount)}</span>
+                    <span className="contractors-fee-money-cell money-income" role="cell">{formatTariffDecimal(campaign.collectedAmount)}</span>
+                    <span className="contractors-fee-participants-cell" role="cell">{formatFeeCampaignParticipantSummary(campaign)}</span>
+                    <span className="fee-period" role="cell">
                       <time className={isPeriodMuted ? undefined : 'money-income'}>{formatDateOnly(campaign.startsOn)}</time>
                       {campaign.endsOn ? <time className={isPeriodMuted ? undefined : 'money-expense'}>{formatDateOnly(campaign.endsOn)}</time> : null}
                     </span>
-                    <span className="contractors-mini-actions">
+                    <span className="contractors-mini-actions" role="cell">
                     {campaign.isArchived ? (
                       <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignsLoading || feeCampaignSavingId === campaign.id} onClick={() => {
                         setFeeCampaignConfirmationError(null)
@@ -3278,6 +3376,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 visibleCount={feeCampaignPage.items.length}
                 disabled={feeCampaignsLoading}
                 pageSizeLabel="Количество строк объявленных сборов"
+                compactPageSizeSelect
                 onPageChange={setFeeCampaignPageNumber}
                 onPageSizeChange={(limit) => {
                   setFeeCampaignPageNumber(1)

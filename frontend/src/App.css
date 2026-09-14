@@ -1424,19 +1424,35 @@ h1 {
 
 .contractors-mini-header--editable,
 .contractors-mini-row--editable {
-  grid-template-columns: minmax(190px, 1fr) minmax(110px, 150px);
+  width: max-content;
+  min-width: 100%;
+  grid-template-columns: var(--irregular-payment-col-name, 270px) var(--irregular-payment-col-amount, 160px);
 }
 
 .contractors-mini-header--fees,
 .contractors-mini-row--fees {
-  min-width: 1100px;
-  grid-template-columns: minmax(210px, 1.45fr) minmax(130px, 0.8fr) repeat(3, minmax(86px, 0.55fr)) minmax(130px, 0.8fr) minmax(150px, 0.9fr) 150px;
+  width: max-content;
+  min-width: 100%;
+  grid-template-columns:
+    var(--fee-campaign-col-name, 220px)
+    var(--fee-campaign-col-fund, 140px)
+    var(--fee-campaign-col-contribution, 100px)
+    var(--fee-campaign-col-target, 100px)
+    var(--fee-campaign-col-collected, 100px)
+    var(--fee-campaign-col-participants, 150px)
+    var(--fee-campaign-col-period, 160px)
+    var(--fee-campaign-col-actions, 120px);
 }
 
+.irregular-payments-table-scroll,
 .fee-campaign-table-scroll {
   min-height: 0;
   flex: 1 1 auto;
   overflow-x: auto;
+}
+
+.tariffs-summary-header-cell {
+  position: relative;
 }
 
 .contractors-mini-header--fees > span,
@@ -6903,6 +6919,27 @@ input.meter-readings-control {
   padding: 3px;
 }
 
+.dictionary-pagination--compact {
+  display: flex;
+  flex-wrap: nowrap;
+  padding: 7px 8px;
+}
+
+.dictionary-pagination--compact .pagination-primary,
+.dictionary-pagination--compact .pagination-controls {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.pagination-page-size-select {
+  width: 66px;
+}
+
+.dictionary-pagination--compact .pagination-meta {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .pagination-size {
   min-width: 34px;
   height: 28px;
@@ -9502,13 +9539,13 @@ button.operation-row:focus-visible {
 
   .contractors-mini-header--fees,
   .contractors-mini-row--fees {
-    width: 100%;
-    min-width: 0;
-    grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.8fr) repeat(3, minmax(0, 0.58fr)) minmax(0, 0.9fr) minmax(0, 1fr) 116px;
+    width: max-content;
+    min-width: 100%;
   }
 
+  .irregular-payments-table-scroll,
   .fee-campaign-table-scroll {
-    overflow-x: hidden;
+    overflow-x: auto;
   }
 
   .contractors-directory-table--garages {

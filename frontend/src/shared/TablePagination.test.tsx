@@ -32,4 +32,17 @@ describe('TablePagination', () => {
     expect(screen.getByRole('button', { name: '10' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
+
+  it('uses a one-line page-size combobox in compact table pagination', () => {
+    const onPageSizeChange = vi.fn()
+    render(<TablePagination ariaLabel="Компактная пагинация" totalCount={40} offset={10} limit={10} visibleCount={10} compactPageSizeSelect onPageChange={vi.fn()} onPageSizeChange={onPageSizeChange} />)
+
+    const navigation = screen.getByRole('navigation', { name: 'Компактная пагинация' })
+    expect(navigation).toHaveClass('dictionary-pagination--compact')
+    expect(screen.getByRole('status')).toHaveTextContent('11-20 из 40 · стр. 2/4')
+    fireEvent.click(screen.getByRole('combobox', { name: 'Количество строк' }))
+    fireEvent.click(screen.getByRole('option', { name: '25' }))
+    expect(onPageSizeChange).toHaveBeenCalledWith(25)
+    expect(screen.queryByRole('group', { name: 'Количество строк' })).not.toBeInTheDocument()
+  })
 })
