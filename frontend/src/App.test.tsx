@@ -1025,6 +1025,11 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i }))
 
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const tariffsToolbar = within(tariffsPanel).getByRole('heading', { name: 'Тарифы и сборы' }).parentElement!.parentElement!
+    expect(tariffsToolbar).toHaveClass('contractors-heading')
+    expect(within(tariffsToolbar).getByRole('tablist', { name: 'Режимы списка услуг' })).toBeInTheDocument()
+    expect(within(tariffsToolbar).getByRole('button', { name: 'Добавить услугу' })).toBeInTheDocument()
+    expect(within(tariffsToolbar).getByRole('button', { name: 'Объявить сбор' })).toBeInTheDocument()
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(await within(tariffsPanel).findByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
     expect(await within(tariffsPanel).findByText('Тариф воды')).toBeInTheDocument()

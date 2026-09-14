@@ -75,6 +75,9 @@ describe('compact desktop layout contract', () => {
   })
 
   it('keeps both tariff summary panels beside each other and protects their pagination', () => {
+    expect(appCss).toContain('.workspace--tariffs > .topbar {\n    position: absolute;')
+    expect(appCss).toContain('.workspace--tariffs .user-panel {\n    display: none;')
+    expect(appCss).toContain('.tariffs-page .contractors-heading {\n    padding-left: 50px;')
     expect(appCss).toContain('.tariffs-page > .dictionary-pagination {\n  min-height: 54px;')
     expect(appCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 8px minmax(0, 1fr);')
     expect(appCss).toContain('.tariffs-summary-card {\n    min-height: 280px;')

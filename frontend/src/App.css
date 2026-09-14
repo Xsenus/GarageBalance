@@ -153,6 +153,7 @@
 }
 
 .workspace {
+  position: relative;
   box-sizing: border-box;
   max-width: 100%;
   min-width: 0;
@@ -1449,10 +1450,6 @@ h1 {
   min-height: 0;
   flex: 1 1 auto;
   overflow-x: auto;
-}
-
-.tariffs-summary-header-cell {
-  position: relative;
 }
 
 .contractors-mini-header--fees > span,
@@ -9450,6 +9447,18 @@ button.operation-row:focus-visible {
     .workspace--settings
   ) > .topbar {
     flex: 0 0 auto;
+  }
+
+  .workspace--tariffs > .topbar {
+    position: absolute;
+  }
+
+  .workspace--tariffs .user-panel {
+    display: none;
+  }
+
+  .tariffs-page .contractors-heading {
+    padding-left: 50px;
   }
 
   .workspace--tariffs > .tariffs-page,

@@ -2679,7 +2679,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     <section className="contractors-page tariffs-page" aria-label="Тарифы и сборы">
       <div className="contractors-heading">
         <div>
-          <h1>Тарифы и сборы</h1>
+          <h1 className="visually-hidden">Тарифы и сборы</h1>
           {!canManageTariffs ? <p className="form-hint">Режим просмотра: для изменения тарифов нужно право tariffs.manage.</p> : null}
           {tariffPersistenceError && !modal ? (
             <AsyncErrorState
@@ -2688,6 +2688,32 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               retrying={tariffsLoading || oneTimeLoading || feeCampaignsLoading || tariffReferencesLoading}
             />
           ) : tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
+        </div>
+        <div className="contractors-prototype-tabs" role="tablist" aria-label="Режимы списка услуг">
+          <button
+            className={chargeServiceView === 'active' ? 'is-active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={chargeServiceView === 'active'}
+            onClick={() => {
+              setChargeServiceView('active')
+              setTariffPageNumber(1)
+            }}
+          >
+            Действующие услуги ({backendChargeServices.length - archivedServiceCount})
+          </button>
+          <button
+            className={chargeServiceView === 'deleted' ? 'is-active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={chargeServiceView === 'deleted'}
+            onClick={() => {
+              setChargeServiceView('deleted')
+              setTariffPageNumber(1)
+            }}
+          >
+            Удалённые услуги ({archivedServiceCount})
+          </button>
         </div>
         <div className="contractors-actions">
           <button
@@ -2721,34 +2747,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         </div>
       </div>
 
-      <>
-        <div className="contractors-prototype-tabs" role="tablist" aria-label="Режимы списка услуг">
-          <button
-            className={chargeServiceView === 'active' ? 'is-active' : ''}
-            type="button"
-            role="tab"
-            aria-selected={chargeServiceView === 'active'}
-            onClick={() => {
-              setChargeServiceView('active')
-              setTariffPageNumber(1)
-            }}
-          >
-            Действующие услуги ({backendChargeServices.length - archivedServiceCount})
-          </button>
-          <button
-            className={chargeServiceView === 'deleted' ? 'is-active' : ''}
-            type="button"
-            role="tab"
-            aria-selected={chargeServiceView === 'deleted'}
-            onClick={() => {
-              setChargeServiceView('deleted')
-              setTariffPageNumber(1)
-            }}
-          >
-            Удалённые услуги ({archivedServiceCount})
-          </button>
-        </div>
-        <div
+      <div
           className={`contractors-sheet${tableColumns[0] ? ' tariffs-show-periodicity' : ''}${tableColumns[1] ? ' tariffs-show-month' : ''}`}
           role="table"
           aria-label={tariffTableLabel}
@@ -3182,7 +3181,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <div className="irregular-payments-table-scroll" role="table" aria-label="Таблица нерегулярных платежей" style={irregularPaymentTableStyle}>
                 <div className="contractors-mini-header contractors-mini-header--editable" role="row">
                   {irregularPaymentColumnDefinitions.map((column) => (
-                    <span className="tariffs-summary-header-cell" role="columnheader" key={column.key}>
+                    <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
                       <span>{column.label}</span>
                       <button
                         className="icon-button contractors-column-resizer"
@@ -3284,7 +3283,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <div className="fee-campaign-table-scroll" role="table" aria-label="Таблица объявленных сборов" style={feeCampaignTableStyle}>
                 <div className="contractors-mini-header contractors-mini-header--fees" role="row">
                   {feeCampaignColumnDefinitions.map((column) => (
-                    <span className="tariffs-summary-header-cell" role="columnheader" key={column.key}>
+                    <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
                       <span className={column.key === 'period' ? 'fee-period' : undefined}>{column.label}</span>
                       <button
                         className="icon-button contractors-column-resizer"
@@ -3385,7 +3384,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               />
             </section>
           </div>
-      </>
 
       {oneTimeContextMenu ? (
         <div className="context-menu-backdrop" role="presentation" onMouseDown={() => setOneTimeContextMenu(null)}>

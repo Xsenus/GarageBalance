@@ -123,7 +123,7 @@ describe('responsive layout styles', () => {
   })
 
   it('contains responsive workspaces, tariff tables and dictionary actions', () => {
-    expect(normalizedAppCss).toContain('.workspace {\n  box-sizing: border-box;\n  max-width: 100%;\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.workspace {\n  position: relative;\n  box-sizing: border-box;\n  max-width: 100%;\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.tariffs-page {\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.tariffs-page > * {\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.dictionary-toolbar {\n    grid-template-columns: minmax(0, 1fr);\n    align-items: stretch;')
