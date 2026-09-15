@@ -145,6 +145,7 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.report-workbook-filter {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;')
     expect(appCss).toContain('.report-workbook-filter__fields > label {\n  flex: 0 0 150px;')
     expect(appCss).toContain('.workspace--reports > .topbar {\n    top: 25px;\n    left: 27px;')
+    expect(appCss).toContain('.workspace--settings > .topbar {\n    top: 25px;\n    left: 27px;')
     expect(appCss).not.toContain('.report-workbook-filter__actions {\n    grid-column: 1;\n    grid-row: 2;')
   })
 })
