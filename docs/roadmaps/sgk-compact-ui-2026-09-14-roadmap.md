@@ -6,7 +6,7 @@
 
 ## Статус
 
-Выполнено и проверено 206 из 208 пунктов (99,04%). Пунктов в работе нет. Один пункт (0,48%) заблокирован отсутствием Docker Engine, один (0,48%) оставлен для расширенной ручной приёмки на дополнительных viewport. Обязательная точка `1366×768`, весь объём исходного задания и уточнённый финансовый сценарий годовых платежей завершены.
+Выполнено и проверено 207 из 208 пунктов (99,52%). Пунктов в работе и заблокированных пунктов нет. Один пункт (0,48%) оставлен для расширенной ручной приёмки на дополнительных viewport. Обязательная точка `1366×768`, весь объём исходного задания и уточнённый финансовый сценарий годовых платежей завершены.
 
 ## Источники
 
@@ -281,7 +281,7 @@
 - [x] Backend complete suite and coverage: exact totals/gates recorded.
 - [x] Backend Release build, format, privacy/security, NuGet audit: exact results recorded.
 - [x] PostgreSQL behavior and migrations verified on isolated local database; limitation recorded if unavailable.
-- [!] Docker configuration проверена статическими тестами; Compose build/smoke заблокирован отсутствующим Docker Engine на рабочей машине.
+- [x] Docker configuration проверена статическими тестами; штатный Compose build/smoke дважды успешно выполнен на окончательном объединённом состоянии.
 - [x] Browser console checked for every section; no task-caused errors remain.
 - [x] Final process audit: task-owned dotnet/testhost/node/Vitest/Vite/Playwright/PostgreSQL/Docker helpers stopped; `dotnet build-server shutdown` run.
 - [x] Temporary databases, screenshots, logs, coverage, build and inspection artifacts removed; retained deliverables listed.
@@ -475,3 +475,4 @@
 - 2026-09-15 — Исходная ветка компоновки сверки фондов прошла focused `66/66`, полный frontend-suite `1269/1269`, полный backend-suite `2890/2890`, lint, production build, package audits, format, privacy, migration и Docker distribution gates; GitHub Actions `34989771789` завершился успешно. Browser-приёмка на PostgreSQL 17 при `1366×768` подтвердила три полностью видимые строки сумм, отсутствие horizontal overflow и чистую console.
 - 2026-09-15 — После присоединения восьмой ветки полный gate повторён на окончательном состоянии: backend `2898/2898`, строки `91,27%`, ветви `76,42%`; frontend `109/109` файлов и `1275/1275` тестов, statements `88,63%`, branches `81,63%`, functions `87,00%`, lines `89,80%`; lint, production build, bundle `297481/297984`, audits, format, privacy, UTF-8, shell и migration-model проверки прошли. Docker Compose повторно собрал окончательные API/frontend и поднял PostgreSQL/API/frontend в состоянии healthy; 147 миграций и 50 таблиц на месте, health 200, защищённый маршрут 401, критических логов нет.
 - 2026-09-15 — Окончательный код восьми веток опубликован в `master` коммитом `457ca38c61b3d59597721a49e37bd6fd77a02736`; GitHub Actions `Deploy staging` №`34993739780` полностью успешен. VPS создал резервную копию и проверил её восстановление на 50 таблицах, применил миграции, подтвердил nginx, перезапустил `garagebalance-staging.service` и развернул release `457ca38c61b3d59597721a49e37bd6fd77a02736-319`. Публичные health/frontend и новый asset вернули 200, PostgreSQL — `ok`, защищённый маршрут — 401; при `1366×768` document `1366/1366`, console чиста. После повторной проверки достижимости все восемь завершённых веток удалены локально и на GitHub; после `fetch --prune` остались только `master` и `origin/master`, открытых PR нет.
+- 2026-09-15 — Снят устаревший Docker-блокер активного плана: после запуска Docker Engine окончательное объединённое состояние дважды прошло полный штатный Compose build/smoke. В обоих прогонах PostgreSQL, API и frontend достигли состояния healthy, `/health` и frontend вернули 200, защищённый маршрут — 401, критических сообщений в логах не найдено. Из 208 пунктов завершены 207; технических блокеров нет, остаётся только необязательная расширенная ручная матрица дополнительных viewport.
