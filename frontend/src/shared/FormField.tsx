@@ -14,7 +14,7 @@ export function FormField({ label, hint, help, children, className }: FormFieldP
       <span className="form-field-label">
         {help ? (
           <span className="field-label-with-help">
-            <span>{label}</span>
+            <span className="form-field-label-text">{label}</span>
             <FieldHelp label={String(label)}>{help}</FieldHelp>
           </span>
         ) : label}

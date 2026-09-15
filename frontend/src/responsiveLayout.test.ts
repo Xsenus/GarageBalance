@@ -399,6 +399,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.owner-name-grid,\n.owner-contact-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.owner-name-grid__middle-name {\n  grid-column: 1 / -1;')
     expect(normalizedAppCss).toContain('.field-label-with-help {\n  position: relative;')
+    expect(normalizedAppCss).toContain("[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label):not(:has(.field-label-with-help))::after,\n[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label) .form-field-label-text::after {\n  color: #f04438;\n  content: ' *';")
+    expect(normalizedAppCss).not.toContain("[data-required='true'] > .form-field-label)::after")
     expect(normalizedAppCss).toContain('width: min(280px, 100%);')
     expect(normalizedAppCss).toContain('.field-help:hover .field-help__tooltip,\n.field-help:focus .field-help__tooltip {')
     expect(normalizedAppCss).toContain('.owner-name-grid,\n  .owner-contact-grid {\n    grid-template-columns: minmax(0, 1fr);')

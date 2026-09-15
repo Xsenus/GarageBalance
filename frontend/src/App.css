@@ -6332,7 +6332,8 @@ input.meter-readings-control {
   border-color: #d92d20;
 }
 
-[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label)::after {
+[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label):not(:has(.field-label-with-help))::after,
+[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label) .form-field-label-text::after {
   color: #f04438;
   content: ' *';
 }
