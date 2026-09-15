@@ -111,6 +111,7 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('@media (min-width: 1200px) and (max-width: 1499px), (min-width: 1200px) and (max-height: 849px) {\n  .workspace--payments .payments-prototype-sheet:not(.payments-prototype-sheet--income) > .payments-prototype-period-row {\n    grid-template-columns: repeat(2, 100px) minmax(0, 1fr);')
     expect(appCss).toContain('.localized-date-picker input {\n  padding: 9px 40px 9px 10px;\n  text-align: center;')
     expect(appCss).toContain('.workspace--settings .settings-tab-list {\n    margin-top: 50px;')
+    expect(appCss).toContain('.topbar {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--app-topbar-gap);\n  margin-bottom: var(--app-topbar-margin-bottom);\n  transform: translateY(calc(-1 * var(--workspace-section-scroll-offset, 0px)));')
     expect(appCss).toContain(') > .topbar {\n    position: absolute;\n    z-index: 2;')
     expect(settingsSource).toContain('aria-orientation="vertical"')
   })

@@ -1,4 +1,4 @@
-import { memo, Suspense, useState } from 'react'
+import { memo, Suspense, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, ArrowLeft, Bell, LockKeyhole, LogOut, RefreshCw, X } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
@@ -154,10 +154,31 @@ export const Workspace = memo(function Workspace({
   onLogout: () => void
 }) {
   const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false)
+  const topbarRef = useRef<HTMLElement>(null)
   useRestoreFocusOnClose(logoutConfirmationOpen)
   const logoutConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(logoutConfirmationOpen)
   const logoutConfirmationDialogRef = useFocusTrap<HTMLElement>(logoutConfirmationOpen)
   useEscapeKey(logoutConfirmationOpen, () => setLogoutConfirmationOpen(false))
+
+  useEffect(() => {
+    const topbar = topbarRef.current
+    const workspace = topbar?.parentElement
+    if (!topbar || !workspace || activeSection === 'dashboard') return
+
+    const handleSectionScroll = (event: Event) => {
+      const scrollContainer = event.target
+      if (!(scrollContainer instanceof HTMLElement) || !workspace.contains(scrollContainer)) return
+      if (scrollContainer.scrollHeight <= scrollContainer.clientHeight) return
+
+      topbar.style.setProperty('--workspace-section-scroll-offset', `${Math.max(0, scrollContainer.scrollTop)}px`)
+    }
+
+    workspace.addEventListener('scroll', handleSectionScroll, true)
+    return () => {
+      workspace.removeEventListener('scroll', handleSectionScroll, true)
+      topbar.style.removeProperty('--workspace-section-scroll-offset')
+    }
+  }, [activeSection])
 
   const canManageUsers = hasPermission(auth, permissions.usersManage)
   const canReadDictionaries = hasPermission(auth, permissions.dictionariesRead)
@@ -273,7 +294,7 @@ export const Workspace = memo(function Workspace({
 
   return (
     <>
-      <header className={activeSection === 'dashboard' ? 'topbar topbar--dashboard' : 'topbar'}>
+      <header ref={topbarRef} className={activeSection === 'dashboard' ? 'topbar topbar--dashboard' : 'topbar'}>
         {activeSection !== 'dashboard' ? (
           <button className="icon-button topbar-back-button" type="button" aria-label="Назад к выбору раздела" title="Назад к выбору раздела" onClick={() => onOpenSection('dashboard')}>
             <ArrowLeft size={19} />

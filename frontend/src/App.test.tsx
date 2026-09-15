@@ -909,6 +909,32 @@ describe('App', () => {
     }
   })
 
+  it('keeps the shared back button in the section header instead of following a scrolled form', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+
+    const backButton = await screen.findByRole('button', { name: 'Назад к выбору раздела' })
+    const topbar = backButton.closest('header')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    expect(topbar).not.toBeNull()
+
+    Object.defineProperties(tariffsPanel, {
+      clientHeight: { configurable: true, value: 320 },
+      scrollHeight: { configurable: true, value: 720 },
+      scrollTop: { configurable: true, writable: true, value: 160 },
+    })
+    fireEvent.scroll(tariffsPanel)
+    expect(topbar).toHaveStyle('--workspace-section-scroll-offset: 160px')
+
+    tariffsPanel.scrollTop = 0
+    fireEvent.scroll(tariffsPanel)
+    expect(topbar).toHaveStyle('--workspace-section-scroll-offset: 0px')
+  })
+
   it('shows ready tariff data without waiting for irregular payments or fee campaigns', async () => {
     const user = userEvent.setup()
     let resolveIrregularPayments!: (payments: IrregularPaymentDto[]) => void

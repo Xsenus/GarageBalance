@@ -222,6 +222,7 @@
   justify-content: space-between;
   gap: var(--app-topbar-gap);
   margin-bottom: var(--app-topbar-margin-bottom);
+  transform: translateY(calc(-1 * var(--workspace-section-scroll-offset, 0px)));
 }
 
 .topbar--dashboard {
