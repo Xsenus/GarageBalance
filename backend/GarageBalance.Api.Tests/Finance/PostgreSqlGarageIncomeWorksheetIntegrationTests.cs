@@ -286,7 +286,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             var aprilPaid = Assert.Single(paidWorksheet.Value!.Rows, row =>
                 row.AnnualAccrualId == accrual2026.Value.Id &&
                 row.AccountingMonth == new DateOnly(2026, 4, 1));
-            Assert.Equal(400m, aprilPaid.IncomeAmount);
+            Assert.Equal(700m, aprilPaid.IncomeAmount);
             Assert.Equal(0m, aprilPaid.Debt);
             Assert.DoesNotContain(paidWorksheet.Value.Rows, row =>
                 row.AnnualAccrualId == accrual2026.Value.Id &&
@@ -316,6 +316,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
                 row.AnnualAccrualId == accrual2027.Value.Id &&
                 row.AccountingMonth == new DateOnly(2027, 1, 1));
             Assert.Equal(900m, january2027.AccrualAmount);
+            Assert.Equal(100m, january2027.IncomeAmount);
             Assert.Equal(800m, january2027.PayableAmount);
             Assert.Equal(800m, january2027.Debt);
             Assert.DoesNotContain(newYearWorksheet.Value.Rows, row => row.AnnualAccrualId == accrual2026.Value.Id);
@@ -351,7 +352,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             var february2027 = Assert.Single(newYearPaidWorksheet.Value!.Rows, row =>
                 row.AnnualAccrualId == accrual2027.Value.Id &&
                 row.AccountingMonth == new DateOnly(2027, 2, 1));
-            Assert.Equal(800m, february2027.IncomeAmount);
+            Assert.Equal(900m, february2027.IncomeAmount);
             Assert.Equal(0m, february2027.Debt);
             Assert.DoesNotContain(newYearPaidWorksheet.Value.Rows, row =>
                 row.AnnualAccrualId == accrual2027.Value.Id &&
