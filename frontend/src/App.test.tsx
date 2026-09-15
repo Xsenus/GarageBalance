@@ -3716,7 +3716,8 @@ describe('App', () => {
     expect(within(garageDialog).getByLabelText('Телефон владельца гаража')).toHaveAttribute('placeholder', '+7 (___) ___-__-__')
     expect(within(garageDialog).getByLabelText('Счетчики гаража')).toHaveValue('Вода № 15, электричество № 27')
     expect(within(garageDialog).getByLabelText('Счетчики гаража').closest('.contractors-garage-form-notes')).not.toBeNull()
-    expect(within(garageDialog).getByLabelText('Комментарий гаража').closest('.contractors-garage-form-notes')).not.toBeNull()
+    expect(within(garageDialog).getByLabelText('Комментарий гаража').closest('.contractors-garage-form-comment')).not.toBeNull()
+    expect(within(garageDialog).getByLabelText('Комментарий гаража')).toHaveAttribute('maxlength', '1000')
     const nestedReportButton = within(garageDialog).getByRole('button', { name: 'Открыть фин. отчет' })
     expect(nestedReportButton).toHaveClass('contractors-report-button')
     expect(within(garageDialog).queryByRole('button', { name: 'Удалить гараж' })).not.toBeInTheDocument()
@@ -5019,7 +5020,7 @@ describe('App', () => {
     await openSection(user, 'Контрагенты')
     const panel = await screen.findByRole('region', { name: 'Контрагенты' })
     const pagination = await within(panel).findByRole('navigation', { name: 'Пагинация гаражей' })
-    const filtersForm = within(panel).getByRole('form', { name: 'Фильтры гаражей' })
+    const filtersForm = within(panel).getByRole('group', { name: 'Фильтры гаражей' })
     expect(within(filtersForm).getByRole('group', { name: 'Количество людей' })).toBeInTheDocument()
     expect(within(filtersForm).getByRole('group', { name: 'Количество этажей' })).toBeInTheDocument()
     expect(within(filtersForm).getByLabelText('Фильтр по номеру гаража')).toHaveAttribute('placeholder', 'Например, А-20')
@@ -5033,8 +5034,6 @@ describe('App', () => {
     await user.type(within(panel).getByLabelText('Минимальное количество этажей'), '1')
     await user.type(within(panel).getByLabelText('Максимальное количество этажей'), '2')
     expect(within(filtersForm).getByRole('button', { name: 'Сбросить фильтры' })).toBeEnabled()
-    await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
-
     await waitFor(() => expect(requests).toContainEqual({
       offset: 0,
       debtorsOnly: false,
@@ -5078,7 +5077,7 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Контрагенты' })
     await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
 
-    expect(within(panel).queryByRole('form', { name: 'Фильтры гаражей' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('group', { name: 'Фильтры гаражей' })).not.toBeInTheDocument()
     expect(within(panel).queryByLabelText('Фильтр по номеру гаража')).not.toBeInTheDocument()
     expect(getGaragesPage.mock.calls.every((call) => call[8] === undefined)).toBe(true)
   })
@@ -5100,7 +5099,6 @@ describe('App', () => {
     await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
 
     await user.type(within(panel).getByLabelText('Фильтр по номеру гаража'), 'А-')
-    await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
     await waitFor(() => expect(getGaragesPage).toHaveBeenCalledTimes(2))
     await user.click(within(panel).getByRole('button', { name: 'Сбросить фильтры' }))
     expect(await within(panel).findByRole('button', { name: 'Изменить гараж 7' })).toBeInTheDocument()
@@ -5128,10 +5126,10 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Контрагенты' })
     await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
     await user.type(within(panel).getByLabelText('Фильтр по номеру гаража'), 'А-')
-    await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
 
     expect(await within(panel).findByText('Недостаточно прав для фильтрации гаражей.')).toBeInTheDocument()
-    expect(within(panel).getByRole('button', { name: 'Применить фильтры' })).toBeEnabled()
+    expect(within(panel).queryByRole('button', { name: 'Применить фильтры' })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Сбросить фильтры' })).toBeEnabled()
   })
 
   it('ignores a stale garage debtor page after the filter is switched back', async () => {
@@ -9914,8 +9912,7 @@ describe('App', () => {
       amount: 5674,
     }))
     expect(getIncomePaymentWarning).toHaveBeenCalledTimes(2)
-    expect(electricityPaymentInput).toHaveValue('')
-    await waitFor(() => expect(electricityPaymentInput).toHaveFocus())
+    expect(within(prototype).queryByLabelText('Платеж Электроэнергия июн.26')).not.toBeInTheDocument()
     expect(within(prototype).getAllByText('5 674.00').length).toBeGreaterThanOrEqual(2)
 
     const addGarageAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление гаражу' })
@@ -10627,6 +10624,84 @@ describe('App', () => {
     expect(screen.queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Выбранный гараж')).toHaveTextContent('77')
   })
+
+  it('searches garages, suppliers and employees online without an apply button', async () => {
+    const user = userEvent.setup()
+    const getGaragesPage = vi.fn(async (_token: string, search?: string, offset = 0, limit = 25) => ({
+      items: [createGarage({ id: search ? 'garage-search' : 'garage-default', number: search ? '77' : '1', ownerName: search ? 'Иванов Иван' : 'Петров Петр' })],
+      totalCount: 1, offset, limit,
+    }))
+    const getSuppliersPage = vi.fn(async (_token: string, _groupId?: string, search?: string, offset = 0, limit = 25) => ({
+      items: [createSupplier({ id: search ? 'supplier-search' : 'supplier-default', name: search ? 'Водоканал' : 'Энергосбыт' })],
+      totalCount: 1, offset, limit,
+    }))
+    const getStaffMembersPage = vi.fn(async (_token: string, _departmentId?: string, search?: string, offset = 0, limit = 25) => ({
+      items: [createStaffMember({ id: search ? 'staff-search' : 'staff-default', fullName: search ? 'Сидоров Сергей' : 'Петрова Ольга' })],
+      totalCount: 1, offset, limit,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage, getSuppliersPage, getStaffMembersPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    expect(within(panel).queryByRole('button', { name: 'Применить фильтры' })).not.toBeInTheDocument()
+    await user.type(within(panel).getByRole('searchbox', { name: 'Поиск гаражей' }), 'Иванов')
+    await waitFor(() => expect(getGaragesPage).toHaveBeenLastCalledWith('token', 'Иванов', 0, 25, true, 'number', 'asc', false, undefined, expect.any(AbortSignal)))
+    expect(await within(panel).findByRole('button', { name: 'Изменить гараж 77' })).toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.type(await within(panel).findByRole('searchbox', { name: 'Поиск поставщиков' }), 'вода')
+    await waitFor(() => expect(getSuppliersPage).toHaveBeenLastCalledWith('token', undefined, 'вода', 0, 25, true, 'service', 'asc', expect.any(AbortSignal)))
+    expect(await within(panel).findByText('Водоканал')).toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('tab', { name: 'Персонал' }))
+    await user.type(await within(panel).findByRole('searchbox', { name: 'Поиск сотрудников' }), 'Сидоров')
+    await waitFor(() => expect(getStaffMembersPage).toHaveBeenLastCalledWith('token', undefined, 'Сидоров', 0, 25, true, 'fullName', 'asc', expect.any(AbortSignal)))
+    expect(await within(panel).findByText('Сидоров Сергей')).toBeInTheDocument()
+  }, 30000)
+
+  it('cancels an outdated contractor search and keeps the newest garage results', async () => {
+    const user = userEvent.setup()
+    let oldSearchSignal: AbortSignal | undefined
+    let resolveOldSearch!: (page: PagedResult<GarageDto>) => void
+    const oldSearchPage = new Promise<PagedResult<GarageDto>>((resolve) => { resolveOldSearch = resolve })
+    const currentGarage = createGarage({ id: 'garage-current-search', number: '22', ownerName: 'Новый результат' })
+    const staleGarage = createGarage({ id: 'garage-stale-search', number: '11', ownerName: 'Старый результат' })
+    const getGaragesPage = vi.fn(async (_token: string, search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, _filters?: Record<string, unknown>, signal?: AbortSignal) => {
+      if (search === 'старый') {
+        oldSearchSignal = signal
+        return oldSearchPage
+      }
+
+      return {
+        items: search === 'новый' ? [currentGarage] : [],
+        totalCount: search === 'новый' ? 1 : 0,
+        offset,
+        limit,
+      }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const search = within(panel).getByRole('searchbox', { name: 'Поиск гаражей' })
+
+    await user.type(search, 'старый')
+    await waitFor(() => expect(oldSearchSignal).toBeInstanceOf(AbortSignal))
+    await user.clear(search)
+    await user.type(search, 'новый')
+
+    expect(await within(panel).findByRole('button', { name: 'Изменить гараж 22' })).toBeInTheDocument()
+    expect(oldSearchSignal?.aborted).toBe(true)
+    await act(async () => {
+      resolveOldSearch({ items: [staleGarage], totalCount: 1, offset: 0, limit: 25 })
+      await oldSearchPage
+    })
+    expect(within(panel).queryByRole('button', { name: 'Изменить гараж 11' })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Изменить гараж 22' })).toBeInTheDocument()
+  }, 30000)
 
   it('uses garages from the dictionary in the payments search', async () => {
     const user = userEvent.setup()
@@ -12021,12 +12096,10 @@ describe('App', () => {
       expect(finances).toHaveTextContent('Просроченная задолженность0.00')
       expect(within(prototype).queryByRole('button', { name: 'Открыть расшифровку просроченной задолженности' })).not.toBeInTheDocument()
     })
-    expect(paymentInput).toHaveValue('')
+    expect(within(prototype).queryByLabelText('Платеж Мусор апр.26')).not.toBeInTheDocument()
     expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2)
     expect(getGarageOverdueDebt).toHaveBeenCalledTimes(2)
-    expect(paymentInput).toBeDisabled()
-    expect(saveButton).toBeDisabled()
-    fireEvent.keyDown(paymentInput, { key: 'Enter' })
+    expect(within(prototype).queryByRole('button', { name: 'Сохранить платеж Мусор апр.26' })).not.toBeInTheDocument()
     expect(createIncome).toHaveBeenCalledTimes(1)
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 101' })).toHaveTextContent('360.00')
   })
@@ -12096,7 +12169,7 @@ describe('App', () => {
 
     expect(await within(prototype).findByText('Изменения сохранены, но не удалось обновить баланс и просроченную задолженность. Обновите страницу.')).toBeInTheDocument()
     expect(createIncome).toHaveBeenCalledTimes(1)
-    expect(paymentInput).toHaveValue('')
+    expect(within(prototype).queryByLabelText('Платеж Вода июн.26')).not.toBeInTheDocument()
   })
 
   it('unlocks a saved garage payment while its background refresh is still pending', async () => {
@@ -12171,8 +12244,8 @@ describe('App', () => {
     await waitFor(() => expect(createIncome).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(worksheetRefreshSignal).toBeDefined())
     await waitFor(() => expect(overdueRefreshSignal).toBeDefined())
-    expect(paymentInput).toHaveValue('')
-    expect(within(prototype).getByRole('button', { name: 'Сохранить платеж Вода июн.26' })).toBeInTheDocument()
+    expect(within(prototype).queryByLabelText('Платеж Вода июн.26')).not.toBeInTheDocument()
+    expect(within(prototype).queryByRole('button', { name: 'Сохранить платеж Вода июн.26' })).not.toBeInTheDocument()
     expect(worksheetRefreshSignal?.aborted).toBe(false)
     expect(overdueRefreshSignal?.aborted).toBe(false)
 
@@ -12209,9 +12282,9 @@ describe('App', () => {
             meterKind: null,
             meterValue: null,
             meterConsumption: null,
-            accrualAmount: 0,
+            accrualAmount: 700,
             payableAmount: 400,
-            incomeAmount: 400,
+            incomeAmount: 700,
             debt: 0,
           }]
         : [currentMonth, previousMonth].map((month) => ({
@@ -12222,9 +12295,9 @@ describe('App', () => {
             meterKind: null,
             meterValue: null,
             meterConsumption: null,
-            accrualAmount: 0,
+            accrualAmount: 700,
             payableAmount: 400,
-            incomeAmount: 0,
+            incomeAmount: 300,
             debt: 400,
           })),
     }))
@@ -12266,7 +12339,7 @@ describe('App', () => {
       amount: 400,
     })))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2))
-    expect(within(prototype).getAllByRole('textbox', { name: /^Платеж Членский взнос/ })).toHaveLength(1)
+    expect(within(prototype).queryAllByRole('textbox', { name: /^Платеж Членский взнос/ })).toHaveLength(0)
     expect(within(prototype).queryByLabelText(futurePaymentLabel)).not.toBeInTheDocument()
   })
 
@@ -14110,6 +14183,11 @@ describe('App', () => {
     expect(coveredSupplierAmounts).toHaveLength(2)
     expect(coveredSupplierAmounts[0]).not.toHaveClass('money-expense', 'money-income')
     expect(coveredSupplierAmounts[1]).not.toHaveClass('money-expense', 'money-income')
+    const paidSupplierButton = within(coveredSupplierExpenseRow!).getByRole('button', { name: 'Электроэнергия оплачено полностью' })
+    expect(paidSupplierButton).toHaveAttribute('aria-disabled', 'true')
+    await user.click(paidSupplierButton)
+    expect(screen.queryByRole('dialog', { name: 'Добавить выплату' })).not.toBeInTheDocument()
+    expect(within(coveredSupplierExpenseRow!).queryByRole('button', { name: 'Оплатить Электроэнергия' })).not.toBeInTheDocument()
     expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)
     const expenseTotalRow = within(expenseTable).getByText('ИТОГО').closest('tr')
     expect(expenseTotalRow).not.toBeNull()
@@ -14123,6 +14201,91 @@ describe('App', () => {
     expect(within(cashAndBankSummary).getByText('4 000.00')).toBeInTheDocument()
     expect(within(cashAndBankSummary).getByText('Касса + банк').closest('div')).toHaveTextContent('16 000.00')
   })
+
+  it('suggests only the remaining supplier debt after a partial payout', async () => {
+    const user = userEvent.setup()
+    const expenseType = createAccountingType({ id: 'expense-water-remaining', name: 'Водоснабжение' })
+    const supplier = createSupplier({
+      id: 'supplier-water-remaining',
+      name: 'Водоканал с остатком',
+      expenseTypeId: expenseType.id,
+      expenseFundId: 'fund-water-remaining',
+      expenseFundBalance: 5000,
+    })
+    let newlyPaid = 0
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accrualTotal: 1000,
+      expenseTotal: 400 + newlyPaid,
+      closingDebtTotal: 600 - newlyPaid,
+      rows: [{
+        rowKind: 'supplier',
+        supplierId: supplier.id,
+        staffMemberId: null,
+        counterpartyName: supplier.name,
+        expenseTypeId: expenseType.id,
+        expenseTypeName: expenseType.name,
+        openingBalance: 0,
+        openingDebt: 0,
+        openingAdvance: 0,
+        closingDebt: 600 - newlyPaid,
+        closingAdvance: 0,
+        accrualAmount: 1000,
+        expenseAmount: 400 + newlyPaid,
+        balance: 600 - newlyPaid,
+        collectedAmount: 1000,
+        difference: 0,
+      }],
+    }))
+    const createExpense = vi.fn(async (_token: string, request: Parameters<FinanceClient['createExpense']>[1]) => {
+      newlyPaid += request.amount
+      return createFinancialOperation({
+        id: `expense-water-${newlyPaid}`,
+        operationKind: 'expense',
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        expenseTypeId: expenseType.id,
+        expenseTypeName: expenseType.name,
+        amount: request.amount,
+        accountingMonth: request.accountingMonth,
+        operationDate: request.operationDate,
+      })
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getSuppliers: async () => [supplier],
+        getExpenseTypes: async () => [expenseType],
+      })}
+      financeClient={createFinanceClient({ getExpenseWorksheet, createExpense })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    const table = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
+    const payoutButton = await within(table).findByRole('button', { name: 'Оплатить Водоснабжение' })
+    await user.click(payoutButton)
+
+    const firstDialog = await screen.findByRole('dialog', { name: 'Добавить выплату' })
+    const amount = within(firstDialog).getByLabelText('Сумма выплаты')
+    expect(amount).toHaveValue('600.00')
+    await user.clear(amount)
+    await user.type(amount, '400')
+    await user.click(within(firstDialog).getByRole('button', { name: 'Провести' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить выплату' })).not.toBeInTheDocument())
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledTimes(2))
+    await user.click(within(table).getByRole('button', { name: 'Оплатить Водоснабжение' }))
+    const secondDialog = await screen.findByRole('dialog', { name: 'Добавить выплату' })
+    expect(within(secondDialog).getByLabelText('Сумма выплаты')).toHaveValue('200.00')
+    expect(createExpense).toHaveBeenCalledWith('token', expect.objectContaining({ amount: 400 }))
+  }, 30000)
 
   it('shows an episodic cash expense in the worksheet without offering a repeated supplier payment', async () => {
     vi.setSystemTime(new Date('2026-08-31T15:00:00+07:00'))
@@ -28160,7 +28323,7 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
 
     expect(await within(dialog).findByText('Годовой резерв')).toBeInTheDocument()
-    expect(within(dialog).getByText('Фонд: Резерв')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Фонд: Резерв/)).toBeInTheDocument()
     expect(within(dialog).getByText('Не оплачен')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Рассчитать' }))
     await waitFor(() => expect(calculateGarageAnnualPayments).toHaveBeenCalledWith('token', 'garage-1', 2026, undefined))
@@ -28180,6 +28343,66 @@ describe('App', () => {
     expect(await within(dialog).findByText('Оплачен')).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Провести' })).not.toBeInTheDocument()
   })
+
+  it('calculates tariff costs and saves already-paid annual amounts while creating a garage', async () => {
+    const user = userEvent.setup()
+    const previewGarageAnnualPayments = vi.fn(async () => ({
+      accountingYear: 2026,
+      items: [{
+        incomeTypeId: 'income-membership',
+        serviceName: 'Годовой членский взнос',
+        tariffName: 'Членский тариф 2026',
+        accountingYear: 2026,
+        accountingMonth: '2026-01-01',
+        amount: 900,
+        destinationFundId: 'fund-membership',
+        destinationFundName: 'Членские взносы',
+        canRecordPayment: true,
+      }],
+    }))
+    const createGarageWithAnnualPayments = vi.fn<DictionaryClient['createGarageWithAnnualPayments']>(async (_token, request) => {
+      if (request.annualPayments.some((payment) => payment.amount > 900)) throw new Error('Сумма уже оплаченного годового платежа не может превышать его полную стоимость.')
+      return createGarage({
+        id: 'garage-created-with-annual-payment',
+        number: request.garage.number,
+        peopleCount: request.garage.peopleCount,
+        floorCount: request.garage.floorCount,
+      })
+    })
+    const createOrdinaryGarage = vi.fn<DictionaryClient['createGarage']>()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ createGarage: createOrdinaryGarage, createGarageWithAnnualPayments })} financeClient={createFinanceClient({ previewGarageAnnualPayments })} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('button', { name: 'Добавить гараж' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+    await user.type(within(dialog).getByLabelText('Номер гаража'), 'A-17')
+    await user.type(within(dialog).getByLabelText('Количество человек'), '3')
+    await user.type(within(dialog).getByLabelText('Этажи гаража'), '2')
+
+    await waitFor(() => expect(previewGarageAnnualPayments).toHaveBeenLastCalledWith('token', { year: 2026, peopleCount: 3, floorCount: 2 }, expect.any(AbortSignal)))
+    const annualPayments = await within(dialog).findByRole('group', { name: 'Уже оплаченные годовые платежи нового гаража' })
+    expect(within(annualPayments).getByText(/Тариф: Членский тариф 2026/)).toBeInTheDocument()
+    expect(within(annualPayments).getByText(/Стоимость: 900\.00/)).toBeInTheDocument()
+    expect(within(annualPayments).getByText(/Фонд: Членские взносы/)).toBeInTheDocument()
+
+    const paidInput = within(annualPayments).getByLabelText('Уже оплачено: Годовой членский взнос')
+    await user.type(paidInput, '1000')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('не может превышать его полную стоимость')
+    expect(createGarageWithAnnualPayments).toHaveBeenCalledWith('token', expect.objectContaining({ annualPayments: [{ incomeTypeId: 'income-membership', amount: 1000 }] }))
+    await user.clear(paidInput)
+    await user.type(paidInput, '600')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createGarageWithAnnualPayments).toHaveBeenCalledWith('token', {
+      garage: expect.objectContaining({ number: 'A-17', peopleCount: 3, floorCount: 2 }),
+      annualPayments: [{ incomeTypeId: 'income-membership', amount: 600 }],
+    }))
+    expect(createOrdinaryGarage).not.toHaveBeenCalled()
+  }, 30000)
 
   it('shows annual payments loading and retry states and keeps read-only access safe', async () => {
     const user = userEvent.setup()
@@ -28235,7 +28458,7 @@ describe('App', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
 
     expect(await within(dialog).findByText('Годовой резерв')).toBeInTheDocument()
-    expect(within(dialog).getByText('Общий пул')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Общий пул/)).toBeInTheDocument()
     expect(within(dialog).getByText('Режим просмотра: проведение оплаты требует права изменения платежей.')).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Рассчитать' })).not.toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Провести' })).not.toBeInTheDocument()
@@ -28734,6 +28957,25 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
         initialWaterMeterValue: request.initialWaterMeterValue ?? null,
         initialElectricityMeterValue: request.initialElectricityMeterValue ?? null,
         comment: request.comment ?? null,
+      })
+      garages = [createdGarage, ...garages]
+      return createdGarage
+    },
+    createGarageWithAnnualPayments: async (_token, request) => {
+      const garageOwner = owners.find((item) => item.id === request.garage.ownerId) ?? null
+      const createdGarage = createGarage({
+        id: `garage-${garages.length + 1}`,
+        number: request.garage.number,
+        peopleCount: request.garage.peopleCount,
+        floorCount: request.garage.floorCount,
+        ownerId: garageOwner?.id ?? null,
+        ownerName: garageOwner?.fullName ?? null,
+        startingBalance: request.garage.startingBalance,
+        balance: request.garage.startingBalance,
+        overdueDebt: Math.max(request.garage.startingBalance, 0),
+        initialWaterMeterValue: request.garage.initialWaterMeterValue ?? null,
+        initialElectricityMeterValue: request.garage.initialElectricityMeterValue ?? null,
+        comment: request.garage.comment ?? null,
       })
       garages = [createdGarage, ...garages]
       return createdGarage
@@ -29391,6 +29633,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getGarageFullPaymentQuote: async (_token, garageId) => buildFullPaymentQuote(garageId),
     getGarageIncomeWorksheet: async () => garageIncomeWorksheet,
     getGarageAnnualPayments: async () => garageAnnualPayments,
+    previewGarageAnnualPayments: async (_token, request) => ({ accountingYear: request.year, items: [] }),
     calculateGarageAnnualPayments: async () => garageAnnualPayments,
     getExpenseWorksheet: async () => {
       throw new Error('Серверная форма выплат недоступна')

@@ -2750,6 +2750,21 @@ h1 {
   min-height: 64px;
 }
 
+.contractors-live-search {
+  display: block;
+  width: min(440px, 100%);
+  margin: 0 0 12px;
+}
+
+.contractors-live-search input {
+  width: 100%;
+  padding-left: 36px;
+}
+
+.contractors-garage-form-comment {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 720px) {
   .suggestion-options {
     max-height: 176px;

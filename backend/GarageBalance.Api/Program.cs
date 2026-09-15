@@ -111,6 +111,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<InitialAdministratorOptions>, InitialAdministratorOptionsValidator>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
+builder.Services.AddScoped<IGarageCreationService, GarageCreationService>();
 builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
 builder.Services.AddScoped<IGarageRepository, EfGarageRepository>();
 builder.Services.AddScoped<ISupplierGroupRepository, EfSupplierGroupRepository>();

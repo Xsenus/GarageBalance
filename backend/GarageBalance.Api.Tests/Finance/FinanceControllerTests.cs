@@ -655,6 +655,25 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task PreviewGarageAnnualPayments_PassesGarageShapeAndReturnsOptions()
+    {
+        var options = new GarageAnnualPaymentOptionsDto(2026, [
+            new GarageAnnualPaymentOptionDto(Guid.NewGuid(), "Членский взнос", "Тариф 2026", 2026,
+                new DateOnly(2026, 1, 1), 1200m, null, null, true)
+        ]);
+        var service = new FakeFinanceService
+        {
+            GarageAnnualPaymentOptionsResult = FinanceResult<GarageAnnualPaymentOptionsDto>.Success(options)
+        };
+        var request = new PreviewGarageAnnualPaymentsRequest(2026, 3, 2);
+
+        var result = await CreateController(service).PreviewGarageAnnualPayments(request, CancellationToken.None);
+
+        Assert.Same(options, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Same(request, service.LastGarageAnnualPaymentPreviewRequest);
+    }
+
+    [Fact]
     public async Task GarageAnnualPaymentsEndpoints_MapInvalidYearAndMissingGarage()
     {
         var invalid = await CreateController(new FakeFinanceService
@@ -2596,6 +2615,7 @@ public sealed class FinanceControllerTests
         public Guid? LastGarageAnnualPaymentsGarageId { get; private set; }
         public int? LastGarageAnnualPaymentsYear { get; private set; }
         public Guid? LastGarageAnnualPaymentsActorUserId { get; private set; }
+        public PreviewGarageAnnualPaymentsRequest? LastGarageAnnualPaymentPreviewRequest { get; private set; }
         public Guid? LastGarageFullPaymentQuoteGarageId { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public ExpenseWorksheetSupplierBreakdownRequest? LastExpenseWorksheetSupplierBreakdownRequest { get; private set; }
@@ -2616,6 +2636,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<GarageFullPaymentQuoteDto> GarageFullPaymentQuoteResult { get; init; } = FinanceResult<GarageFullPaymentQuoteDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageAnnualPaymentsDto> GarageAnnualPaymentsResult { get; init; } = FinanceResult<GarageAnnualPaymentsDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<GarageAnnualPaymentOptionsDto> GarageAnnualPaymentOptionsResult { get; init; } = FinanceResult<GarageAnnualPaymentOptionsDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetSupplierBreakdownDto> ExpenseWorksheetSupplierBreakdownResult { get; init; } = FinanceResult<ExpenseWorksheetSupplierBreakdownDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetStaffBreakdownDto> ExpenseWorksheetStaffBreakdownResult { get; init; } = FinanceResult<ExpenseWorksheetStaffBreakdownDto>.Failure("not_configured", "Not configured.");
@@ -2778,6 +2799,14 @@ public sealed class FinanceControllerTests
             LastGarageAnnualPaymentsGarageId = garageId;
             LastGarageAnnualPaymentsYear = year;
             return Task.FromResult(GarageAnnualPaymentsResult);
+        }
+
+        public Task<FinanceResult<GarageAnnualPaymentOptionsDto>> PreviewGarageAnnualPaymentsAsync(
+            PreviewGarageAnnualPaymentsRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastGarageAnnualPaymentPreviewRequest = request;
+            return Task.FromResult(GarageAnnualPaymentOptionsResult);
         }
 
         public Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(

@@ -5962,7 +5962,7 @@ function PaymentsPrototypePanel({
                               </div>
                             </td>
                             <td>
-                              <div className="payments-prototype-payment-editor">
+                              {row.debt > 0 ? <div className="payments-prototype-payment-editor">
                                 <MoneyTextInput
                                   className="payments-prototype-payment-input"
                                   aria-label={`Платеж ${row.service} ${row.monthLabel}`}
@@ -5992,7 +5992,7 @@ function PaymentsPrototypePanel({
                                 {savingPaymentRowId === row.id
                                   ? <span className="payments-prototype-payment-status" role="status" aria-live="polite">Сохраняем платёж…</span>
                                   : null}
-                              </div>
+                              </div> : null}
                             </td>
                             <td>{formatPaymentMoney(row.paid)}</td>
                             {(() => {
@@ -6111,7 +6111,7 @@ function PaymentsPrototypePanel({
                   {expenseRows.map((row, index) => {
                     const supplier = row.counterparty ?? ''
                     const isStaffPaymentRow = row.rowKind === 'staff'
-                    const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
+                    const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : undefined
                     const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
                     const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
                     const breakdownKey = getExpenseSupplierBreakdownKey(row)
@@ -6173,15 +6173,16 @@ function PaymentsPrototypePanel({
                             </td>
                             <td>
                               {row.action ? (
-                                <button className="link-button" type="button" onClick={(event) => {
+                                <button className="link-button" type="button" aria-disabled={row.closingDebt <= 0} onClick={(event) => {
+                                  if (row.closingDebt <= 0) return
                                   if (isStaffPaymentRow) {
                                     openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
                                     return
                                   }
 
                                   openExpenseDialog(event, { expensePaymentSource: 'bank', expenseTypeName: row.item, amount: suggestedAmount, rowIndex: index })
-                                }} aria-label={isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
-                                  Оплатить
+                                }} aria-label={row.closingDebt <= 0 ? `${row.item} оплачено полностью` : isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
+                                  {row.closingDebt <= 0 ? 'Оплачено' : 'Оплатить'}
                                 </button>
                               ) : null}
                             </td>

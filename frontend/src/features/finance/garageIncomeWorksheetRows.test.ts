@@ -77,6 +77,24 @@ describe('createGarageIncomeRowsFromWorksheet', () => {
     expect(row.advance).toBe(0.05)
     expect(row.debt).toBe(0)
   })
+
+  it('shows the full annual charge and all payments since the start of its year', () => {
+    const [row] = createGarageIncomeRowsFromWorksheet({
+      garageId: 'garage-annual', garageNumber: '17', ownerName: null,
+      monthFrom: '2026-09-01', monthTo: '2026-09-01', openingBalance: 0, openingDebt: 0,
+      unrepresentedOpeningDebt: 0, accrualTotal: 0, incomeTotal: 0, advanceTotal: 0,
+      debtTotal: 400, closingBalance: 400, closingDebt: 400,
+      rows: [{
+        accountingMonth: '2026-09-01', incomeTypeId: 'membership', incomeTypeName: 'Членский взнос',
+        annualAccrualId: 'annual-1', meterKind: null, meterValue: null, meterConsumption: null,
+        accrualAmount: 1000, payableAmount: 700, incomeAmount: 600, advanceAmount: 0, debt: 400,
+      }],
+    })
+
+    expect(row.accrued).toBe(1000)
+    expect(row.paid).toBe(600)
+    expect(row.debt).toBe(400)
+  })
 })
 
 describe('formatPaymentPrototypeMonthLabel', () => {

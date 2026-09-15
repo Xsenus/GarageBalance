@@ -3,7 +3,7 @@ import type { CSSProperties, FormEvent, MouseEvent, ReactNode, RefObject } from 
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { SupplierServiceDto, UpsertSupplierServiceRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
-import type { FinanceClient, GarageAnnualPaymentItemDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto } from '../../services/financeApi'
+import type { FinanceClient, GarageAnnualPaymentItemDto, GarageAnnualPaymentOptionsDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
@@ -127,6 +127,7 @@ type ContractorGarageRow = {
   meters: string
   comment: string
   isDeleted: boolean
+  paidAnnualPayments?: Array<{ incomeTypeId: string; amount: number }>
 }
 
 type ContractorSupplierRow = {
@@ -929,6 +930,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const garagePageRequestControllerRef = useRef<AbortController | null>(null)
   const supplierPageRequestControllerRef = useRef<AbortController | null>(null)
   const staffPageRequestControllerRef = useRef<AbortController | null>(null)
+  const contractorSearchRef = useRef<Record<ContractorSection, string>>({ garages: '', suppliers: '', staff: '' })
+  const contractorSearchDelayRef = useRef<(() => void) | null>(null)
+  const garageFilterDelayRef = useRef<(() => void) | null>(null)
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -944,6 +948,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     contractorReferenceControllersRef.current.suppliers?.abort()
     supplierEditorRequestControllerRef.current?.abort()
     financialReportRequestControllerRef.current?.abort()
+    contractorSearchDelayRef.current?.()
+    garageFilterDelayRef.current?.()
   }, [])
   useEffect(() => () => {
     if (activeSection === 'garages') {
@@ -953,6 +959,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     } else {
       staffPageRequestControllerRef.current?.abort()
     }
+    contractorSearchDelayRef.current?.()
     if (activeSection !== 'staff') {
       contractorReferenceControllersRef.current[activeSection]?.abort()
     }
@@ -1285,6 +1292,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       : { section: 'garages', key: 'number', direction: 'asc' },
     debtorsOnly = showGarageDebtorsOnly,
     filters = garageColumnFilters,
+    search = contractorSearchRef.current.garages,
   ) {
     garagePageRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -1296,8 +1304,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     try {
       const page = dictionaryClient.getGaragesPage
         ? await (hasGarageColumnFilters(effectiveFilters)
-            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters, controller.signal)
-            : dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, undefined, controller.signal))
+            ? dictionaryClient.getGaragesPage(auth.accessToken, search.trim() || undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters, controller.signal)
+            : dictionaryClient.getGaragesPage(auth.accessToken, search.trim() || undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, undefined, controller.signal))
         : createFallbackPage(
             (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal))
               .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0))
@@ -1336,6 +1344,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     sort: ContractorSortState = contractorSort.section === 'suppliers' && isSupplierServerSortKey(contractorSort.key)
       ? contractorSort
       : { section: 'suppliers', key: 'service', direction: 'asc' },
+    search = contractorSearchRef.current.suppliers,
   ) {
     supplierPageRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -1344,7 +1353,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setSupplierContextMenu(null)
     try {
       const page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.key === 'debt' ? supplierDebtSortDirection(sort.direction) : sort.direction, controller.signal)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, search.trim() || undefined, offset, limit, true, sort.key, sort.key === 'debt' ? supplierDebtSortDirection(sort.direction) : sort.direction, controller.signal)
         : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
       if (controller.signal.aborted) {
         return
@@ -1370,6 +1379,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     sort: ContractorSortState = contractorSort.section === 'staff'
       ? contractorSort
       : { section: 'staff', key: 'fullName', direction: 'asc' },
+    search = contractorSearchRef.current.staff,
   ) {
     staffPageRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -1378,7 +1388,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setEmployeeContextMenu(null)
     try {
       const page = dictionaryClient.getStaffMembersPage
-        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
+        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, search.trim() || undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
         : createFallbackPage(await dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
       if (controller.signal.aborted) {
         return
@@ -1401,6 +1411,27 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const supplierColumnResize = useColumnResize(contractorSupplierColumnDefinitions, supplierColumnWidths, setSupplierColumnWidths)
   const staffColumnResize = useColumnResize(contractorStaffColumnDefinitions, staffColumnWidths, setStaffColumnWidths)
 
+  function scheduleContractorSearch(section: ContractorSection, value: string, load: (nextValue: string) => void) {
+    contractorSearchRef.current[section] = value
+    contractorSearchDelayRef.current?.()
+    contractorSearchDelayRef.current = scheduleDelayedAction(() => {
+      contractorSearchDelayRef.current = null
+      load(value)
+    })
+  }
+
+  function updateGarageColumnFilter(key: keyof GarageColumnFilterForm, value: string) {
+    const nextForm = { ...garageColumnFilterForm, [key]: value }
+    setGarageColumnFilterForm(nextForm)
+    garageFilterDelayRef.current?.()
+    garageFilterDelayRef.current = scheduleDelayedAction(() => {
+      garageFilterDelayRef.current = null
+      const filters = toGarageColumnFilters(nextForm)
+      setGarageColumnFilters(filters)
+      void loadGaragePage(0, garagePage.limit, undefined, undefined, filters)
+    })
+  }
+
   const saveGarage = async (garage: ContractorGarageRow) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
 
@@ -1417,9 +1448,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
 
       const request = createGarageRequestFromRow(garage, savedOwner?.id ?? null)
-      const savedGarage = isBackendDictionaryId(garage.id)
-        ? await dictionaryClient.updateGarage(auth.accessToken, garage.id, request)
-        : await dictionaryClient.createGarage(auth.accessToken, request)
+      let savedGarage: GarageDto
+      if (isBackendDictionaryId(garage.id)) {
+        savedGarage = await dictionaryClient.updateGarage(auth.accessToken, garage.id, request)
+      } else if (garage.paidAnnualPayments?.length) {
+        savedGarage = await dictionaryClient.createGarageWithAnnualPayments(auth.accessToken, { garage: request, annualPayments: garage.paidAnnualPayments })
+      } else {
+        savedGarage = await dictionaryClient.createGarage(auth.accessToken, request)
+      }
       const nextGarage = createGarageRowFromDto(savedGarage, savedOwner ? [...owners.filter((owner) => owner.id !== savedOwner.id), savedOwner] : owners)
 
       setGarages((currentGarages) => {
@@ -2224,7 +2260,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     )
   }
 
-  const hasActiveGarageFilters = canUseGarageColumnFilters && hasGarageColumnFilters(garageColumnFilters)
+  const hasActiveGarageFilters = contractorSearchRef.current.garages.trim().length > 0 || (canUseGarageColumnFilters && hasGarageColumnFilters(garageColumnFilters))
   const toggleGarageDebtorsFilter = () => {
     const nextValue = !showGarageDebtorsOnly
     setShowGarageDebtorsOnly(nextValue)
@@ -2302,6 +2338,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     : contractorFinancialReportTarget?.row.department || 'Отдел не указан'
   const contractorFinancialReportDialogTitleId = 'contractor-financial-report-title'
   const contractorFinancialReportDialogDescriptionId = 'contractor-financial-report-description'
+  const liveSearch = (section: ContractorSection, label: string, load: (value: string) => void) => (
+    <label className="contractors-live-search">
+      <span className="visually-hidden">{label}</span>
+      <span className="contractors-column-filters__input-shell">
+        <Search size={16} aria-hidden="true" />
+        <input type="search" aria-label={label} defaultValue={contractorSearchRef.current[section]} onChange={(event) => scheduleContractorSearch(section, event.target.value, load)} />
+      </span>
+    </label>
+  )
 
   return (
     <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
@@ -2360,20 +2405,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       {formStateError && !modal ? (
         <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || contractorReferenceLoading !== null || supplierEditorLoadingId !== null} />
       ) : null}
-
       {activeSection === 'garages' ? (
         <section className="contractors-directory-card" aria-label="Гаражи">
-          {canUseGarageColumnFilters ? <form className="contractors-column-filters" aria-label="Фильтры гаражей" onSubmit={(event) => {
-            event.preventDefault()
-            const filters = toGarageColumnFilters(garageColumnFilterForm)
-            setGarageColumnFilters(filters)
-            void loadGaragePage(0, garagePage.limit, undefined, undefined, filters)
-          }}>
+          {liveSearch('garages', 'Поиск гаражей', (value) => void loadGaragePage(0, garagePage.limit, undefined, undefined, undefined, value))}
+          {canUseGarageColumnFilters ? <div className="contractors-column-filters" role="group" aria-label="Фильтры гаражей">
             <label className="contractors-column-filters__field contractors-column-filters__field--number">
               <span>Номер гаража</span>
               <span className="contractors-column-filters__input-shell">
                 <Search size={16} aria-hidden="true" />
-                <input aria-label="Фильтр по номеру гаража" placeholder="Например, А-20" value={garageColumnFilterForm.number} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, number: event.target.value }))} />
+                <input aria-label="Фильтр по номеру гаража" placeholder="Например, А-20" value={garageColumnFilterForm.number} onChange={(event) => updateGarageColumnFilter('number', event.target.value)} />
               </span>
             </label>
             <fieldset className="contractors-column-filters__range">
@@ -2381,11 +2421,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               <div>
                 <label>
                   <span>От</span>
-                  <input aria-label="Минимальное количество человек" type="number" inputMode="numeric" min="0" step="1" placeholder="0" value={garageColumnFilterForm.peopleCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMin: event.target.value }))} />
+                  <input aria-label="Минимальное количество человек" type="number" inputMode="numeric" min="0" step="1" placeholder="0" value={garageColumnFilterForm.peopleCountMin} onChange={(event) => updateGarageColumnFilter('peopleCountMin', event.target.value)} />
                 </label>
                 <label>
                   <span>До</span>
-                  <input aria-label="Максимальное количество человек" type="number" inputMode="numeric" min="0" step="1" placeholder="Любое" value={garageColumnFilterForm.peopleCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMax: event.target.value }))} />
+                  <input aria-label="Максимальное количество человек" type="number" inputMode="numeric" min="0" step="1" placeholder="Любое" value={garageColumnFilterForm.peopleCountMax} onChange={(event) => updateGarageColumnFilter('peopleCountMax', event.target.value)} />
                 </label>
               </div>
             </fieldset>
@@ -2394,20 +2434,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               <div>
                 <label>
                   <span>От</span>
-                  <input aria-label="Минимальное количество этажей" type="number" inputMode="numeric" min="0" step="1" placeholder="0" value={garageColumnFilterForm.floorCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMin: event.target.value }))} />
+                  <input aria-label="Минимальное количество этажей" type="number" inputMode="numeric" min="0" step="1" placeholder="0" value={garageColumnFilterForm.floorCountMin} onChange={(event) => updateGarageColumnFilter('floorCountMin', event.target.value)} />
                 </label>
                 <label>
                   <span>До</span>
-                  <input aria-label="Максимальное количество этажей" type="number" inputMode="numeric" min="0" step="1" placeholder="Любое" value={garageColumnFilterForm.floorCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMax: event.target.value }))} />
+                  <input aria-label="Максимальное количество этажей" type="number" inputMode="numeric" min="0" step="1" placeholder="Любое" value={garageColumnFilterForm.floorCountMax} onChange={(event) => updateGarageColumnFilter('floorCountMax', event.target.value)} />
                 </label>
               </div>
             </fieldset>
             <div className="contractors-column-filters__actions">
-              <button className="secondary-button" type="submit" aria-label="Применить фильтры" disabled={contractorPageLoading.garages}>
-                <Search size={16} aria-hidden="true" />
-                <span>Применить</span>
-              </button>
               <button className="ghost-button" type="button" aria-label="Сбросить фильтры" disabled={Object.values(garageColumnFilterForm).every((value) => value === '')} onClick={() => {
+                garageFilterDelayRef.current?.()
                 setGarageColumnFilterForm(emptyGarageColumnFilterForm)
                 setGarageColumnFilters({})
                 void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
@@ -2416,7 +2453,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span>Сбросить</span>
               </button>
             </div>
-          </form> : null}
+          </div> : null}
           <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи" style={garageTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorGarageColumnDefinitions.map((column) => (
@@ -2504,6 +2541,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       {activeSection === 'suppliers' ? (
         <section className="contractors-directory-card" aria-label="Поставщики">
           {supplierEditorLoadingId ? <span className="contractors-directory-loading-note" role="status" aria-live="polite">Загружаем контакты поставщика…</span> : null}
+          {liveSearch('suppliers', 'Поиск поставщиков', (value) => void loadSupplierPage(0, supplierPage.limit, undefined, value))}
           <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики" style={supplierTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorSupplierColumnDefinitions.map((column) => (
@@ -2596,6 +2634,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-card-header">
               <h2>Сотрудники</h2>
             </div>
+            {liveSearch('staff', 'Поиск сотрудников', (value) => void loadStaffPage(0, staffPage.limit, undefined, value))}
             <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 {contractorStaffColumnDefinitions.map((column) => (
@@ -3805,6 +3844,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<GaragePrototypeValidationErrors>({})
+  const [annualPaymentOptions, setAnnualPaymentOptions] = useState<GarageAnnualPaymentOptionsDto | string | null>()
+  const [annualPaymentDrafts, setAnnualPaymentDrafts] = useState<Record<string, string>>({})
   const formRef = useRef<HTMLFormElement>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
@@ -3812,6 +3853,22 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
   const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
   const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
   const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)
+
+  useEffect(() => {
+    if (item || !canReadPayments || !form.peopleCount || !form.floorCount) return
+    const peopleCount = Number(form.peopleCount)
+    const floorCount = Number(form.floorCount)
+    return scheduleDebouncedRequest({
+      request: (signal) => financeClient.previewGarageAnnualPayments(accessToken, {
+        year: new Date().getFullYear(),
+        peopleCount,
+        floorCount,
+      }, signal),
+      onStart: () => setAnnualPaymentOptions(null),
+      onSuccess: setAnnualPaymentOptions,
+      onError: (error) => setAnnualPaymentOptions(error instanceof Error ? error.message : String(error)),
+    })
+  }, [accessToken, canReadPayments, financeClient, form.floorCount, form.peopleCount, item])
 
   function clearValidationError(field: GaragePrototypeField) {
     setValidationErrors((current) => {
@@ -3823,10 +3880,15 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
   }
 
   async function saveAndClose() {
+    const paidAnnualPayments = !item && canWritePayments
+      ? Object.entries(annualPaymentDrafts)
+          .map(([incomeTypeId, draft]) => ({ incomeTypeId, amount: parsePrototypeMoney(draft) }))
+          .filter((payment) => payment.amount > 0)
+      : []
     setSaving(true)
     setSaveError(null)
     try {
-      await onSave(form)
+      await onSave({ ...form, paidAnnualPayments })
       setSaveChanges([])
       onClose()
     } catch (error) {
@@ -3924,8 +3986,26 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
             </div>
             <div className="contractors-garage-form-notes">
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
-              <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
+              <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" maxLength={1000} value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
+            {!item ? (
+              <section className="contractor-history-section" aria-labelledby="garage-create-annual-payments-title">
+                <h4 id="garage-create-annual-payments-title"><FileText size={17} /> Уже оплаченные годовые платежи</h4>
+                {!canWritePayments ? <p className="form-hint">{canReadPayments ? 'Для указания оплаты нужно право изменения платежей.' : 'Для просмотра годовых платежей нужен доступ к платежам.'}</p> : null}
+                {annualPaymentOptions === null ? <LoadingSkeleton label="Рассчитываем годовые платежи" rows={2} columns={3} /> : null}
+                {typeof annualPaymentOptions === 'string' ? <FormError>{annualPaymentOptions}</FormError> : null}
+                {annualPaymentOptions && typeof annualPaymentOptions !== 'string' && annualPaymentOptions.items.length === 0 ? <StatusMessage>Годовые платежи не настроены.</StatusMessage> : null}
+                {annualPaymentOptions && typeof annualPaymentOptions !== 'string' && annualPaymentOptions.items.length ? (
+                  <div className="form-grid" role="group" aria-label="Уже оплаченные годовые платежи нового гаража">
+                    {annualPaymentOptions.items.map((option) => (
+                      <FormField key={option.incomeTypeId} label={`${option.serviceName} · Тариф: ${option.tariffName ?? 'не задан'} · Стоимость: ${option.amount === null ? '—' : formatMoney(option.amount)} · ${option.destinationFundName ? `Фонд: ${option.destinationFundName}` : 'Общий пул'}`}>
+                        {canWritePayments && option.canRecordPayment && option.amount !== null ? <MoneyTextInput aria-label={`Уже оплачено: ${option.serviceName}`} disabled={saving} value={annualPaymentDrafts[option.incomeTypeId] ?? ''} onValueChange={(value) => setAnnualPaymentDrafts((current) => ({ ...current, [option.incomeTypeId]: value }))} /> : <span>Недоступно</span>}
+                      </FormField>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
             {item ? <GarageAnnualPaymentsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} financeClient={financeClient} garage={item} onPaymentRecorded={onPaymentRecorded} /> : null}
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (

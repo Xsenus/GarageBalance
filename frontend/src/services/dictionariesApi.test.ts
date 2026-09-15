@@ -82,6 +82,25 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('creates a garage together with selected annual payments through the atomic endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'garage-17', number: '17' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      garage: { number: '17', peopleCount: 2, floorCount: 1, startingBalance: 0 },
+      annualPayments: [{ incomeTypeId: 'membership', amount: 600 }],
+    }
+
+    await dictionariesApi.createGarageWithAnnualPayments!('token', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/with-annual-payments', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(request),
+    }))
+  })
+
   it('deduplicates the complete tariff reference bundle across repeated section loads', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), {
       status: 200,
