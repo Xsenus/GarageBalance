@@ -8987,7 +8987,7 @@ describe('App', () => {
 
     await user.click(localOption)
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
-    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Номер1')
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('№1')
   })
 
   it('finishes a stalled garage search with a clear retry message', async () => {
@@ -9094,7 +9094,7 @@ describe('App', () => {
     await user.type(search, '101')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*101\s*Иванов Иван/ }))
     const activeGarage = within(prototype).getByLabelText('Выбранный гараж')
-    expect(activeGarage).toHaveTextContent('Номер101')
+    expect(activeGarage).toHaveTextContent('№101')
     expect(activeGarage).toHaveTextContent('Иванов Иван')
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
 
@@ -9102,9 +9102,9 @@ describe('App', () => {
     await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '202', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*202\s*Петров Петр/ }))
 
-    expect(activeGarage).toHaveTextContent('Номер202')
+    expect(activeGarage).toHaveTextContent('№202')
     expect(activeGarage).toHaveTextContent('Петров Петр')
-    expect(activeGarage).not.toHaveTextContent('Номер101')
+    expect(activeGarage).not.toHaveTextContent('№101')
     expect(activeGarage).not.toHaveTextContent('Иванов Иван')
     expect(search).toHaveValue('')
   })
@@ -9780,7 +9780,7 @@ describe('App', () => {
     expect(selectedGarageSummary.closest('.payments-prototype-heading')).toBeNull()
     expect(garageSearchWrap?.compareDocumentPosition(workspaceHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(workspaceHeader).getByLabelText('Выбранный гараж')).toContainElement(selectedGarageSummary)
-    expect(garageGroup).toHaveTextContent('Номер1')
+    expect(garageGroup).toHaveTextContent('№1')
     expect(garageGroup).toHaveTextContent('Люди3')
     expect(garageGroup).toHaveTextContent('Этажи1')
     expect(ownerGroup).toHaveTextContent('ФИОИванов Иван')
@@ -10833,7 +10833,7 @@ describe('App', () => {
     await user.type(searchInput, 'Иванов')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
     expect(await within(prototype).findByRole('table', { name: 'Поступления гаража 1' })).toBeInTheDocument()
-    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Номер1')
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('№1')
 
     await openSection(user, 'Главное меню')
     await openSection(user, 'Платежи')
@@ -11001,6 +11001,8 @@ describe('App', () => {
 
     const quickPeriods = within(prototype).getByRole('group', { name: 'Быстрый выбор периода' })
     await user.click(within(quickPeriods).getByRole('button', { name: 'Текущий год' }))
+    expect(within(quickPeriods).getAllByRole('button', { pressed: true })).toHaveLength(1)
+    expect(within(quickPeriods).getByRole('button', { name: 'Текущий год' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
       monthFrom: `${currentMonth.slice(0, 4)}-01-01`,
       monthTo: `${currentMonth.slice(0, 4)}-12-01`,
@@ -11566,20 +11568,29 @@ describe('App', () => {
     const serviceRow = within(incomeTable).getByText('Водоснабжение').closest('tr')
     expect(serviceRow).not.toBeNull()
     const cells = serviceRow!.querySelectorAll('td')
-    expect(cells[6]).toHaveTextContent('1 250.00')
+    expect(cells[0]).toHaveTextContent('июн.26')
+    await waitFor(() => expect(cells[6]).toHaveTextContent('1 250.00'))
     expect(cells[7]).toHaveTextContent('250.00')
     expect(cells).toHaveLength(8)
-    const monthTotalCells = incomeTable.querySelector('.payments-prototype-month-total')!.querySelectorAll('td')
-    expect(monthTotalCells[4]).toHaveTextContent('1 000.00')
-    expect(monthTotalCells[6]).toHaveTextContent('1 250.00')
-    expect(monthTotalCells[7]).toHaveTextContent('250.00')
-    const periodTotalCells = incomeTable.querySelector('.payments-prototype-total-row')!.querySelectorAll('td')
-    expect(periodTotalCells[4]).toHaveTextContent('1 000.00')
-    expect(periodTotalCells[6]).toHaveTextContent('1 250.00')
-    expect(periodTotalCells[7]).toHaveTextContent('250.00')
+    expect(incomeTable.querySelector('.payments-prototype-month-total')).not.toBeInTheDocument()
+    const periodTotalCells = incomeTable.querySelector('.payments-prototype-total-row')!.querySelectorAll('td, th')
+    expect(periodTotalCells[0]).toHaveTextContent('Показано 1 из 1 записей')
+    expect(periodTotalCells[1]).toHaveTextContent('Итого:')
+    expect(periodTotalCells[2]).toHaveTextContent('1 000.00')
+    expect(periodTotalCells[4]).toHaveTextContent('1 250.00')
+    expect(periodTotalCells[5]).toHaveTextContent('250.00')
+    const columnResizers = within(incomeTable).getAllByRole('button', { name: /Изменить ширину столбца/ })
+    expect(columnResizers).toHaveLength(8)
+    const serviceColumn = incomeTable.querySelectorAll('col')[1]
+    expect(serviceColumn).toHaveStyle({ width: '320px' })
+    fireEvent.keyDown(within(incomeTable).getByRole('button', { name: 'Изменить ширину столбца Услуга' }), { key: 'ArrowRight' })
+    expect(serviceColumn).toHaveStyle({ width: '336px' })
+    await waitFor(() => expect(window.localStorage.getItem('garagebalance.payments.incomeWorksheetColumnWidths')).toContain('"service":336'))
     const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(periodSummary).toHaveTextContent(/Внесено1 250\.00/)
     expect(periodSummary).toHaveTextContent(/Баланс на конец250\.00/)
+    expect(within(periodSummary).getByText('1 250.00')).toHaveClass('money-income')
+    expect(within(periodSummary).getByText('250.00')).toHaveClass('money-income')
   })
 
   it('pays the remaining system water debt without loading the income type directory', async () => {

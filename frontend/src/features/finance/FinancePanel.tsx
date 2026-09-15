@@ -1,6 +1,6 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { ChevronDown, ChevronRight, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleHelp, Database, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, Warehouse, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, ExpenseWorksheetSupplierBreakdownEntryDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialJournalEntryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualRecalculationPreviewDto, StaffSalaryAdjustmentDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
@@ -71,6 +71,19 @@ const dictionaryScreenRequestLimit = 100
 const garageSearchTimeoutMs = 10_000
 type ExpenseWorksheetColumnKey = 'recipient' | 'service' | 'opening' | 'cost' | 'paid' | 'closing' | 'fund' | 'action'
 type ExpenseWorksheetColumnDefinition = { key: ExpenseWorksheetColumnKey; label: string; defaultWidth: number; minWidth: number }
+type IncomeWorksheetColumnKey = 'month' | 'service' | 'meter' | 'difference' | 'accrued' | 'payment' | 'paid' | 'balance'
+type IncomeWorksheetColumnDefinition = { key: IncomeWorksheetColumnKey; label: string; defaultWidth: number; minWidth: number }
+const incomeWorksheetColumnStorageKey = 'garagebalance.payments.incomeWorksheetColumnWidths'
+const incomeWorksheetColumnDefinitions: IncomeWorksheetColumnDefinition[] = [
+  { key: 'month', label: 'Месяц', defaultWidth: 90, minWidth: 72 },
+  { key: 'service', label: 'Услуга', defaultWidth: 320, minWidth: 180 },
+  { key: 'meter', label: 'Счётчик', defaultWidth: 132, minWidth: 108 },
+  { key: 'difference', label: 'Разница', defaultWidth: 92, minWidth: 76 },
+  { key: 'accrued', label: 'Начислено', defaultWidth: 132, minWidth: 104 },
+  { key: 'payment', label: 'Платёж', defaultWidth: 144, minWidth: 120 },
+  { key: 'paid', label: 'Оплачено', defaultWidth: 116, minWidth: 92 },
+  { key: 'balance', label: 'Баланс', defaultWidth: 124, minWidth: 100 },
+]
 const expenseWorksheetColumnStorageKey = 'garagebalance.payments.expenseWorksheetColumnWidths'
 const expenseWorksheetColumnDefinitions: ExpenseWorksheetColumnDefinition[] = [
   { key: 'recipient', label: 'Получатель', defaultWidth: 190, minWidth: 130 },
@@ -82,6 +95,37 @@ const expenseWorksheetColumnDefinitions: ExpenseWorksheetColumnDefinition[] = [
   { key: 'fund', label: 'Текущий размер фонда', defaultWidth: 150, minWidth: 112 },
   { key: 'action', label: 'Действие', defaultWidth: 86, minWidth: 72 },
 ]
+
+function getDefaultIncomeWorksheetColumnWidths() {
+  return incomeWorksheetColumnDefinitions.reduce<Record<IncomeWorksheetColumnKey, number>>((widths, column) => {
+    widths[column.key] = column.defaultWidth
+    return widths
+  }, {} as Record<IncomeWorksheetColumnKey, number>)
+}
+
+function loadIncomeWorksheetColumnWidths() {
+  const defaults = getDefaultIncomeWorksheetColumnWidths()
+  try {
+    const value = window.localStorage.getItem(incomeWorksheetColumnStorageKey)
+    if (!value) return defaults
+    const stored = JSON.parse(value) as Partial<Record<IncomeWorksheetColumnKey, number>>
+    return incomeWorksheetColumnDefinitions.reduce<Record<IncomeWorksheetColumnKey, number>>((widths, column) => {
+      const width = stored[column.key]
+      widths[column.key] = typeof width === 'number' && Number.isFinite(width) ? Math.max(column.minWidth, width) : defaults[column.key]
+      return widths
+    }, {} as Record<IncomeWorksheetColumnKey, number>)
+  } catch {
+    return defaults
+  }
+}
+
+function saveIncomeWorksheetColumnWidths(widths: Record<IncomeWorksheetColumnKey, number>) {
+  try {
+    window.localStorage.setItem(incomeWorksheetColumnStorageKey, JSON.stringify(widths))
+  } catch {
+    // Column widths are an optional local UI preference.
+  }
+}
 
 function getDefaultExpenseWorksheetColumnWidths() {
   return expenseWorksheetColumnDefinitions.reduce<Record<ExpenseWorksheetColumnKey, number>>((widths, column) => {
@@ -3396,6 +3440,7 @@ function PaymentsPrototypePanel({
   useRestoreFocusOnClose(Boolean(historicalMeterReadingSave))
   const [overdueDebtDetailsExpanded, setOverdueDebtDetailsExpanded] = useState(() => overdueDebtDetailsPreference(auth.user.id))
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
+  const [incomeWorksheetColumnWidths, setIncomeWorksheetColumnWidths] = useState(loadIncomeWorksheetColumnWidths)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
   const [expenseWorksheetColumnWidths, setExpenseWorksheetColumnWidths] = useState(loadExpenseWorksheetColumnWidths)
   const [expenseWorksheetMonthFrom, setExpenseWorksheetMonthFrom] = useState(() => getCurrentMonthInputValue())
@@ -5164,16 +5209,6 @@ function PaymentsPrototypePanel({
         garageRows.reduce((sum, row) => sum + row.debt, 0),
         garageRows.reduce((sum, row) => sum + row.advance, 0),
       )
-  const garageMonthlyBalances = new Map<string, number>()
-  if (garageWorksheetSummary) {
-    let runningBalance = garageWorksheetSummary.openingBalance
-    for (const group of [...groupedGarageRows].sort((left, right) => left.month.localeCompare(right.month))) {
-      const monthlyAccrual = group.rows.reduce((sum, row) => sum + row.accrued, 0)
-      const monthlyIncome = group.rows.reduce((sum, row) => sum + row.paid, 0)
-      runningBalance = roundPaymentMoney(runningBalance + monthlyAccrual - monthlyIncome)
-      garageMonthlyBalances.set(group.month, toSignedGarageNetBalance(runningBalance))
-    }
-  }
   const fullPaymentRowsDebt = sumPaymentDebt(getRowsForFullPayment('full'))
   const selectedGarageFullPaymentQuote = fullPaymentQuote && fullPaymentQuote.garageId === selectedGarage?.id
     ? fullPaymentQuote
@@ -5348,6 +5383,10 @@ function PaymentsPrototypePanel({
         .replace(/\s+г\.$/u, '')
     : `${formatMonth(`${expenseWorksheetMonthFrom}-01`)} — ${formatMonth(`${expenseWorksheetMonthTo}-01`)}`
   const expenseWorksheetTableLabel = `Форма выплат за ${expensePeriodLabel}`
+  const incomeWorksheetTableStyle = useMemo<CSSProperties>(() => ({
+    width: `${incomeWorksheetColumnDefinitions.reduce((total, column) => total + incomeWorksheetColumnWidths[column.key], 0)}px`,
+  }), [incomeWorksheetColumnWidths])
+  const incomeWorksheetColumnResize = useColumnResize(incomeWorksheetColumnDefinitions, incomeWorksheetColumnWidths, setIncomeWorksheetColumnWidths)
   const visibleExpenseWorksheetColumns = isEditableExpenseWorksheetPeriod
     ? expenseWorksheetColumnDefinitions
     : expenseWorksheetColumnDefinitions.slice(0, 6)
@@ -5355,6 +5394,10 @@ function PaymentsPrototypePanel({
     width: `${visibleExpenseWorksheetColumns.reduce((total, column) => total + expenseWorksheetColumnWidths[column.key], 0)}px`,
   }), [expenseWorksheetColumnWidths, visibleExpenseWorksheetColumns])
   const expenseWorksheetColumnResize = useColumnResize(expenseWorksheetColumnDefinitions, expenseWorksheetColumnWidths, setExpenseWorksheetColumnWidths)
+
+  useEffect(() => {
+    saveIncomeWorksheetColumnWidths(incomeWorksheetColumnWidths)
+  }, [incomeWorksheetColumnWidths])
 
   useEffect(() => {
     saveExpenseWorksheetColumnWidths(expenseWorksheetColumnWidths)
@@ -5450,32 +5493,40 @@ function PaymentsPrototypePanel({
           <div className="payments-prototype-garage-overview" aria-label="Выбранный гараж">
             <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
               <section className="payments-prototype-summary-group" aria-label="Гараж">
-                <h3>Гараж</h3>
-                <dl>
-                  <div><dt>Номер</dt><dd>{selectedGarage.number}</dd></div>
-                  <div><dt>Люди</dt><dd>{selectedGarage.peopleCount}</dd></div>
-                  <div><dt>Этажи</dt><dd>{selectedGarage.floorCount}</dd></div>
-                </dl>
+                <Warehouse className="payments-prototype-summary-icon" size={32} aria-hidden="true" />
+                <div className="payments-prototype-summary-content">
+                  <h3>Гараж</h3>
+                  <dl>
+                    <div className="payments-prototype-summary-primary"><dt>№</dt><dd>{selectedGarage.number}</dd></div>
+                    <div className="payments-prototype-summary-secondary"><dt>Люди</dt><dd>{selectedGarage.peopleCount}</dd><dt>Этажи</dt><dd>{selectedGarage.floorCount}</dd></div>
+                  </dl>
+                </div>
               </section>
               <section className="payments-prototype-summary-group" aria-label="Владелец">
-                <h3>Владелец</h3>
-                <dl>
-                  <div><dt>ФИО</dt><dd>{selectedGarage.ownerName}</dd></div>
-                  <div><dt>Телефон</dt><dd>{selectedGarage.phone}</dd></div>
-                </dl>
+                <UserRound className="payments-prototype-summary-icon" size={32} aria-hidden="true" />
+                <div className="payments-prototype-summary-content">
+                  <h3>Владелец</h3>
+                  <dl>
+                    <div className="payments-prototype-summary-primary"><dt>ФИО</dt><dd>{selectedGarage.ownerName}</dd></div>
+                    <div className="payments-prototype-summary-secondary"><dt>Телефон</dt><dd>{selectedGarage.phone}</dd></div>
+                  </dl>
+                </div>
               </section>
               <section className="payments-prototype-summary-group payments-prototype-summary-group--finances" aria-label="Финансы">
-                <h3>Финансы</h3>
-                <dl>
-                  <div>
-                    <dt>{selectedGarageBalance?.label}</dt>
-                    <dd className={selectedGarageBalance?.moneyClassName}>{formatPaymentMoney(selectedGarageBalance?.amount ?? 0)}</dd>
-                  </div>
-                  <div>
-                    <dt>Просроченная задолженность</dt>
-                    <dd className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(selectedGarage.overdueDebt)}</dd>
-                  </div>
-                </dl>
+                <Database className="payments-prototype-summary-icon" size={32} aria-hidden="true" />
+                <div className="payments-prototype-summary-content">
+                  <h3>Финансы</h3>
+                  <dl>
+                    <div className="payments-prototype-summary-primary">
+                      <dt>{selectedGarageBalance?.label}</dt>
+                      <dd className={selectedGarageBalance?.moneyClassName}>{formatPaymentMoney(selectedGarageBalance?.amount ?? 0)}</dd>
+                    </div>
+                    <div className="payments-prototype-summary-secondary">
+                      <dt>Просроченная задолженность</dt>
+                      <dd className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(selectedGarage.overdueDebt)}</dd>
+                    </div>
+                  </dl>
+                </div>
               </section>
             </section>
           </div>
@@ -5607,81 +5658,75 @@ function PaymentsPrototypePanel({
           ) : null}
 
           <div className="payments-prototype-sheet payments-prototype-sheet--income">
-            <div className="payments-prototype-period-row">
-              <label>
-                <span>Месяц с</span>
-                <LocalizedDatePicker ariaLabel="Месяц поступлений с" mode="month" value={incomeWorksheetMonthFrom} onChange={handleIncomeWorksheetMonthFromChange} />
-              </label>
-              <label>
-                <span>Месяц по</span>
-                <LocalizedDatePicker ariaLabel="Месяц поступлений по" mode="month" value={incomeWorksheetMonthTo} onChange={handleIncomeWorksheetMonthToChange} />
-              </label>
-              <ReportPeriodQuickSelect
-                mode="month"
-                valueFrom={incomeWorksheetMonthFrom}
-                valueTo={incomeWorksheetMonthTo}
-                onSelect={(range) => setIncomeWorksheetPeriod(range.monthFrom, range.monthTo)}
-              />
-            </div>
-            {garageWorksheetSummary ? (
-              <div className="payments-prototype-period-summary" aria-label="Итоги периода поступлений">
-                <div>
-                  <span>Баланс на начало</span>
-                  <strong className={openingBalanceTotal < 0 ? 'money-expense' : openingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(openingBalanceTotal)}</strong>
-                </div>
-                <div>
-                  <span>Начислено</span>
-                  <strong>{formatPaymentMoney(garageWorksheetSummary.accrualTotal)}</strong>
-                </div>
-                <div>
-                  <span>Внесено</span>
-                  <strong>{formatPaymentMoney(garageWorksheetSummary.incomeTotal)}</strong>
-                </div>
-                <div>
-                  <span>Баланс на конец</span>
-                  <strong className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalanceTotal)}</strong>
-                </div>
+            <div className="payments-prototype-period-toolbar">
+              <div className="payments-prototype-period-row">
+                <label>
+                  <span>Месяц с</span>
+                  <LocalizedDatePicker ariaLabel="Месяц поступлений с" mode="month" value={incomeWorksheetMonthFrom} onChange={handleIncomeWorksheetMonthFromChange} />
+                </label>
+                <label>
+                  <span>Месяц по</span>
+                  <LocalizedDatePicker ariaLabel="Месяц поступлений по" mode="month" value={incomeWorksheetMonthTo} onChange={handleIncomeWorksheetMonthToChange} />
+                </label>
+                <ReportPeriodQuickSelect
+                  mode="month"
+                  valueFrom={incomeWorksheetMonthFrom}
+                  valueTo={incomeWorksheetMonthTo}
+                  onSelect={(range) => setIncomeWorksheetPeriod(range.monthFrom, range.monthTo)}
+                />
               </div>
-            ) : null}
+              {garageWorksheetSummary ? (
+                <div className="payments-prototype-period-summary" aria-label="Итоги периода поступлений">
+                  <div>
+                    <span>Баланс на начало</span>
+                    <strong className={openingBalanceTotal < 0 ? 'money-expense' : openingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(openingBalanceTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Начислено</span>
+                    <strong className={garageWorksheetSummary.accrualTotal < 0 ? 'money-expense' : garageWorksheetSummary.accrualTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(garageWorksheetSummary.accrualTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Внесено</span>
+                    <strong className={garageWorksheetSummary.incomeTotal < 0 ? 'money-expense' : garageWorksheetSummary.incomeTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(garageWorksheetSummary.incomeTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Баланс на конец</span>
+                    <strong className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalanceTotal)}</strong>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <div className="payments-prototype-table-scroll">
-              <table className="payments-prototype-table payments-prototype-table--garage" aria-label={`Поступления гаража ${selectedGarage.number}`}>
+              <table className="payments-prototype-table payments-prototype-table--garage payments-prototype-table--resizable" aria-label={`Поступления гаража ${selectedGarage.number}`} style={incomeWorksheetTableStyle}>
+                <colgroup>
+                  {incomeWorksheetColumnDefinitions.map((column) => (
+                    <col key={column.key} style={{ width: incomeWorksheetColumnWidths[column.key] }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr>
-                    <th scope="col">Месяц</th>
-                    <th scope="col">Услуга</th>
-                    <th scope="col">Счётчик</th>
-                    <th scope="col">Разница</th>
-                    <th scope="col">Начислено</th>
-                    <th scope="col">Платёж</th>
-                    <th scope="col">Оплачено</th>
-                    <th scope="col">Баланс</th>
+                    {incomeWorksheetColumnDefinitions.map((column) => (
+                      <th scope="col" key={column.key} aria-label={column.label}>
+                        <span>{column.label}</span>
+                        <button
+                          className="icon-button contractors-column-resizer"
+                          type="button"
+                          aria-label={`Изменить ширину столбца ${column.label}`}
+                          onPointerDown={(event) => incomeWorksheetColumnResize.startResize(column.key, event)}
+                          onPointerMove={incomeWorksheetColumnResize.continueResize}
+                          onPointerUp={incomeWorksheetColumnResize.finishResize}
+                          onPointerCancel={incomeWorksheetColumnResize.cancelResize}
+                          onKeyDown={(event) => incomeWorksheetColumnResize.resizeWithKeyboard(column.key, event)}
+                        />
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedGarageRows.map((group) => {
-                    const groupPayable = group.rows.reduce((sum, row) => sum + row.accrued, 0)
-                    const groupPaid = group.rows.reduce((sum, row) => sum + row.paid, 0)
-                    const groupAdvance = group.rows.reduce((sum, row) => sum + row.advance, 0)
-                    const groupDebt = group.rows.reduce((sum, row) => sum + row.debt, 0)
-                    const groupBalance = garageMonthlyBalances.get(group.month)
-                      ?? toSignedGarageSplitBalance(groupDebt, groupAdvance)
-                    return (
-                      <Fragment key={group.month}>
-                        <tr className="payments-prototype-month-total">
-                          <td>{group.monthLabel}</td>
-                          <td>ИТОГО</td>
-                          <td />
-                          <td />
-                          <td>{formatPaymentMoney(groupPayable)}</td>
-                          <td />
-                          <td>{formatPaymentMoney(groupPaid)}</td>
-                          <td className={groupBalance < 0 ? 'money-expense' : groupBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(groupBalance)}</td>
-                        </tr>
-                        {group.rows.map((row) => {
-                          return (
+                  {garageRows.map((row) => (
                           <Fragment key={row.id}>
                           <tr>
-                            <td />
+                            <td className="payments-prototype-month-cell">{row.monthLabel}</td>
                             <td>
                               <span>{getGarageIncomeRowTitle(row)}</span>
                               {shouldShowAccrualReason(row, accrualReasonDisplayMode) ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
@@ -5794,27 +5839,23 @@ function PaymentsPrototypePanel({
                             })()}
                           </tr>
                           </Fragment>
-                          )
-                        })}
-                      </Fragment>
-                    )
-                  })}
-                  {groupedGarageRows.length === 0 ? (
+                  ))}
+                  {garageRows.length === 0 ? (
                     <tr>
                       <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
+                </tbody>
+                <tfoot>
                   <tr className="payments-prototype-total-row">
-                    <td />
-                    <td>ИТОГО</td>
-                    <td />
-                    <td />
+                    <td colSpan={3} className="payments-prototype-visible-count">Показано {garageRows.length} из {garageRows.length} записей</td>
+                    <th scope="row">Итого:</th>
                     <td>{formatPaymentMoney(paymentTotal)}</td>
                     <td />
                     <td>{formatPaymentMoney(paidTotal)}</td>
                     <td className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalanceTotal)}</td>
                   </tr>
-                </tbody>
+                </tfoot>
               </table>
             </div>
           </div>
