@@ -320,6 +320,10 @@ describe('responsive layout styles', () => {
 
   it('keeps the signed garage balance column and four period totals readable', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 1120px;\n  table-layout: fixed;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage tbody td {\n  height: 28px;\n  padding-block: 3px;\n  font-size: 13px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage :is(.payments-prototype-payment-input, .payments-prototype-meter-input) {\n  min-height: 28px;\n  padding-block: 3px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage :is(.payments-prototype-payment-save, .payments-prototype-meter-save) {\n  width: 28px;\n  height: 28px;\n  min-height: 28px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage .payments-prototype-calculation-toggle {\n  width: 28px;\n  height: 28px;')
     expect(normalizedAppCss).toContain('.payments-prototype-table-scroll {\n  min-width: 0;\n  max-width: 100%;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(3) {\n  width: 150px;')
     expect(normalizedAppCss).toContain('.payments-prototype-table--garage th:nth-child(4) {\n  width: 100px;')

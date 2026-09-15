@@ -4602,6 +4602,43 @@ input.meter-readings-control {
   table-layout: fixed;
 }
 
+.payments-prototype-table--garage thead th,
+.payments-prototype-table--garage tfoot :is(th, td) {
+  height: 34px;
+  padding-block: 4px;
+}
+
+.payments-prototype-table--garage tbody td {
+  height: 28px;
+  padding-block: 3px;
+  font-size: 13px;
+}
+
+.payments-prototype-table--garage :is(.payments-prototype-payment-input, .payments-prototype-meter-input) {
+  min-height: 28px;
+  padding-block: 3px;
+}
+
+.payments-prototype-table--garage :is(.payments-prototype-payment-save, .payments-prototype-meter-save) {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+.payments-prototype-table--garage :is(.payments-prototype-payment-editor, .payments-prototype-meter-editor) {
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 4px;
+}
+
+.payments-prototype-table--garage .payments-prototype-payable {
+  gap: 5px;
+}
+
+.payments-prototype-table--garage .payments-prototype-calculation-toggle {
+  width: 28px;
+  height: 28px;
+}
+
 .payments-prototype-table--garage th:nth-child(1) {
   width: 112px;
 }
