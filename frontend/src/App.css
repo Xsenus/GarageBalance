@@ -2594,6 +2594,23 @@ h1 {
   gap: 12px;
 }
 
+.contractors-supplier-primary-grid {
+  align-items: start;
+}
+
+.contractors-supplier-primary-grid > .form-field {
+  grid-template-rows: minmax(15px, auto) 40px;
+  align-content: start;
+}
+
+.contractors-supplier-primary-grid > .form-field > input,
+.contractors-supplier-primary-grid > .form-field > .select-control,
+.contractors-supplier-primary-grid > .form-field > .select-control > .select-control__trigger {
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+}
+
 .contractors-supplier-contact-summary-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -6333,6 +6350,15 @@ input.meter-readings-control {
 }
 
 [aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label)::after {
+  color: #f04438;
+  content: ' *';
+}
+
+[aria-modal] .form-field:has(:required, [aria-required='true']) > .form-field-label:has(> .field-label-with-help)::after {
+  content: none;
+}
+
+[aria-modal] .form-field:has(:required, [aria-required='true']) > .form-field-label > .field-label-with-help > span:first-child::after {
   color: #f04438;
   content: ' *';
 }
