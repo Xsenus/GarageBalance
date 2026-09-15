@@ -15072,6 +15072,12 @@ describe('App', () => {
     expect(within(reconciliation).getByText('700.00 руб.')).toBeInTheDocument()
     expect(within(reconciliation).getByText('250.00 руб.')).toBeInTheDocument()
     expect(within(reconciliation).queryByText('300.00 руб.')).not.toBeInTheDocument()
+    const reconciliationCopy = reconciliation.querySelector('.funds-distribution-copy')
+    const reconciliationValues = reconciliation.querySelector('.funds-reconciliation-values')
+    expect(reconciliationCopy).not.toBeNull()
+    expect(reconciliationValues).not.toBeNull()
+    expect(reconciliationCopy?.compareDocumentPosition(reconciliationValues as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(reconciliationValues?.querySelectorAll(':scope > div')).toHaveLength(3)
     expect(await screen.findByRole('alert')).toHaveTextContent('Обнаружено расхождение 50.00 руб.')
   })
 
