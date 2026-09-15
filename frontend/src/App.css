@@ -8474,6 +8474,29 @@ button.operation-row:focus-visible {
   gap: 6px;
 }
 
+.report-checkbox-picker--with-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 14px;
+}
+
+.report-checkbox-picker--with-actions > .form-field-label,
+.report-checkbox-picker--with-actions > .report-workbook-multi-select-status,
+.report-checkbox-picker--with-actions > .report-filter-search-status,
+.report-checkbox-picker--with-actions > .report-filter-search-error,
+.report-checkbox-picker--with-actions > .report-checkbox-picker-selected {
+  grid-column: 1 / -1;
+}
+
+.report-checkbox-picker--with-actions > .payments-prototype-search-wrap {
+  grid-column: 1;
+}
+
+.report-checkbox-picker--with-actions > .report-workbook-filter__actions {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+}
+
 .report-checkbox-picker > label {
   display: block;
 }

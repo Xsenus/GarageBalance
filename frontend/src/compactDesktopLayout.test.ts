@@ -147,5 +147,7 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.report-workbook-filter__fields > label {\n  flex: 0 0 150px;')
     expect(appCss).toContain('.workspace--reports > .topbar {\n    top: 25px;\n    left: 27px;')
     expect(appCss).not.toContain('.report-workbook-filter__actions {\n    grid-column: 1;\n    grid-row: 2;')
+    expect(appCss).toContain('.report-checkbox-picker--with-actions {\n  grid-template-columns: minmax(0, 1fr) auto;\n  column-gap: 14px;')
+    expect(appCss).toContain('.report-checkbox-picker--with-actions > .report-workbook-filter__actions {\n  grid-column: 2;\n  grid-row: 2;\n  align-self: start;')
   })
 })

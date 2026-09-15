@@ -76,6 +76,7 @@ function ReportCheckboxMultiSelect({
   required,
   openOnFocus = false,
   loadOptions,
+  actions,
   onChange,
 }: {
   label: string
@@ -89,6 +90,7 @@ function ReportCheckboxMultiSelect({
   required?: boolean
   openOnFocus?: boolean
   loadOptions?: (search: string, signal: AbortSignal) => Promise<ReportFilterOption[]>
+  actions?: ReactNode
   onChange: (values: string[]) => void
 }) {
   const searchId = useId()
@@ -148,7 +150,7 @@ function ReportCheckboxMultiSelect({
   }
 
   return (
-    <div className="report-workbook-filter-wide report-checkbox-picker" data-required={required}>
+    <div className={`report-workbook-filter-wide report-checkbox-picker${actions ? ' report-checkbox-picker--with-actions' : ''}`} data-required={required}>
       <label className="form-field-label" htmlFor={searchId}>{label}</label>
       <div
         ref={wrapRef}
@@ -212,6 +214,7 @@ function ReportCheckboxMultiSelect({
           </div>
         ) : null}
       </div>
+      {actions}
       {selectedValues.length === 0 ? (
         <span className="report-workbook-multi-select-status" id={statusId} role="status" aria-live="polite">{allLabel}</span>
       ) : null}
@@ -1548,11 +1551,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                 options={feeFilterOptions}
                 selectedValues={selectedFeeEntryIds}
                 openOnFocus
+                actions={(
+                  <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">
+                    {renderReportExports('fees', downloadFeeReport)}
+                  </div>
+                )}
                 onChange={setSelectedFeeEntryIds}
               />
-            </div>
-            <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">
-              {renderReportExports('fees', downloadFeeReport)}
             </div>
           </div>
           <div className="report-workbook-split">
