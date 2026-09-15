@@ -34,6 +34,18 @@ describe('shared pagination coverage', () => {
     expect(paginationSource).toContain('pageSizeOptions.map')
   })
 
+  it('keeps compact page-size options above every clipping table container', () => {
+    const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
+    const compactPaginationRule = appCss.match(/\.dictionary-pagination--compact\s*\{([^}]*)\}/)?.[1] ?? ''
+    const compactSelectRule = appCss.match(/\.pagination-page-size-select\s*\{([^}]*)\}/)?.[1] ?? ''
+
+    expect(compactPaginationRule).toContain('position: relative;')
+    expect(compactPaginationRule).toContain('z-index: 4;')
+    expect(compactPaginationRule).toContain('overflow: visible;')
+    expect(compactSelectRule).toContain('position: relative;')
+    expect(compactSelectRule).toContain('z-index: 2;')
+  })
+
   it('keeps reports as the explicit all-rows exception without visible pagination', () => {
     const source = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
 

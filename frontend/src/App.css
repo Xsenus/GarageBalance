@@ -7078,6 +7078,9 @@ input.meter-readings-control {
 .dictionary-pagination--compact {
   display: flex;
   flex-wrap: nowrap;
+  position: relative;
+  z-index: 4;
+  overflow: visible;
   padding: 7px 8px;
 }
 
@@ -7088,6 +7091,8 @@ input.meter-readings-control {
 }
 
 .pagination-page-size-select {
+  position: relative;
+  z-index: 2;
   width: 66px;
 }
 
