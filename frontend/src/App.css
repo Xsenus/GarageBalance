@@ -6354,15 +6354,6 @@ input.meter-readings-control {
   content: ' *';
 }
 
-[aria-modal] .form-field:has(:required, [aria-required='true']) > .form-field-label:has(> .field-label-with-help)::after {
-  content: none;
-}
-
-[aria-modal] .form-field:has(:required, [aria-required='true']) > .form-field-label > .field-label-with-help > span:first-child::after {
-  color: #f04438;
-  content: ' *';
-}
-
 .audit-filter-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(140px, 1fr));
