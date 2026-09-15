@@ -630,6 +630,11 @@ describe('responsive layout styles', () => {
   it('keeps the supplier editor wide, compact and responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--supplier {\n  width: min(1280px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.contractors-dialog--supplier .contractors-modal-form {\n  gap: 9px;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid {\n  align-items: start;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid > .form-field {\n  grid-template-rows: minmax(15px, auto) 40px;\n  align-content: start;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid > .form-field > input,\n.contractors-supplier-primary-grid > .form-field > .select-control,\n.contractors-supplier-primary-grid > .form-field > .select-control > .select-control__trigger {\n  box-sizing: border-box;\n  height: 40px;\n  min-height: 40px;')
+    expect(normalizedAppCss).toContain("[aria-modal] .form-field:has(:required, [aria-required='true']) > .form-field-label:has(> .field-label-with-help)::after {\n  content: none;")
+    expect(normalizedAppCss).toContain("[aria-modal] .form-field:has(:required, [aria-required='true']) > .form-field-label > .field-label-with-help > span:first-child::after {\n  color: #f04438;\n  content: ' *';")
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid > .form-field {\n  align-content: start;')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(0, 1fr);')
