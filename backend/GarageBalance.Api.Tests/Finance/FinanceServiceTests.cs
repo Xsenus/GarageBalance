@@ -8162,6 +8162,240 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_CreatesAnnualObligationWhenGarageWasRegisteredAfterAccrualMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.RegisteredOn = new DateOnly(2026, 9, 10);
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Годовой взнос после регистрации",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 700m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(
+                fixtures.IncomeType.Id,
+                tariff.Id,
+                new DateOnly(2026, 1, 1),
+                "Годовое обязательство"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(2026, accrual.AccountingYear);
+        Assert.Equal(new DateOnly(2026, 1, 1), accrual.AccountingMonth);
+    }
+
+    [Fact]
+    public async Task GarageAnnualPayments_CalculatesAndTargetsReceiptToSelectedAnnualAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "custom_annual_card";
+        fixtures.IncomeType.Name = "Годовой резерв";
+        var fund = new Fund { Name = "Резерв", NormalizedName = "РЕЗЕРВ" };
+        database.Context.Funds.Add(fund);
+        fixtures.IncomeType.DestinationFund = fund;
+        var tariff = new Tariff
+        {
+            Name = "Годовой резерв",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 900m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Годовой резерв",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            PaymentDueMonth = 6,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 15, 5, 0, 0, TimeSpan.Zero)));
+
+        var calculated = await service.CalculateGarageAnnualPaymentsAsync(
+            fixtures.Garage.Id,
+            2026,
+            null,
+            CancellationToken.None);
+
+        Assert.True(calculated.Succeeded, calculated.ErrorMessage);
+        var item = Assert.Single(calculated.Value!.Items);
+        Assert.Equal("unpaid", item.Status);
+        Assert.Equal(900m, item.OutstandingAmount);
+        Assert.Equal(fund.Id, item.DestinationFundId);
+        Assert.True(item.CanRecordPayment);
+
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2025, 1, 1),
+            AccountingYear = 2025,
+            DueDate = new DateOnly(2025, 6, 30),
+            OverdueFromDate = new DateOnly(2025, 7, 31),
+            Amount = 300m,
+            Source = AccrualSources.Regular
+        });
+        await database.Context.SaveChangesAsync();
+
+        var excessivePayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 15),
+                new DateOnly(2026, 9, 1),
+                901m,
+                null,
+                null,
+                TargetAccrualId: item.AccrualId),
+            null,
+            CancellationToken.None);
+        Assert.False(excessivePayment.Succeeded);
+        Assert.Equal("annual_payment_amount_exceeds_remaining", excessivePayment.ErrorCode);
+
+        var partialPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 15),
+                new DateOnly(2026, 9, 1),
+                400m,
+                "ПКО-ГОД-1",
+                "Частичная оплата из карточки",
+                TargetAccrualId: item.AccrualId),
+            null,
+            CancellationToken.None);
+
+        Assert.True(partialPayment.Succeeded, partialPayment.ErrorMessage);
+        Assert.Equal(item.AccrualId, partialPayment.Value!.TargetAccrualId);
+        var partialAllocation = Assert.Single(database.Context.AccrualPaymentAllocations.Where(value => value.FinancialOperationId == partialPayment.Value.Id));
+        Assert.Equal(item.AccrualId, partialAllocation.AccrualId);
+        Assert.Equal(400m, partialAllocation.Amount);
+
+        var partialStatus = await service.GetGarageAnnualPaymentsAsync(fixtures.Garage.Id, 2026, CancellationToken.None);
+        Assert.True(partialStatus.Succeeded, partialStatus.ErrorMessage);
+        var partialItem = Assert.Single(partialStatus.Value!.Items);
+        Assert.Equal("partial", partialItem.Status);
+        Assert.Equal(400m, partialItem.PaidAmount);
+        Assert.Equal(500m, partialItem.OutstandingAmount);
+
+        var finalPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 15),
+                new DateOnly(2026, 9, 1),
+                500m,
+                "ПКО-ГОД-2",
+                "Окончательная оплата из карточки",
+                TargetAccrualId: item.AccrualId),
+            null,
+            CancellationToken.None);
+
+        Assert.True(finalPayment.Succeeded, finalPayment.ErrorMessage);
+        Assert.Equal(item.AccrualId, finalPayment.Value!.TargetAccrualId);
+        Assert.Equal(900m, database.Context.FundOperations.Where(value => value.FundId == fund.Id).Sum(value => value.Amount));
+
+        var status = await service.GetGarageAnnualPaymentsAsync(fixtures.Garage.Id, 2026, CancellationToken.None);
+        Assert.True(status.Succeeded, status.ErrorMessage);
+        var paidItem = Assert.Single(status.Value!.Items);
+        Assert.Equal("paid", paidItem.Status);
+        Assert.Equal(900m, paidItem.PaidAmount);
+        Assert.Equal(0m, paidItem.OutstandingAmount);
+        Assert.False(paidItem.CanRecordPayment);
+
+        var alreadyPaid = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 16),
+                new DateOnly(2026, 9, 1),
+                1m,
+                "ПКО-ГОД-3",
+                null,
+                TargetAccrualId: item.AccrualId),
+            null,
+            CancellationToken.None);
+        Assert.False(alreadyPaid.Succeeded);
+        Assert.Equal("annual_payment_already_paid", alreadyPaid.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GarageAnnualPayments_RejectInvalidYearMissingGarageAndConflictingTarget()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 15, 5, 0, 0, TimeSpan.Zero)));
+        var monthlyAccrual = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            DueDate = new DateOnly(2026, 9, 30),
+            OverdueFromDate = new DateOnly(2026, 10, 1),
+            Amount = 100m,
+            Source = AccrualSources.Regular
+        };
+        database.Context.Accruals.Add(monthlyAccrual);
+        await database.Context.SaveChangesAsync();
+
+        var invalidYear = await service.GetGarageAnnualPaymentsAsync(fixtures.Garage.Id, 1999, CancellationToken.None);
+        var missingGarage = await service.CalculateGarageAnnualPaymentsAsync(Guid.NewGuid(), 2026, null, CancellationToken.None);
+        var conflictingTarget = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 15),
+                new DateOnly(2026, 9, 1),
+                1m,
+                null,
+                null,
+                FeeCampaignId: Guid.NewGuid(),
+                TargetAccrualId: Guid.NewGuid()),
+            null,
+            CancellationToken.None);
+        var invalidTarget = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 15),
+                new DateOnly(2026, 9, 1),
+                1m,
+                null,
+                null,
+                TargetAccrualId: monthlyAccrual.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.False(invalidYear.Succeeded);
+        Assert.Equal("annual_payment_year_invalid", invalidYear.ErrorCode);
+        Assert.False(missingGarage.Succeeded);
+        Assert.Equal("garage_not_found", missingGarage.ErrorCode);
+        Assert.False(conflictingTarget.Succeeded);
+        Assert.Equal("income_payment_target_conflict", conflictingTarget.ErrorCode);
+        Assert.False(invalidTarget.Succeeded);
+        Assert.Equal("annual_payment_target_invalid", invalidTarget.ErrorCode);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_UsesAnnualSettingForAnyServiceAndCarriesOnlyItsUnpaidRemainder()
     {
         await using var database = await TestDatabase.CreateAsync();

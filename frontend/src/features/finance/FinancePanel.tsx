@@ -46,6 +46,7 @@ import { selectedGaragePreference, shouldRestoreSelectedGarageAfterReload } from
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
+import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
 
 const FinancialJournalPanel = lazy(() => import('./FinancialJournalPanel').then((module) => ({ default: module.FinancialJournalPanel })))
 const ExpenseBatchPaymentDialog = lazy(() => import('./ExpenseBatchPaymentDialog'))
@@ -4280,12 +4281,8 @@ function PaymentsPrototypePanel({
     }
   }
 
-  async function editPayoutContextTarget() {
-    if (!payoutContextMenu || !payoutEditEnabled) return
-    const { row, item } = payoutContextMenu
-    const trigger = payoutContextMenuTriggerRef.current
-    setPayoutContextMenu(null)
-    if (!trigger) return
+  async function editPayoutTarget(row: PaymentPrototypeRow, item: ExpenseWorksheetSupplierBreakdownEntryDto | undefined, trigger: HTMLTableRowElement) {
+    if (!payoutEditEnabled || !canOpenPayoutContextMenu(row, item)) return
     if (item?.entryKind === 'bonus' || item?.entryKind === 'penalty') {
       await openStaffSalaryAdjustmentEdit(row, item, trigger)
       return
@@ -4311,6 +4308,15 @@ function PaymentsPrototypePanel({
       expenseTriggerRef.current = trigger
       setExpenseDialogPreset({ expensePaymentSource: record.expensePaymentSource, record })
     }
+  }
+
+  async function editPayoutContextTarget() {
+    if (!payoutContextMenu || !payoutEditEnabled) return
+    const { row, item } = payoutContextMenu
+    const trigger = payoutContextMenuTriggerRef.current
+    setPayoutContextMenu(null)
+    if (!trigger) return
+    await editPayoutTarget(row, item, trigger)
   }
 
   function deletePayoutContextTarget() {
@@ -6119,6 +6125,9 @@ function PaymentsPrototypePanel({
                         tabIndex={canOpenPayoutContextMenu(row) ? 0 : undefined}
                         onContextMenu={canOpenPayoutContextMenu(row) ? (event) => openPayoutContextMenu(event, row) : undefined}
                         onKeyDown={canOpenPayoutContextMenu(row) ? (event) => openPayoutContextMenuFromKeyboard(event, row) : undefined}
+                        onDoubleClick={canOpenPayoutContextMenu(row) ? (event) => {
+                          if (!isInteractiveTableRowTarget(event.target)) void editPayoutTarget(row, undefined, event.currentTarget)
+                        } : undefined}
                       >
                         <td>
                           {breakdownKey ? (
@@ -6231,6 +6240,9 @@ function PaymentsPrototypePanel({
                                           tabIndex={canOpenPayoutContextMenu(row, item) ? 0 : undefined}
                                           onContextMenu={canOpenPayoutContextMenu(row, item) ? (event) => openPayoutContextMenu(event, row, item) : undefined}
                                           onKeyDown={canOpenPayoutContextMenu(row, item) ? (event) => openPayoutContextMenuFromKeyboard(event, row, item) : undefined}
+                                          onDoubleClick={canOpenPayoutContextMenu(row, item) ? (event) => {
+                                            if (!isInteractiveTableRowTarget(event.target)) void editPayoutTarget(row, item, event.currentTarget)
+                                          } : undefined}
                                         >
                                           <td>{getExpenseBreakdownEntryLabel(item.entryKind)}</td>
                                           <td>{formatMonth(item.accountingMonth)}</td>

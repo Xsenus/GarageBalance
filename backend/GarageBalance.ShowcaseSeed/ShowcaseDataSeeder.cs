@@ -141,7 +141,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var hasDebt = debtRows.Any(item => item.Balance < 0m);
         var hasAdvance = debtRows.Any(item => item.Balance > 0m);
         var newGarageHasNoCalculatedHistory = !await context.Accruals.AnyAsync(
-                item => item.GarageId == newGarageId,
+                item => item.GarageId == newGarageId && !item.AccountingYear.HasValue,
                 cancellationToken)
             && !await context.FinancialOperations.AnyAsync(
                 item => item.GarageId == newGarageId,

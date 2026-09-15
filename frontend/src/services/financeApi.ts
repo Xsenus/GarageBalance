@@ -35,6 +35,7 @@ export type FinancialOperationDto = {
   negativeFundBalanceConfirmed?: boolean
   feeCampaignId?: string | null
   irregularPaymentId?: string | null
+  targetAccrualId?: string | null
   garageDebtBefore: number | null
   garageDebtAfter: number | null
   garageServiceDebtAfter?: number | null
@@ -568,7 +569,36 @@ export type CreateIncomeOperationRequest = {
   comment?: string
   feeCampaignId?: string
   irregularPaymentId?: string
+  targetAccrualId?: string
   expectedVersion?: string
+}
+
+export type GarageAnnualPaymentItemDto = {
+  accrualId: string | null
+  incomeTypeId: string
+  serviceName: string
+  accountingYear: number
+  accountingMonth: string
+  dueDate: string
+  overdueFromDate: string
+  amount: number | null
+  paidAmount: number
+  outstandingAmount: number
+  status: 'scheduled' | 'unpaid' | 'partial' | 'paid'
+  destinationFundId: string | null
+  destinationFundName: string | null
+  canRecordPayment: boolean
+}
+
+export type GarageAnnualPaymentsDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  accountingYear: number
+  accruedTotal: number
+  paidTotal: number
+  outstandingTotal: number
+  items: GarageAnnualPaymentItemDto[]
 }
 
 export type CreateFullGaragePaymentLineRequest = {
@@ -843,6 +873,8 @@ export type FinanceClient = {
   getGarageFullPaymentQuote(accessToken: string, garageId: string, signal?: AbortSignal): Promise<GarageFullPaymentQuoteDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
+  getGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
+  calculateGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
   getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId?: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
@@ -1041,6 +1073,15 @@ export const financeApi: FinanceClient = {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
     }), { signal })
+  },
+  getGarageAnnualPayments(accessToken, garageId, year, signal) {
+    return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/annual-payments`, { year }), { signal })
+  },
+  calculateGarageAnnualPayments(accessToken, garageId, year, signal) {
+    return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/annual-payments/calculate`, { year }), {
+      method: 'POST',
+      signal,
+    })
   },
   getExpenseWorksheet(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet', {

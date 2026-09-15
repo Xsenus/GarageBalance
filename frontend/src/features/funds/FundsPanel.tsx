@@ -18,6 +18,7 @@ import { TablePagination } from '../../shared/TablePagination'
 import { loadFundsRequest } from './fundsLoading'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
 type FundPrototypeRow = {
   id: string
   version: string
@@ -802,7 +803,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           </thead>
           <tbody>
             {operationPage.items.length > 0 ? operationPage.items.map((fundOperation) => (
-              <tr key={fundOperation.id}>
+              <tr key={fundOperation.id} onDoubleClick={(event) => {
+                if (!fundOperation.isFundArchived && !fundOperation.isAutomaticIncomeAssignment && !fundOperation.isCanceled && canWriteFunds && !operationsLoading && !isInteractiveTableRowTarget(event.target)) openFundOperationEdit(fundOperation)
+              }}>
                 <td>{formatDateTime(fundOperation.createdAtUtc)}</td>
                 <td>{fundOperation.fundName}</td>
                 <td>{fundOperation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'}</td>

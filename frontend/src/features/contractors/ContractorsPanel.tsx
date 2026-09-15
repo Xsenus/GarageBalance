@@ -3,7 +3,7 @@ import type { CSSProperties, FormEvent, MouseEvent, ReactNode, RefObject } from 
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { SupplierServiceDto, UpsertSupplierServiceRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
-import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
+import type { FinanceClient, GarageAnnualPaymentItemDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
@@ -31,13 +31,14 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
 import { supplierBalanceWithDebtHelp, supplierDebtSortDirection, toDisplayedSupplierBalance, toStoredSupplierStartingBalance } from '../../shared/supplierOpeningBalance'
+import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
 
 function normalizeContractorTargetText(value?: string | null) {
   return (value ?? '').trim().toLocaleLowerCase('ru-RU')
 }
 
 function isInteractiveContractorRowTarget(target: EventTarget | null) {
-  return target instanceof Element && target.closest('button, a, input, textarea, select, [role="button"], [role="link"], [role="menuitem"]') !== null
+  return isInteractiveTableRowTarget(target)
 }
 
 function extractGarageNumberFromTarget(target: ContractorOpenTarget) {
@@ -1259,6 +1260,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const canWriteContractors = hasPermission(auth, permissions.dictionariesWrite)
   const canManageSupplierServices = hasPermission(auth, permissions.dictionariesWrite)
   const canAdjustOpeningData = hasPermission(auth, permissions.openingDataAdjust)
+  const canReadPayments = hasPermission(auth, permissions.paymentsRead)
+  const canWritePayments = hasPermission(auth, permissions.paymentsWrite)
   const canUseGarageColumnFilters = isAdministrator(auth)
 
   function retryActiveContractorSection() {
@@ -2680,7 +2683,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span className="contractors-directory-header-cell table-actions-column" role="columnheader">Действия</span>
               </div>
               {departmentPage.items.map((department) => (
-                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
+                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)} onDoubleClick={(event) => {
+                  if (!department.isDeleted && canWriteContractors && !isInteractiveContractorRowTarget(event.target)) openDepartmentEditor(department)
+                }}>
                   <span role="cell">{department.name}</span>
                   <span role="cell" className="contractors-row-actions table-actions-column">
                     {department.isDeleted ? (
@@ -2879,7 +2884,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} canReadPayments={canReadPayments} canWritePayments={canWritePayments} financeClient={financeClient} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onPaymentRecorded={() => setSectionReloadRevision((revision) => revision + 1)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={supplierServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <SupplierServiceDialog edit={modal.edit} services={supplierServices} onClose={() => setModal(null)} onSave={saveSupplierService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
@@ -3685,7 +3690,116 @@ function ContractorDialogShell({ children, className = '', closeDisabled = false
   )
 }
 
-function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
+const annualPaymentStatusLabels: Record<GarageAnnualPaymentItemDto['status'], string> = {
+  scheduled: 'Запланирован',
+  unpaid: 'Не оплачен',
+  partial: 'Оплачен частично',
+  paid: 'Оплачен',
+}
+
+function GarageAnnualPaymentsSection({ accessToken, canReadPayments, canWritePayments, financeClient, garage, onPaymentRecorded }: { accessToken: string; canReadPayments: boolean; canWritePayments: boolean; financeClient: FinanceClient; garage: ContractorGarageRow; onPaymentRecorded: () => void }) {
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(String(currentYear))
+  const [paymentDate, setPaymentDate] = useState(getLocalDateInputValue())
+  const [data, setData] = useState<GarageAnnualPaymentsDto | null>(null)
+  const [loading, setLoading] = useState(canReadPayments)
+  const [error, setError] = useState<string | null>(null)
+  const [payingAccrualId, setPayingAccrualId] = useState<string | null>(null)
+  const selectedYear = Number(year)
+  const yearOptions = Array.from({ length: 6 }, (_, index) => currentYear + 1 - index)
+    .map((value) => ({ value: String(value), label: `${value} год` }))
+
+  const load = useCallback(async (calculate: boolean, signal?: AbortSignal) => {
+    const request = calculate ? financeClient.calculateGarageAnnualPayments : financeClient.getGarageAnnualPayments
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await request(accessToken, garage.id, selectedYear, signal)
+      setData(result)
+    } catch (requestError) {
+      if (signal?.aborted) return
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить годовые платежи.')
+    } finally {
+      if (!signal?.aborted) setLoading(false)
+    }
+  }, [accessToken, financeClient, garage.id, selectedYear])
+
+  useEffect(() => {
+    if (!canReadPayments) return
+    const controller = new AbortController()
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) void load(false, controller.signal)
+    })
+    return () => controller.abort()
+  }, [canReadPayments, load])
+
+  async function recordPayment(item: GarageAnnualPaymentItemDto) {
+    if (!item.accrualId || item.outstandingAmount <= 0 || !paymentDate) return
+    setPayingAccrualId(item.accrualId)
+    setError(null)
+    try {
+      await financeClient.createIncome(accessToken, {
+        garageId: garage.id,
+        incomeTypeId: item.incomeTypeId,
+        operationDate: paymentDate,
+        accountingMonth: `${paymentDate.slice(0, 7)}-01`,
+        amount: item.outstandingAmount,
+        comment: `Оплата годового платежа «${item.serviceName}» за ${item.accountingYear} год из карточки гаража.`,
+        targetAccrualId: item.accrualId,
+      })
+      await load(false)
+      onPaymentRecorded()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось провести годовой платёж.')
+    } finally {
+      setPayingAccrualId(null)
+    }
+  }
+
+  if (!canReadPayments) {
+    return <section className="contractor-history-section" aria-labelledby="garage-annual-payments-title"><h4 id="garage-annual-payments-title"><FileText size={17} /> Годовые платежи</h4><p className="form-hint">Для просмотра нужен доступ к платежам.</p></section>
+  }
+
+  return (
+    <section className="contractor-history-section" aria-labelledby="garage-annual-payments-title">
+      <div className="inline-action-row">
+        <h4 id="garage-annual-payments-title"><FileText size={17} /> Годовые платежи</h4>
+        <div className="inline-action-row">
+          <SelectControl aria-label="Год годовых платежей" value={year} options={yearOptions} onChange={setYear} />
+          {canWritePayments ? <button className="secondary-button" type="button" disabled={loading || payingAccrualId !== null} onClick={() => void load(true)}><Gauge size={16} /><span>Рассчитать</span></button> : null}
+        </div>
+      </div>
+      {canWritePayments ? (
+        <div className="contractors-garage-form-details">
+          <FormField label="Дата оплаты"><LocalizedDatePicker ariaLabel="Дата годового платежа" mode="date" required value={paymentDate} onChange={setPaymentDate} /></FormField>
+        </div>
+      ) : <p className="form-hint">Режим просмотра: проведение оплаты требует права изменения платежей.</p>}
+      {loading ? <LoadingSkeleton label="Загружаем годовые платежи" rows={2} columns={4} /> : null}
+      {error && !loading ? <AsyncErrorState message={error} onRetry={() => void load(false)} retrying={loading} /> : null}
+      {!loading && !error && data?.items.length === 0 ? <StatusMessage>На {selectedYear} годовые платежи не настроены.</StatusMessage> : null}
+      {!loading && !error && data && data.items.length > 0 ? (
+        <div className="dictionary-table-scroll">
+          <table className="dictionary-data-table">
+            <thead><tr><th>Платёж</th><th>Начислено</th><th>Оплачено</th><th>Осталось</th><th>Статус</th><th><span className="visually-hidden">Действие</span></th></tr></thead>
+            <tbody>{data.items.map((item) => (
+              <tr key={`${item.incomeTypeId}-${item.accountingYear}`}>
+                <td><strong>{item.serviceName}</strong><br /><small>{item.destinationFundName ? `Фонд: ${item.destinationFundName}` : 'Общий пул'}</small></td>
+                <td>{item.amount === null ? '—' : formatMoney(item.amount)}</td>
+                <td>{formatMoney(item.paidAmount)}</td>
+                <td>{formatMoney(item.outstandingAmount)}</td>
+                <td><span className={item.status === 'paid' ? 'status-active' : 'status-disabled'}>{annualPaymentStatusLabels[item.status]}</span></td>
+                <td>{canWritePayments && item.canRecordPayment ? <button className="secondary-button" type="button" aria-busy={payingAccrualId === item.accrualId} disabled={!paymentDate || payingAccrualId !== null} onClick={() => void recordPayment(item)}>{payingAccrualId === item.accrualId ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Save size={16} />}<span>{payingAccrualId === item.accrualId ? 'Проводим…' : 'Провести'}</span></button> : null}</td>
+              </tr>
+            ))}</tbody>
+            <tfoot><tr><th>Итого</th><td>{formatMoney(data.accruedTotal)}</td><td>{formatMoney(data.paidTotal)}</td><td>{formatMoney(data.outstandingTotal)}</td><td colSpan={2} /></tr></tfoot>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayments, canWritePayments, financeClient, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onPaymentRecorded, onSave }: { accessToken: string; canAdjustOpeningData: boolean; canReadPayments: boolean; canWritePayments: boolean; financeClient: FinanceClient; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onPaymentRecorded: () => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
@@ -3812,6 +3926,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
+            {item ? <GarageAnnualPaymentsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} financeClient={financeClient} garage={item} onPaymentRecorded={onPaymentRecorded} /> : null}
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
                 <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>

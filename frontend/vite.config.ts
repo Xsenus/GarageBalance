@@ -8,7 +8,7 @@ export function getManualChunkName(id: string): string | undefined {
   // Keep the authenticated workspace outside the login graph, but split its
   // largest business areas so every production chunk stays comfortably below
   // Vite's warning threshold.
-  if (/[/\\]src[/\\]features[/\\](finance|funds|import)[/\\]/.test(id)) return 'workspace-finance'
+  if (/[/\\]src[/\\]features[/\\](finance|funds|import|dictionaries)[/\\]/.test(id)) return 'workspace-finance'
   if (/[/\\]src[/\\]features[/\\](meterReadings|contractors|tariffs)[/\\]/.test(id)) return 'workspace-operations'
   if (/[/\\]src[/\\]features[/\\](settings[/\\]PasswordPanel|users[/\\]UserManagementPanel)\./.test(id)) return 'app-runtime'
   if (id.includes('lucide-react')) return 'app-runtime'

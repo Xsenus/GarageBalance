@@ -23,6 +23,7 @@ describe('production chunking', () => {
     expect(getManualChunkName('/project/src/features/meterReadings/MeterReadingsPanel.tsx')).toBe('workspace-operations')
     expect(getManualChunkName('C:\\project\\src\\features\\contractors\\ContractorsPanel.tsx')).toBe('workspace-operations')
     expect(getManualChunkName('/project/src/features/tariffs/TariffsAndFeesPanel.tsx')).toBe('workspace-operations')
+    expect(getManualChunkName('/project/src/features/dictionaries/DictionaryPanel.tsx')).toBe('workspace-finance')
     expect(getManualChunkName('/project/src/features/reports/ReportPanel.tsx')).toBe('workspace-operations')
     expect(getManualChunkName('/project/src/features/users/UserManagementPanel.tsx')).toBe('app-runtime')
   })

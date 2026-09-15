@@ -81,6 +81,22 @@ public sealed class AccrualPaymentAllocatorTests
     }
 
     [Fact]
+    public void Allocate_TargetedAnnualPaymentPaysOnlySelectedAccrual()
+    {
+        var older = Accrual(new DateOnly(2025, 6, 30), 700m, 1);
+        var annual = Accrual(new DateOnly(2026, 6, 30), 700m, 2);
+        var payment = Payment(new DateOnly(2026, 9, 15), 700m, 3) with
+        {
+            TargetAccrualId = annual.Id
+        };
+
+        var allocation = Assert.Single(AccrualPaymentAllocator.Allocate([older, annual], [payment]));
+
+        Assert.Equal(annual.Id, allocation.AccrualId);
+        Assert.Equal(700m, allocation.Amount);
+    }
+
+    [Fact]
     public void Allocate_UntargetedPeriodPaymentPaysRegularAccrualBeforeOlderTargetedDebt()
     {
         var feeCampaign = Accrual(new DateOnly(2026, 7, 31), 300m, 1) with { FeeCampaignId = Guid.NewGuid() };

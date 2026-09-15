@@ -24,6 +24,7 @@ internal static class PostgreSqlLegacyModelCompatibility
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"CounterpartyName\" character varying(200) NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"CounterpartyName\""),
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"NegativeFundBalanceConfirmed\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"NegativeFundBalanceConfirmed\""),
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"Version\""),
+        ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"TargetAccrualId\" uuid NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"TargetAccrualId\""),
         ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"MeterKind\" character varying(40) NULL", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"MeterKind\"")
     ];
 
@@ -45,7 +46,10 @@ internal static class PostgreSqlLegacyModelCompatibility
 
     public static Task AddFinancialOperationVersionAsync(GarageBalanceDbContext context) =>
         context.Database.ExecuteSqlRawAsync(
-            "ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()");
+            """
+            ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS "Version" uuid NOT NULL DEFAULT gen_random_uuid();
+            ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS "TargetAccrualId" uuid NULL;
+            """);
 
     public static Task AddGarageInitialMeterMonthAsync(GarageBalanceDbContext context) =>
         context.Database.ExecuteSqlRawAsync("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"InitialMeterReadingMonth\" date NULL, ADD COLUMN IF NOT EXISTS \"RegisteredOn\" date NULL");
@@ -55,5 +59,16 @@ internal static class PostgreSqlLegacyModelCompatibility
 
     public static Task RemoveFinancialOperationVersionAsync(GarageBalanceDbContext context) =>
         context.Database.ExecuteSqlRawAsync(
-            "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"Version\"");
+            """
+            ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS "TargetAccrualId";
+            ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS "Version";
+            """);
+
+    public static Task AddFinancialOperationTargetAccrualAsync(GarageBalanceDbContext context) =>
+        context.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"TargetAccrualId\" uuid NULL");
+
+    public static Task RemoveFinancialOperationTargetAccrualAsync(GarageBalanceDbContext context) =>
+        context.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"TargetAccrualId\"");
 }

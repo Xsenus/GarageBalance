@@ -28,7 +28,9 @@ public static class AccrualPaymentAllocator
             var paymentRemainder = payment.Amount;
             var matchingAccruals = orderedAccruals
                 .Where(accrual =>
-                    payment.FeeCampaignId.HasValue
+                    payment.TargetAccrualId.HasValue
+                        ? accrual.Id == payment.TargetAccrualId.Value
+                        : payment.FeeCampaignId.HasValue
                         ? accrual.FeeCampaignId == payment.FeeCampaignId
                         : payment.IrregularPaymentId.HasValue
                             ? accrual.IrregularPaymentId == payment.IrregularPaymentId
@@ -84,7 +86,8 @@ public sealed record AccrualPaymentAllocationPayment(
     decimal Amount,
     DateTimeOffset CreatedAtUtc,
     Guid? FeeCampaignId = null,
-    Guid? IrregularPaymentId = null);
+    Guid? IrregularPaymentId = null,
+    Guid? TargetAccrualId = null);
 
 public sealed record AccrualPaymentAllocationPlanItem(
     Guid FinancialOperationId,
