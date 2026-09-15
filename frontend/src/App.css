@@ -5879,30 +5879,41 @@ input.meter-readings-control {
 
 .funds-reconciliation {
   align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
 }
 
 .funds-reconciliation-values {
   display: grid;
-  gap: 6px;
-  min-width: 210px;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
   margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid #d0d5dd;
 }
 
 .funds-reconciliation-values div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(max-content, 150px);
+  align-items: baseline;
   gap: 18px;
 }
 
 .funds-reconciliation-values dt {
+  min-width: 0;
   color: #475467;
   font-size: 0.8rem;
+  overflow-wrap: anywhere;
 }
 
 .funds-reconciliation-values dd {
+  min-width: 0;
   margin: 0;
   color: #101828;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 

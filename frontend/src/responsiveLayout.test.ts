@@ -468,6 +468,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('@media (max-width: 1180px) {\n  .workspace--funds {\n    height: auto;\n    min-height: 100dvh;\n    overflow: visible;')
   })
 
+  it('stacks reconciliation amounts below the explanation without clipping long totals', () => {
+    expect(normalizedAppCss).toContain('.funds-reconciliation {\n  align-items: start;\n  grid-template-columns: minmax(0, 1fr);\n  gap: 10px;')
+    expect(normalizedAppCss).toContain('.funds-reconciliation-values {\n  display: grid;\n  width: 100%;\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.funds-reconciliation-values div {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) minmax(max-content, 150px);')
+    expect(normalizedAppCss).toContain('.funds-reconciliation-values dd {\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('font-variant-numeric: tabular-nums;\n  text-align: right;\n  white-space: nowrap;')
+  })
+
   it('keeps settings navigation full-height and settings forms compact', () => {
     expect(normalizedAppCss).toContain('.settings-layout {\n  display: grid;\n  height: calc(100dvh - 90px);\n  grid-template-columns: 240px minmax(0, 1fr);\n  gap: 18px;')
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')
