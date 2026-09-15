@@ -1,4 +1,3 @@
-const overdueDebtDetailsStoragePrefix = 'garagebalance.finance.overdueExpanded'
 const selectedGarageStoragePrefix = 'garagebalance.finance.selectedGarage'
 
 export type SelectedGaragePreference = {
@@ -8,17 +7,6 @@ export type SelectedGaragePreference = {
 
 export function shouldRestoreSelectedGarageAfterReload() {
   return (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
-}
-
-export function overdueDebtDetailsPreference(userId: string, expanded?: boolean) {
-  try {
-    const key = `${overdueDebtDetailsStoragePrefix}.${userId}`
-    if (expanded === undefined) return window.localStorage.getItem(key) !== 'false'
-    window.localStorage.setItem(key, String(expanded))
-    return expanded
-  } catch {
-    return true
-  }
 }
 
 export function selectedGaragePreference(userId: string, garage?: SelectedGaragePreference | null) {

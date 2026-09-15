@@ -1,6 +1,6 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { ChevronDown, ChevronRight, CircleHelp, Database, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, Warehouse, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, Warehouse, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, ExpenseWorksheetStaffBreakdownDto, ExpenseWorksheetSupplierBreakdownDto, ExpenseWorksheetSupplierBreakdownEntryDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialJournalEntryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, RegularAccrualRecalculationPreviewDto, StaffSalaryAdjustmentDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
@@ -42,7 +42,7 @@ import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, 
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
-import { overdueDebtDetailsPreference, selectedGaragePreference, shouldRestoreSelectedGarageAfterReload } from './financeDisplayPreferences'
+import { selectedGaragePreference, shouldRestoreSelectedGarageAfterReload } from './financeDisplayPreferences'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
@@ -3355,6 +3355,189 @@ function GaragePaymentHistoryDialog({
   )
 }
 
+function GarageOverdueDebtDialog({
+  id,
+  garageNumber,
+  details,
+  loading,
+  error,
+  onRetry,
+  onClose,
+}: {
+  id: string
+  garageNumber: string
+  details: GarageOverdueDebtDto | null
+  loading: boolean
+  error: string | null
+  onRetry: () => void
+  onClose: () => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; left: number; top: number } | null>(null)
+  const titleId = `${id}-title`
+  const hintId = `${id}-move-hint`
+
+  useEscapeKey(true, onClose)
+  useEffect(() => closeButtonRef.current?.focus(), [])
+
+  const clampPosition = useCallback((left: number, top: number) => {
+    const rect = dialogRef.current?.getBoundingClientRect()
+    const width = rect?.width || Math.min(1120, Math.max(window.innerWidth - 32, 0))
+    const height = rect?.height || Math.min(520, Math.max(window.innerHeight - 32, 0))
+    const margin = 8
+    return {
+      left: Math.max(margin, Math.min(left, Math.max(window.innerWidth - width - margin, margin))),
+      top: Math.max(margin, Math.min(top, Math.max(window.innerHeight - height - margin, margin))),
+    }
+  }, [dialogRef])
+
+  useEffect(() => {
+    function keepDialogInViewport() {
+      setPosition((current) => current ? clampPosition(current.left, current.top) : current)
+    }
+    window.addEventListener('resize', keepDialogInViewport)
+    return () => window.removeEventListener('resize', keepDialogInViewport)
+  }, [clampPosition])
+
+  function handleDragStart(event: ReactPointerEvent<HTMLElement>) {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    const rect = dialogRef.current?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+    }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  function handleDragMove(event: ReactPointerEvent<HTMLElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    setPosition(clampPosition(
+      drag.left + event.clientX - drag.startX,
+      drag.top + event.clientY - drag.startY,
+    ))
+  }
+
+  function handleDragEnd(event: ReactPointerEvent<HTMLElement>) {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
+  function handleDragKeyboard(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setPosition(null)
+      return
+    }
+    let deltaX = 0
+    let deltaY = 0
+    if (event.key === 'ArrowLeft') deltaX = -1
+    else if (event.key === 'ArrowRight') deltaX = 1
+    else if (event.key === 'ArrowUp') deltaY = -1
+    else if (event.key === 'ArrowDown') deltaY = 1
+    else return
+    event.preventDefault()
+    const rect = dialogRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const step = event.shiftKey ? 40 : 10
+    const current = position ?? { left: rect.left, top: rect.top }
+    setPosition(clampPosition(current.left + deltaX * step, current.top + deltaY * step))
+  }
+
+  const dialogStyle: CSSProperties | undefined = position
+    ? { left: position.left, top: position.top, transform: 'none' }
+    : undefined
+
+  return (
+    <div className="modal-backdrop payment-history-modal-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose()
+    }}>
+      <section
+        id={id}
+        ref={dialogRef}
+        className="detail-dialog garage-payment-history-dialog garage-overdue-debt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={hintId}
+        style={dialogStyle}
+      >
+        <header
+          className="detail-dialog-header garage-payment-history-dialog__drag-handle"
+          tabIndex={0}
+          aria-label="Переместить окно расшифровки просроченной задолженности"
+          onPointerDown={handleDragStart}
+          onPointerMove={handleDragMove}
+          onPointerUp={handleDragEnd}
+          onPointerCancel={handleDragEnd}
+          onDoubleClick={() => setPosition(null)}
+          onKeyDown={handleDragKeyboard}
+        >
+          <div>
+            <h2 id={titleId}>Расшифровка просроченной задолженности</h2>
+            <p>Гараж {garageNumber}</p>
+          </div>
+          <button ref={closeButtonRef} className="icon-button" type="button" aria-label="Закрыть расшифровку просроченной задолженности" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <p id={hintId} className="visually-hidden">Окно можно перемещать за заголовок стрелками или указателем и изменять его размер за правый нижний край.</p>
+        <section className="garage-payment-history-dialog__content" aria-label="Состав просроченной задолженности гаража">
+          {loading ? (
+            <TableLoadingState label="Загружаем расшифровку просроченной задолженности" />
+          ) : error ? (
+            <AsyncErrorState message={error} onRetry={onRetry} />
+          ) : details && details.rows.length > 0 ? (
+            <div className="table-scroll">
+              <table className="garage-overdue-debt-table" aria-label="Расшифровка просроченной задолженности">
+                <thead>
+                  <tr>
+                    <th>Услуга</th>
+                    <th>Месяц начисления</th>
+                    <th>Срок оплаты</th>
+                    <th>Просрочено с</th>
+                    <th>Начислено</th>
+                    <th>Оплачено</th>
+                    <th>Остаток</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {details.rows.map((row, index) => (
+                    <tr key={row.accrualId ?? `${row.rowKind}-${index}`}>
+                      <td>{row.chargeName ?? row.incomeTypeName}</td>
+                      <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
+                      <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
+                      <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
+                      <td>{formatPaymentMoney(row.originalAmount)}</td>
+                      <td>{formatPaymentMoney(row.paidAmount)}</td>
+                      <td className="money-expense">{formatPaymentMoney(row.outstandingAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colSpan={6}>Итого на {formatDateOnly(details.asOfDate)}</th>
+                    <th>{formatPaymentMoney(details.total)}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
+            <EmptyState>Просроченных начислений не найдено.</EmptyState>
+          )}
+        </section>
+      </section>
+    </div>
+  )
+}
+
 function PaymentsPrototypePanel({
   auth,
   canWritePayments,
@@ -3438,7 +3621,7 @@ function PaymentsPrototypePanel({
   const historicalMeterReadingDialogRef = useFocusTrap<HTMLElement>(Boolean(historicalMeterReadingSave))
   useEscapeKey(Boolean(historicalMeterReadingSave), () => setHistoricalMeterReadingSave(null))
   useRestoreFocusOnClose(Boolean(historicalMeterReadingSave))
-  const [overdueDebtDetailsExpanded, setOverdueDebtDetailsExpanded] = useState(() => overdueDebtDetailsPreference(auth.user.id))
+  const [overdueDebtDetailsOpen, setOverdueDebtDetailsOpen] = useState(false)
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [incomeWorksheetColumnWidths, setIncomeWorksheetColumnWidths] = useState(loadIncomeWorksheetColumnWidths)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
@@ -3458,9 +3641,11 @@ function PaymentsPrototypePanel({
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
   const paymentHistoryRequestControllerRef = useRef<AbortController | null>(null)
   const paymentHistoryTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const overdueDebtDetailsTriggerRef = useRef<HTMLButtonElement | null>(null)
   const incomePaymentWarningControllerRef = useRef<AbortController | null>(null)
   const overdueDebtRefreshControllerRef = useRef<AbortController | null>(null)
   const paymentHistoryId = useId()
+  const overdueDebtDetailsId = useId()
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
   const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
@@ -4287,6 +4472,20 @@ function PaymentsPrototypePanel({
     void loadGaragePaymentHistory(selectedGarage)
   }
 
+  function closeOverdueDebtDetails(restoreFocus = true) {
+    setOverdueDebtDetailsOpen(false)
+    if (restoreFocus) {
+      restoreFocusAfterClose(overdueDebtDetailsTriggerRef)
+    } else {
+      overdueDebtDetailsTriggerRef.current = null
+    }
+  }
+
+  function openOverdueDebtDetails(event: MouseEvent<HTMLButtonElement>) {
+    overdueDebtDetailsTriggerRef.current = event.currentTarget
+    setOverdueDebtDetailsOpen(true)
+  }
+
   function openHistoryEdit(row: GaragePaymentHistoryPrototypeRow, trigger?: HTMLButtonElement | null) {
     if (!row.operation || !canWritePayments) {
       return
@@ -4416,6 +4615,7 @@ function PaymentsPrototypePanel({
     setGarageWorksheetSummary(null)
     setHistoryRows([])
     closePaymentHistory(false)
+    closeOverdueDebtDetails(false)
     setGaragePaymentHistoryLoadingId(null)
     setFullPaymentQuoteLoading(false)
     setFullPaymentQuote(null)
@@ -5555,84 +5755,27 @@ function PaymentsPrototypePanel({
             </button>
           </div>
           {selectedGarageBalance && selectedGarage.overdueDebt > 0 ? (
-            <>
-              <p className="payments-prototype-balance-explanation" role="note">
+            <div className="payments-prototype-balance-explanation" role="note">
+              <span>
                 {selectedGarageBalance.overdueRelation === 'partly-overdue'
                   ? <>Общий долг составляет <strong>{formatPaymentMoney(Math.abs(selectedGarageBalance.amount))}</strong>, из него просрочено <strong>{formatPaymentMoney(selectedGarage.overdueDebt)}</strong>.</>
                   : selectedGarageBalance.overdueRelation === 'fully-overdue'
                     ? <>Весь общий долг <strong>{formatPaymentMoney(Math.abs(selectedGarageBalance.amount))}</strong> уже просрочен.</>
-                    : <>{selectedGarageBalance.label} <strong>{formatPaymentMoney(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentMoney(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
-              </p>
-              <section className={`payments-prototype-overdue-details${overdueDebtDetailsExpanded ? ' payments-prototype-overdue-details--expanded' : ''}`} aria-label="Расшифровка просроченной задолженности">
-                <div className="payments-prototype-overdue-heading">
-                  <span className="payments-prototype-overdue-title">Расшифровка просроченной задолженности</span>
-                  <span className="payments-prototype-overdue-controls">
-                    <strong>{formatPaymentMoney(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`${overdueDebtDetailsExpanded ? 'Скрыть' : 'Показать'} расшифровку просроченной задолженности`}
-                      onClick={() => setOverdueDebtDetailsExpanded((current) => {
-                        const next = !current
-                        overdueDebtDetailsPreference(auth.user.id, next)
-                        return next
-                      })}
-                    >
-                      {overdueDebtDetailsExpanded
-                        ? <X size={17} aria-hidden="true" />
-                        : <CircleHelp size={17} aria-hidden="true" />}
-                    </button>
-                  </span>
-                </div>
-                {overdueDebtDetailsExpanded && (overdueDebtLoading ? (
-                  <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />
-                ) : overdueDebtError ? (
-                  <ForegroundDialogError>
-                    <div className="form-error payments-prototype-overdue-error" role="alert">
-                      <span>{overdueDebtError}</span>
-                      <button className="secondary-button" type="button" onClick={() => setOverdueDebtRefresh((value) => value + 1)}>Повторить</button>
-                    </div>
-                  </ForegroundDialogError>
-                ) : overdueDebtDetails && overdueDebtDetails.rows.length > 0 ? (
-                  <div className="table-scroll">
-                    <table aria-label="Расшифровка просроченной задолженности">
-                      <thead>
-                        <tr>
-                          <th>Услуга</th>
-                          <th>Месяц начисления</th>
-                          <th>Срок оплаты</th>
-                          <th>Просрочено с</th>
-                          <th>Начислено</th>
-                          <th>Оплачено</th>
-                          <th>Остаток</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {overdueDebtDetails.rows.map((row, index) => (
-                          <tr key={row.accrualId ?? `${row.rowKind}-${index}`}>
-                            <td>{row.chargeName ?? row.incomeTypeName}</td>
-                            <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
-                            <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
-                            <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
-                            <td>{formatPaymentMoney(row.originalAmount)}</td>
-                            <td>{formatPaymentMoney(row.paidAmount)}</td>
-                            <td className="money-expense">{formatPaymentMoney(row.outstandingAmount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr>
-                          <th colSpan={6}>Итого на {formatDateOnly(overdueDebtDetails.asOfDate)}</th>
-                          <th>{formatPaymentMoney(overdueDebtDetails.total)}</th>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="empty-state empty-state--spacious" role="status" aria-live="polite">Просроченных начислений не найдено.</p>
-                ))}
-              </section>
-            </>
+                    : <>{selectedGarageBalance.label} <strong>{formatPaymentMoney(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentMoney(selectedGarage.overdueDebt)}</strong> относятся к разным услугам.</>}
+              </span>
+              <button
+                ref={overdueDebtDetailsTriggerRef}
+                type="button"
+                className="icon-button payments-prototype-overdue-trigger"
+                aria-label="Открыть расшифровку просроченной задолженности"
+                aria-controls={overdueDebtDetailsId}
+                aria-expanded={overdueDebtDetailsOpen}
+                title="Расшифровка просроченной задолженности"
+                onClick={openOverdueDebtDetails}
+              >
+                <CircleAlert size={19} aria-hidden="true" />
+              </button>
+            </div>
           ) : null}
         </section>
       ) : null}
@@ -5654,6 +5797,18 @@ function PaymentsPrototypePanel({
               onClose={closePaymentHistory}
               onEdit={openHistoryEdit}
               onCancel={openHistoryCancel}
+            />
+          ) : null}
+
+          {overdueDebtDetailsOpen && selectedGarage.overdueDebt > 0 ? (
+            <GarageOverdueDebtDialog
+              id={overdueDebtDetailsId}
+              garageNumber={selectedGarage.number}
+              details={overdueDebtDetails}
+              loading={overdueDebtLoading}
+              error={overdueDebtError}
+              onRetry={() => setOverdueDebtRefresh((value) => value + 1)}
+              onClose={closeOverdueDebtDetails}
             />
           ) : null}
 
@@ -5742,6 +5897,7 @@ function PaymentsPrototypePanel({
                                     aria-label={`Показание ${row.service} ${row.monthLabel}`}
                                     aria-describedby={row.meterRequired && row.meter === null ? `required-meter-${row.id}` : undefined}
                                     aria-invalid={row.meterError || (row.meterRequired && row.meter === null) ? 'true' : undefined}
+                                    title={row.meterRequired && row.meter === null ? 'Введите обязательное показание' : undefined}
                                     disabled={savingMeterRowId === row.id}
                                     value={row.meterDraft}
                                     onChange={(event) => handleMeterDraftChange(row.id, event.target.value)}
@@ -5770,7 +5926,7 @@ function PaymentsPrototypePanel({
                                 </div>
                               ) : row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}
                               {row.meterRequired && row.meter === null ? (
-                                <span className="payments-prototype-meter-required-hint" id={`required-meter-${row.id}`}>
+                                <span className="payments-prototype-meter-required-hint" id={`required-meter-${row.id}`} role="tooltip">
                                   Введите обязательное показание
                                 </span>
                               ) : null}
