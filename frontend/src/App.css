@@ -9740,6 +9740,11 @@ button.operation-row:focus-visible {
     left: 27px;
   }
 
+  .workspace--settings > .topbar {
+    top: 25px;
+    left: 27px;
+  }
+
   .workspace--payments > .topbar {
     top: 25px;
     left: 27px;
