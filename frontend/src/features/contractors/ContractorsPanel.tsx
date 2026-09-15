@@ -3766,8 +3766,11 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                   <span className="form-field-label">Номер</span>
                   <input aria-label="Номер гаража" aria-invalid={Boolean(validationErrors.number)} data-garage-field="number" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => { clearValidationError('number'); setForm({ ...form, number: event.target.value }) }} />
                 </label>
-                <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
-                <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
+                <div className="contractors-garage-form-occupancy">
+                  <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
+                  <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
+                </div>
+                <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {!item ? (
@@ -3799,12 +3802,11 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                 )}
                 <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
                 <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
+                <div className="contractors-garage-form-details">
+                  <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
+                  <FormField label="Телефон"><PhoneInput aria-label="Телефон владельца гаража" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
+                </div>
               </div>
-            </div>
-            <div className="contractors-garage-form-details">
-              <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
-              <FormField label="Телефон"><PhoneInput aria-label="Телефон владельца гаража" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
-              <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
             </div>
             <div className="contractors-garage-form-notes">
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
