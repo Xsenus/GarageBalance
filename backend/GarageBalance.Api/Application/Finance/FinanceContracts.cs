@@ -82,7 +82,28 @@ public sealed record GarageAnnualPaymentItemDto(
     string Status,
     Guid? DestinationFundId,
     string? DestinationFundName,
+    bool CanRecordPayment,
+    string? TariffName = null);
+
+public sealed record PreviewGarageAnnualPaymentsRequest(
+    [Range(2000, 9999)] int Year,
+    [Range(0, 1000)] int PeopleCount,
+    [Range(0, 100)] int FloorCount);
+
+public sealed record GarageAnnualPaymentOptionDto(
+    Guid IncomeTypeId,
+    string ServiceName,
+    string? TariffName,
+    int AccountingYear,
+    DateOnly AccountingMonth,
+    decimal? Amount,
+    Guid? DestinationFundId,
+    string? DestinationFundName,
     bool CanRecordPayment);
+
+public sealed record GarageAnnualPaymentOptionsDto(
+    int AccountingYear,
+    IReadOnlyList<GarageAnnualPaymentOptionDto> Items);
 
 public sealed record GarageAnnualPaymentsDto(
     Guid GarageId,

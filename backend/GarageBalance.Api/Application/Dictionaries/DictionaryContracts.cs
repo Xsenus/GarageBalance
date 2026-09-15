@@ -60,6 +60,14 @@ public sealed record UpsertGarageRequest(
     Guid? Version = null,
     [Range(0, 999999999)] decimal? StartingOverdueDebt = null);
 
+public sealed record PaidAnnualPaymentRequest(
+    Guid IncomeTypeId,
+    [Range(0.01, 999999999)] decimal Amount);
+
+public sealed record CreateGarageWithAnnualPaymentsRequest(
+    [Required] UpsertGarageRequest Garage,
+    [Required, MinLength(1), MaxLength(100)] IReadOnlyList<PaidAnnualPaymentRequest> AnnualPayments);
+
 public sealed record SupplierGroupDto(Guid Id, string Name, bool IsSystem, bool IsArchived);
 
 public sealed record UpsertSupplierGroupRequest([Required, MaxLength(200)] string Name);

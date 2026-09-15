@@ -241,6 +241,17 @@ public sealed class FinanceController(
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("garages/annual-payments/preview")]
+    [ProducesResponseType<GarageAnnualPaymentOptionsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<GarageAnnualPaymentOptionsDto>> PreviewGarageAnnualPayments(
+        [FromQuery] PreviewGarageAnnualPaymentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.PreviewGarageAnnualPaymentsAsync(request, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("expenses-worksheet")]
     [ProducesResponseType<ExpenseWorksheetDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

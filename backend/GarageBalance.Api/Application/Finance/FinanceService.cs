@@ -611,9 +611,9 @@ public sealed class FinanceService(
                     null,
                     null,
                     null,
-                    annualAccrual.AccountingMonth == month ? MoneyMath.RoundMoney(annualAccrual.Amount) : 0m,
+                    MoneyMath.RoundMoney(annualAccrual.Amount),
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
-                    allocatedInMonth,
+                    allocatedThroughMonth,
                     advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m)),
                     Reason: BuildAnnualAccrualWorksheetReason(
@@ -900,7 +900,8 @@ public sealed class FinanceService(
                 status,
                 incomeType.DestinationFundId,
                 incomeType.DestinationFund?.Name,
-                accrual is not null && outstandingAmount > 0m));
+                accrual is not null && outstandingAmount > 0m,
+                definition?.Tariff?.Name));
         }
 
         var orderedRows = rows
@@ -916,6 +917,48 @@ public sealed class FinanceService(
             MoneyMath.RoundMoney(orderedRows.Sum(item => item.PaidAmount)),
             MoneyMath.RoundMoney(orderedRows.Sum(item => item.OutstandingAmount)),
             orderedRows));
+    }
+
+    public async Task<FinanceResult<GarageAnnualPaymentOptionsDto>> PreviewGarageAnnualPaymentsAsync(
+        PreviewGarageAnnualPaymentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateAnnualPaymentYear(request.Year);
+        if (validation is not null)
+        {
+            return FinanceResult<GarageAnnualPaymentOptionsDto>.Failure(validation.Value.Code, validation.Value.Message);
+        }
+
+        if (request.PeopleCount is < 0 or > 1000 || request.FloorCount is < 0 or > 100)
+        {
+            return FinanceResult<GarageAnnualPaymentOptionsDto>.Failure(
+                "garage_annual_payment_preview_values_invalid",
+                "Количество людей и этажей указано неверно.");
+        }
+
+        var garage = new Garage
+        {
+            Number = "Новый гараж",
+            PeopleCount = request.PeopleCount,
+            FloorCount = request.FloorCount,
+            RegisteredOn = businessDateProvider.Today
+        };
+        var currentMonth = GetCurrentAccountingMonth();
+        var definitions = await GetAnnualServiceDefinitionsAsync(request.Year, cancellationToken);
+        var items = definitions.Select(definition => new GarageAnnualPaymentOptionDto(
+                definition.IncomeType.Id,
+                definition.Setting.Name,
+                definition.Tariff?.Name,
+                request.Year,
+                definition.AccountingMonth,
+                CalculateAnnualPlannedAmount(garage, definition),
+                definition.IncomeType.DestinationFundId,
+                definition.IncomeType.DestinationFund?.Name,
+                definition.Tariff is not null && definition.AccountingMonth <= currentMonth))
+            .ToArray();
+
+        return FinanceResult<GarageAnnualPaymentOptionsDto>.Success(
+            new GarageAnnualPaymentOptionsDto(request.Year, items));
     }
 
     public async Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(

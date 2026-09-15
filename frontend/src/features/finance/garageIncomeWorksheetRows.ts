@@ -62,7 +62,7 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       accrued: row.accrualAmount,
       payable: row.payableAmount ?? row.accrualAmount,
       paymentDraft: '',
-      paid: roundPaymentMoney(row.incomeAmount + (row.advanceAmount ?? 0)),
+      paid: roundPaymentMoney(row.incomeAmount + (row.annualAccrualId ? 0 : row.advanceAmount ?? 0)),
       advance: row.advanceAmount ?? 0,
       debt: row.debt,
       meterRequired: row.meterKind !== null && row.meterValue === null,

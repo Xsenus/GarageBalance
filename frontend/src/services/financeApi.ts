@@ -588,6 +588,24 @@ export type GarageAnnualPaymentItemDto = {
   destinationFundId: string | null
   destinationFundName: string | null
   canRecordPayment: boolean
+  tariffName?: string | null
+}
+
+export type GarageAnnualPaymentOptionDto = {
+  incomeTypeId: string
+  serviceName: string
+  tariffName: string | null
+  accountingYear: number
+  accountingMonth: string
+  amount: number | null
+  destinationFundId: string | null
+  destinationFundName: string | null
+  canRecordPayment: boolean
+}
+
+export type GarageAnnualPaymentOptionsDto = {
+  accountingYear: number
+  items: GarageAnnualPaymentOptionDto[]
 }
 
 export type GarageAnnualPaymentsDto = {
@@ -875,6 +893,7 @@ export type FinanceClient = {
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
   calculateGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
+  previewGarageAnnualPayments(accessToken: string, request: { year: number; peopleCount: number; floorCount: number }, signal?: AbortSignal): Promise<GarageAnnualPaymentOptionsDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
   getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId?: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
@@ -1082,6 +1101,9 @@ export const financeApi: FinanceClient = {
       method: 'POST',
       signal,
     })
+  },
+  previewGarageAnnualPayments(accessToken, request, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/garages/annual-payments/preview', request), { signal })
   },
   getExpenseWorksheet(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet', {

@@ -698,6 +698,20 @@ describe('financeApi', () => {
     expect(fetchMock.mock.calls[1][1]?.signal).toBeInstanceOf(AbortSignal)
   })
 
+  it('previews annual payment costs for an unsaved garage and forwards cancellation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ accountingYear: 2026, items: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await financeApi.previewGarageAnnualPayments('token', { year: 2026, peopleCount: 3, floorCount: 2 }, controller.signal)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/garages/annual-payments/preview?year=2026&peopleCount=3&floorCount=2', expect.any(Object))
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+
   it('loads the paged historical accrual due-date reconciliation report', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       items: [],

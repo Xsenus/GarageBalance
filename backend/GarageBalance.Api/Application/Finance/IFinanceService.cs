@@ -42,6 +42,10 @@ public interface IFinanceService
         int year,
         CancellationToken cancellationToken);
 
+    Task<FinanceResult<GarageAnnualPaymentOptionsDto>> PreviewGarageAnnualPaymentsAsync(
+        PreviewGarageAnnualPaymentsRequest request,
+        CancellationToken cancellationToken);
+
     Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(
         Guid garageId,
         int year,
