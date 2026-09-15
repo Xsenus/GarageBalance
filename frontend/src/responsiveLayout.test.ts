@@ -436,11 +436,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {\n  flex: 0 0 auto;')
   })
 
-  it('lets report tables extend down the page while keeping report choices in one row', () => {
+  it('lets report tables extend down the page while keeping report choices in one fitted row', () => {
     expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  min-height: 100dvh;\n  flex-direction: column;\n  overflow: visible;\n  box-sizing: border-box;')
     expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  flex: 0 0 auto;\n  flex-direction: column;')
-    expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
-    expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 auto;')
+    expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: grid;\n  grid-template-columns: 1.18fr 1fr 1fr 1fr 0.94fr 1.06fr 0.8fr 1.08fr;\n  overflow: visible;')
+    expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 0;\n  min-height: 48px;')
     expect(normalizedAppCss).toContain('.report-workbook-sheet > .report-workbook-table {\n  flex: 0 0 auto;\n  overflow-x: auto;\n  overflow-y: visible;')
     expect(normalizedAppCss).not.toContain('.report-workbook-sheet > .dictionary-pagination {')
   })

@@ -8347,7 +8347,7 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
     expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByText('Первое показание в пустой ячейке сохраняется сразу. Изменение существующего показания за другой месяц требует права и включённой настройки.')).toBeInTheDocument()
+    expect(within(readingsPanel).queryByText('Первое показание в пустой ячейке сохраняется сразу. Изменение существующего показания за другой месяц требует права и включённой настройки.')).not.toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     await act(async () => resolveMeterReadingYearPage({
       garages: [
@@ -25501,6 +25501,9 @@ describe('App', () => {
     expect(within(reportsPanel).getByRole('tab', { name: /Консолидированный/ })).toHaveAttribute('aria-selected', 'true')
     for (const tabName of ['По гаражам', 'По выплатам', 'Поступления', 'Оплаты из кассы', 'Сдача кассы в банк', 'Сборы', 'Изменение фондов']) {
       expect(within(reportsPanel).getByRole('tab', { name: new RegExp(tabName) })).toBeInTheDocument()
+    }
+    for (const tabName of ['Оплаты из кассы', 'Сдача кассы в банк', 'Изменение фондов']) {
+      expect(within(reportsPanel).getByRole('tab', { name: tabName }).querySelector('br')).toBeInTheDocument()
     }
 
     const reportTabs = within(reportsPanel).getAllByRole('tab')

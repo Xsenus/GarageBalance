@@ -654,8 +654,6 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           setReloadRevision((value) => value + 1)
         }
       }} retrying={loading} /> : null}
-      <p className="form-hint">Первое показание в пустой ячейке сохраняется сразу. Изменение существующего показания за другой месяц требует права и включённой настройки.</p>
-
       {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
       {availableMeterTypes?.length === 0 && !error ? (
         <EmptyState>Нет действующих услуг по счётчику. Назначьте счётчиковый тариф в разделе «Тарифы и сборы».</EmptyState>

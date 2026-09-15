@@ -135,9 +135,16 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('.payments-prototype-table--resizable {\n  min-width: calc(100% - 4px);\n  table-layout: fixed;')
   })
 
-  it('keeps report tabs in a single horizontally scrollable strip', () => {
-    expect(appCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
-    expect(appCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 auto;')
-    expect(appCss).not.toContain('grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));')
+  it('fits report tabs into one centered strip and keeps a narrow-screen fallback', () => {
+    expect(appCss).toContain('.report-tabs--workbook {\n  display: grid;\n  grid-template-columns: 1.18fr 1fr 1fr 1fr 0.94fr 1.06fr 0.8fr 1.08fr;\n  overflow: visible;')
+    expect(appCss).toContain('.report-tabs--workbook button {\n  min-width: 0;\n  min-height: 48px;')
+    expect(appCss).toContain('@media (max-width: 900px) {\n  .report-tabs--workbook {\n    display: flex;\n    overflow-x: auto;')
+  })
+
+  it('aligns the report back button and keeps export actions beside compact filters', () => {
+    expect(appCss).toContain('.report-workbook-filter {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;')
+    expect(appCss).toContain('.report-workbook-filter__fields > label {\n  flex: 0 0 150px;')
+    expect(appCss).toContain('.workspace--reports > .topbar {\n    top: 25px;\n    left: 27px;')
+    expect(appCss).not.toContain('.report-workbook-filter__actions {\n    grid-column: 1;\n    grid-row: 2;')
   })
 })

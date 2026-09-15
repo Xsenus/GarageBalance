@@ -248,15 +248,15 @@ function ReportCheckboxMultiSelect({
   )
 }
 
-const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string }> = [
+const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; compactLabel?: readonly [string, string] }> = [
   { key: 'consolidated', label: 'Консолидированный' },
   { key: 'garages', label: 'По гаражам' },
   { key: 'payouts', label: 'По выплатам' },
   { key: 'income', label: 'Поступления' },
-  { key: 'cashPayments', label: 'Оплаты из кассы' },
-  { key: 'bankDeposits', label: 'Сдача кассы в банк' },
+  { key: 'cashPayments', label: 'Оплаты из кассы', compactLabel: ['Оплаты из', 'кассы'] },
+  { key: 'bankDeposits', label: 'Сдача кассы в банк', compactLabel: ['Сдача кассы', 'в банк'] },
   { key: 'fees', label: 'Сборы' },
-  { key: 'funds', label: 'Изменение фондов' },
+  { key: 'funds', label: 'Изменение фондов', compactLabel: ['Изменение', 'фондов'] },
 ]
 
 function getReportMonthStart(monthValue: string) {
@@ -1666,6 +1666,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             type="button"
             role="tab"
             id={`report-tab-${tab.key}`}
+            aria-label={tab.label}
             aria-selected={activeReportTab === tab.key}
             aria-controls={`report-panel-${tab.key}`}
             tabIndex={activeReportTab === tab.key ? 0 : -1}
@@ -1687,7 +1688,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             }}
             key={tab.key}
           >
-            <span>{tab.label}</span>
+            <span>
+              {tab.compactLabel ? <>{tab.compactLabel[0]}<br />{tab.compactLabel[1]}</> : tab.label}
+            </span>
           </button>
         ))}
       </div>

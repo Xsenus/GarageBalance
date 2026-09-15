@@ -7995,15 +7995,23 @@ button.operation-row:focus-visible {
 }
 
 .report-tabs--workbook {
-  display: flex;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scrollbar-gutter: stable;
+  display: grid;
+  grid-template-columns: 1.18fr 1fr 1fr 1fr 0.94fr 1.06fr 0.8fr 1.08fr;
+  overflow: visible;
 }
 
 .report-tabs--workbook button {
-  min-width: 150px;
-  flex: 1 0 auto;
+  min-width: 0;
+  min-height: 48px;
+  padding: 5px 7px;
+  text-align: center;
+}
+
+.report-tabs--workbook button span {
+  line-height: 1.15;
+  overflow-wrap: normal;
+  text-align: center;
+  white-space: normal;
 }
 
 .report-tab-panel {
@@ -8259,7 +8267,7 @@ button.operation-row:focus-visible {
 }
 
 .report-workbook-filter__fields > label {
-  flex: 0 1 180px;
+  flex: 0 0 150px;
 }
 
 .report-quick-periods {
@@ -8271,7 +8279,8 @@ button.operation-row:focus-visible {
 
 .report-quick-periods__button {
   min-height: 38px;
-  padding: 7px 10px;
+  padding: 6px 8px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -8282,7 +8291,12 @@ button.operation-row:focus-visible {
 }
 
 .report-workbook-filter--single .report-workbook-filter__fields > label {
-  flex-basis: 420px;
+  flex-basis: 150px;
+}
+
+.report-workbook-filter--single .report-workbook-filter__fields,
+.report-workbook-filter--single .report-checkbox-picker {
+  width: 100%;
 }
 
 .report-workbook-filter__actions {
@@ -8544,6 +8558,8 @@ button.operation-row:focus-visible {
 
 .report-group-button {
   min-height: 38px;
+  padding: 7px 10px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -8639,18 +8655,6 @@ button.operation-row:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .report-workbook-filter {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .report-workbook-filter__actions {
-    grid-row: 2;
-    justify-content: flex-start;
-  }
-
-  .report-workbook-filter__extra {
-    grid-row: 3;
-  }
 }
 
 @media (max-width: 720px) {
@@ -9690,7 +9694,12 @@ button.operation-row:focus-visible {
 
   .workspace--reports > .reports-workbook-panel {
     margin-top: 0;
-    padding-top: 0;
+    padding-top: 13px;
+  }
+
+  .workspace--reports > .topbar {
+    top: 25px;
+    left: 27px;
   }
 
   .workspace--payments > .topbar {
@@ -10903,5 +10912,19 @@ button.operation-row:focus-visible {
   .table-actions-column .funds-action-button {
     min-width: 36px;
     min-height: 36px;
+  }
+}
+
+@media (max-width: 900px) {
+  .report-tabs--workbook {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .report-tabs--workbook button {
+    min-width: 126px;
+    flex: 1 0 auto;
   }
 }
