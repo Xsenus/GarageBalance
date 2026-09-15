@@ -909,7 +909,7 @@ describe('App', () => {
     }
   })
 
-  it('keeps the shared back button in the section header instead of following a scrolled form', async () => {
+  it('keeps the shared back button in the top row while the section table scrolls', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -921,6 +921,7 @@ describe('App', () => {
     const topbar = backButton.closest('header')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     expect(topbar).not.toBeNull()
+    const initialTopbarStyle = topbar?.getAttribute('style')
 
     Object.defineProperties(tariffsPanel, {
       clientHeight: { configurable: true, value: 320 },
@@ -928,11 +929,14 @@ describe('App', () => {
       scrollTop: { configurable: true, writable: true, value: 160 },
     })
     fireEvent.scroll(tariffsPanel)
-    expect(topbar).toHaveStyle('--workspace-section-scroll-offset: 160px')
+    expect(backButton).toBeVisible()
+    expect(backButton.closest('header')).toBe(topbar)
+    expect(topbar?.getAttribute('style')).toBe(initialTopbarStyle)
 
     tariffsPanel.scrollTop = 0
     fireEvent.scroll(tariffsPanel)
-    expect(topbar).toHaveStyle('--workspace-section-scroll-offset: 0px')
+    expect(backButton).toBeVisible()
+    expect(topbar?.getAttribute('style')).toBe(initialTopbarStyle)
   })
 
   it('shows ready tariff data without waiting for irregular payments or fee campaigns', async () => {
