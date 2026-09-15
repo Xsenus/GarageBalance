@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
+import { FormField } from './FormField'
 import { LocalizedDatePicker } from './LocalizedDatePicker'
 import { SelectControl } from './SelectControl'
 
@@ -277,5 +278,21 @@ describe('styled form controls', () => {
     await user.click(control)
     await user.click(screen.getByRole('option', { name: 'Финансы' }))
     expect(control).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  it('keeps a required marker attached to label text before field help', () => {
+    render(
+      <div role="dialog" aria-modal="true" aria-label="Форма сбора">
+        <FormField label="Фонд" help="В этот фонд будут зачисляться оплаты по сбору.">
+          <SelectControl aria-label="Фонд сбора" required value="fund-other" options={[{ value: 'fund-other', label: 'Прочее' }]} onChange={() => undefined} />
+        </FormField>
+      </div>,
+    )
+
+    const labelText = screen.getByText('Фонд')
+    const help = screen.getByLabelText('Справка: Фонд')
+    expect(labelText).toHaveClass('form-field-label-text')
+    expect(labelText.parentElement).toHaveClass('field-label-with-help')
+    expect(labelText.nextElementSibling).toBe(help)
   })
 })
