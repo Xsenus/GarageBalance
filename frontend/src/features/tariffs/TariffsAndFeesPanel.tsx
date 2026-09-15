@@ -32,6 +32,7 @@ import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServi
 import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
+import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
 
 const dictionaryScreenRequestLimit = 100
 const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -2832,6 +2833,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     row.isDeleted ? 'contractors-sheet-row--deleted' : '',
                   ].filter(Boolean).join(' ')}
                   role="row"
+                  onDoubleClick={(event) => {
+                    if (row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted && canManageTariffs && !isRowDisabled && !tariffReferencesLoading && !isInteractiveTableRowTarget(event.target)) {
+                      void openChargeServiceEditor(serviceSetting)
+                    }
+                  }}
                 >
                   <span
                     className={[
@@ -3311,6 +3317,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     ].filter(Boolean).join(' ')}
                     role="row"
                     key={campaign.id}
+                    onDoubleClick={(event) => {
+                      if (!campaign.isArchived && !campaign.closedAtUtc && canManageTariffs && !feeCampaignsLoading && !tariffReferencesLoading && !feeCampaignGarageOptionsLoading && !isInteractiveTableRowTarget(event.target)) {
+                        void openFeeCampaignEditDialog(campaign)
+                      }
+                    }}
                   >
                     <span className="contractors-fee-name-cell" role="cell">
                       <span>{campaign.name}</span>

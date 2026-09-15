@@ -103,10 +103,12 @@ public sealed class ExpensePaymentBatchRepositoryTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync("20260905214500_RouteUnusedDefaultFeeFundsToOther");
         await using var context = database.CreateContext();
+        await PostgreSqlLegacyModelCompatibility.AddFinancialOperationTargetAccrualAsync(context);
         var operation = Operation();
         context.Add(operation);
         await context.SaveChangesAsync();
         var version = operation.Version;
+        await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationTargetAccrualAsync(context);
         await context.Database.MigrateAsync();
         await context.Database.MigrateAsync("20260905214500_RouteUnusedDefaultFeeFundsToOther");
         await context.Database.MigrateAsync();

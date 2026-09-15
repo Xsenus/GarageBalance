@@ -36,7 +36,7 @@ describe('frontend bundle budget gate', () => {
     expect(viteConfig).toContain('modulePreload: false')
     expect(viteConfig).toContain("return 'workspace-finance'")
     expect(viteConfig).toContain("return 'workspace-operations'")
-    expect(viteConfig).toContain('(finance|funds|import)')
+    expect(viteConfig).toContain('(finance|funds|import|dictionaries)')
     expect(viteConfig).toContain('(meterReadings|contractors|tariffs)')
   })
 

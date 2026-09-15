@@ -126,7 +126,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                         !row.IsCanceled &&
                         row.OperationKind == FinancialOperationKinds.Income)
                     .Select(row => new AccrualPaymentAllocationPayment(
-                        row.Id, row.SortDate, row.AccountingMonth, row.Amount, row.CreatedAtUtc, row.FeeCampaignId, row.IrregularPaymentId)));
+                        row.Id, row.SortDate, row.AccountingMonth, row.Amount, row.CreatedAtUtc, row.FeeCampaignId, row.IrregularPaymentId, row.TargetAccrualId)));
 
             dbContext.AccrualPaymentAllocations.AddRange(plan.Select(item => new AccrualPaymentAllocation
             {
@@ -178,6 +178,16 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             .ToHashSetAsync(cancellationToken);
     }
 
+    public async Task<decimal> GetActiveAllocatedAmountAsync(
+        Guid accrualId,
+        CancellationToken cancellationToken) =>
+        await dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.IsActive &&
+                allocation.AccrualId == accrualId &&
+                !allocation.FinancialOperation.IsCanceled)
+            .SumAsync(allocation => (decimal?)allocation.Amount, cancellationToken) ?? 0m;
+
     private IQueryable<AllocationLedgerRow> BuildLedgerQuery(IReadOnlyCollection<AccrualPaymentAllocationKey> keys)
     {
         var garageIds = keys.Select(key => key.GarageId).Distinct().ToArray();
@@ -201,7 +211,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.IsCanceled,
                 OperationKind = string.Empty,
                 item.FeeCampaignId,
-                item.IrregularPaymentId
+                item.IrregularPaymentId,
+                TargetAccrualId = (Guid?)null
             });
         var untaggedPaymentRows = dbContext.FinancialOperations.AsNoTracking()
             .Where(item =>
@@ -234,7 +245,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.IsCanceled,
                 item.OperationKind,
                 item.FeeCampaignId,
-                item.IrregularPaymentId
+                item.IrregularPaymentId,
+                item.TargetAccrualId
             });
         var campaignAccrualRoutes = dbContext.Accruals.AsNoTracking()
             .Where(item =>
@@ -284,7 +296,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.IsCanceled,
                 item.OperationKind,
                 item.FeeCampaignId,
-                item.IrregularPaymentId
+                item.IrregularPaymentId,
+                TargetAccrualId = (Guid?)null
             };
         var migratedCampaignPaymentRows = dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(allocation =>
@@ -328,7 +341,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 group.Key.IsCanceled,
                 group.Key.OperationKind,
                 group.Key.FeeCampaignId,
-                group.Key.IrregularPaymentId
+                group.Key.IrregularPaymentId,
+                TargetAccrualId = (Guid?)null
             });
         var paymentRows = untaggedPaymentRows
             .Concat(campaignPaymentRows)
@@ -355,7 +369,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 IsCanceled = false,
                 OperationKind = string.Empty,
                 item.Accrual.FeeCampaignId,
-                item.Accrual.IrregularPaymentId
+                item.Accrual.IrregularPaymentId,
+                TargetAccrualId = (Guid?)null
             });
 
         var rows = accrualRows
@@ -373,7 +388,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 row.IsCanceled,
                 row.OperationKind,
                 row.FeeCampaignId,
-                row.IrregularPaymentId));
+                row.IrregularPaymentId,
+                row.TargetAccrualId));
         return rows;
     }
 
@@ -519,7 +535,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                     accrual.IsCanceled,
                     string.Empty,
                     accrual.FeeCampaignId,
-                    accrual.IrregularPaymentId));
+                    accrual.IrregularPaymentId,
+                    null));
             }
         }
     }
@@ -557,7 +574,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                     payment.IsCanceled,
                     payment.OperationKind,
                     payment.FeeCampaignId,
-                    payment.IrregularPaymentId));
+                    payment.IrregularPaymentId,
+                    payment.TargetAccrualId));
             }
         }
     }
@@ -628,7 +646,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 payment.IsCanceled,
                 payment.OperationKind,
                 payment.FeeCampaignId,
-                payment.IrregularPaymentId));
+                payment.IrregularPaymentId,
+                null));
         }
     }
 
@@ -644,7 +663,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         bool IsCanceled,
         string OperationKind,
         Guid? FeeCampaignId,
-        Guid? IrregularPaymentId)
+        Guid? IrregularPaymentId,
+        Guid? TargetAccrualId)
     {
         public AccrualPaymentAllocationKey Key => new(GarageId, IncomeTypeId);
     }

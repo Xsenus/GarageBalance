@@ -23,6 +23,10 @@ public interface IAccrualPaymentAllocationRepository
     Task<IReadOnlySet<Guid>> GetActivelyAllocatedAccrualIdsAsync(
         IReadOnlyCollection<Guid> accrualIds,
         CancellationToken cancellationToken);
+
+    Task<decimal> GetActiveAllocatedAmountAsync(
+        Guid accrualId,
+        CancellationToken cancellationToken);
 }
 
 public sealed record AccrualPaymentAllocationKey(Guid GarageId, Guid IncomeTypeId);

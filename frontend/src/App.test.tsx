@@ -43,7 +43,7 @@ import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceTariffScheduleRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import { expenseBatchesApi } from './services/expenseBatchesApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -1410,7 +1410,8 @@ describe('App', () => {
     expect(within(feeCampaignsSection).getAllByText('700.00').every((cell) => cell.classList.contains('contractors-fee-money-cell'))).toBe(true)
 
     const editFeeCampaignButton = within(feeCampaignsSection).getByRole('button', { name: 'Изменить сбор Сбор на камеры' })
-    await user.click(editFeeCampaignButton)
+    const feeCampaignRow = within(feeCampaignsSection).getByText('Сбор на камеры').closest('[role="row"]')!
+    await user.dblClick(feeCampaignRow)
     let editDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
     expect(within(editDialog).getByLabelText('Наименование сбора')).toHaveValue('Сбор на камеры')
     expect(within(editDialog).getByRole('combobox', { name: 'Фонд сбора' })).toHaveTextContent(alternateIncomeType.destinationFundName!)
@@ -1419,7 +1420,7 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Сумма сбора')).not.toHaveAttribute('readonly')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить сбор' })).not.toBeInTheDocument())
-    await waitFor(() => expect(editFeeCampaignButton).toHaveFocus())
+    expect(screen.queryByRole('dialog', { name: 'Изменить сбор' })).not.toBeInTheDocument()
     expect(updatedRequests).toHaveLength(0)
 
     await user.click(editFeeCampaignButton)
@@ -3735,7 +3736,7 @@ describe('App', () => {
     expect(garageAddressListbox).not.toHaveClass('suggestion-options--above')
     await user.click(await within(garageDialog).findByRole('option', { name: /Советская, д 2/ }))
     expect(garageAddressInput).toHaveValue('630000, г Новосибирск, ул Советская, д 2')
-    const selectedGarageAddressStatus = within(garageDialog).getByRole('status')
+    const selectedGarageAddressStatus = within(garageDialog).getByText('Адрес выбран из DaData.')
     expect(selectedGarageAddressStatus).toHaveTextContent('Адрес выбран из DaData.')
     expect(selectedGarageAddressStatus).toHaveClass('suggestion-status--visually-hidden')
     const garageAddressRequestCount = suggestAddresses.mock.calls.length
@@ -4211,7 +4212,8 @@ describe('App', () => {
     const departmentContextMenu = await screen.findByRole('menu', { name: 'Действия отдела Бухгалтерия' })
     expect(within(departmentContextMenu).getByRole('menuitem', { name: 'Изменить' })).toBeInTheDocument()
     expect(within(departmentContextMenu).getByRole('menuitem', { name: 'Удалить' })).toBeInTheDocument()
-    await user.click(within(departmentContextMenu).getByRole('menuitem', { name: 'Изменить' }))
+    await user.keyboard('{Escape}')
+    await user.dblClick(activeDepartmentRow as HTMLElement)
     const editDepartmentDialog = await screen.findByRole('dialog', { name: 'Бухгалтерия' })
     const departmentNameInput = within(editDepartmentDialog).getByLabelText('Наименование отдела')
     await user.clear(departmentNameInput)
@@ -6690,7 +6692,7 @@ describe('App', () => {
     }))
     expect(savedServiceCostInput).toHaveValue('1 800.00')
 
-    await user.click(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана' }))
+    await user.dblClick(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана' }).closest('[role="row"]')!)
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
     expect(within(editDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toHaveTextContent('Членские взносы')
     expect(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toHaveTextContent('Ежегодно')
@@ -14754,8 +14756,7 @@ describe('App', () => {
     await user.click(within(newDialog).getByRole('button', { name: 'Отмена' }))
     await user.click(await within(prototype).findByRole('button', { name: 'Показать состав суммы: Водоканал, Электроэнергия' }))
     const details = await within(prototype).findByRole('table', { name: 'Операции: Водоканал, Электроэнергия' })
-    fireEvent.contextMenu((await within(details).findByText('ПП-400')).closest('tr')!)
-    await user.click(await screen.findByRole('menuitem', { name: 'Редактировать' }))
+    await user.dblClick((await within(details).findByText('ПП-400')).closest('tr')!)
     const dialog = await screen.findByRole('dialog', { name: 'Редактировать выплату' })
     expect(within(dialog).getByRole('combobox', { name: 'Источник выплаты' })).toHaveTextContent('Банк · поставщику')
     expect(within(dialog).getByRole('combobox', { name: 'Поставщик выплаты' })).toHaveTextContent('Водоканал')
@@ -14765,7 +14766,7 @@ describe('App', () => {
     await waitFor(() => expect(updateExpense).toHaveBeenCalledWith('token', 'bank-payment-1', expect.objectContaining({ expensePaymentSource: 'bank', supplierId: 'supplier-1', expenseFundId: 'fund-water', amount: 450, expectedVersion: 'bank-version' })))
   })
 
-  it('edits an episodic cash payout from the row context menu with its concurrency version', async () => {
+  it('edits an episodic cash payout by double click with its concurrency version', async () => {
     const user = userEvent.setup()
     const updateExpense = vi.fn(async (_token: string, operationId: string, request: CreateExpenseOperationRequest) => createFinancialOperation({
       id: operationId,
@@ -14796,11 +14797,7 @@ describe('App', () => {
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
     const payoutRow = (await within(prototype).findByText('ИП Ромашка')).closest('tr')!
 
-    fireEvent.contextMenu(payoutRow)
-    const menu = await screen.findByRole('menu', { name: 'Действия выплаты ИП Ромашка' })
-    expect(within(menu).getByRole('menuitem', { name: 'Редактировать' })).toBeInTheDocument()
-    expect(within(menu).queryByRole('menuitem', { name: 'Удалить' })).not.toBeInTheDocument()
-    await user.click(within(menu).getByRole('menuitem', { name: 'Редактировать' }))
+    await user.dblClick(payoutRow)
 
     const dialog = await screen.findByRole('dialog', { name: 'Редактировать выплату' })
     expect(within(dialog).getByRole('combobox', { name: 'Источник выплаты' })).toHaveTextContent('Касса · эпизодическая')
@@ -15500,7 +15497,7 @@ describe('App', () => {
 
     const editFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Изменить операцию фонда Целевые взносы' })
     expect(editFundOperationButton).toHaveAttribute('title', 'Изменить операцию фонда Целевые взносы')
-    await user.click(editFundOperationButton)
+    await user.dblClick(editFundOperationButton.closest('tr')!)
     let editFundOperationDialog = await screen.findByRole('dialog', { name: 'Изменить операцию фонда?' })
     let editCancelButton = within(editFundOperationDialog).getByRole('button', { name: 'Отмена' })
     let editSaveButton = within(editFundOperationDialog).getByRole('button', { name: 'Сохранить изменения' })
@@ -18582,7 +18579,7 @@ describe('App', () => {
     expect(within(usersTable).getByRole('columnheader', { name: 'Действия' })).toHaveClass('table-actions-column')
     const createdUserRow = row.closest('tr')!
     expect(within(createdUserRow).getByRole('button', { name: 'Удалить пользователя Оператор' })).toBeInTheDocument()
-    await user.click(within(createdUserRow).getByRole('button', { name: 'Изменить пользователя Оператор' }))
+    await user.dblClick(createdUserRow)
     const noChangeDialog = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
     await user.click(within(noChangeDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => {
@@ -28089,6 +28086,165 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Перерасчёт неоплаченных начислений' })).not.toBeInTheDocument()
   })
 
+  it('shows annual obligations in a garage card and records a targeted receipt', async () => {
+    const user = userEvent.setup()
+    let paid = false
+    let paymentAttempt = 0
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
+      paymentAttempt += 1
+      if (paymentAttempt === 1) throw new Error('Не удалось провести годовой платёж.')
+      paid = true
+      return createFinancialOperation({
+        id: 'annual-payment-operation',
+        garageId: request.garageId,
+        incomeTypeId: request.incomeTypeId,
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        targetAccrualId: request.targetAccrualId,
+      })
+    })
+    const annualResult = (): GarageAnnualPaymentsDto => ({
+      garageId: 'garage-1',
+      garageNumber: '12',
+      ownerName: 'Иванов Иван',
+      accountingYear: 2026,
+      accruedTotal: 900,
+      paidTotal: paid ? 900 : 0,
+      outstandingTotal: paid ? 0 : 900,
+      items: [{
+        accrualId: 'annual-accrual-1',
+        incomeTypeId: 'income-type-membership',
+        serviceName: 'Годовой резерв',
+        accountingYear: 2026,
+        accountingMonth: '2026-01-01',
+        dueDate: '2026-06-30',
+        overdueFromDate: '2026-07-31',
+        amount: 900,
+        paidAmount: paid ? 900 : 0,
+        outstandingAmount: paid ? 0 : 900,
+        status: paid ? 'paid' : 'unpaid',
+        destinationFundId: 'fund-reserve',
+        destinationFundName: 'Резерв',
+        canRecordPayment: !paid,
+      }],
+    })
+    const getGarageAnnualPayments = vi.fn(async () => annualResult())
+    const calculateGarageAnnualPayments = vi.fn(async () => annualResult())
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getGarageAnnualPayments, calculateGarageAnnualPayments, createIncome })} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(await within(panel).findByRole('button', { name: 'Изменить гараж 12' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
+
+    expect(await within(dialog).findByText('Годовой резерв')).toBeInTheDocument()
+    expect(within(dialog).getByText('Фонд: Резерв')).toBeInTheDocument()
+    expect(within(dialog).getByText('Не оплачен')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Рассчитать' }))
+    await waitFor(() => expect(calculateGarageAnnualPayments).toHaveBeenCalledWith('token', 'garage-1', 2026, undefined))
+    await user.click(within(dialog).getByRole('button', { name: 'Провести' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Не удалось провести годовой платёж.')
+    await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
+    await user.click(await within(dialog).findByRole('button', { name: 'Провести' }))
+
+    await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: 'garage-1',
+      incomeTypeId: 'income-type-membership',
+      amount: 900,
+      targetAccrualId: 'annual-accrual-1',
+    })))
+    expect(createIncome).toHaveBeenCalledTimes(2)
+    expect(await within(dialog).findByText('Оплачен')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Провести' })).not.toBeInTheDocument()
+  })
+
+  it('shows annual payments loading and retry states and keeps read-only access safe', async () => {
+    const user = userEvent.setup()
+    let rejectInitialLoad: ((reason?: unknown) => void) | undefined
+    const initialLoad = new Promise<GarageAnnualPaymentsDto>((_resolve, reject) => {
+      rejectInitialLoad = reject
+    })
+    const annualPayments: GarageAnnualPaymentsDto = {
+      garageId: 'garage-1',
+      garageNumber: '12',
+      ownerName: 'Иванов Иван',
+      accountingYear: 2026,
+      accruedTotal: 900,
+      paidTotal: 0,
+      outstandingTotal: 900,
+      items: [{
+        accrualId: 'annual-accrual-1',
+        incomeTypeId: 'income-type-membership',
+        serviceName: 'Годовой резерв',
+        accountingYear: 2026,
+        accountingMonth: '2026-01-01',
+        dueDate: '2026-06-30',
+        overdueFromDate: '2026-07-31',
+        amount: 900,
+        paidAmount: 0,
+        outstandingAmount: 900,
+        status: 'unpaid',
+        destinationFundId: null,
+        destinationFundName: null,
+        canRecordPayment: true,
+      }],
+    }
+    const getGarageAnnualPayments = vi.fn()
+      .mockImplementationOnce(async () => initialLoad)
+      .mockResolvedValue(annualPayments)
+    const auth = createAuthResponse({
+      user: {
+        permissions: ['dictionaries.read', 'dictionaries.write', 'payments.read'],
+      },
+    })
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getGarageAnnualPayments })} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.dblClick((await within(panel).findByRole('button', { name: 'Изменить гараж 12' })).closest('[role="row"]')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
+
+    expect(within(dialog).getByRole('status', { name: 'Загружаем годовые платежи' })).toBeInTheDocument()
+    rejectInitialLoad?.(new Error('Годовые платежи временно недоступны.'))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Годовые платежи временно недоступны.')
+    await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
+
+    expect(await within(dialog).findByText('Годовой резерв')).toBeInTheDocument()
+    expect(within(dialog).getByText('Общий пул')).toBeInTheDocument()
+    expect(within(dialog).getByText('Режим просмотра: проведение оплаты требует права изменения платежей.')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Рассчитать' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Провести' })).not.toBeInTheDocument()
+  })
+
+  it('does not request annual payments without payment read access', async () => {
+    const user = userEvent.setup()
+    const getGarageAnnualPayments = vi.fn(async () => {
+      throw new Error('Запрос годовых платежей не должен выполняться без payments.read.')
+    })
+    const auth = createAuthResponse({
+      user: {
+        permissions: ['dictionaries.read', 'dictionaries.write'],
+      },
+    })
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getGarageAnnualPayments })} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.dblClick((await within(panel).findByRole('button', { name: 'Изменить гараж 12' })).closest('[role="row"]')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
+
+    expect(within(dialog).getByText('Для просмотра нужен доступ к платежам.')).toBeInTheDocument()
+    expect(getGarageAnnualPayments).not.toHaveBeenCalled()
+  })
+
   it('shows workspace loading errors inside the related panel', async () => {
     const user = userEvent.setup()
     let failReportDictionaries = false
@@ -29112,6 +29268,16 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     rows: [],
   })
   let latestGarageIncomeWorksheet = garageIncomeWorksheet
+  const garageAnnualPayments: GarageAnnualPaymentsDto = {
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    accountingYear: 2026,
+    accruedTotal: 0,
+    paidTotal: 0,
+    outstandingTotal: 0,
+    items: [],
+  }
 
   const buildFullPaymentQuote = (garageId: string): GarageFullPaymentQuoteDto => {
     const worksheet = latestGarageIncomeWorksheet
@@ -29205,6 +29371,8 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getGarageOverdueDebt: async () => garageOverdueDebt,
     getGarageFullPaymentQuote: async (_token, garageId) => buildFullPaymentQuote(garageId),
     getGarageIncomeWorksheet: async () => garageIncomeWorksheet,
+    getGarageAnnualPayments: async () => garageAnnualPayments,
+    calculateGarageAnnualPayments: async () => garageAnnualPayments,
     getExpenseWorksheet: async () => {
       throw new Error('Серверная форма выплат недоступна')
     },

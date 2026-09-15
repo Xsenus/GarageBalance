@@ -32,6 +32,7 @@ public sealed class PostgreSqlCleanCitySupplierMigrationTests
         await using (var context = database.CreateContext())
         {
             await context.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationTargetAccrualAsync(context);
             var trashService = await context.SupplierServices.FirstOrDefaultAsync(item =>
                 !item.IsArchived && (EF.Functions.ILike(item.Name, "%мусор%") || EF.Functions.ILike(item.Name, "%отход%")))
                 ?? new SupplierService { Name = "Вывоз мусора — тест миграции" };
@@ -144,6 +145,7 @@ public sealed class PostgreSqlCleanCitySupplierMigrationTests
             Assert.True(await context.SupplierServices.AnyAsync(item =>
                 !item.IsArchived && item.Id == trashService.Id));
 
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationTargetAccrualAsync(context);
             await context.Database.MigrateAsync();
             Assert.Contains("20260908094046_ReconcileCleanCitySupplierService", await context.Database.GetAppliedMigrationsAsync());
         }

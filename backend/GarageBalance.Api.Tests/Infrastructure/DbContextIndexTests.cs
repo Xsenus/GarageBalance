@@ -16,6 +16,7 @@ public sealed class DbContextIndexTests
     [InlineData(typeof(Supplier), nameof(Supplier.GroupId))]
     [InlineData(typeof(Supplier), nameof(Supplier.Inn))]
     [InlineData(typeof(Supplier), nameof(Supplier.ContactPerson))]
+    [InlineData(typeof(FinancialOperation), nameof(FinancialOperation.TargetAccrualId))]
     public void SearchFields_HaveEfIndexes(Type entityType, params string[] propertyNames)
     {
         using var context = CreateContext();
@@ -25,6 +26,21 @@ public sealed class DbContextIndexTests
         Assert.Contains(
             entity!.GetIndexes(),
             index => index.Properties.Select(property => property.Name).SequenceEqual(propertyNames));
+    }
+
+    [Fact]
+    public void TargetedAnnualPayment_HasRestrictForeignKeyToAccrual()
+    {
+        using var context = CreateContext();
+        var entity = context.Model.FindEntityType(typeof(FinancialOperation));
+
+        var foreignKey = Assert.Single(
+            entity!.GetForeignKeys(),
+            candidate => candidate.Properties.Select(property => property.Name)
+                .SequenceEqual([nameof(FinancialOperation.TargetAccrualId)]));
+
+        Assert.Equal(typeof(Accrual), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
     }
 
     [Theory]

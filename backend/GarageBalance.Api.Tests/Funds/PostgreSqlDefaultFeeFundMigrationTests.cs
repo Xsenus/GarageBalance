@@ -53,6 +53,7 @@ public sealed class PostgreSqlDefaultFeeFundMigrationTests
         {
             await using var database = await PostgreSqlTestDatabase.CreateAsync(PreviousMigration);
             await using var context = database.CreateContext();
+            await PostgreSqlLegacyModelCompatibility.AddFinancialOperationTargetAccrualAsync(context);
             var fund = await context.Funds.SingleAsync(item => item.Id == MembershipFundId);
             var supplier = new Supplier { Name = "Контрольный поставщик", Group = new SupplierGroup { Name = "Контрольная группа" } };
             var expense = new ExpenseType { Name = "Контрольный расход" };
@@ -107,6 +108,7 @@ public sealed class PostgreSqlDefaultFeeFundMigrationTests
             var oldVersion = fund.Version;
             var counts = new[] { await context.FundOperations.CountAsync(), await context.SupplierAccruals.CountAsync(), await context.FinancialOperations.CountAsync() };
 
+            await PostgreSqlLegacyModelCompatibility.RemoveFinancialOperationTargetAccrualAsync(context);
             await context.Database.MigrateAsync();
             context.ChangeTracker.Clear();
 

@@ -25,6 +25,8 @@ public sealed class FinancialOperation : IOptimisticConcurrencyEntity
     public FeeCampaign? FeeCampaign { get; set; }
     public Guid? IrregularPaymentId { get; set; }
     public IrregularPayment? IrregularPayment { get; set; }
+    public Guid? TargetAccrualId { get; set; }
+    public Accrual? TargetAccrual { get; set; }
     public Guid? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
     public Guid? StaffMemberId { get; set; }

@@ -242,12 +242,15 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         var audit = await seeder.AuditAsync(CancellationToken.None);
 
         Assert.True(automationResult.Succeeded, automationResult.Message);
-        Assert.Equal(0, automationResult.CreatedCount);
+        Assert.Equal(3, automationResult.CreatedCount);
         Assert.True(audit.IsReady);
         Assert.True(audit.HasNoDebt);
         Assert.True(audit.NewGarageHasNoCalculatedHistory);
         Assert.True(audit.BusinessDateIsPinned);
         Assert.Equal(67, await context.Accruals.CountAsync(item => item.Comment == ShowcaseDataSeeder.Marker));
+        Assert.Equal(3, await context.Accruals.CountAsync(item =>
+            item.Garage.Number == "110-НОВЫЙ" &&
+            item.AccountingYear == ShowcaseDataSeeder.BusinessDate.Year));
         Assert.DoesNotContain(
             await context.Accruals.AsNoTracking().ToListAsync(),
             item => item.AccountingMonth > ShowcaseDataSeeder.AccountingMonth);

@@ -37,6 +37,17 @@ public interface IFinanceService
         Guid? actorUserId,
         CancellationToken cancellationToken);
 
+    Task<FinanceResult<GarageAnnualPaymentsDto>> GetGarageAnnualPaymentsAsync(
+        Guid garageId,
+        int year,
+        CancellationToken cancellationToken);
+
+    Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(
+        Guid garageId,
+        int year,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
+
     Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<ExpenseWorksheetSupplierBreakdownDto>> GetExpenseWorksheetSupplierBreakdownAsync(

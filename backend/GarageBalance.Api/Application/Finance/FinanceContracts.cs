@@ -51,7 +51,8 @@ public sealed record FinancialOperationDto(
     Guid Version = default,
     Guid? FeeCampaignId = null,
     Guid? IrregularPaymentId = null,
-    decimal? GarageServiceDebtAfter = null);
+    decimal? GarageServiceDebtAfter = null,
+    Guid? TargetAccrualId = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -64,7 +65,34 @@ public sealed record CreateIncomeOperationRequest(
     Guid? ReceiptBatchId = null,
     Guid? FeeCampaignId = null,
     Guid? IrregularPaymentId = null,
-    Guid? ExpectedVersion = null);
+    Guid? ExpectedVersion = null,
+    Guid? TargetAccrualId = null);
+
+public sealed record GarageAnnualPaymentItemDto(
+    Guid? AccrualId,
+    Guid IncomeTypeId,
+    string ServiceName,
+    int AccountingYear,
+    DateOnly AccountingMonth,
+    DateOnly DueDate,
+    DateOnly OverdueFromDate,
+    decimal? Amount,
+    decimal PaidAmount,
+    decimal OutstandingAmount,
+    string Status,
+    Guid? DestinationFundId,
+    string? DestinationFundName,
+    bool CanRecordPayment);
+
+public sealed record GarageAnnualPaymentsDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    int AccountingYear,
+    decimal AccruedTotal,
+    decimal PaidTotal,
+    decimal OutstandingTotal,
+    IReadOnlyList<GarageAnnualPaymentItemDto> Items);
 
 public sealed record CreateFullGaragePaymentLineRequest(
     Guid? IncomeTypeId,

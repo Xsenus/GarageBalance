@@ -17,6 +17,7 @@ import { useToast } from '../../shared/useToast'
 import type { UserFormState } from '../../shared/userManagement'
 import { getInitialRoleCodes, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
 type UserDeactivationConfirmationState = { user: ManagedUserDto; request: UpdateManagedUserRequest }
@@ -589,6 +590,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   <tr
                     key={managedUser.id}
                     tabIndex={0}
+                    onDoubleClick={loading ? undefined : (event) => {
+                      if (!isInteractiveTableRowTarget(event.target)) openEditor('edit', managedUser)
+                    }}
                     onContextMenu={loading ? undefined : (event) => {
                       event.stopPropagation()
                       openUserContextMenu(event, managedUser)
