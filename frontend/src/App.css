@@ -2080,6 +2080,14 @@ h1 {
 
 .detail-dialog.contractors-dialog--garage {
   width: min(1120px, calc(100vw - 48px));
+  max-height: calc(100dvh - 24px);
+  padding: 14px;
+}
+
+.contractors-dialog--garage .detail-dialog-header {
+  top: -14px;
+  margin: -14px -14px 10px;
+  padding: 12px 14px;
 }
 
 .detail-dialog.contractors-dialog--supplier {
@@ -2363,7 +2371,7 @@ h1 {
 }
 
 .contractors-dialog--garage .contractors-modal-form {
-  gap: 10px;
+  gap: 7px;
 }
 
 .contractors-dialog--supplier .contractors-modal-form {
@@ -2732,10 +2740,11 @@ h1 {
 .contractors-garage-form-column {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 7px;
 }
 
 .contractors-garage-form-column--financial {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border-left: 1px solid #eaecf0;
   padding-left: 18px;
 }
@@ -2750,10 +2759,15 @@ h1 {
 
 .contractors-garage-form-details {
   grid-column: 1 / -1;
+  gap: 7px 12px;
+}
+
+.contractors-garage-form-notes {
+  gap: 7px 12px;
 }
 
 .contractors-garage-form-notes textarea {
-  min-height: 64px;
+  min-height: 52px;
 }
 
 .contractors-garage-form-comment {
@@ -2806,6 +2820,11 @@ h1 {
   font-size: 12px;
 }
 
+.contractors-dialog--garage .detail-dialog-actions {
+  margin-top: 6px;
+  padding-top: 10px;
+}
+
 @media (max-width: 720px) {
   .suggestion-options {
     max-height: 176px;
@@ -2840,6 +2859,7 @@ h1 {
   }
 
   .contractors-garage-form-columns,
+  .contractors-garage-form-column--financial,
   .contractors-garage-form-occupancy,
   .contractors-garage-form-details,
   .contractors-garage-form-notes {
@@ -5059,42 +5079,6 @@ input.meter-readings-control {
     padding: 7px 9px;
   }
 
-  .detail-dialog.contractors-dialog--garage {
-    max-height: calc(100dvh - 24px);
-    padding: 14px;
-  }
-
-  .contractors-dialog--garage .detail-dialog-header {
-    top: -14px;
-    margin: -14px -14px 10px;
-    padding: 12px 14px;
-  }
-
-  .contractors-dialog--garage .contractors-modal-form,
-  .contractors-garage-form-column {
-    gap: 7px;
-  }
-
-  .contractors-garage-form-column--financial {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .contractors-garage-form-details {
-    gap: 7px 12px;
-  }
-
-  .contractors-garage-form-notes {
-    gap: 7px 12px;
-  }
-
-  .contractors-garage-form-notes textarea {
-    min-height: 52px;
-  }
-
-  .contractors-dialog--garage .detail-dialog-actions {
-    margin-top: 6px;
-    padding-top: 10px;
-  }
 }
 
 .payments-prototype-payment-editor {
