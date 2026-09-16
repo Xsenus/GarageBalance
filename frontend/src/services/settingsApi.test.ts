@@ -105,6 +105,8 @@ describe('settingsApi', () => {
       showFundName: false,
       accrualReasonDisplayMode: 'penalties_only',
       accrualReasonDisplayVersion: 'reason-v1',
+      showGarageDebtPeriodByDefault: false,
+      garageDebtPeriodVersion: 'debt-period-v1',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -114,6 +116,7 @@ describe('settingsApi', () => {
     expect(result.showFundName).toBe(false)
     expect(result.accrualReasonDisplayMode).toBe('penalties_only')
     expect(result.accrualReasonDisplayVersion).toBe('reason-v1')
+    expect(result.showGarageDebtPeriodByDefault).toBe(false)
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       headers: {
         'Content-Type': 'application/json',
@@ -128,16 +131,19 @@ describe('settingsApi', () => {
       showFundName: true,
       accrualReasonDisplayMode: 'all',
       accrualReasonDisplayVersion: 'reason-v2',
+      showGarageDebtPeriodByDefault: true,
+      garageDebtPeriodVersion: 'debt-period-v2',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version', showFundName: true, accrualReasonDisplayMode: 'all' as const, accrualReasonDisplayVersion: 'reason-v1' }
+    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version', showFundName: true, accrualReasonDisplayMode: 'all' as const, accrualReasonDisplayVersion: 'reason-v1', showGarageDebtPeriodByDefault: true, garageDebtPeriodVersion: 'debt-period-v1' }
     const result = await settingsApi.updatePaymentDisplaySettings('token', request)
 
     expect(result.showAllGarageOperationsByDefault).toBe(true)
     expect(result.showFundName).toBe(true)
     expect(result.accrualReasonDisplayMode).toBe('all')
     expect(result.accrualReasonDisplayVersion).toBe('reason-v2')
+    expect(result.showGarageDebtPeriodByDefault).toBe(true)
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       method: 'PUT',
       body: JSON.stringify(request),

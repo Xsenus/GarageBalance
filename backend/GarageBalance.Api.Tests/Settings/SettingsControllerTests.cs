@@ -103,7 +103,9 @@ public sealed class SettingsControllerTests
             Current = new PaymentDisplaySettingsDto(
                 false,
                 AccrualReasonDisplayMode: AccrualReasonDisplayModes.All,
-                AccrualReasonDisplayVersion: reasonVersion)
+                AccrualReasonDisplayVersion: reasonVersion,
+                ShowGarageDebtPeriodByDefault: true,
+                GarageDebtPeriodVersion: Guid.NewGuid())
         };
         var controller = CreateController(service);
 
@@ -117,6 +119,8 @@ public sealed class SettingsControllerTests
         Assert.False(dto.ShowFundName);
         Assert.Equal(AccrualReasonDisplayModes.All, dto.AccrualReasonDisplayMode);
         Assert.Equal(reasonVersion, dto.AccrualReasonDisplayVersion);
+        Assert.True(dto.ShowGarageDebtPeriodByDefault);
+        Assert.NotEqual(Guid.Empty, dto.GarageDebtPeriodVersion);
     }
 
     [Fact]
@@ -251,13 +255,16 @@ public sealed class SettingsControllerTests
             }
         };
         var reasonVersion = Guid.NewGuid();
+        var debtPeriodVersion = Guid.NewGuid();
         var request = new UpdatePaymentDisplaySettingsRequest(
             true,
             ShowPeriodicityColumn: true,
             ShowAccrualMonthColumn: false,
             ShowFundName: true,
             AccrualReasonDisplayMode: AccrualReasonDisplayModes.Hidden,
-            AccrualReasonDisplayVersion: reasonVersion);
+            AccrualReasonDisplayVersion: reasonVersion,
+            ShowGarageDebtPeriodByDefault: true,
+            GarageDebtPeriodVersion: debtPeriodVersion);
 
         var result = await controller.UpdatePaymentDisplaySettings(request, CancellationToken.None);
 
@@ -269,6 +276,8 @@ public sealed class SettingsControllerTests
         Assert.True(dto.ShowFundName);
         Assert.Equal(AccrualReasonDisplayModes.Hidden, dto.AccrualReasonDisplayMode);
         Assert.Equal(reasonVersion, dto.AccrualReasonDisplayVersion);
+        Assert.True(dto.ShowGarageDebtPeriodByDefault);
+        Assert.Equal(debtPeriodVersion, dto.GarageDebtPeriodVersion);
         Assert.Same(request, service.ReceivedRequest);
         Assert.Equal(new UpdateTariffTableDisplaySettingsRequest(true, false, ShowFundName: true), service.ReceivedTariffTableDisplayRequest);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
@@ -659,7 +668,9 @@ public sealed class SettingsControllerTests
             Current = new PaymentDisplaySettingsDto(
                 request.ShowAllGarageOperationsByDefault,
                 AccrualReasonDisplayMode: request.AccrualReasonDisplayMode,
-                AccrualReasonDisplayVersion: request.AccrualReasonDisplayVersion ?? Guid.NewGuid());
+                AccrualReasonDisplayVersion: request.AccrualReasonDisplayVersion ?? Guid.NewGuid(),
+                ShowGarageDebtPeriodByDefault: request.ShowGarageDebtPeriodByDefault,
+                GarageDebtPeriodVersion: request.GarageDebtPeriodVersion ?? Guid.NewGuid());
             return Task.FromResult(Current);
         }
 

@@ -44,7 +44,7 @@ import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, su
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 import { selectedGaragePreference, shouldRestoreSelectedGarageAfterReload } from './financeDisplayPreferences'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
-import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
+import type { AuditPanelPreset, PaymentOpenTarget, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
 
@@ -482,6 +482,7 @@ export function FinancePanel({
   financeClient,
   fundsClient = fundsApi,
   settingsClient,
+  initialTarget = null,
   onOpenAudit,
   onOpenWorkspaceSection,
 }: {
@@ -491,6 +492,7 @@ export function FinancePanel({
   fundsClient?: FundsClient
   integrationClient: IntegrationClient
   settingsClient: ApplicationSettingsClient
+  initialTarget?: PaymentOpenTarget | null
   onOpenAudit?: (preset: AuditPanelPreset) => void
   onOpenWorkspaceSection?: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void
 }) {
@@ -604,6 +606,7 @@ export function FinancePanel({
   const [financePreviewReloadRevision, setFinancePreviewReloadRevision] = useState(0)
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
+  const [showGarageDebtPeriodByDefault, setShowGarageDebtPeriodByDefault] = useState(false)
   const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
   const [payoutEditEnabled, setPayoutEditEnabled] = useState(true)
   const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
@@ -882,6 +885,7 @@ export function FinancePanel({
       .then((settings) => {
         if (!ignore) {
           setShowAllGarageOperations(settings.showAllGarageOperationsByDefault)
+          setShowGarageDebtPeriodByDefault(Boolean(settings.showGarageDebtPeriodByDefault))
           setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
           return settingsClient.getPayoutMutationSettings(auth.accessToken, controller.signal)
         }
@@ -2425,7 +2429,7 @@ export function FinancePanel({
         garages={garages}
         incomeTypes={incomeTypes}
         irregularPayments={irregularPayments}
-        loading={paymentsPrototypeLoading}
+        loading={paymentsPrototypeLoading || !paymentDisplaySettingsLoaded}
         suppliers={suppliers}
         staffMembers={staffMembers}
         headingStatus={paymentsHeadingStatus}
@@ -2445,6 +2449,8 @@ export function FinancePanel({
         onEnsureReferences={ensureFinanceReferenceBundle}
         onOpenDialog={openPaymentsPrototypeDialog}
         refreshRevision={paymentsPrototypeRefreshRevision}
+        initialTarget={initialTarget}
+        showGarageDebtPeriodByDefault={showGarageDebtPeriodByDefault}
       />
 
       {!financePeriodError ? <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
@@ -3563,6 +3569,8 @@ function PaymentsPrototypePanel({
   onEnsureReferences,
   onOpenDialog,
   refreshRevision,
+  initialTarget,
+  showGarageDebtPeriodByDefault,
 }: {
   auth: AuthResponse
   canWritePayments: boolean
@@ -3584,6 +3592,8 @@ function PaymentsPrototypePanel({
   onEnsureReferences: () => Promise<boolean>
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
   refreshRevision: number
+  initialTarget?: PaymentOpenTarget | null
+  showGarageDebtPeriodByDefault: boolean
 }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>(() => loadStoredWorkspaceView(
@@ -3603,6 +3613,7 @@ function PaymentsPrototypePanel({
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const activateGarageRef = useRef<(garage: PaymentsPrototypeGarage) => void>(() => undefined)
+  const initialTargetHandledRef = useRef<string | null>(null)
   const selectedGarageRestoreAttemptedRef = useRef(false)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
   const incomeWorksheetRequestControllerRef = useRef<AbortController | null>(null)
@@ -3720,7 +3731,37 @@ function PaymentsPrototypePanel({
     [availableGarages],
   )
   useEffect(() => {
-    if (loading || selectedGarageIdRef.current || selectedGarageRestoreAttemptedRef.current || !shouldRestoreSelectedGarageAfterReload()) return
+    if (loading || !initialTarget || initialTargetHandledRef.current === initialTarget.garageId) return
+    const availableGarage = garageOptions.find((garage) => garage.id === initialTarget.garageId)
+    if (availableGarage) {
+      initialTargetHandledRef.current = initialTarget.garageId
+      activateGarageRef.current(availableGarage)
+      return
+    }
+
+    const controller = new AbortController()
+    void dictionaryClient.getGarages(auth.accessToken, initialTarget.garageNumber, 20, false, controller.signal)
+      .then((foundGarages) => {
+        if (controller.signal.aborted || initialTargetHandledRef.current === initialTarget.garageId) return
+        const foundGarage = foundGarages.find(({ id, isArchived }) => id === initialTarget.garageId && !isArchived)
+        if (!foundGarage) return
+        initialTargetHandledRef.current = initialTarget.garageId
+        activateGarageRef.current({
+          id: foundGarage.id,
+          number: foundGarage.number,
+          ownerName: foundGarage.ownerName?.trim() || 'Владелец не указан',
+          phone: foundGarage.ownerPhone?.trim() || 'Не указан',
+          peopleCount: foundGarage.peopleCount,
+          floorCount: foundGarage.floorCount,
+          balance: foundGarage.balance,
+          overdueDebt: foundGarage.overdueDebt,
+        })
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [auth.accessToken, dictionaryClient, garageOptions, initialTarget, loading])
+  useEffect(() => {
+    if (initialTarget || loading || selectedGarageIdRef.current || selectedGarageRestoreAttemptedRef.current || !shouldRestoreSelectedGarageAfterReload()) return
     const storedGarage = selectedGaragePreference(auth.user.id)
     if (!storedGarage) return
 
@@ -3747,7 +3788,7 @@ function PaymentsPrototypePanel({
       controller.abort()
       if (!selectedGarageIdRef.current) selectedGarageRestoreAttemptedRef.current = false
     }
-  }, [auth.accessToken, auth.user.id, dictionaryClient, loading])
+  }, [auth.accessToken, auth.user.id, dictionaryClient, initialTarget, loading])
   useEffect(() => () => {
     incomeWorksheetRequests.invalidate()
     incomeWorksheetRequestControllerRef.current?.abort()
@@ -4064,8 +4105,10 @@ function PaymentsPrototypePanel({
 
         resolvedAvailableMonthFrom = period.monthFrom.slice(0, 7)
         resolvedAvailableMonthTo = period.monthTo.slice(0, 7)
-        resolvedMonthFrom = period.defaultMonthFrom?.slice(0, 7) ?? resolvedAvailableMonthFrom
         resolvedMonthTo = period.defaultMonthTo?.slice(0, 7) ?? resolvedAvailableMonthTo
+        resolvedMonthFrom = showGarageDebtPeriodByDefault
+          ? period.defaultMonthFrom?.slice(0, 7) ?? resolvedMonthTo
+          : resolvedMonthTo
       }
 
       const worksheetRequest = {
@@ -4441,9 +4484,16 @@ function PaymentsPrototypePanel({
     setSelectedGarage((current) => current?.id === garage.id
       ? { ...current, balance: roundPaymentMoney(current.balance + amount) }
       : current)
+    const worksheetAndDebtRefresh = loadGarageIncomeWorksheet(
+      garage,
+      incomeWorksheetMonthFrom,
+      incomeWorksheetMonthTo,
+      undefined,
+      false,
+      minimumAccrualTotal,
+    ).then(() => refreshGarageOverdueDebt(garage))
     void Promise.all([
-      refreshGarageOverdueDebt(garage),
-      loadGarageIncomeWorksheet(garage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, undefined, false, minimumAccrualTotal),
+      worksheetAndDebtRefresh,
       paymentHistoryOpen ? loadGaragePaymentHistory(garage) : Promise.resolve(),
     ]).then(([overdueDebtRefreshed]) => {
       if (!overdueDebtRefreshed && selectedGarageIdRef.current === garage.id) {
@@ -4609,7 +4659,6 @@ function PaymentsPrototypePanel({
 
   function activateGarage(garage: PaymentsPrototypeGarage) {
     const currentMonth = getCurrentMonthInputValue()
-    const previousMonth = getPreviousMonthInputValue(currentMonth)
     selectedGarageIdRef.current = garage.id
     selectedGaragePreference(auth.user.id, { id: garage.id, number: garage.number })
     incomeWorksheetRequestControllerRef.current?.abort()
@@ -4630,11 +4679,11 @@ function PaymentsPrototypePanel({
     setFullPaymentQuote(null)
     setFullPaymentDialogOpen(false)
     setPaymentError(null)
-    setIncomeWorksheetAvailableMonthFrom(previousMonth)
+    setIncomeWorksheetAvailableMonthFrom(currentMonth)
     setIncomeWorksheetAvailableMonthTo(currentMonth)
-    setIncomeWorksheetMonthFrom(previousMonth)
+    setIncomeWorksheetMonthFrom(currentMonth)
     setIncomeWorksheetMonthTo(currentMonth)
-    void loadGarageIncomeWorksheet(garage, previousMonth, currentMonth, undefined, true)
+    void loadGarageIncomeWorksheet(garage, currentMonth, currentMonth, undefined, true)
   }
   activateGarageRef.current = activateGarage
 

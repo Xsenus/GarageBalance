@@ -110,6 +110,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
+  const [showGarageDebtPeriodByDefault, setShowGarageDebtPeriodByDefault] = useState(false)
   const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
   const [payoutEditEnabled, setPayoutEditEnabled] = useState(true)
   const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
@@ -117,6 +118,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [payoutMutationSettingsSaving, setPayoutMutationSettingsSaving] = useState(false)
   const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false, fundName: false })
   const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
+  const [garageDebtPeriodVersion, setGarageDebtPeriodVersion] = useState<string | null>(null)
   const [tariffTableDisplaySettingsVersion, setTariffTableDisplaySettingsVersion] = useState<string | null>(null)
   const [accrualReasonDisplayVersion, setAccrualReasonDisplayVersion] = useState<string | null>(null)
   const [historicalMeterReadingCorrectionEnabled, setHistoricalMeterReadingCorrectionEnabled] = useState(false)
@@ -251,6 +253,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .then(([settings, meterReadingSettings, payoutSettings]) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+          setShowGarageDebtPeriodByDefault(Boolean(settings.showGarageDebtPeriodByDefault))
+          setGarageDebtPeriodVersion(settings.garageDebtPeriodVersion ?? null)
           setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
           setAccrualReasonDisplayVersion(settings.accrualReasonDisplayVersion ?? null)
           setPaymentDisplaySettingsVersion(settings.version)
@@ -413,8 +417,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         showFundName: tariffTableColumns.fundName,
         accrualReasonDisplayMode,
         accrualReasonDisplayVersion: accrualReasonDisplayVersion ?? '',
+        showGarageDebtPeriodByDefault,
+        garageDebtPeriodVersion: garageDebtPeriodVersion ?? '',
       })
       setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+      setShowGarageDebtPeriodByDefault(Boolean(settings.showGarageDebtPeriodByDefault))
+      setGarageDebtPeriodVersion(settings.garageDebtPeriodVersion ?? null)
       setPaymentDisplaySettingsVersion(settings.version)
       setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
       setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
@@ -1283,6 +1291,14 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             checked={showAllGarageOperationsByDefault}
             disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
             onChange={(checked) => { setShowAllGarageOperationsByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
+          />
+          <SettingsDisplaySwitch
+            title="Начальный период поступлений"
+            label="При открытии гаража показывать месяцы с первого долга"
+            help="По умолчанию открывается только текущий месяц. Включите настройку, чтобы сразу видеть период с первого неоплаченного начисления по текущий месяц."
+            checked={showGarageDebtPeriodByDefault}
+            disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
+            onChange={(checked) => { setShowGarageDebtPeriodByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
           />
           <FormField label="Причины начислений" help="Задаёт строки платежей с пояснением «Причина». История не скрывается.">
             <SelectControl

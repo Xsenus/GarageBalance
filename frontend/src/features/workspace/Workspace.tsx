@@ -205,7 +205,7 @@ export const Workspace = memo(function Workspace({
         )
       case 'contractors':
         return canReadDictionaries ? (
-          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} integrationClient={integrationClient} initialTarget={workspaceOpenContext?.contractorTarget ?? null} onOpenAudit={onOpenAudit} />
+          <ContractorsPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} integrationClient={integrationClient} initialTarget={workspaceOpenContext?.contractorTarget ?? null} onOpenAudit={onOpenAudit} onOpenWorkspaceSection={onOpenSection} />
         ) : (
           <AccessNotice label="Контрагенты недоступны" title="Контрагенты" permission={permissions.dictionariesRead} description="Для просмотра гаражей, поставщиков и карточек контрагентов нужно право на чтение справочников." />
         )
@@ -217,7 +217,7 @@ export const Workspace = memo(function Workspace({
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
-          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} integrationClient={integrationClient} settingsClient={settingsClient} onOpenAudit={onOpenAudit} onOpenWorkspaceSection={onOpenSection} />
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} integrationClient={integrationClient} settingsClient={settingsClient} initialTarget={workspaceOpenContext?.paymentTarget ?? null} onOpenAudit={onOpenAudit} onOpenWorkspaceSection={onOpenSection} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
         )

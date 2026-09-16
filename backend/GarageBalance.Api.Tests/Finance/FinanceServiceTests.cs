@@ -144,7 +144,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(new FinancialReportPeriodDto(
             new DateOnly(2023, 2, 1),
             new DateOnly(2027, 3, 1),
-            new DateOnly(2026, 1, 1),
+            new DateOnly(2024, 5, 1),
             new DateOnly(2026, 7, 1)), garage.Value);
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2024, 4, 1), new DateOnly(2026, 7, 1)), supplier.Value);
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2025, 1, 1), new DateOnly(2026, 7, 1)), staff.Value);
@@ -8200,6 +8200,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.IncomeType.Code = "custom_annual_card";
         fixtures.IncomeType.Name = "Годовой резерв";
+        fixtures.Garage.RegisteredOn = new DateOnly(2026, 9, 15);
         var fund = new Fund { Name = "Резерв", NormalizedName = "РЕЗЕРВ" };
         database.Context.Funds.Add(fund);
         fixtures.IncomeType.DestinationFund = fund;
@@ -8240,6 +8241,11 @@ public sealed class FinanceServiceTests
         Assert.Equal(900m, previewItem.FullAmount);
         Assert.Equal(fund.Id, previewItem.DestinationFundId);
 
+        var emptyFormPreview = await service.PreviewGarageAnnualPaymentsAsync(
+            new GarageAnnualPaymentPreviewRequest(0, 0),
+            CancellationToken.None);
+        Assert.Equal(900m, Assert.Single(emptyFormPreview.Value!.Items).FullAmount);
+
         var calculated = await service.CalculateGarageAnnualPaymentsAsync(
             fixtures.Garage.Id,
             2026,
@@ -8250,6 +8256,7 @@ public sealed class FinanceServiceTests
         var item = Assert.Single(calculated.Value!.Items);
         Assert.Equal("unpaid", item.Status);
         Assert.Equal(900m, item.OutstandingAmount);
+        Assert.Equal(new DateOnly(2026, 9, 1), item.AccountingMonth);
         Assert.Equal("Годовой резерв", item.TariffName);
         Assert.Equal(fund.Id, item.DestinationFundId);
         Assert.True(item.CanRecordPayment);

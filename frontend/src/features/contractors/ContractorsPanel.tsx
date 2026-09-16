@@ -16,14 +16,14 @@ import { PhoneInput } from '../../shared/PhoneInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
-import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { fitContextMenuToViewport, useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
-import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
+import type { AuditPanelPreset, ContractorOpenTarget, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { SupplierServiceDialog } from './SupplierServiceDialog'
 import { useColumnResize } from '../../shared/useColumnResize'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
@@ -853,7 +853,7 @@ function FinancialReportPeriodFilters({ filters, targetLabel, onChange }: { filt
   )
 }
 
-export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
+export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, integrationClient, initialTarget = null, onOpenAudit, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void; onOpenWorkspaceSection?: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const [activeSection, setActiveSection] = useState<ContractorSection>(() => initialTarget?.section ?? loadStoredWorkspaceView(
     workspaceViewStorageKeys.contractorsSection,
@@ -1482,7 +1482,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   function openGarageContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorGarageRow) {
     event.preventDefault()
-    setGarageContextMenu({ row, x: event.clientX, y: event.clientY })
+    setGarageContextMenu({ row, ...fitContextMenuToViewport(event.clientX, event.clientY, 220, 210) })
+  }
+
+  function openGaragePayments(row: ContractorGarageRow) {
+    setGarageContextMenu(null)
+    onOpenWorkspaceSection?.('payments', {
+      paymentTarget: { garageId: row.id, garageNumber: row.number },
+    })
   }
 
   async function openGarageEditor(row: ContractorGarageRow) {
@@ -2781,6 +2788,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </div>
                 <div className="context-menu-separator" role="separator" />
                 <div className="context-menu-group" role="group">
+                  <button type="button" role="menuitem" onClick={() => openGaragePayments(garageContextMenu.row)}>
+                    <FileText size={16} />
+                    <span>Перейти в поступления</span>
+                  </button>
                   <button type="button" role="menuitem" onClick={() => openGarageFinancialReport(garageContextMenu.row)}>
                     <FileText size={16} />
                     <span>Финансовый отчет</span>
@@ -3806,9 +3817,8 @@ function GarageAnnualPaymentFieldsSection({ accessToken, canReadPayments, canWri
       return () => controller.abort()
     }
 
-    if (!form.peopleCount.trim() || !form.floorCount.trim()) return
-    const peopleCount = Number(form.peopleCount)
-    const floorCount = Number(form.floorCount)
+    const peopleCount = form.peopleCount.trim() ? Number(form.peopleCount) : 0
+    const floorCount = form.floorCount.trim() ? Number(form.floorCount) : 0
     if (!Number.isInteger(peopleCount) || peopleCount < 0 || peopleCount > 1000 || !Number.isInteger(floorCount) || floorCount < 0 || floorCount > 100) return
 
     return scheduleDebouncedRequest({
@@ -3821,7 +3831,6 @@ function GarageAnnualPaymentFieldsSection({ accessToken, canReadPayments, canWri
       onStart: () => {
         setLoading(true)
         setError(null)
-        onDataChange(null)
       },
       onSuccess: (result) => {
         setLoading(false)
@@ -3986,9 +3995,10 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
                   <span className="form-field-label">Номер</span>
                   <input aria-label="Номер гаража" aria-invalid={Boolean(validationErrors.number)} data-garage-field="number" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => { clearValidationError('number'); setForm({ ...form, number: event.target.value }) }} />
                 </label>
+                <GarageAnnualPaymentFieldsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} data={annualPaymentData} drafts={annualPaymentDrafts} financeClient={financeClient} form={form} garage={item} onDataChange={setAnnualPaymentData} onDraftsChange={setAnnualPaymentDrafts} />
                 <div className="contractors-garage-form-occupancy">
-                  <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setAnnualPaymentData(null); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
-                  <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setAnnualPaymentData(null); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
+                  <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
+                  <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
                 </div>
                 <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
               </div>
@@ -4020,8 +4030,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
                     <FormField label="Срок оплаты не наступил"><input aria-label="Непросроченная часть задолженности гаража" value={`${formatMoney(notYetOverdueDebt)} руб.`} readOnly /></FormField>
                   </>
                 )}
-                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setAnnualPaymentData(null); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
-                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setAnnualPaymentData(null); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
+                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
+                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
                 <div className="contractors-garage-form-details">
                   <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
                   <FormField label="Телефон"><PhoneInput aria-label="Телефон владельца гаража" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
@@ -4032,7 +4042,6 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
-            <GarageAnnualPaymentFieldsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} data={annualPaymentData} drafts={annualPaymentDrafts} financeClient={financeClient} form={form} garage={item} onDataChange={setAnnualPaymentData} onDraftsChange={setAnnualPaymentDrafts} />
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
                 <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>

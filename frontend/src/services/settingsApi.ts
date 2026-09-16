@@ -9,6 +9,8 @@ export type PaymentDisplaySettingsDto = {
   showFundName: boolean
   accrualReasonDisplayMode?: AccrualReasonDisplayMode
   accrualReasonDisplayVersion?: string
+  showGarageDebtPeriodByDefault?: boolean
+  garageDebtPeriodVersion?: string
 }
 
 export type AccrualReasonDisplayMode = 'penalties_only' | 'all' | 'hidden'

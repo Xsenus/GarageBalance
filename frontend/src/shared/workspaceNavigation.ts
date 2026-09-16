@@ -33,6 +33,12 @@ export type ContractorOpenTarget = {
   garageNumber?: string | null
 }
 
+export type PaymentOpenTarget = {
+  garageId: string
+  garageNumber: string
+}
+
 export type WorkspaceOpenContext = {
   contractorTarget?: ContractorOpenTarget
+  paymentTarget?: PaymentOpenTarget
 }

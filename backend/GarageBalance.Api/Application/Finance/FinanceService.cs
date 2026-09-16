@@ -971,6 +971,9 @@ public sealed class FinanceService(
                 continue;
             }
 
+            var accrualMonth = definition.AccountingMonth < GetGarageAccrualStartMonth(garage)
+                ? GetGarageAccrualStartMonth(garage)
+                : definition.AccountingMonth;
             var segments = BuildRegularAccrualSegments(definition.AccountingMonth, definition.Setting, definition.Tariff);
             var meteredBase = segments.Select(segment => segment.CalculationBase)
                 .FirstOrDefault(value => value is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
@@ -1016,7 +1019,7 @@ public sealed class FinanceService(
             }
 
             var dueDates = AccrualDueDates.ForGarage(
-                definition.AccountingMonth,
+                accrualMonth,
                 definition.IncomeType.Code,
                 definition.Setting,
                 GetGarageRegistrationDate(garage));
@@ -1027,7 +1030,7 @@ public sealed class FinanceService(
                 IncomeTypeId = definition.IncomeType.Id,
                 IncomeType = definition.IncomeType,
                 TariffId = definition.Tariff.Id,
-                AccountingMonth = definition.AccountingMonth,
+                AccountingMonth = accrualMonth,
                 AccountingYear = year,
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
@@ -1084,13 +1087,12 @@ public sealed class FinanceService(
                 Definition = definition,
                 Amount = CalculateAnnualPlannedAmount(garage, definition)
             })
-            .Where(item => item.Amount is > 0m)
             .Select(item => new GarageAnnualPaymentPreviewItemDto(
                 item.Definition.IncomeType.Id,
                 item.Definition.Setting.Name,
                 item.Definition.Tariff!.Name,
                 item.Definition.AccountingMonth,
-                MoneyMath.RoundMoney(item.Amount!.Value),
+                MoneyMath.RoundMoney(item.Amount ?? 0m),
                 item.Definition.IncomeType.DestinationFundId,
                 item.Definition.IncomeType.DestinationFund?.Name))
             .ToArray();
@@ -1948,7 +1950,7 @@ public sealed class FinanceService(
         var monthTo = months.Where(month => month.HasValue).Max()!.Value;
         var defaultMonthFrom = request.GarageId.HasValue
             ? data.FirstUnpaidAccrualMonth is { } firstUnpaidMonth && firstUnpaidMonth <= currentMonth
-                ? new DateOnly(currentMonth.Year, 1, 1)
+                ? firstUnpaidMonth
                 : currentMonth
             : (DateOnly?)null;
         return FinanceResult<FinancialReportPeriodDto>.Success(new FinancialReportPeriodDto(

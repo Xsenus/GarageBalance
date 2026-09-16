@@ -33,7 +33,9 @@ public sealed class SettingsController(
             tariffs.Version,
             tariffs.ShowFundName,
             payments.AccrualReasonDisplayMode,
-            payments.AccrualReasonDisplayVersion));
+            payments.AccrualReasonDisplayVersion,
+            payments.ShowGarageDebtPeriodByDefault,
+            payments.GarageDebtPeriodVersion));
     }
 
     [HttpPut("payments/display")]
@@ -73,7 +75,9 @@ public sealed class SettingsController(
             tariffs.Version,
             tariffs.ShowFundName,
             payments.AccrualReasonDisplayMode,
-            payments.AccrualReasonDisplayVersion));
+            payments.AccrualReasonDisplayVersion,
+            payments.ShowGarageDebtPeriodByDefault,
+            payments.GarageDebtPeriodVersion));
     }
 
     [HttpGet("tariffs/layout")]

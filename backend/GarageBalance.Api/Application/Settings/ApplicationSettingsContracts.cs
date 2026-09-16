@@ -10,7 +10,9 @@ public sealed record PaymentDisplaySettingsDto(
     Guid TariffTableVersion = default,
     bool ShowFundName = false,
     string AccrualReasonDisplayMode = AccrualReasonDisplayModes.PenaltiesOnly,
-    Guid AccrualReasonDisplayVersion = default);
+    Guid AccrualReasonDisplayVersion = default,
+    bool ShowGarageDebtPeriodByDefault = false,
+    Guid GarageDebtPeriodVersion = default);
 
 public sealed record UpdatePaymentDisplaySettingsRequest(
     bool ShowAllGarageOperationsByDefault,
@@ -20,7 +22,9 @@ public sealed record UpdatePaymentDisplaySettingsRequest(
     Guid? TariffTableVersion = null,
     bool ShowFundName = false,
     string AccrualReasonDisplayMode = AccrualReasonDisplayModes.PenaltiesOnly,
-    Guid? AccrualReasonDisplayVersion = null);
+    Guid? AccrualReasonDisplayVersion = null,
+    bool ShowGarageDebtPeriodByDefault = false,
+    Guid? GarageDebtPeriodVersion = null);
 
 public static class AccrualReasonDisplayModes
 {

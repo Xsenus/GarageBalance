@@ -12,7 +12,7 @@ vi.mock('./services/settingsApi', () => ({
     updateHistoricalMeterReadingCorrectionSettings: vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request),
     getPayoutMutationSettings: vi.fn(async () => ({ editEnabled: true, deleteEnabled: false, version: 'payout-version' })),
     updatePayoutMutationSettings: vi.fn(async (_accessToken: string, request: { editEnabled: boolean; deleteEnabled: boolean; version: string }) => request),
-    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false })),
+    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, showGarageDebtPeriodByDefault: true, garageDebtPeriodVersion: 'garage-debt-period-version' })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request),
     getTariffPanelsLayout: vi.fn(async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' })),
     updateTariffPanelsLayout: vi.fn(async (_accessToken: string, request: { irregularPaymentsWidthPercent: number }) => ({ ...request, version: 'tariff-layout-version' })),
@@ -162,7 +162,7 @@ describe('App', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
-    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false }))
+    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, showGarageDebtPeriodByDefault: true, garageDebtPeriodVersion: 'garage-debt-period-version' }))
     vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean }) => request)
     vi.mocked(settingsApi.getActionCommentSettings).mockImplementation(async () => ({ required: true, version: 'comment-version' }))
     vi.mocked(settingsApi.updateActionCommentSettings).mockImplementation(async (_accessToken: string, request: { required: boolean; version: string }) => request)
@@ -3209,6 +3209,17 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Контрагенты' })
     await user.click(within(panel).getByRole('button', { name: 'Добавить гараж' }))
     const dialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+    await waitFor(() => expect(previewGarageAnnualPayments).toHaveBeenCalledWith('token', {
+      peopleCount: 0,
+      floorCount: 0,
+      initialWaterMeterValue: null,
+      initialElectricityMeterValue: null,
+    }, expect.any(AbortSignal)))
+    expect(await within(dialog).findByText('Годовые платежи за 2026 год')).toBeInTheDocument()
+    const annualPaymentInput = within(dialog).getByLabelText('Годовая охрана за 2026 год')
+    const peopleCountInput = within(dialog).getByLabelText('Количество человек')
+    expect(annualPaymentInput).toHaveValue('0.00')
+    expect(Boolean(annualPaymentInput.compareDocumentPosition(peopleCountInput) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     await user.type(within(dialog).getByLabelText('Номер гаража'), 'ГОД-1')
     await user.type(within(dialog).getByLabelText('Количество человек'), '2')
     await user.type(within(dialog).getByLabelText('Этажи гаража'), '1')
@@ -3219,7 +3230,7 @@ describe('App', () => {
       initialWaterMeterValue: null,
       initialElectricityMeterValue: null,
     }, expect.any(AbortSignal)))
-    expect(await within(dialog).findByText('Годовые платежи за 2026 год')).toBeInTheDocument()
+    expect(within(dialog).getByText('Годовые платежи за 2026 год')).toBeInTheDocument()
     const annualHelp = within(dialog).getByLabelText('Справка: Годовая охрана')
     expect(within(annualHelp).getByRole('tooltip')).toHaveTextContent('Платёж за 2026 год. Начислено: 900.00 руб. Уже оплачено: 0.00 руб. Осталось: 900.00 руб. Тариф: Охрана 2026. Фонд: Охрана.')
     const paidInput = within(dialog).getByLabelText('Годовая охрана за 2026 год')
@@ -10726,6 +10737,70 @@ describe('App', () => {
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
   })
 
+  it('opens garage receipts from the fitted context menu for the current month', async () => {
+    const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: 'garage-1',
+      garageNumber: '12',
+      ownerName: 'Иванов Иван',
+      monthFrom: `${currentMonth}-01`,
+      monthTo: `${currentMonth}-01`,
+      accrualTotal: 500,
+      closingBalance: 500,
+      closingDebt: 500,
+      debtTotal: 500,
+      rows: [],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient()}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({
+          monthFrom: '2024-05-01',
+          monthTo: `${currentMonth}-01`,
+          defaultMonthFrom: '2024-05-01',
+          defaultMonthTo: `${currentMonth}-01`,
+        }),
+        getGarageIncomeWorksheet,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      settingsClient={createSettingsClient({
+        getPaymentDisplaySettings: async () => ({
+          showAllGarageOperationsByDefault: false,
+          version: 'payment-version',
+          showPeriodicityColumn: false,
+          showAccrualMonthColumn: false,
+          tariffTableVersion: 'tariff-version',
+          showFundName: false,
+          showGarageDebtPeriodByDefault: false,
+          garageDebtPeriodVersion: 'garage-debt-period-version',
+        }),
+      })}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractors = await screen.findByRole('region', { name: 'Контрагенты' })
+    const row = (await within(contractors).findByText('Иванов Иван')).closest('[role="row"]') as HTMLElement
+    fireEvent.contextMenu(row, { clientX: window.innerWidth + 200, clientY: window.innerHeight + 200 })
+    const menu = await screen.findByRole('menu', { name: 'Действия гаража 12' })
+    expect(Number.parseFloat(menu.style.left)).toBeLessThanOrEqual(window.innerWidth - 228)
+    expect(Number.parseFloat(menu.style.top)).toBeLessThanOrEqual(window.innerHeight - 218)
+    await user.click(within(menu).getByRole('menuitem', { name: 'Перейти в поступления' }))
+
+    const payments = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    expect(await within(payments).findByLabelText('Выбранный гараж')).toHaveTextContent('№12')
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-1', {
+      monthFrom: `${currentMonth}-01`,
+      monthTo: `${currentMonth}-01`,
+    }, expect.any(AbortSignal)))
+  })
+
   it('shows separate campaign names for overdue charges routed to the same fund', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-campaign-names', number: '18', ownerName: 'Иванов Иван', overdueDebt: 500 })
@@ -11943,9 +12018,18 @@ describe('App', () => {
     let resolveWorksheet!: (worksheet: GarageIncomeWorksheetDto) => void
     const worksheet = createGarageIncomeWorksheet({ garageId: garage.id, rows: [], accrualTotal: 0, incomeTotal: 0, debtTotal: 0, closingBalance: 0, closingDebt: 0 })
     const getGarageIncomeWorksheet = vi.fn(async () => saved ? await new Promise<GarageIncomeWorksheetDto>((resolve) => { resolveWorksheet = resolve }) : worksheet)
+    const getGarageOverdueDebt = vi.fn(async () => ({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      asOfDate: '2026-09-16',
+      total: 175,
+      balance: 175,
+      rows: [],
+    }))
     const save = vi.fn(async () => { saved = true; return savedAccrual })
     const createIncome = vi.fn(async () => createFinancialOperation({ id: 'new-targeted-payment', amount: 50 }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], getIncomeTypes: async () => [incomeType], getIrregularPayments: async () => kind === 'catalog' ? [createIrregularPayment({ id: 'catalog-repair', name: basis, amount: 150 })] : [] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, createAccrual: save, createIrregularAccrual: save, createIncome })} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], getIncomeTypes: async () => [incomeType], getIrregularPayments: async () => kind === 'catalog' ? [createIrregularPayment({ id: 'catalog-repair', name: basis, amount: 150 })] : [] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, getGarageOverdueDebt, createAccrual: save, createIrregularAccrual: save, createIncome })} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
@@ -11962,7 +12046,10 @@ describe('App', () => {
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
     expect(within(panel).getByText(`${kind === 'penalty' ? 'Штраф' : 'Основание'}: ${basis}`)).toBeInTheDocument()
     await waitFor(() => expect(resolveWorksheet).toBeTypeOf('function'))
+    expect(getGarageOverdueDebt).not.toHaveBeenCalled()
     await act(async () => resolveWorksheet({ ...worksheet, accrualTotal: 175, closingBalance: 175, closingDebt: 175, rows: [{ accountingMonth: savedAccrual.accountingMonth, incomeTypeId: incomeType.id, incomeTypeCode: incomeType.code, incomeTypeName: kind === 'penalty' ? incomeType.name : basis, irregularPaymentId: savedAccrual.irregularPaymentId, reason: basis, meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 175, incomeAmount: 0, debt: 175 }] }))
+    await waitFor(() => expect(getGarageOverdueDebt).toHaveBeenCalled())
+    expect(within(panel).getByRole('button', { name: 'Открыть расшифровку просроченной задолженности' })).toBeInTheDocument()
     const row = within(panel).getByText(`${kind === 'penalty' ? 'Штраф' : 'Основание'}: ${basis}`).closest('tr')!
     expect(within(row).getAllByText('175.00').length).toBeGreaterThan(0)
     await user.type(within(row).getByRole('textbox', { name: /^Платеж / }), '50')
@@ -16879,7 +16966,7 @@ describe('App', () => {
 
   it('saves the default payment overview mode from display settings', async () => {
     const user = userEvent.setup()
-    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean; accrualReasonDisplayMode: string; accrualReasonDisplayVersion: string }) => request)
+    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean; accrualReasonDisplayMode: string; accrualReasonDisplayVersion: string; showGarageDebtPeriodByDefault: boolean; garageDebtPeriodVersion: string }) => request)
     const updateHistoricalMeterReadingCorrectionSettings = vi.fn(async (_accessToken: string, request: { enabled: boolean; version: string }) => request)
     const updatePayoutMutationSettings = vi.fn(async (_accessToken: string, request: { editEnabled: boolean; deleteEnabled: boolean; version: string }) => request)
     const settingsClient = createSettingsClient({
@@ -16898,6 +16985,7 @@ describe('App', () => {
 
     const displayPanel = within(settings).getByRole('region', { name: 'Отображение таблиц' })
     const toggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать общую ведомость платежей при открытии' })
+    const debtPeriodToggle = within(displayPanel).getByRole('checkbox', { name: 'При открытии гаража показывать месяцы с первого долга' })
     const periodicityToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Периодичность»' })
     const accrualMonthToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Месяц начисления»' })
     const fundNameToggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать фонд под наименованием услуги' })
@@ -16910,6 +16998,7 @@ describe('App', () => {
       ['Редактирование выплат', /исправлять выплаты поставщикам и сотрудникам/i],
       ['Удаление выплат', /Удаление выполняется как сторно/i],
       ['Показывать общую ведомость платежей', /открывает «Платежи» общей ведомостью/i],
+      ['Начальный период поступлений', /По умолчанию открывается только текущий месяц/i],
       ['Причины начислений', /строки платежей с пояснением «Причина»/i],
       ['Изменение показаний за другие месяцы', /Пустую ячейку можно заполнить всегда/i],
       ['Периодичность', /частоту начисления услуги/i],
@@ -16924,6 +17013,7 @@ describe('App', () => {
     })
     await user.click(within(displayPanel).getByLabelText('Справка: Показывать общую ведомость платежей'))
     expect(toggle).not.toBeChecked()
+    expect(debtPeriodToggle).toBeChecked()
     expect(periodicityToggle).not.toBeChecked()
     expect(accrualMonthToggle).not.toBeChecked()
     expect(fundNameToggle).not.toBeChecked()
@@ -16938,6 +17028,7 @@ describe('App', () => {
       version: 'payout-version',
     }))
     await user.click(toggle)
+    await user.click(debtPeriodToggle)
     await user.click(periodicityToggle)
     await user.click(fundNameToggle)
     await user.click(historicalCorrectionToggle)
@@ -16954,6 +17045,8 @@ describe('App', () => {
       showFundName: true,
       accrualReasonDisplayMode: 'all',
       accrualReasonDisplayVersion: 'accrual-reason-version',
+      showGarageDebtPeriodByDefault: false,
+      garageDebtPeriodVersion: 'garage-debt-period-version',
     }))
     await waitFor(() => expect(updateHistoricalMeterReadingCorrectionSettings).toHaveBeenCalledWith('token', {
       enabled: true,
@@ -28570,7 +28663,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
     updateHistoricalMeterReadingCorrectionSettings: async (_accessToken, request) => request,
     getPayoutMutationSettings: async () => ({ editEnabled: true, deleteEnabled: false, version: 'payout-version' }),
     updatePayoutMutationSettings: async (_accessToken, request) => request,
-    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, accrualReasonDisplayMode: 'penalties_only', accrualReasonDisplayVersion: 'accrual-reason-version' }),
+    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, accrualReasonDisplayMode: 'penalties_only', accrualReasonDisplayVersion: 'accrual-reason-version', showGarageDebtPeriodByDefault: true, garageDebtPeriodVersion: 'garage-debt-period-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),
     updateTariffPanelsLayout: async (_accessToken, request) => ({ ...request, version: 'tariff-layout-version' }),

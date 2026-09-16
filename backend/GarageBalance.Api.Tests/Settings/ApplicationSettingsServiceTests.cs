@@ -276,9 +276,11 @@ public sealed class ApplicationSettingsServiceTests
         var result = await service.GetPaymentDisplaySettingsAsync(CancellationToken.None);
 
         Assert.False(result.ShowAllGarageOperationsByDefault);
+        Assert.False(result.ShowGarageDebtPeriodByDefault);
         Assert.Equal(AccrualReasonDisplayModes.PenaltiesOnly, result.AccrualReasonDisplayMode);
         Assert.NotEqual(Guid.Empty, result.Version);
         Assert.NotEqual(Guid.Empty, result.AccrualReasonDisplayVersion);
+        Assert.NotEqual(Guid.Empty, result.GarageDebtPeriodVersion);
     }
 
     [Fact]
@@ -397,6 +399,29 @@ public sealed class ApplicationSettingsServiceTests
         Assert.Equal("application_setting.updated", audit.Action);
         Assert.Equal("settings", audit.Section);
         Assert.Equal(actorUserId, audit.ActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_PersistsGarageDebtPeriodAndWritesAuditEvent()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(false, ShowGarageDebtPeriodByDefault: true),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.ShowGarageDebtPeriodByDefault);
+        Assert.Equal(ApplicationSettingsService.ShowGarageDebtPeriodKey, repository.Setting!.Key);
+        Assert.True(repository.Setting.BooleanValue);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        var audit = Assert.Single(auditWriter.Requests);
+        Assert.Equal("application_setting.garage_debt_period_updated", audit.Action);
+        Assert.Equal(false, audit.OldValues!["showGarageDebtPeriodByDefault"]);
+        Assert.Equal(true, audit.NewValues!["showGarageDebtPeriodByDefault"]);
     }
 
     [Fact]

@@ -14,6 +14,7 @@ public sealed class ApplicationSettingsService(
     ILogger<ApplicationSettingsService> logger) : IApplicationSettingsService
 {
     public const string ShowAllGarageOperationsKey = "payments.show_all_garage_operations_by_default";
+    public const string ShowGarageDebtPeriodKey = "payments.show_garage_debt_period_by_default";
     public const string AccrualReasonDisplayModeKey = "payments.accrual_reason_display_mode";
     public const string TariffTableVisibleColumnsKey = "tariffs.table_visible_columns";
     public const int DefaultTariffPanelsSplitPercent = 40;
@@ -30,11 +31,14 @@ public sealed class ApplicationSettingsService(
     {
         var setting = await repository.FindAsync(ShowAllGarageOperationsKey, cancellationToken);
         var reasonSetting = await repository.FindAsync(AccrualReasonDisplayModeKey, cancellationToken);
+        var debtPeriodSetting = await repository.FindAsync(ShowGarageDebtPeriodKey, cancellationToken);
         return new PaymentDisplaySettingsDto(
             setting?.BooleanValue ?? false,
             setting?.Version ?? Guid.NewGuid(),
             AccrualReasonDisplayMode: CreateAccrualReasonDisplayMode(reasonSetting?.IntegerValue),
-            AccrualReasonDisplayVersion: reasonSetting?.Version ?? Guid.NewGuid());
+            AccrualReasonDisplayVersion: reasonSetting?.Version ?? Guid.NewGuid(),
+            ShowGarageDebtPeriodByDefault: debtPeriodSetting?.BooleanValue ?? false,
+            GarageDebtPeriodVersion: debtPeriodSetting?.Version ?? Guid.NewGuid());
     }
 
     public async Task<PaymentDisplaySettingsDto> UpdatePaymentDisplaySettingsAsync(
@@ -50,7 +54,9 @@ public sealed class ApplicationSettingsService(
 
         var setting = await repository.FindForUpdateAsync(ShowAllGarageOperationsKey, cancellationToken);
         var reasonSetting = await repository.FindForUpdateAsync(AccrualReasonDisplayModeKey, cancellationToken);
+        var debtPeriodSetting = await repository.FindForUpdateAsync(ShowGarageDebtPeriodKey, cancellationToken);
         var previousValue = setting?.BooleanValue ?? false;
+        var previousDebtPeriodValue = debtPeriodSetting?.BooleanValue ?? false;
         var previousReasonMode = CreateAccrualReasonDisplayMode(reasonSetting?.IntegerValue);
         var nextReasonValue = CreateAccrualReasonDisplayValue(request.AccrualReasonDisplayMode);
         if (setting is not null && request.Version.HasValue)
@@ -61,6 +67,10 @@ public sealed class ApplicationSettingsService(
         {
             OptimisticConcurrencyGuard.EnsureCurrent(request.AccrualReasonDisplayVersion, reasonSetting);
         }
+        if (debtPeriodSetting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.GarageDebtPeriodVersion, debtPeriodSetting);
+        }
 
         var paymentChanged = setting is null
             ? request.ShowAllGarageOperationsByDefault
@@ -68,14 +78,19 @@ public sealed class ApplicationSettingsService(
         var reasonChanged = reasonSetting is null
             ? nextReasonValue != 0
             : reasonSetting.IntegerValue != nextReasonValue;
+        var debtPeriodChanged = debtPeriodSetting is null
+            ? request.ShowGarageDebtPeriodByDefault
+            : debtPeriodSetting.BooleanValue != request.ShowGarageDebtPeriodByDefault;
 
-        if (!paymentChanged && !reasonChanged)
+        if (!paymentChanged && !reasonChanged && !debtPeriodChanged)
         {
             return new PaymentDisplaySettingsDto(
                 previousValue,
                 setting?.Version ?? request.Version ?? Guid.NewGuid(),
                 AccrualReasonDisplayMode: previousReasonMode,
-                AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid());
+                AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid(),
+                ShowGarageDebtPeriodByDefault: previousDebtPeriodValue,
+                GarageDebtPeriodVersion: debtPeriodSetting?.Version ?? request.GarageDebtPeriodVersion ?? Guid.NewGuid());
         }
 
         if (paymentChanged)
@@ -132,12 +147,42 @@ public sealed class ApplicationSettingsService(
                 FieldLabels: new Dictionary<string, string> { ["accrualReasonDisplayMode"] = "Показывать причины начислений" }));
         }
 
+        if (debtPeriodChanged)
+        {
+            if (debtPeriodSetting is null)
+            {
+                debtPeriodSetting = new ApplicationSetting { Key = ShowGarageDebtPeriodKey };
+                repository.Add(debtPeriodSetting);
+            }
+
+            debtPeriodSetting.BooleanValue = request.ShowGarageDebtPeriodByDefault;
+            debtPeriodSetting.UpdatedAtUtc = timeProvider.GetUtcNow();
+            debtPeriodSetting.UpdatedByUserId = actorUserId;
+
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                actorUserId,
+                "application_setting.garage_debt_period_updated",
+                "application_setting",
+                ShowGarageDebtPeriodKey,
+                Summary: request.ShowGarageDebtPeriodByDefault
+                    ? "При открытии гаража показывается период с первого неоплаченного месяца."
+                    : "При открытии гаража показывается только текущий месяц.",
+                Section: "settings",
+                ActionKind: "update",
+                EntityDisplayName: "Начальный период поступлений",
+                OldValues: new Dictionary<string, object?> { ["showGarageDebtPeriodByDefault"] = previousDebtPeriodValue },
+                NewValues: new Dictionary<string, object?> { ["showGarageDebtPeriodByDefault"] = request.ShowGarageDebtPeriodByDefault },
+                FieldLabels: new Dictionary<string, string> { ["showGarageDebtPeriodByDefault"] = "Показывать период задолженности" }));
+        }
+
         await repository.SaveChangesAsync(cancellationToken);
         return new PaymentDisplaySettingsDto(
             setting?.BooleanValue ?? false,
             setting?.Version ?? request.Version ?? Guid.NewGuid(),
             AccrualReasonDisplayMode: request.AccrualReasonDisplayMode,
-            AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid());
+            AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid(),
+            ShowGarageDebtPeriodByDefault: debtPeriodSetting?.BooleanValue ?? false,
+            GarageDebtPeriodVersion: debtPeriodSetting?.Version ?? request.GarageDebtPeriodVersion ?? Guid.NewGuid());
     }
 
     public async Task<TariffTableDisplaySettingsDto> GetTariffTableDisplaySettingsAsync(CancellationToken cancellationToken)
