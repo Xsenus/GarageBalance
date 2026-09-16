@@ -2750,6 +2750,69 @@ h1 {
   min-height: 64px;
 }
 
+.contractors-garage-form-comment {
+  border-left: 1px solid #eaecf0;
+  padding-left: 18px;
+}
+
+.garage-annual-payments {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe5f6;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.garage-annual-payments__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.garage-annual-payments__header h4,
+.garage-annual-payments__header p {
+  margin: 0;
+}
+
+.garage-annual-payments__header p {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.garage-annual-payments__new-list {
+  display: grid;
+  gap: 8px;
+}
+
+.garage-annual-payments__new-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr);
+  align-items: end;
+  gap: 10px 14px;
+  border-top: 1px solid #e4e7ec;
+  padding-top: 8px;
+}
+
+.garage-annual-payments__new-description {
+  display: grid;
+  align-self: center;
+  gap: 2px;
+}
+
+.garage-annual-payments__new-description span,
+.garage-annual-payments__new-error {
+  color: #667085;
+  font-size: 12px;
+}
+
+.garage-annual-payments__new-error {
+  grid-column: 3;
+  color: #b42318;
+}
+
 @media (max-width: 720px) {
   .suggestion-options {
     max-height: 176px;
@@ -2761,8 +2824,7 @@ h1 {
 
   .contractors-column-filters__actions {
     grid-column: auto;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: block;
   }
 
   .suggestion-status {
@@ -2797,6 +2859,19 @@ h1 {
     border-left: 0;
     padding-top: 10px;
     padding-left: 0;
+  }
+
+  .contractors-garage-form-comment {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .garage-annual-payments__new-row {
+    grid-template-columns: 1fr;
+  }
+
+  .garage-annual-payments__new-error {
+    grid-column: auto;
   }
 
   .contractors-supplier-primary-grid,

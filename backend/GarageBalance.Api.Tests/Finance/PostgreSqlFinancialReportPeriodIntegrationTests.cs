@@ -8,7 +8,7 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlFinancialReportPeriodIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task GaragePeriod_ReturnsFirstUnpaidAccrualMonthOnPostgreSql()
+    public async Task GaragePeriod_StartsAtBeginningOfCurrentYearWhenDebtExistsOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid garageId;
@@ -54,7 +54,7 @@ public sealed class PostgreSqlFinancialReportPeriodIntegrationTests
         Assert.True(result.Succeeded);
         Assert.Equal(new DateOnly(2023, 2, 1), result.Value!.MonthFrom);
         Assert.Equal(new DateOnly(2026, 7, 1), result.Value.MonthTo);
-        Assert.Equal(new DateOnly(2024, 5, 1), result.Value.DefaultMonthFrom);
+        Assert.Equal(new DateOnly(2026, 1, 1), result.Value.DefaultMonthFrom);
         Assert.Equal(new DateOnly(2026, 7, 1), result.Value.DefaultMonthTo);
     }
 

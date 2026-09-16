@@ -441,36 +441,39 @@ type SupplierAccrualPrototypeDialogPreset = {
 }
 
 function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): PaymentPrototypeRow[] {
-  return worksheet.rows.map((row) => ({
-    rowKind: row.rowKind,
-    supplierId: row.supplierId,
-    staffMemberId: row.staffMemberId,
-    expenseTypeId: row.expenseTypeId,
-    expenseFundName: row.expenseFundName,
-    counterparty: row.counterpartyName ?? '',
-    item: row.expenseTypeName,
-    openingDebt: row.openingDebt ?? Math.max(row.openingBalance ?? 0, 0),
-    openingAdvance: row.openingAdvance ?? Math.max(-(row.openingBalance ?? 0), 0),
-    closingDebt: row.closingDebt ?? Math.max((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount, 0),
-    closingAdvance: row.closingAdvance ?? Math.max(-((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount), 0),
-    cost: row.accrualAmount,
-    baseAccrual: row.baseAccrualAmount ?? row.accrualAmount,
-    bonus: row.bonusAmount ?? 0,
-    penalty: row.penaltyAmount ?? 0,
-    paid: row.expenseAmount,
-    balance: row.closingDebt ?? row.balance,
-    collected: row.collectedAmount ?? '',
-    difference: row.difference ?? '',
-    action: row.rowKind !== 'episodic',
-    operationId: row.operationId,
-    operationDate: row.operationDate,
-    accountingMonth: row.accountingMonth,
-    expensePaymentType: row.expensePaymentType,
-    expensePaymentSource: row.expensePaymentSource,
-    documentNumber: row.documentNumber,
-    comment: row.comment,
-    operationVersion: row.operationVersion,
-  }))
+  return worksheet.rows.map((row) => {
+    const closingDebt = row.closingDebt ?? Math.max((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount, 0)
+    return {
+      rowKind: row.rowKind,
+      supplierId: row.supplierId,
+      staffMemberId: row.staffMemberId,
+      expenseTypeId: row.expenseTypeId,
+      expenseFundName: row.expenseFundName,
+      counterparty: row.counterpartyName ?? '',
+      item: row.expenseTypeName,
+      openingDebt: row.openingDebt ?? Math.max(row.openingBalance ?? 0, 0),
+      openingAdvance: row.openingAdvance ?? Math.max(-(row.openingBalance ?? 0), 0),
+      closingDebt,
+      closingAdvance: row.closingAdvance ?? Math.max(-((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount), 0),
+      cost: row.accrualAmount,
+      baseAccrual: row.baseAccrualAmount ?? row.accrualAmount,
+      bonus: row.bonusAmount ?? 0,
+      penalty: row.penaltyAmount ?? 0,
+      paid: row.expenseAmount,
+      balance: row.closingDebt ?? row.balance,
+      collected: row.collectedAmount ?? '',
+      difference: row.difference ?? '',
+      action: row.rowKind !== 'episodic' && closingDebt > 0,
+      operationId: row.operationId,
+      operationDate: row.operationDate,
+      accountingMonth: row.accountingMonth,
+      expensePaymentType: row.expensePaymentType,
+      expensePaymentSource: row.expensePaymentSource,
+      documentNumber: row.documentNumber,
+      comment: row.comment,
+      operationVersion: row.operationVersion,
+    }
+  })
 }
 
 export function FinancePanel({
@@ -5962,7 +5965,7 @@ function PaymentsPrototypePanel({
                               </div>
                             </td>
                             <td>
-                              <div className="payments-prototype-payment-editor">
+                              {row.debt > 0 ? <div className="payments-prototype-payment-editor">
                                 <MoneyTextInput
                                   className="payments-prototype-payment-input"
                                   aria-label={`Платеж ${row.service} ${row.monthLabel}`}
@@ -5992,7 +5995,7 @@ function PaymentsPrototypePanel({
                                 {savingPaymentRowId === row.id
                                   ? <span className="payments-prototype-payment-status" role="status" aria-live="polite">Сохраняем платёж…</span>
                                   : null}
-                              </div>
+                              </div> : <span className="payments-prototype-payment-complete">—</span>}
                             </td>
                             <td>{formatPaymentMoney(row.paid)}</td>
                             {(() => {
@@ -6111,7 +6114,7 @@ function PaymentsPrototypePanel({
                   {expenseRows.map((row, index) => {
                     const supplier = row.counterparty ?? ''
                     const isStaffPaymentRow = row.rowKind === 'staff'
-                    const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
+                    const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : undefined
                     const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
                     const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
                     const breakdownKey = getExpenseSupplierBreakdownKey(row)

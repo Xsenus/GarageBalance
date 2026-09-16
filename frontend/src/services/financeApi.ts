@@ -588,6 +588,20 @@ export type GarageAnnualPaymentItemDto = {
   destinationFundId: string | null
   destinationFundName: string | null
   canRecordPayment: boolean
+  tariffName?: string | null
+}
+
+export type GarageAnnualPaymentPreviewDto = {
+  accountingYear: number
+  items: Array<{
+    incomeTypeId: string
+    serviceName: string
+    tariffName: string
+    accountingMonth: string
+    fullAmount: number
+    destinationFundId: string | null
+    destinationFundName: string | null
+  }>
 }
 
 export type GarageAnnualPaymentsDto = {
@@ -875,6 +889,7 @@ export type FinanceClient = {
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
   calculateGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
+  previewGarageAnnualPayments(accessToken: string, request: { peopleCount: number; floorCount: number; initialWaterMeterValue?: number | null; initialElectricityMeterValue?: number | null }, signal?: AbortSignal): Promise<GarageAnnualPaymentPreviewDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
   getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId?: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
@@ -1080,6 +1095,16 @@ export const financeApi: FinanceClient = {
   calculateGarageAnnualPayments(accessToken, garageId, year, signal) {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/annual-payments/calculate`, { year }), {
       method: 'POST',
+      signal,
+    })
+  },
+  previewGarageAnnualPayments(accessToken, request, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/garage-annual-payments/preview', {
+      peopleCount: request.peopleCount,
+      floorCount: request.floorCount,
+      initialWaterMeterValue: request.initialWaterMeterValue ?? undefined,
+      initialElectricityMeterValue: request.initialElectricityMeterValue ?? undefined,
+    }), {
       signal,
     })
   },

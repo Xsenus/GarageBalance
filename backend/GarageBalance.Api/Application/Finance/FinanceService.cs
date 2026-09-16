@@ -900,7 +900,8 @@ public sealed class FinanceService(
                 status,
                 incomeType.DestinationFundId,
                 incomeType.DestinationFund?.Name,
-                accrual is not null && outstandingAmount > 0m));
+                accrual is not null && outstandingAmount > 0m,
+                definition?.Tariff?.Name));
         }
 
         var orderedRows = rows
@@ -1058,6 +1059,44 @@ public sealed class FinanceService(
         }
 
         return await GetGarageAnnualPaymentsAsync(garageId, year, cancellationToken);
+    }
+
+    public async Task<FinanceResult<GarageAnnualPaymentPreviewDto>> PreviewGarageAnnualPaymentsAsync(
+        GarageAnnualPaymentPreviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        var accountingYear = businessDateProvider.Today.Year;
+        var currentMonth = GetCurrentAccountingMonth();
+        var garage = new Garage
+        {
+            Number = "Предварительный расчёт",
+            PeopleCount = request.PeopleCount,
+            FloorCount = request.FloorCount,
+            InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue),
+            InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue),
+            RegisteredOn = businessDateProvider.Today
+        };
+        var definitions = await GetAnnualServiceDefinitionsAsync(accountingYear, cancellationToken);
+        var items = definitions
+            .Where(definition => definition.AccountingMonth <= currentMonth && definition.Tariff is not null)
+            .Select(definition => new
+            {
+                Definition = definition,
+                Amount = CalculateAnnualPlannedAmount(garage, definition)
+            })
+            .Where(item => item.Amount is > 0m)
+            .Select(item => new GarageAnnualPaymentPreviewItemDto(
+                item.Definition.IncomeType.Id,
+                item.Definition.Setting.Name,
+                item.Definition.Tariff!.Name,
+                item.Definition.AccountingMonth,
+                MoneyMath.RoundMoney(item.Amount!.Value),
+                item.Definition.IncomeType.DestinationFundId,
+                item.Definition.IncomeType.DestinationFund?.Name))
+            .ToArray();
+
+        return FinanceResult<GarageAnnualPaymentPreviewDto>.Success(
+            new GarageAnnualPaymentPreviewDto(accountingYear, items));
     }
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
@@ -1909,7 +1948,7 @@ public sealed class FinanceService(
         var monthTo = months.Where(month => month.HasValue).Max()!.Value;
         var defaultMonthFrom = request.GarageId.HasValue
             ? data.FirstUnpaidAccrualMonth is { } firstUnpaidMonth && firstUnpaidMonth <= currentMonth
-                ? firstUnpaidMonth
+                ? new DateOnly(currentMonth.Year, 1, 1)
                 : currentMonth
             : (DateOnly?)null;
         return FinanceResult<FinancialReportPeriodDto>.Success(new FinancialReportPeriodDto(

@@ -10,7 +10,9 @@ namespace GarageBalance.Api.Controllers;
 [ApiController]
 [Authorize(Policy = SystemPermissions.DictionariesRead)]
 [Route("api/dictionaries")]
-public sealed class DictionariesController(IDictionaryService dictionaryService) : ControllerBase
+public sealed class DictionariesController(
+    IDictionaryService dictionaryService,
+    IGarageOnboardingService? garageOnboardingService = null) : ControllerBase
 {
     [HttpGet("owners")]
     [ProducesResponseType<IReadOnlyList<OwnerDto>>(StatusCodes.Status200OK)]
@@ -110,6 +112,28 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         }
 
         return CreatedAtAction(nameof(GetGarages), new { search = result.Value!.Number }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("garages/with-annual-payments")]
+    [ProducesResponseType<GarageDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<GarageDto>> CreateGarageWithAnnualPayments(
+        CreateGarageWithAnnualPaymentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (garageOnboardingService is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                ApiProblemDetails.Create("garage_onboarding_unavailable", "Сервис добавления гаража временно недоступен.", StatusCodes.Status503ServiceUnavailable));
+        }
+
+        var result = await garageOnboardingService.CreateWithAnnualPaymentsAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetGarages), new { search = result.Value!.Number }, result.Value)
+            : ToError(result);
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
@@ -1081,7 +1105,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.ErrorCode switch
         {
             "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_service_not_found" or "supplier_expense_fund_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" or "fee_campaign_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "owner_has_active_garages" or "supplier_group_duplicate" or "supplier_group_has_active_suppliers" or "supplier_duplicate" or "supplier_has_active_contacts" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_code_duplicate" or "income_type_code_reserved" or "income_type_has_active_services" or "income_type_system" or "expense_type_duplicate" or "expense_type_code_duplicate" or "expense_type_code_reserved" or "expense_type_has_active_services" or "expense_type_system" or "measurement_unit_duplicate" or "measurement_unit_in_use" or "tariff_duplicate" or "tariff_has_active_services" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "charge_service_has_active_suppliers" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" or "fee_campaign_participants_locked" or "fee_campaign_closed" or "fee_campaign_already_closed" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "garage_number_duplicate" or "garage_onboarding_concurrency" or "owner_has_active_garages" or "supplier_group_duplicate" or "supplier_group_has_active_suppliers" or "supplier_duplicate" or "supplier_has_active_contacts" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_code_duplicate" or "income_type_code_reserved" or "income_type_has_active_services" or "income_type_system" or "expense_type_duplicate" or "expense_type_code_duplicate" or "expense_type_code_reserved" or "expense_type_has_active_services" or "expense_type_system" or "measurement_unit_duplicate" or "measurement_unit_in_use" or "tariff_duplicate" or "tariff_has_active_services" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "charge_service_has_active_suppliers" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" or "fee_campaign_participants_locked" or "fee_campaign_closed" or "fee_campaign_already_closed" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

@@ -111,6 +111,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<InitialAdministratorOptions>, InitialAdministratorOptionsValidator>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
+builder.Services.AddScoped<IGarageOnboardingTransactionRunner, EfGarageOnboardingTransactionRunner>();
 builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
 builder.Services.AddScoped<IGarageRepository, EfGarageRepository>();
 builder.Services.AddScoped<ISupplierGroupRepository, EfSupplierGroupRepository>();
@@ -189,6 +190,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IPayoutMutationPolicy>()));
 builder.Services.AddScoped<IRegularAccrualRecalculationService>(services =>
     (IRegularAccrualRecalculationService)services.GetRequiredService<IFinanceService>());
+builder.Services.AddScoped<IGarageOnboardingService, GarageOnboardingService>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();
 builder.Services.AddScoped<IImportService, ImportService>();
