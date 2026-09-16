@@ -3522,14 +3522,14 @@ function SuggestionStatus({ id, message }: { id: string; message: string }) {
   const isAddressSelectionConfirmation = message === 'Адрес выбран из DaData.'
   return (
     <small
-      className={`suggestion-status${isAddressSelectionConfirmation ? ' suggestion-status--visually-hidden' : ''}`}
+      className={`suggestion-status${message ? '' : ' suggestion-status--empty'}${isAddressSelectionConfirmation ? ' suggestion-status--visually-hidden' : ''}`}
       id={id}
       role={message ? 'status' : undefined}
       aria-live={message ? 'polite' : undefined}
       aria-hidden={message ? undefined : true}
       title={message || undefined}
     >
-      {message || '\u00a0'}
+      {message}
     </small>
   )
 }

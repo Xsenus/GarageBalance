@@ -646,6 +646,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).not.toContain('> .field-label-with-help > span:first-child::after')
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid > .form-field {\n  align-content: start;')
+    expect(normalizedAppCss).toContain('.suggestion-status.suggestion-status--empty {\n  display: none;\n  height: 0;\n  margin-top: 0;')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid .form-field > input,\n.contractors-supplier-footer-grid .form-field > textarea {\n  box-sizing: border-box;\n  height: 76px;\n  min-height: 76px;')
     expect(normalizedAppCss).toContain('.contractors-contacts-preview--editable {\n  min-height: 196px;\n  max-height: 280px;')
