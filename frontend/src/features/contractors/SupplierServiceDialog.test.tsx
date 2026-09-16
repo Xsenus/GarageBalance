@@ -16,6 +16,7 @@ describe('SupplierServiceDialog', () => {
     const onClose = vi.fn()
     render(<SupplierServiceDialog services={services} onSave={onSave} onClose={onClose} />)
     expect(screen.getByRole('dialog')).not.toHaveClass('supplier-service-edit-dialog')
+    expect(screen.getAllByRole('button').filter((button) => ['Сохранить', 'Отмена'].includes(button.textContent ?? '')).map((button) => button.textContent)).toEqual(['Сохранить', 'Отмена'])
     expect(screen.getAllByRole('textbox')).toHaveLength(1)
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Сохранить' }))

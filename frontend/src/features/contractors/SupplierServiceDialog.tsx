@@ -59,11 +59,11 @@ export function SupplierServiceDialog({ edit = false, services, onClose, onSave 
             <input aria-label="Наименование услуги" value={name} maxLength={200} required disabled={saving} onChange={(event) => setName(event.target.value)} />
           </FormField>
           <div className="detail-dialog-actions contractors-dialog-actions">
-            <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
             <button className="secondary-button" type="submit" disabled={saving} aria-busy={saving}>
               {saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} aria-hidden="true" />}
               <span>{saving ? 'Сохраняем...' : 'Сохранить'}</span>
             </button>
+            <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
           </div>
           {saving ? <span className="sr-only" role="status" aria-live="polite">Сохраняем услугу поставщика</span> : null}
         </form>
