@@ -3219,12 +3219,15 @@ describe('App', () => {
       initialWaterMeterValue: null,
       initialElectricityMeterValue: null,
     }, expect.any(AbortSignal)))
-    expect(await within(dialog).findByText('Тариф: Охрана 2026')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Полная стоимость Годовая охрана')).toHaveValue('900.00 руб.')
-    const paidInput = within(dialog).getByLabelText('Погашено по тарифу Годовая охрана')
+    expect(await within(dialog).findByText('Годовые платежи за 2026 год')).toBeInTheDocument()
+    const annualHelp = within(dialog).getByLabelText('Справка: Годовая охрана')
+    expect(within(annualHelp).getByRole('tooltip')).toHaveTextContent('Платёж за 2026 год. Начислено: 900.00 руб. Уже оплачено: 0.00 руб. Осталось: 900.00 руб. Тариф: Охрана 2026. Фонд: Охрана.')
+    const paidInput = within(dialog).getByLabelText('Годовая охрана за 2026 год')
+    expect(paidInput).toHaveValue('0.00')
+    await user.clear(paidInput)
     await user.type(paidInput, '901')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
-    expect(await within(dialog).findByText('Погашенная сумма «Годовая охрана» должна быть от 0 до 900.00 руб.')).toBeInTheDocument()
+    expect(await within(dialog).findByText('Сумма «Годовая охрана» должна быть от 0.00 до 900.00 руб.')).toBeInTheDocument()
     expect(createGarageWithAnnualPayments).not.toHaveBeenCalled()
 
     await user.clear(paidInput)
@@ -28264,52 +28267,40 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Перерасчёт неоплаченных начислений' })).not.toBeInTheDocument()
   })
 
-  it('shows annual obligations in a garage card and records a targeted receipt', async () => {
+  it('shows current annual payments as fields and saves an increased total with the garage card', async () => {
     const user = userEvent.setup()
-    let paid = false
-    let paymentAttempt = 0
-    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
-      paymentAttempt += 1
-      if (paymentAttempt === 1) throw new Error('Не удалось провести годовой платёж.')
-      paid = true
-      return createFinancialOperation({
-        id: 'annual-payment-operation',
-        garageId: request.garageId,
-        incomeTypeId: request.incomeTypeId,
-        operationDate: request.operationDate,
-        accountingMonth: request.accountingMonth,
-        amount: request.amount,
-        targetAccrualId: request.targetAccrualId,
-      })
-    })
-    const annualResult = (): GarageAnnualPaymentsDto => ({
-      garageId: 'garage-1',
+    const garageId = '11111111-1111-4111-8111-111111111111'
+    const garage = createGarage({ id: garageId, number: '12' })
+    const annualResult: GarageAnnualPaymentsDto = {
+      garageId,
       garageNumber: '12',
       ownerName: 'Иванов Иван',
       accountingYear: 2026,
       accruedTotal: 900,
-      paidTotal: paid ? 900 : 0,
-      outstandingTotal: paid ? 0 : 900,
+      paidTotal: 300,
+      outstandingTotal: 600,
       items: [{
         accrualId: 'annual-accrual-1',
         incomeTypeId: 'income-type-membership',
-        serviceName: 'Годовой резерв',
+        serviceName: 'Целевой взнос',
         accountingYear: 2026,
         accountingMonth: '2026-01-01',
         dueDate: '2026-06-30',
         overdueFromDate: '2026-07-31',
         amount: 900,
-        paidAmount: paid ? 900 : 0,
-        outstandingAmount: paid ? 0 : 900,
-        status: paid ? 'paid' : 'unpaid',
+        paidAmount: 300,
+        outstandingAmount: 600,
+        status: 'partial',
         destinationFundId: 'fund-reserve',
         destinationFundName: 'Резерв',
-        canRecordPayment: !paid,
+        canRecordPayment: true,
+        tariffName: 'Целевой взнос 2026',
       }],
-    })
-    const getGarageAnnualPayments = vi.fn(async () => annualResult())
-    const calculateGarageAnnualPayments = vi.fn(async () => annualResult())
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getGarageAnnualPayments, calculateGarageAnnualPayments, createIncome })} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    }
+    const getGarageAnnualPayments = vi.fn(async () => annualResult)
+    const updateGarage = vi.fn<DictionaryClient['updateGarage']>()
+    const updateGarageWithAnnualPayments = vi.fn<DictionaryClient['updateGarageWithAnnualPayments']>(async (_token, id, request) => createGarage({ id, number: request.garage.number }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], updateGarage, updateGarageWithAnnualPayments })} financeClient={createFinanceClient({ getGarageAnnualPayments })} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -28318,26 +28309,32 @@ describe('App', () => {
     await user.click(await within(panel).findByRole('button', { name: 'Изменить гараж 12' }))
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
 
-    expect(await within(dialog).findByText('Годовой резерв')).toBeInTheDocument()
-    expect(within(dialog).getByText('Фонд: Резерв')).toBeInTheDocument()
-    expect(within(dialog).getByText('Не оплачен')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Рассчитать' }))
-    await waitFor(() => expect(calculateGarageAnnualPayments).toHaveBeenCalledWith('token', 'garage-1', 2026, undefined))
-    await user.click(within(dialog).getByRole('button', { name: 'Провести' }))
-
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Не удалось провести годовой платёж.')
-    await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
-    await user.click(await within(dialog).findByRole('button', { name: 'Провести' }))
-
-    await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({
-      garageId: 'garage-1',
-      incomeTypeId: 'income-type-membership',
-      amount: 900,
-      targetAccrualId: 'annual-accrual-1',
-    })))
-    expect(createIncome).toHaveBeenCalledTimes(2)
-    expect(await within(dialog).findByText('Оплачен')).toBeInTheDocument()
+    const amountInput = await within(dialog).findByLabelText('Целевой взнос за 2026 год')
+    expect(amountInput).toHaveValue('300.00')
+    const help = within(dialog).getByLabelText('Справка: Целевой взнос')
+    expect(within(help).getByRole('tooltip')).toHaveTextContent('Платёж за 2026 год. Начислено: 900.00 руб. Уже оплачено: 300.00 руб. Осталось: 600.00 руб. Тариф: Целевой взнос 2026. Фонд: Резерв.')
+    expect(within(dialog).queryByRole('combobox', { name: 'Год годовых платежей' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('Дата годового платежа')).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Рассчитать' })).not.toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Провести' })).not.toBeInTheDocument()
+
+    await user.clear(amountInput)
+    await user.type(amountInput, '299')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByText('Сумма «Целевой взнос» должна быть от 300.00 до 900.00 руб.')).toBeInTheDocument()
+    expect(updateGarageWithAnnualPayments).not.toHaveBeenCalled()
+
+    await user.clear(amountInput)
+    await user.type(amountInput, '500')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateGarageWithAnnualPayments).toHaveBeenCalledWith('token', garageId, {
+      garage: expect.objectContaining({ number: '12' }),
+      accountingYear: 2026,
+      annualPayments: [{ incomeTypeId: 'income-type-membership', amount: 500 }],
+    }))
+    expect(updateGarage).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гараж 12' })).not.toBeInTheDocument())
   })
 
   it('shows annual payments loading and retry states and keeps read-only access safe', async () => {
@@ -28393,9 +28390,10 @@ describe('App', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Годовые платежи временно недоступны.')
     await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
 
-    expect(await within(dialog).findByText('Годовой резерв')).toBeInTheDocument()
-    expect(within(dialog).getByText('Общий пул')).toBeInTheDocument()
-    expect(within(dialog).getByText('Режим просмотра: проведение оплаты требует права изменения платежей.')).toBeInTheDocument()
+    const annualInput = await within(dialog).findByLabelText('Годовой резерв за 2026 год')
+    expect(annualInput).toBeDisabled()
+    expect(within(dialog).getByText('Для изменения сумм нужно право изменения платежей.')).toBeInTheDocument()
+    expect(within(within(dialog).getByLabelText('Справка: Годовой резерв')).getByRole('tooltip')).toHaveTextContent('Средства поступают в общий нераспределённый пул.')
     expect(within(dialog).queryByRole('button', { name: 'Рассчитать' })).not.toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Провести' })).not.toBeInTheDocument()
   })
@@ -28915,6 +28913,25 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       })
       garages = [createdGarage, ...garages]
       return createdGarage
+    },
+    updateGarageWithAnnualPayments: async (_token, id, request) => {
+      const garageOwner = owners.find((item) => item.id === request.garage.ownerId) ?? null
+      const updatedGarage = createGarage({
+        id,
+        number: request.garage.number,
+        peopleCount: request.garage.peopleCount,
+        floorCount: request.garage.floorCount,
+        ownerId: garageOwner?.id ?? null,
+        ownerName: garageOwner?.fullName ?? null,
+        startingBalance: request.garage.startingBalance,
+        balance: request.garage.startingBalance,
+        overdueDebt: Math.max(request.garage.startingBalance, 0),
+        initialWaterMeterValue: request.garage.initialWaterMeterValue ?? null,
+        initialElectricityMeterValue: request.garage.initialElectricityMeterValue ?? null,
+        comment: request.garage.comment ?? null,
+      })
+      garages = garages.map((item) => (item.id === id ? updatedGarage : item))
+      return updatedGarage
     },
     updateGarage: async (_token, id, request) => {
       const garageOwner = owners.find((item) => item.id === request.ownerId) ?? null
@@ -30443,6 +30460,28 @@ function createStatefulDictionaryClient(): DictionaryClient {
         comment: request.comment ?? null,
       })
       garages = [garage, ...garages]
+      return garage
+    },
+    createGarageWithAnnualPayments: async (_token, request) => {
+      const garage = createGarage({
+        id: crypto.randomUUID(),
+        number: request.garage.number,
+        peopleCount: request.garage.peopleCount,
+        floorCount: request.garage.floorCount,
+        startingBalance: request.garage.startingBalance,
+      })
+      garages = [garage, ...garages]
+      return garage
+    },
+    updateGarageWithAnnualPayments: async (_token, id, request) => {
+      const garage = createGarage({
+        id,
+        number: request.garage.number,
+        peopleCount: request.garage.peopleCount,
+        floorCount: request.garage.floorCount,
+        startingBalance: request.garage.startingBalance,
+      })
+      garages = garages.map((item) => (item.id === id ? garage : item))
       return garage
     },
     updateGarage: async (_token, id, request) => {

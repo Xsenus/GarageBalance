@@ -6,6 +6,12 @@ public interface IGarageOnboardingService
         CreateGarageWithAnnualPaymentsRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+
+    Task<DictionaryResult<GarageDto>> UpdateWithAnnualPaymentsAsync(
+        Guid garageId,
+        UpdateGarageWithAnnualPaymentsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
 }
 
 public interface IGarageOnboardingTransactionRunner

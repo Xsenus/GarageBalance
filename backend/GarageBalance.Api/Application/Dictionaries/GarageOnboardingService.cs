@@ -95,6 +95,118 @@ public sealed class GarageOnboardingService(
         }, cancellationToken);
     }
 
+    public Task<DictionaryResult<GarageDto>> UpdateWithAnnualPaymentsAsync(
+        Guid garageId,
+        UpdateGarageWithAnnualPaymentsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return transactionRunner.ExecuteAsync(async transactionCancellationToken =>
+        {
+            if (request.AccountingYear != businessDateProvider.Today.Year)
+            {
+                return DictionaryResult<GarageDto>.Failure(
+                    "garage_annual_payment_year_invalid",
+                    "Годовые платежи в карточке гаража можно изменять только за текущий год.");
+            }
+
+            var requestedPayments = request.AnnualPayments
+                .GroupBy(item => item.IncomeTypeId)
+                .ToArray();
+            if (requestedPayments.Any(group => group.Count() > 1))
+            {
+                return DictionaryResult<GarageDto>.Failure(
+                    "garage_annual_payment_duplicate",
+                    "Каждый годовой платёж можно указать только один раз.");
+            }
+
+            var garageResult = await dictionaryService.UpdateGarageAsync(
+                garageId,
+                request.Garage,
+                actorUserId,
+                transactionCancellationToken);
+            if (!garageResult.Succeeded)
+            {
+                return garageResult;
+            }
+
+            var annualResult = await financeService.CalculateGarageAnnualPaymentsAsync(
+                garageId,
+                request.AccountingYear,
+                actorUserId,
+                transactionCancellationToken);
+            if (!annualResult.Succeeded)
+            {
+                return FromFinanceFailure(annualResult);
+            }
+
+            var annualItems = annualResult.Value!.Items.ToDictionary(item => item.IncomeTypeId);
+            foreach (var payment in request.AnnualPayments)
+            {
+                var requestedTotal = MoneyMath.RoundMoney(payment.Amount);
+                if (!annualItems.TryGetValue(payment.IncomeTypeId, out var annualItem) ||
+                    annualItem.Amount is null)
+                {
+                    return DictionaryResult<GarageDto>.Failure(
+                        "garage_annual_payment_amount_invalid",
+                        "Годовой платёж нельзя сохранить: начисление текущего года не рассчитано.");
+                }
+
+                if (requestedTotal < annualItem.PaidAmount)
+                {
+                    return DictionaryResult<GarageDto>.Failure(
+                        "garage_annual_payment_total_decrease",
+                        "Уже проведённую сумму годового платежа нельзя уменьшить в карточке гаража.");
+                }
+
+                if (requestedTotal > annualItem.Amount.Value)
+                {
+                    return DictionaryResult<GarageDto>.Failure(
+                        "garage_annual_payment_amount_invalid",
+                        "Оплаченная сумма годового платежа не может превышать сумму начисления.");
+                }
+
+                var amountToRecord = MoneyMath.RoundMoney(requestedTotal - annualItem.PaidAmount);
+                if (amountToRecord <= 0m)
+                {
+                    continue;
+                }
+
+                if (annualItem.AccrualId is null || amountToRecord > annualItem.OutstandingAmount)
+                {
+                    return DictionaryResult<GarageDto>.Failure(
+                        "garage_annual_payment_amount_invalid",
+                        "Годовой платёж нельзя сохранить: начисление текущего года не рассчитано.");
+                }
+
+                var incomeResult = await financeService.CreateIncomeAsync(
+                    new CreateIncomeOperationRequest(
+                        garageId,
+                        annualItem.IncomeTypeId,
+                        businessDateProvider.Today,
+                        annualItem.AccountingMonth,
+                        amountToRecord,
+                        null,
+                        $"Годовой платёж за {request.AccountingYear} год из карточки гаража",
+                        TargetAccrualId: annualItem.AccrualId),
+                    actorUserId,
+                    transactionCancellationToken);
+                if (!incomeResult.Succeeded)
+                {
+                    return FromFinanceFailure(incomeResult);
+                }
+            }
+
+            var refreshedGarage = (await dictionaryService.GetGaragesAsync(
+                    garageResult.Value!.Number,
+                    transactionCancellationToken,
+                    limit: 10))
+                .SingleOrDefault(item => item.Id == garageId) ?? garageResult.Value;
+            return DictionaryResult<GarageDto>.Success(refreshedGarage);
+        }, cancellationToken);
+    }
+
     private static DictionaryResult<GarageDto> FromFinanceFailure<TFinance>(FinanceResult<TFinance> result) =>
         DictionaryResult<GarageDto>.Failure(result.ErrorCode ?? "garage_annual_payment_failed", result.ErrorMessage ?? "Не удалось сохранить годовые платежи гаража.");
 }

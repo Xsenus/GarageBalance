@@ -27,17 +27,20 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
-    public void CreateGarageWithAnnualPayments_RequiresDictionaryAndPaymentWritePermissions()
+    public void GarageWithAnnualPaymentsEndpoints_RequireDictionaryAndPaymentWritePermissions()
     {
-        var action = typeof(DictionariesController).GetMethod(nameof(DictionariesController.CreateGarageWithAnnualPayments));
-        Assert.NotNull(action);
-        var policies = action!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
-            .Cast<AuthorizeAttribute>()
-            .Select(attribute => attribute.Policy)
-            .ToArray();
+        foreach (var actionName in new[] { nameof(DictionariesController.CreateGarageWithAnnualPayments), nameof(DictionariesController.UpdateGarageWithAnnualPayments) })
+        {
+            var action = typeof(DictionariesController).GetMethod(actionName);
+            Assert.NotNull(action);
+            var policies = action!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+                .Cast<AuthorizeAttribute>()
+                .Select(attribute => attribute.Policy)
+                .ToArray();
 
-        Assert.Contains(SystemPermissions.DictionariesWrite, policies);
-        Assert.Contains(SystemPermissions.PaymentsWrite, policies);
+            Assert.Contains(SystemPermissions.DictionariesWrite, policies);
+            Assert.Contains(SystemPermissions.PaymentsWrite, policies);
+        }
     }
 
     [Fact]
@@ -166,6 +169,30 @@ public sealed class DictionariesControllerTests
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
         Assert.Same(garage, created.Value);
         Assert.Equal(request, onboarding.LastRequest);
+        Assert.Equal(actorUserId, onboarding.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateGarageWithAnnualPayments_ReturnsOkAndPassesIdRequestAndActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var garage = new GarageDto(Guid.NewGuid(), "ГОД-2", 2, 1, null, null, 0m, null, null, null, false, Version: Guid.NewGuid());
+        var onboarding = new FakeGarageOnboardingService
+        {
+            Result = DictionaryResult<GarageDto>.Success(garage)
+        };
+        var request = new UpdateGarageWithAnnualPaymentsRequest(
+            new UpsertGarageRequest(garage.Number, 2, 1, null, 0m, null, null, null, garage.Version),
+            2026,
+            [new InitialGarageAnnualPaymentRequest(Guid.NewGuid(), 500m)]);
+        var controller = CreateController(new FakeDictionaryService(), actorUserId, onboarding);
+
+        var result = await controller.UpdateGarageWithAnnualPayments(garage.Id, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(garage, ok.Value);
+        Assert.Equal(garage.Id, onboarding.LastGarageId);
+        Assert.Equal(request, onboarding.LastUpdateRequest);
         Assert.Equal(actorUserId, onboarding.LastActorUserId);
     }
 
@@ -1783,6 +1810,8 @@ public sealed class DictionariesControllerTests
     {
         public DictionaryResult<GarageDto> Result { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public CreateGarageWithAnnualPaymentsRequest? LastRequest { get; private set; }
+        public UpdateGarageWithAnnualPaymentsRequest? LastUpdateRequest { get; private set; }
+        public Guid? LastGarageId { get; private set; }
         public Guid? LastActorUserId { get; private set; }
 
         public Task<DictionaryResult<GarageDto>> CreateWithAnnualPaymentsAsync(
@@ -1791,6 +1820,18 @@ public sealed class DictionariesControllerTests
             CancellationToken cancellationToken)
         {
             LastRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(Result);
+        }
+
+        public Task<DictionaryResult<GarageDto>> UpdateWithAnnualPaymentsAsync(
+            Guid garageId,
+            UpdateGarageWithAnnualPaymentsRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastGarageId = garageId;
+            LastUpdateRequest = request;
             LastActorUserId = actorUserId;
             return Task.FromResult(Result);
         }

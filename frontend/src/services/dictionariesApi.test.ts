@@ -31,6 +31,26 @@ describe('dictionariesApi response cache', () => {
     }))
   })
 
+  it('updates a garage and its current annual payment totals in one request', async () => {
+    const request = {
+      garage: { number: 'ГОД-1', peopleCount: 2, floorCount: 1, startingBalance: 0, version: 'garage-v1' },
+      accountingYear: 2026,
+      annualPayments: [{ incomeTypeId: 'annual-security', amount: 500 }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'garage-annual', number: 'ГОД-1' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.updateGarageWithAnnualPayments('token', 'garage-annual', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/garage-annual/with-annual-payments', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(request),
+    }))
+  })
+
   it('uses the independent supplier service contract and invalidates supplier names without invalidating tariffs', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'service', name: 'Уборка', version: 'v1', isArchived: false }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

@@ -15,7 +15,7 @@ public sealed class EfGarageOnboardingTransactionRunner(GarageBalanceDbContext d
         cancellationToken.ThrowIfCancellationRequested();
         if (dbContext.Database.CurrentTransaction is not null || dbContext.ChangeTracker.HasChanges())
         {
-            throw new InvalidOperationException("Добавление гаража должно начинаться без незавершённых изменений.");
+            throw new InvalidOperationException("Сохранение гаража должно начинаться без незавершённых изменений.");
         }
 
         dbContext.ChangeTracker.Clear();
@@ -27,7 +27,7 @@ public sealed class EfGarageOnboardingTransactionRunner(GarageBalanceDbContext d
             {
                 if (dbContext.ChangeTracker.HasChanges())
                 {
-                    throw new InvalidOperationException("Не все изменения при добавлении гаража сохранены.");
+                    throw new InvalidOperationException("Не все изменения карточки гаража сохранены.");
                 }
                 await transaction.CommitAsync(cancellationToken);
             }
@@ -42,7 +42,7 @@ public sealed class EfGarageOnboardingTransactionRunner(GarageBalanceDbContext d
             await transaction.RollbackAsync(CancellationToken.None);
             return DictionaryResult<T>.Failure(
                 "garage_onboarding_concurrency",
-                "Данные изменились во время добавления гаража. Обновите форму и повторите операцию.");
+                "Данные изменились во время сохранения гаража. Обновите форму и повторите операцию.");
         }
         catch
         {

@@ -89,6 +89,112 @@ public sealed class GarageOnboardingServiceTests
         Assert.Equal(year == 2026 ? 1 : 0, dictionaryCalls);
     }
 
+    [Fact]
+    public async Task UpdateWithAnnualPaymentsAsync_RecordsOnlyIncreaseOfCurrentYearTotalInOneTransaction()
+    {
+        var garage = new GarageDto(Guid.NewGuid(), "ГОД-3", 2, 1, null, null, 0m, null, null, null, false, Version: Guid.NewGuid());
+        var refreshedGarage = garage with { Balance = -200m, Version = Guid.NewGuid() };
+        var incomeTypeId = Guid.NewGuid();
+        var accrualId = Guid.NewGuid();
+        var dictionary = Proxy<IDictionaryService>((method, _) => method.Name switch
+        {
+            nameof(IDictionaryService.UpdateGarageAsync) => Task.FromResult(DictionaryResult<GarageDto>.Success(garage)),
+            nameof(IDictionaryService.GetGaragesAsync) => Task.FromResult<IReadOnlyList<GarageDto>>([refreshedGarage]),
+            _ => throw new InvalidOperationException(method.Name)
+        });
+        CreateIncomeOperationRequest? capturedPayment = null;
+        var finance = Proxy<IFinanceService>((method, args) => method.Name switch
+        {
+            nameof(IFinanceService.CalculateGarageAnnualPaymentsAsync) => Task.FromResult(FinanceResult<GarageAnnualPaymentsDto>.Success(
+                new GarageAnnualPaymentsDto(garage.Id, garage.Number, null, 2026, 900m, 300m, 600m,
+                [new GarageAnnualPaymentItemDto(accrualId, incomeTypeId, "Целевой взнос", 2026, new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 30), new DateOnly(2026, 7, 31), 900m, 300m, 600m, "partial", null, null, true, "Целевой взнос 2026")]))),
+            nameof(IFinanceService.CreateIncomeAsync) => CaptureIncome(args!, request => capturedPayment = request),
+            _ => throw new InvalidOperationException(method.Name)
+        });
+        var runner = new ImmediateTransactionRunner();
+        var service = new GarageOnboardingService(dictionary, finance, runner, new FixedBusinessDateProvider());
+
+        var result = await service.UpdateWithAnnualPaymentsAsync(
+            garage.Id,
+            new UpdateGarageWithAnnualPaymentsRequest(
+                new UpsertGarageRequest(garage.Number, 2, 1, null, 0m, null, null, null, garage.Version),
+                2026,
+                [new InitialGarageAnnualPaymentRequest(incomeTypeId, 500m)]),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Same(refreshedGarage, result.Value);
+        Assert.Equal(1, runner.ExecutionCount);
+        Assert.NotNull(capturedPayment);
+        Assert.Equal(200m, capturedPayment!.Amount);
+        Assert.Equal(accrualId, capturedPayment.TargetAccrualId);
+        Assert.Equal(BusinessDate, capturedPayment.OperationDate);
+    }
+
+    [Theory]
+    [InlineData(200, "garage_annual_payment_total_decrease")]
+    [InlineData(901, "garage_annual_payment_amount_invalid")]
+    public async Task UpdateWithAnnualPaymentsAsync_RejectsDecreaseAndOverpayment(decimal requestedTotal, string expectedCode)
+    {
+        var garage = new GarageDto(Guid.NewGuid(), "ГОД-4", 1, 1, null, null, 0m, null, null, null, false, Version: Guid.NewGuid());
+        var incomeTypeId = Guid.NewGuid();
+        var accrualId = Guid.NewGuid();
+        var dictionary = Proxy<IDictionaryService>((method, _) => method.Name switch
+        {
+            nameof(IDictionaryService.UpdateGarageAsync) => Task.FromResult(DictionaryResult<GarageDto>.Success(garage)),
+            _ => throw new InvalidOperationException(method.Name)
+        });
+        var finance = Proxy<IFinanceService>((method, _) => method.Name switch
+        {
+            nameof(IFinanceService.CalculateGarageAnnualPaymentsAsync) => Task.FromResult(FinanceResult<GarageAnnualPaymentsDto>.Success(
+                new GarageAnnualPaymentsDto(garage.Id, garage.Number, null, 2026, 900m, 300m, 600m,
+                [new GarageAnnualPaymentItemDto(accrualId, incomeTypeId, "Целевой взнос", 2026, new DateOnly(2026, 1, 1), BusinessDate, BusinessDate, 900m, 300m, 600m, "partial", null, null, true)]))),
+            nameof(IFinanceService.CreateIncomeAsync) => throw new InvalidOperationException("Недопустимое изменение не должно создавать платёж."),
+            _ => throw new InvalidOperationException(method.Name)
+        });
+        var service = new GarageOnboardingService(dictionary, finance, new ImmediateTransactionRunner(), new FixedBusinessDateProvider());
+
+        var result = await service.UpdateWithAnnualPaymentsAsync(
+            garage.Id,
+            new UpdateGarageWithAnnualPaymentsRequest(
+                new UpsertGarageRequest(garage.Number, 1, 1, null, 0m, null, null, null, garage.Version),
+                2026,
+                [new InitialGarageAnnualPaymentRequest(incomeTypeId, requestedTotal)]),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedCode, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task UpdateWithAnnualPaymentsAsync_RejectsWrongYearAndDuplicatesBeforeUpdatingGarage()
+    {
+        var incomeTypeId = Guid.NewGuid();
+        var dictionary = Proxy<IDictionaryService>((method, _) => throw new InvalidOperationException($"{method.Name} не должен вызываться."));
+        var finance = Proxy<IFinanceService>((method, _) => throw new InvalidOperationException($"{method.Name} не должен вызываться."));
+        var service = new GarageOnboardingService(dictionary, finance, new ImmediateTransactionRunner(), new FixedBusinessDateProvider());
+        var garageRequest = new UpsertGarageRequest("ГОД-5", 1, 1, null, 0m, null, null, null, Guid.NewGuid());
+
+        var wrongYear = await service.UpdateWithAnnualPaymentsAsync(
+            Guid.NewGuid(),
+            new UpdateGarageWithAnnualPaymentsRequest(garageRequest, 2025, [new InitialGarageAnnualPaymentRequest(incomeTypeId, 100m)]),
+            null,
+            CancellationToken.None);
+        var duplicate = await service.UpdateWithAnnualPaymentsAsync(
+            Guid.NewGuid(),
+            new UpdateGarageWithAnnualPaymentsRequest(garageRequest, 2026, [
+                new InitialGarageAnnualPaymentRequest(incomeTypeId, 100m),
+                new InitialGarageAnnualPaymentRequest(incomeTypeId, 200m)
+            ]),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("garage_annual_payment_year_invalid", wrongYear.ErrorCode);
+        Assert.Equal("garage_annual_payment_duplicate", duplicate.ErrorCode);
+    }
+
     private static Task<FinanceResult<FinancialOperationDto>> CaptureIncome(
         object?[] args,
         Action<CreateIncomeOperationRequest> capture)

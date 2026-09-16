@@ -69,6 +69,11 @@ public sealed record CreateGarageWithAnnualPaymentsRequest(
     [Range(2000, 9999)] int AccountingYear,
     [Required, MinLength(1), MaxLength(50)] IReadOnlyList<InitialGarageAnnualPaymentRequest> AnnualPayments);
 
+public sealed record UpdateGarageWithAnnualPaymentsRequest(
+    [Required] UpsertGarageRequest Garage,
+    [Range(2000, 9999)] int AccountingYear,
+    [Required, MinLength(1), MaxLength(50)] IReadOnlyList<InitialGarageAnnualPaymentRequest> AnnualPayments);
+
 public sealed record SupplierGroupDto(Guid Id, string Name, bool IsSystem, bool IsArchived);
 
 public sealed record UpsertSupplierGroupRequest([Required, MaxLength(200)] string Name);

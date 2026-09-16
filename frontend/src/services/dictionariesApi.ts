@@ -261,6 +261,8 @@ export type CreateGarageWithAnnualPaymentsRequest = {
   }>
 }
 
+export type UpdateGarageWithAnnualPaymentsRequest = CreateGarageWithAnnualPaymentsRequest
+
 export type UpsertSupplierGroupRequest = {
   name: string
 }
@@ -447,6 +449,7 @@ export type DictionaryClient = {
   getGaragesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string, debtorsOnly?: boolean, filters?: GarageColumnFilters, signal?: AbortSignal): Promise<PagedResult<GarageDto>>
   createGarage(accessToken: string, request: UpsertGarageRequest): Promise<GarageDto>
   createGarageWithAnnualPayments(accessToken: string, request: CreateGarageWithAnnualPaymentsRequest): Promise<GarageDto>
+  updateGarageWithAnnualPayments(accessToken: string, id: string, request: UpdateGarageWithAnnualPaymentsRequest): Promise<GarageDto>
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
   archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
@@ -621,6 +624,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   createGarageWithAnnualPayments(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/garages/with-annual-payments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateGarageWithAnnualPayments(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/garages/${id}/with-annual-payments`, { method: 'PUT', body: JSON.stringify(request) })
   },
   updateGarage(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'PUT', body: JSON.stringify(request) })

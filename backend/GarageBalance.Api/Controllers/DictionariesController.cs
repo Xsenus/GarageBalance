@@ -149,6 +149,33 @@ public sealed class DictionariesController(
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("garages/{id:guid}/with-annual-payments")]
+    [RequireConcurrencyVersion("request.Garage.Version")]
+    [ProducesResponseType<GarageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<GarageDto>> UpdateGarageWithAnnualPayments(
+        Guid id,
+        UpdateGarageWithAnnualPaymentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (garageOnboardingService is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                ApiProblemDetails.Create("garage_onboarding_unavailable", "Сервис сохранения гаража временно недоступен.", StatusCodes.Status503ServiceUnavailable));
+        }
+
+        var result = await garageOnboardingService.UpdateWithAnnualPaymentsAsync(
+            id,
+            request,
+            GetActorUserId(),
+            cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpDelete("garages/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
