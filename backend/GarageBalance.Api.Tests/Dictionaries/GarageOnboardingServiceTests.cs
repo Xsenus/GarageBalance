@@ -15,9 +15,13 @@ public sealed class GarageOnboardingServiceTests
         var garage = new GarageDto(Guid.NewGuid(), "ГОД-1", 2, 1, null, null, 0m, null, null, null, false);
         var incomeTypeId = Guid.NewGuid();
         var accrualId = Guid.NewGuid();
-        var dictionary = Proxy<IDictionaryService>((method, _) => method.Name == nameof(IDictionaryService.CreateGarageAsync)
-            ? Task.FromResult(DictionaryResult<GarageDto>.Success(garage))
-            : throw new InvalidOperationException(method.Name));
+        var refreshedGarage = garage with { Balance = -400m };
+        var dictionary = Proxy<IDictionaryService>((method, _) => method.Name switch
+        {
+            nameof(IDictionaryService.CreateGarageAsync) => Task.FromResult(DictionaryResult<GarageDto>.Success(garage)),
+            nameof(IDictionaryService.GetGaragesAsync) => Task.FromResult<IReadOnlyList<GarageDto>>([refreshedGarage]),
+            _ => throw new InvalidOperationException(method.Name)
+        });
         CreateIncomeOperationRequest? capturedPayment = null;
         var finance = Proxy<IFinanceService>((method, args) => method.Name switch
         {
@@ -37,7 +41,7 @@ public sealed class GarageOnboardingServiceTests
         var result = await service.CreateWithAnnualPaymentsAsync(request, Guid.NewGuid(), CancellationToken.None);
 
         Assert.True(result.Succeeded, result.ErrorMessage);
-        Assert.Same(garage, result.Value);
+        Assert.Same(refreshedGarage, result.Value);
         Assert.Equal(1, runner.ExecutionCount);
         Assert.NotNull(capturedPayment);
         Assert.Equal(garage.Id, capturedPayment!.GarageId);

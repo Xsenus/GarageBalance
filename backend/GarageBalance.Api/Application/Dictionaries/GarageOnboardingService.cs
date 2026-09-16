@@ -86,7 +86,12 @@ public sealed class GarageOnboardingService(
                 }
             }
 
-            return DictionaryResult<GarageDto>.Success(garageResult.Value);
+            var refreshedGarage = (await dictionaryService.GetGaragesAsync(
+                    garageResult.Value.Number,
+                    transactionCancellationToken,
+                    limit: 10))
+                .SingleOrDefault(item => item.Id == garageResult.Value.Id) ?? garageResult.Value;
+            return DictionaryResult<GarageDto>.Success(refreshedGarage);
         }, cancellationToken);
     }
 

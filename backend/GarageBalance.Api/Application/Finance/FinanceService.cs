@@ -611,9 +611,9 @@ public sealed class FinanceService(
                     null,
                     null,
                     null,
-                    annualAccrual.AccountingMonth == month ? MoneyMath.RoundMoney(annualAccrual.Amount) : 0m,
+                    MoneyMath.RoundMoney(annualAccrual.Amount),
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
-                    allocatedInMonth,
+                    allocatedThroughMonth,
                     advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m)),
                     Reason: BuildAnnualAccrualWorksheetReason(
