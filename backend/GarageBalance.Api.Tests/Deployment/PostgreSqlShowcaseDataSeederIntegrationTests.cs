@@ -248,12 +248,19 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         Assert.True(audit.NewGarageHasNoCalculatedHistory);
         Assert.True(audit.BusinessDateIsPinned);
         Assert.Equal(67, await context.Accruals.CountAsync(item => item.Comment == ShowcaseDataSeeder.Marker));
-        Assert.Equal(3, await context.Accruals.CountAsync(item =>
-            item.Garage.Number == "110-НОВЫЙ" &&
-            item.AccountingYear == ShowcaseDataSeeder.BusinessDate.Year));
+        var newGarageAnnualAccruals = await context.Accruals
+            .Where(item =>
+                item.Garage.Number == "110-НОВЫЙ" &&
+                item.AccountingYear == ShowcaseDataSeeder.BusinessDate.Year)
+            .ToListAsync();
+        Assert.Equal(3, newGarageAnnualAccruals.Count);
+        Assert.All(newGarageAnnualAccruals, item =>
+            Assert.Equal(new DateOnly(2026, 9, 1), item.AccountingMonth));
+        var newGarageId = newGarageAnnualAccruals[0].GarageId;
         Assert.DoesNotContain(
             await context.Accruals.AsNoTracking().ToListAsync(),
-            item => item.AccountingMonth > ShowcaseDataSeeder.AccountingMonth);
+            item => item.AccountingMonth > ShowcaseDataSeeder.AccountingMonth &&
+                item.GarageId != newGarageId);
     }
 
     private static void AssertTier(ShowcaseElectricityTier tier, decimal? upperBound, decimal rate)

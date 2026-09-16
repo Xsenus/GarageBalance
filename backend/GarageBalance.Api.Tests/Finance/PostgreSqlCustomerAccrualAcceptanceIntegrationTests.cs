@@ -87,6 +87,106 @@ public sealed class PostgreSqlCustomerAccrualAcceptanceIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task NewGarageWorksheet_MovesPaidAnnualAccrualFromJanuaryToRegistrationMonth()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var garage = new Garage
+        {
+            Number = "PG-NEW-SEPTEMBER-ANNUAL",
+            PeopleCount = 1,
+            FloorCount = 1,
+            RegisteredOn = new DateOnly(2026, 9, 16)
+        };
+        var incomeType = new IncomeType
+        {
+            Name = "Годовой взнос нового гаража PostgreSQL",
+            Code = "pg_new_garage_annual"
+        };
+        var tariff = new Tariff
+        {
+            Name = "Членский взнос 2026",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 500m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Годовой взнос нового гаража PostgreSQL",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            PaymentDueMonth = 6,
+            OverdueGraceDays = 30,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        };
+        var januaryAccrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            AccountingYear = 2026,
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 500m,
+            Source = AccrualSources.Regular
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            Garage = garage,
+            IncomeType = incomeType,
+            OperationDate = new DateOnly(2026, 9, 16),
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            Amount = 200m
+        };
+        context.AddRange(
+            garage,
+            incomeType,
+            tariff,
+            setting,
+            januaryAccrual,
+            payment,
+            new AccrualPaymentAllocation
+            {
+                Accrual = januaryAccrual,
+                FinancialOperation = payment,
+                Amount = 200m
+            });
+        await context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(
+                context,
+                new FixedTimeProvider(new DateTimeOffset(2026, 9, 16, 12, 0, 0, TimeSpan.Zero)))
+            .CalculateGarageIncomeWorksheetAsync(
+                garage.Id,
+                new GarageIncomeWorksheetRequest(
+                    new DateOnly(2026, 1, 1),
+                    new DateOnly(2026, 9, 1)),
+                Guid.NewGuid(),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var row = Assert.Single(result.Value!.Rows, item => item.AnnualAccrualId == januaryAccrual.Id);
+        Assert.Equal(new DateOnly(2026, 9, 1), row.AccountingMonth);
+        Assert.Equal(200m, row.IncomeAmount);
+        Assert.Equal(300m, row.Debt);
+        Assert.Equal(
+            new DateOnly(2026, 9, 1),
+            await context.Accruals
+                .Where(accrual => accrual.Id == januaryAccrual.Id)
+                .Select(accrual => accrual.AccountingMonth)
+                .SingleAsync());
+        Assert.Contains(await context.AuditEvents.ToListAsync(), audit =>
+            audit.Action == "finance.annual_accrual_moved_to_garage_registration_month" &&
+            audit.EntityId == januaryAccrual.Id.ToString());
+    }
+
+    [PostgreSqlFact]
     public async Task MidMonthTariffChange_PersistsDayWeightedRateAndTwoCalculationSegments()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

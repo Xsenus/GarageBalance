@@ -579,6 +579,10 @@ public sealed class FinanceService(
             var yearStart = new DateOnly(annualAccrual.AccountingYear, 1, 1);
             var yearEnd = new DateOnly(annualAccrual.AccountingYear, 12, 1);
             var displayFrom = monthFrom > yearStart ? monthFrom : yearStart;
+            if (annualAccrual.AccountingMonth > displayFrom)
+            {
+                displayFrom = annualAccrual.AccountingMonth;
+            }
             var displayTo = monthTo < yearEnd ? monthTo : yearEnd;
             if (displayFrom > displayTo)
             {
@@ -1195,6 +1199,34 @@ public sealed class FinanceService(
             cancellationToken);
         IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null;
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
+        foreach (var historicalAnnualAccrual in existingAccruals.Where(accrual =>
+                     accrual.AccountingMonth < garageAccrualStartMonth &&
+                     accrual.AccountingYear == garageAccrualStartMonth.Year &&
+                     accrual.Basis is null &&
+                     !accrual.FeeCampaignId.HasValue &&
+                     !accrual.IrregularPaymentId.HasValue))
+        {
+            var previousAccountingMonth = historicalAnnualAccrual.AccountingMonth;
+            var setting = settings.FirstOrDefault(item => item.IncomeTypeId == historicalAnnualAccrual.IncomeTypeId);
+            var dueDates = AccrualDueDates.ForGarage(
+                garageAccrualStartMonth,
+                historicalAnnualAccrual.IncomeType.Code,
+                setting,
+                GetGarageRegistrationDate(garage));
+            historicalAnnualAccrual.AccountingMonth = garageAccrualStartMonth;
+            historicalAnnualAccrual.DueDate = dueDates.DueDate;
+            historicalAnnualAccrual.OverdueFromDate = dueDates.OverdueFromDate;
+            historicalAnnualAccrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+            AddAudit(
+                actorUserId,
+                "finance.annual_accrual_moved_to_garage_registration_month",
+                historicalAnnualAccrual,
+                $"Годовое начисление «{historicalAnnualAccrual.IncomeType.Name}» перенесено с {previousAccountingMonth:MM.yyyy} на {garageAccrualStartMonth:MM.yyyy}: гараж {garage.Number} зарегистрирован {GetGarageRegistrationDate(garage):dd.MM.yyyy}.",
+                new Dictionary<string, object?> { ["accountingMonth"] = previousAccountingMonth },
+                new Dictionary<string, object?> { ["accountingMonth"] = garageAccrualStartMonth });
+            changedKeys.Add(new AccrualPaymentAllocationKey(garage.Id, historicalAnnualAccrual.IncomeTypeId));
+        }
+
         foreach (var historicalAccrual in existingAccruals.Where(accrual =>
                      accrual.AccountingMonth < garageAccrualStartMonth &&
                      !accrual.AccountingYear.HasValue &&
@@ -1239,13 +1271,11 @@ public sealed class FinanceService(
             {
                 if (!setting.IncomeTypeId.HasValue ||
                     !incomeTypes.TryGetValue(setting.IncomeTypeId.Value, out var incomeType) ||
-                    !IsChargeServiceDueForMonth(setting, month))
-                {
-                    continue;
-                }
-
-                if (month < garageAccrualStartMonth &&
-                    !AnnualAccrualPolicy.IsAnnual(setting.PeriodicityMonths, incomeType.Code))
+                    !IsChargeServiceDueForGarageMonth(
+                        setting,
+                        incomeType.Code,
+                        month,
+                        garageAccrualStartMonth))
                 {
                     continue;
                 }
@@ -1427,13 +1457,11 @@ public sealed class FinanceService(
             {
                 if (!setting.IncomeTypeId.HasValue ||
                     !incomeTypes.TryGetValue(setting.IncomeTypeId.Value, out var incomeType) ||
-                    !IsChargeServiceDueForMonth(setting, month))
-                {
-                    continue;
-                }
-
-                if (month < garageAccrualStartMonth &&
-                    !AnnualAccrualPolicy.IsAnnual(setting.PeriodicityMonths, incomeType.Code))
+                    !IsChargeServiceDueForGarageMonth(
+                        setting,
+                        incomeType.Code,
+                        month,
+                        garageAccrualStartMonth))
                 {
                     continue;
                 }
@@ -5405,7 +5433,9 @@ public sealed class FinanceService(
         }
         var pendingGarageIds = garages
             .Where(garage =>
-                (accountingYear.HasValue || GetGarageAccrualStartMonth(garage) <= month) &&
+                (accountingYear.HasValue
+                    ? GetGarageAccrualStartMonth(garage).Year <= accountingYear.Value
+                    : GetGarageAccrualStartMonth(garage) <= month) &&
                 !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
             .ToArray();
@@ -5431,7 +5461,9 @@ public sealed class FinanceService(
 
         foreach (var garage in garages)
         {
-            if (!accountingYear.HasValue && GetGarageAccrualStartMonth(garage) > month)
+            var garageAccrualStartMonth = GetGarageAccrualStartMonth(garage);
+            if ((!accountingYear.HasValue && garageAccrualStartMonth > month) ||
+                (accountingYear.HasValue && garageAccrualStartMonth.Year > accountingYear.Value))
             {
                 skipped.Add($"Гараж {garage.Number}: месяц начисления раньше месяца регистрации гаража.");
                 continue;
@@ -5460,7 +5492,10 @@ public sealed class FinanceService(
                 continue;
             }
 
-            var dueDates = AccrualDueDates.ForGarage(month, incomeType.Code, matchingSetting, GetGarageRegistrationDate(garage));
+            var accrualMonth = accountingYear.HasValue && garageAccrualStartMonth > month
+                ? garageAccrualStartMonth
+                : month;
+            var dueDates = AccrualDueDates.ForGarage(accrualMonth, incomeType.Code, matchingSetting, GetGarageRegistrationDate(garage));
 
             var accrual = new Accrual
             {
@@ -5470,7 +5505,7 @@ public sealed class FinanceService(
                 IncomeType = incomeType,
                 TariffId = tariff.Id,
                 Tariff = tariff,
-                AccountingMonth = month,
+                AccountingMonth = accrualMonth,
                 AccountingYear = accountingYear,
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
@@ -6377,6 +6412,28 @@ public sealed class FinanceService(
 
         var monthsAfterStart = (month.Month - setting.AccrualStartMonth.Value + 12) % 12;
         return monthsAfterStart % periodicity == 0;
+    }
+
+    private static bool IsChargeServiceDueForGarageMonth(
+        ChargeServiceSetting setting,
+        string? incomeTypeCode,
+        DateOnly month,
+        DateOnly garageAccrualStartMonth)
+    {
+        if (month < garageAccrualStartMonth)
+        {
+            return false;
+        }
+
+        if (IsChargeServiceDueForMonth(setting, month))
+        {
+            return true;
+        }
+
+        return month == garageAccrualStartMonth &&
+            AnnualAccrualPolicy.IsAnnual(setting.PeriodicityMonths, incomeTypeCode) &&
+            setting.AccrualStartMonth.HasValue &&
+            setting.AccrualStartMonth.Value < garageAccrualStartMonth.Month;
     }
 
     private static string BuildRegularCatalogAccrualComment(string serviceName, string? comment)

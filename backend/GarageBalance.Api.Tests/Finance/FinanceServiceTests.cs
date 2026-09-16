@@ -7309,6 +7309,94 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CalculateGarageIncomeWorksheetAsync_MovesAnnualAccrualToRegistrationMonthAndPreservesPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.RegisteredOn = new DateOnly(2026, 9, 16);
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Членский взнос нового гаража",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 500m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Членский взнос",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            PaymentDueMonth = 6,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        };
+        var annualAccrual = new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            AccountingYear = 2026,
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 500m,
+            Source = AccrualSources.Regular
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            OperationDate = new DateOnly(2026, 9, 16),
+            AccountingMonth = new DateOnly(2026, 9, 1),
+            Amount = 200m
+        };
+        database.Context.AddRange(
+            tariff,
+            setting,
+            annualAccrual,
+            payment,
+            new AccrualPaymentAllocation
+            {
+                Accrual = annualAccrual,
+                FinancialOperation = payment,
+                Amount = 200m
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 16, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CalculateGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 9, 1)),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 9, 1), annualAccrual.AccountingMonth);
+        Assert.False(annualAccrual.IsCanceled);
+        var row = Assert.Single(result.Value!.Rows, item => item.AnnualAccrualId == annualAccrual.Id);
+        Assert.Equal(new DateOnly(2026, 9, 1), row.AccountingMonth);
+        Assert.Equal(500m, row.AccrualAmount);
+        Assert.Equal(200m, row.IncomeAmount);
+        Assert.Equal(300m, row.Debt);
+        Assert.DoesNotContain(result.Value.Rows, item =>
+            item.AnnualAccrualId == annualAccrual.Id &&
+            item.AccountingMonth < new DateOnly(2026, 9, 1));
+        Assert.Contains(database.Context.AuditEvents, audit =>
+            audit.Action == "finance.annual_accrual_moved_to_garage_registration_month" &&
+            audit.EntityId == annualAccrual.Id.ToString());
+    }
+
+    [Fact]
     public async Task Garage103_AugustAnnualAccrualIsNotOverdueFromJulyAndUnpaidLegacyDatesAreRepaired()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -8162,7 +8250,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GenerateRegularAccrualsAsync_CreatesAnnualObligationWhenGarageWasRegisteredAfterAccrualMonth()
+    public async Task GenerateRegularAccrualsAsync_CreatesAnnualObligationInGarageRegistrationMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -8190,7 +8278,7 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded, result.ErrorMessage);
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(2026, accrual.AccountingYear);
-        Assert.Equal(new DateOnly(2026, 1, 1), accrual.AccountingMonth);
+        Assert.Equal(new DateOnly(2026, 9, 1), accrual.AccountingMonth);
     }
 
     [Fact]
