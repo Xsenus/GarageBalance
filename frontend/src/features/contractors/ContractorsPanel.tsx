@@ -3995,7 +3995,6 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
                   <span className="form-field-label">Номер</span>
                   <input aria-label="Номер гаража" aria-invalid={Boolean(validationErrors.number)} data-garage-field="number" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => { clearValidationError('number'); setForm({ ...form, number: event.target.value }) }} />
                 </label>
-                <GarageAnnualPaymentFieldsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} data={annualPaymentData} drafts={annualPaymentDrafts} financeClient={financeClient} form={form} garage={item} onDataChange={setAnnualPaymentData} onDraftsChange={setAnnualPaymentDrafts} />
                 <div className="contractors-garage-form-occupancy">
                   <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
                   <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
@@ -4042,6 +4041,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
+            <GarageAnnualPaymentFieldsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} data={annualPaymentData} drafts={annualPaymentDrafts} financeClient={financeClient} form={form} garage={item} onDataChange={setAnnualPaymentData} onDraftsChange={setAnnualPaymentDrafts} />
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
                 <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>
