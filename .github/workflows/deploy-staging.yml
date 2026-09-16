@@ -261,7 +261,9 @@ jobs:
             artifacts/frontend.tar.gz
             artifacts/deploy-migrations.sql
             artifacts/operations.tar.gz
-          retention-days: 30
+          # Seven days keeps a rollback/diagnostic window without accumulating
+          # a month of large, uncompressed staging bundles in Actions storage.
+          retention-days: 7
           compression-level: 0
 
       - name: Prepare SSH

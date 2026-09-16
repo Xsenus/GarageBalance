@@ -45,6 +45,10 @@ describe('frontend test acceleration', () => {
     expect(workflow).toContain('run: npm run test:coverage')
   })
 
+  it('keeps the combined staging artifact for a bounded rollback window', () => {
+    expect(workflow).toMatch(/name: garagebalance-staging-\$\{\{ github\.sha \}\}[\s\S]*?retention-days: 7/)
+  })
+
   it('keeps serial diagnostics and related-test development commands available', () => {
     expect(packageJson.scripts['test:dev']).toBe('node scripts/run-vitest.mjs --quick')
     expect(packageJson.scripts['test:dev:related']).toBe('node scripts/run-vitest.mjs --quick --related')
