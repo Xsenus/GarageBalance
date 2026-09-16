@@ -230,6 +230,12 @@ describe('responsive layout styles', () => {
     expect(compactDesktopCss).toContain('.tariffs-row-action-button.icon-button {\n    width: 30px;\n    min-width: 30px;\n    height: 30px;')
   })
 
+  it('keeps the tariff navigation row together while the page content scrolls', () => {
+    const compactDesktopCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1499px), (max-height: 849px) {'))
+    expect(compactDesktopCss).toContain('.tariffs-page .contractors-heading {\n    position: sticky;\n    z-index: 2;\n    top: 0;\n    padding-left: 50px;\n    background: #ffffff;')
+    expect(compactDesktopCss).toContain('.workspace--tariffs > .topbar {\n    z-index: 3;')
+  })
+
   it('anchors report filters to their disclosure instead of inheriting the fixed calendar position', () => {
     expect(normalizedAppCss).toContain('.report-garage-filter-disclosure {\n  position: relative;\n  z-index: 2;')
     expect(normalizedAppCss).toContain('.report-garage-filter-panel {\n  position: absolute;\n  top: calc(100% + 8px);\n  left: 0;')
@@ -414,7 +420,9 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.meter-readings-table {\n  min-width: 1344px;')
     expect(normalizedAppCss).toContain('.meter-readings-title-row,\n.meter-readings-month-row,\n.meter-readings-data-row {\n  display: grid;\n  grid-template-columns: minmax(168px, 2.5fr) repeat(12, minmax(92px, 1fr));')
     expect(normalizedAppCss).toContain('.meter-readings-title-row span {\n  display: flex;\n  min-height: 32px;\n  align-items: center;\n  justify-content: center;\n  border-bottom: 1px solid #d0d5dd;\n  padding: 6px 10px;\n  color: #344054;\n  font-size: 13px;')
+    expect(normalizedAppCss).toContain('.meter-readings-title-row span:first-child {\n  position: sticky;\n  left: 0;\n  z-index: 4;\n  background: #f8fafc;\n  justify-content: center;\n  text-align: center;')
     expect(normalizedAppCss).toContain('.meter-readings-month-row span {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;')
+    expect(normalizedAppCss).toContain('.meter-readings-month-row span:first-child {\n  position: sticky;\n  left: 0;\n  z-index: 4;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: #ffffff;\n  text-align: center;')
     expect(normalizedAppCss).toContain('font-size: 12px;\n  font-weight: 700;\n  white-space: nowrap;')
     expect(normalizedAppCss).toContain('input.meter-readings-control {\n  box-sizing: border-box;\n  height: 40px;')
     expect(normalizedAppCss).toContain('.meter-readings-month-row small {\n  color: #667085;\n  font-size: 10px;')
@@ -443,6 +451,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  flex: 0 0 auto;\n  flex-direction: column;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: grid;\n  grid-template-columns: 1.18fr 1fr 1fr 1fr 0.94fr 1.06fr 0.8fr 1.08fr;\n  overflow: visible;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 0;\n  min-height: 48px;')
+    expect(normalizedAppCss).toContain(".report-tabs--workbook button[data-report-tab='consolidated'] span {\n  display: block;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;")
     expect(normalizedAppCss).toContain('.report-workbook-sheet > .report-workbook-table {\n  flex: 0 0 auto;\n  overflow-x: auto;\n  overflow-y: visible;')
     expect(normalizedAppCss).not.toContain('.report-workbook-sheet > .dictionary-pagination {')
   })
@@ -450,6 +459,16 @@ describe('responsive layout styles', () => {
   it('contains wide report tables without stretching their filters beyond the viewport', () => {
     expect(normalizedAppCss).toContain('.report-tab-panel {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr);\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.report-workbook-sheet {\n  display: flex;\n  min-width: 0;')
+  })
+
+  it('keeps desktop report periods and exports in one compact row', () => {
+    expect(normalizedAppCss).toContain('.report-workbook-filter .localized-date-picker input {\n  padding-inline: 6px 36px;\n  font-weight: 500;\n  text-align: center;')
+    expect(normalizedAppCss).toContain('@media (min-width: 1280px) {\n  .report-workbook-filter {\n    grid-template-columns: minmax(0, 1fr) auto;\n    column-gap: 8px;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter__fields,\n  .report-quick-periods,\n  .report-workbook-filter__actions {\n    flex-wrap: nowrap;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > .report-period-field--month,\n  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--month {\n    flex-basis: 100px;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > .report-period-field--date,\n  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--date {\n    flex-basis: 118px;')
+    expect(normalizedAppCss).toContain('.report-quick-periods__button {\n    padding-inline: 6px;\n    font-size: 12px;')
+    expect(normalizedAppCss).toContain('.report-group-button {\n    padding-inline: 8px;\n    font-size: 12px;')
   })
 
   it('keeps history details reachable through horizontal scrolling on mobile', () => {
@@ -467,6 +486,10 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.funds-operations-sheet {\n  display: flex;\n  width: 100%;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;')
     expect(normalizedAppCss).toContain('.funds-operations-table-scroll {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow: auto;')
     expect(normalizedAppCss).toContain('.funds-operations-sheet > .dictionary-pagination {\n  flex: 0 0 auto;')
+    expect(normalizedAppCss).toContain('.funds-table.funds-operations-table th {\n  text-align: center;')
+    expect(normalizedAppCss).toContain('.funds-operations-table .funds-operation-date-cell,\n.funds-operations-table .funds-operation-status-cell {\n  text-align: center;')
+    expect(normalizedAppCss).toContain('.funds-operation-date-time {\n  display: inline-grid;\n  justify-items: center;\n  line-height: 1.25;\n  white-space: nowrap;')
+    expect(normalizedAppCss).toContain('.funds-operations-table .funds-operation-money-cell {\n  font-variant-numeric: tabular-nums;\n  text-align: right;\n  white-space: nowrap;')
     expect(normalizedAppCss).toContain('@media (max-width: 1180px) {\n  .workspace--funds {\n    height: auto;\n    min-height: 100dvh;\n    overflow: visible;')
   })
 

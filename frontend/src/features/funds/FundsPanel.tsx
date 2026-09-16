@@ -9,7 +9,7 @@ import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { AsyncErrorState, BackgroundRefreshStatus, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { FormError } from '../../shared/formFeedback'
-import { formatDateTime, formatMoney } from '../../shared/formatters'
+import { formatAuditDateTime, formatMoney } from '../../shared/formatters'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { formatMoneyTextInput, parseMoneyInput } from '../../shared/moneyInputFormatting'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -802,47 +802,56 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             </tr>
           </thead>
           <tbody>
-            {operationPage.items.length > 0 ? operationPage.items.map((fundOperation) => (
-              <tr key={fundOperation.id} onDoubleClick={(event) => {
-                if (!fundOperation.isFundArchived && !fundOperation.isAutomaticIncomeAssignment && !fundOperation.isCanceled && canWriteFunds && !operationsLoading && !isInteractiveTableRowTarget(event.target)) openFundOperationEdit(fundOperation)
-              }}>
-                <td>{formatDateTime(fundOperation.createdAtUtc)}</td>
-                <td>{fundOperation.fundName}</td>
-                <td>{fundOperation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'}</td>
-                <td>{formatMoney(fundOperation.amount)} руб.</td>
-                <td>{formatMoney(fundOperation.balanceAfter)} руб.</td>
-                <td>
-                  <span className={fundOperation.isCanceled ? 'dictionary-status-pill dictionary-status-pill-archived' : 'dictionary-status-pill dictionary-status-pill-active'}>
-                    {fundOperation.isCanceled ? 'Отменена' : 'Активна'}
-                  </span>
-                </td>
-                <td>
-                  <div className="funds-operation-actions">
-                    {fundOperation.isFundArchived ? (
-                      <span className="funds-operation-managed-label">Архивный фонд: только просмотр</span>
-                    ) : fundOperation.isAutomaticIncomeAssignment ? (
-                      <span className="funds-operation-managed-label">Управляется поступлением</span>
-                    ) : fundOperation.isCanceled ? (
-                      <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Вернуть операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundStatusAction('restore', fundOperation)}>
-                        <RotateCcw size={16} aria-hidden="true" />
-                      </button>
-                    ) : (
-                      <>
-                        <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Изменить операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundOperationEdit(fundOperation)}>
-                          <Pencil size={16} aria-hidden="true" />
+            {operationPage.items.length > 0 ? operationPage.items.map((fundOperation) => {
+              const [operationDate, operationTimeWithSuffix = ''] = formatAuditDateTime(fundOperation.createdAtUtc).split(' (')
+              const operationTime = operationTimeWithSuffix.replace(/\)$/, '')
+              return (
+                <tr key={fundOperation.id} onDoubleClick={(event) => {
+                  if (!fundOperation.isFundArchived && !fundOperation.isAutomaticIncomeAssignment && !fundOperation.isCanceled && canWriteFunds && !operationsLoading && !isInteractiveTableRowTarget(event.target)) openFundOperationEdit(fundOperation)
+                }}>
+                  <td className="funds-operation-date-cell">
+                    <time className="funds-operation-date-time" dateTime={fundOperation.createdAtUtc}>
+                      <span>{operationDate}</span>
+                      <span>{operationTime}</span>
+                    </time>
+                  </td>
+                  <td>{fundOperation.fundName}</td>
+                  <td>{fundOperation.operationKind === 'deposit' ? 'Пополнение' : 'Изъятие'}</td>
+                  <td className="funds-operation-money-cell">{formatMoney(fundOperation.amount)}</td>
+                  <td className="funds-operation-money-cell">{formatMoney(fundOperation.balanceAfter)}</td>
+                  <td className="funds-operation-status-cell">
+                    <span className={fundOperation.isCanceled ? 'dictionary-status-pill dictionary-status-pill-archived' : 'dictionary-status-pill dictionary-status-pill-active'}>
+                      {fundOperation.isCanceled ? 'Отменена' : 'Активна'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="funds-operation-actions">
+                      {fundOperation.isFundArchived ? (
+                        <span className="funds-operation-managed-label">Архивный фонд: только просмотр</span>
+                      ) : fundOperation.isAutomaticIncomeAssignment ? (
+                        <span className="funds-operation-managed-label">Управляется поступлением</span>
+                      ) : fundOperation.isCanceled ? (
+                        <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Вернуть операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundStatusAction('restore', fundOperation)}>
+                          <RotateCcw size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Создать обратную операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundOperationReverse(fundOperation)}>
-                          <RefreshCw size={16} aria-hidden="true" />
-                        </button>
-                        <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Отменить операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundStatusAction('cancel', fundOperation)}>
-                          <Trash2 size={16} aria-hidden="true" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )) : (
+                      ) : (
+                        <>
+                          <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Изменить операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundOperationEdit(fundOperation)}>
+                            <Pencil size={16} aria-hidden="true" />
+                          </button>
+                          <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Создать обратную операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundOperationReverse(fundOperation)}>
+                            <RefreshCw size={16} aria-hidden="true" />
+                          </button>
+                          <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={canWriteFunds ? `Отменить операцию фонда ${fundOperation.fundName}` : 'Нужно право payments.write'} disabled={operationsLoading || !canWriteFunds} onClick={() => openFundStatusAction('cancel', fundOperation)}>
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            }) : (
               <tr>
                 <td colSpan={7}>Ручных перераспределений пока нет.</td>
               </tr>

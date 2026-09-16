@@ -3250,10 +3250,10 @@ describe('App', () => {
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить отдел' }))
     dialog = await screen.findByRole('dialog', { name: 'Новый отдел' })
     await user.type(within(dialog).getByLabelText('Наименование отдела'), 'Отдел с ошибкой')
-    await user.click(within(dialog).getByRole('button', { name: 'Ок' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Отдел не сохранен.')
     expect(within(dialog).getByLabelText('Наименование отдела')).toHaveValue('Отдел с ошибкой')
-    expect(within(dialog).getByRole('button', { name: 'Ок' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
   }, 30000)
 
   it('keeps contractor archive and restore confirmations open when the server rejects the operation', async () => {
@@ -4286,7 +4286,7 @@ describe('App', () => {
     await user.click(addDepartmentButton)
     departmentDialog = await screen.findByRole('dialog', { name: 'Новый отдел' })
     await user.type(within(departmentDialog).getByLabelText('Наименование отдела'), 'Охрана')
-    await user.click(within(departmentDialog).getByRole('button', { name: 'Ок' }))
+    await user.click(within(departmentDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(addDepartmentButton).toHaveFocus())
 
     const addEmployeeButton = within(contractorsPanel).getByRole('button', { name: 'Добавить сотрудника' })
@@ -15620,6 +15620,16 @@ describe('App', () => {
     expect(fundOperationsTable).toHaveTextContent('Целевые взносы')
     expect(fundOperationsTable).toHaveTextContent('Пополнение')
     expect(fundOperationsTable).toHaveTextContent('Активна')
+    const operationDateTime = fundOperationsTable.querySelector('.funds-operation-date-time')
+    expect(operationDateTime).not.toBeNull()
+    expect(operationDateTime?.querySelectorAll('span')).toHaveLength(2)
+    expect(operationDateTime?.querySelector('span:first-child')).toHaveTextContent(/^\d{2}\.\d{2}\.\d{4}$/)
+    expect(operationDateTime?.querySelector('span:last-child')).toHaveTextContent(/^\d{2}:\d{2}:\d{2}$/)
+    expect(fundOperationsTable.querySelector('.funds-operation-date-cell')).toContainElement(operationDateTime)
+    expect(within(fundOperationsTable).getByText('Активна').closest('td')).toHaveClass('funds-operation-status-cell')
+    const operationMoneyCells = fundOperationsTable.querySelectorAll('.funds-operation-money-cell')
+    expect(operationMoneyCells).toHaveLength(2)
+    expect(Array.from(operationMoneyCells).every((cell) => !cell.textContent?.includes('руб.'))).toBe(true)
 
   })
 
@@ -15725,7 +15735,7 @@ describe('App', () => {
     expect(within(fundsPanel).getByText(/Операция фонда "Целевые взносы" изменена и записана в историю изменений\./)).toHaveAttribute('role', 'status')
     editRefresh.release()
     expect(await within(fundsPanel).findByText(/Операция фонда "Целевые взносы" изменена и записана в историю изменений\./)).toHaveAttribute('role', 'status')
-    expect(within(fundOperationsTable).getAllByText(/1 750\.00 руб\./).length).toBeGreaterThanOrEqual(1)
+    expect(within(fundOperationsTable).getAllByText('1 750.00').length).toBeGreaterThanOrEqual(1)
 
     const cancelFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Отменить операцию фонда Целевые взносы' })
     expect(cancelFundOperationButton).toHaveAttribute('title', 'Отменить операцию фонда Целевые взносы')
@@ -20920,7 +20930,7 @@ describe('App', () => {
     expect(within(targetFundRow as HTMLTableRowElement).getByText('1 500.00 руб.')).toBeInTheDocument()
     const fundOperationsTable = await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })
     expect(within(fundOperationsTable).getByText('Целевые взносы')).toBeInTheDocument()
-    expect(within(fundOperationsTable).getAllByText('1 500.00 руб.')).toHaveLength(2)
+    expect(within(fundOperationsTable).getAllByText('1 500.00')).toHaveLength(2)
     expect(within(fundOperationsTable).getByText('Активна')).toBeInTheDocument()
   })
 
@@ -25722,6 +25732,8 @@ describe('App', () => {
 
     const consolidatedMonthFrom = within(reportsPanel).getByLabelText('Месяц с') as HTMLInputElement
     const consolidatedMonthTo = within(reportsPanel).getByLabelText('Месяц по') as HTMLInputElement
+    expect(consolidatedMonthFrom.closest('label')).toHaveClass('report-period-field', 'report-period-field--month')
+    expect(consolidatedMonthTo.closest('label')).toHaveClass('report-period-field', 'report-period-field--month')
     const reportYear = new Date().getFullYear()
     await user.click(within(reportsPanel).getByRole('button', { name: 'Открыть календарь: Месяц с' }))
     expect(within(reportsPanel).getByRole('dialog', { name: 'Месяц с: календарь' })).toBeInTheDocument()
@@ -25730,6 +25742,9 @@ describe('App', () => {
     expect(consolidatedExportButton).toHaveClass('secondary-button', 'report-export-button', 'report-export-button--xlsx')
     expect(consolidatedExportButton).toHaveTextContent('')
     expect(consolidatedExportButton.closest('.report-workbook-filter')).toContainElement(consolidatedMonthFrom)
+    const consolidatedTab = within(reportsPanel).getByRole('tab', { name: 'Консолидированный' })
+    expect(consolidatedTab).toHaveAttribute('data-report-tab', 'consolidated')
+    expect(consolidatedTab).toHaveAttribute('title', 'Консолидированный')
     const consolidatedQuickPeriods = within(reportsPanel).getByRole('group', { name: 'Быстрый выбор периода' })
     const previousMonthEnd = new Date(reportYear, new Date().getMonth(), 0)
     const previousMonthText = `${String(previousMonthEnd.getMonth() + 1).padStart(2, '0')}.${previousMonthEnd.getFullYear()}`

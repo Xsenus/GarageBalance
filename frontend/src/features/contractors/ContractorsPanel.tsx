@@ -4610,7 +4610,7 @@ function DepartmentPrototypeDialog({ item, onClose, onSave }: { item?: Contracto
             {saveError ? <FormError>{saveError}</FormError> : null}
             <FormField label="Наименование"><input aria-label="Наименование отдела" maxLength={200} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
             <div className="detail-dialog-actions">
-              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : item ? 'Сохранить' : 'Ок'}</span></button>
+              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>
               <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
             </div>
           </form>

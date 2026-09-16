@@ -997,7 +997,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
         <div className="report-workbook-filter__fields">
           {(['from', 'to'] as const).map((bound) => (
-            <label key={bound}>
+            <label className={`report-period-field report-period-field--${mode}`} key={bound}>
               <span>{labels[bound]}</span>
               <LocalizedDatePicker ariaLabel={labels[bound]} mode={mode} value={bound === 'from' ? from : to} aria-invalid={!(bound === 'from' ? from : to) || Boolean(to && from > to)} onChange={(value) => updateRange(bound === 'from' ? value : from, bound === 'to' ? value : to)} required />
             </label>
@@ -1674,6 +1674,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             aria-label={tab.label}
             aria-selected={activeReportTab === tab.key}
             aria-controls={`report-panel-${tab.key}`}
+            data-report-tab={tab.key}
+            title={tab.label}
             tabIndex={activeReportTab === tab.key ? 0 : -1}
             className={activeReportTab === tab.key ? 'is-active' : undefined}
             onKeyDown={(event) => {

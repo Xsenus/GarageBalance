@@ -3392,8 +3392,8 @@ input.meter-readings-control {
   left: 0;
   z-index: 4;
   background: #f8fafc;
-  justify-content: flex-start;
-  text-align: left;
+  justify-content: center;
+  text-align: center;
 }
 
 .meter-readings-title-row span:last-child {
@@ -3429,8 +3429,11 @@ input.meter-readings-control {
   position: sticky;
   left: 0;
   z-index: 4;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #ffffff;
+  text-align: center;
 }
 
 .meter-readings-month-row small {
@@ -5750,6 +5753,28 @@ input.meter-readings-control {
   min-width: 980px;
 }
 
+.funds-table.funds-operations-table th {
+  text-align: center;
+}
+
+.funds-operations-table .funds-operation-date-cell,
+.funds-operations-table .funds-operation-status-cell {
+  text-align: center;
+}
+
+.funds-operation-date-time {
+  display: inline-grid;
+  justify-items: center;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.funds-operations-table .funds-operation-money-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
 @media (max-width: 1180px) {
   .workspace--funds {
     height: auto;
@@ -8052,6 +8077,14 @@ button.operation-row:focus-visible {
   white-space: normal;
 }
 
+.report-tabs--workbook button[data-report-tab='consolidated'] span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .report-tab-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -8308,6 +8341,14 @@ button.operation-row:focus-visible {
   flex: 0 0 150px;
 }
 
+.report-workbook-filter__fields > .report-period-field--month {
+  flex-basis: 100px;
+}
+
+.report-workbook-filter__fields > .report-period-field--date {
+  flex-basis: 118px;
+}
+
 .report-quick-periods {
   display: flex;
   flex-wrap: wrap;
@@ -8475,6 +8516,12 @@ button.operation-row:focus-visible {
   color: #101828;
   font: inherit;
   padding: 7px 9px;
+}
+
+.report-workbook-filter .localized-date-picker input {
+  padding-inline: 6px 36px;
+  font-weight: 500;
+  text-align: center;
 }
 
 .report-workbook-filter input:focus {
@@ -8716,6 +8763,56 @@ button.operation-row:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
+}
+
+@media (min-width: 1280px) {
+  .report-workbook-filter {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+  }
+
+  .report-workbook-filter__fields,
+  .report-quick-periods,
+  .report-workbook-filter__actions {
+    flex-wrap: nowrap;
+  }
+
+  .report-workbook-filter__fields {
+    gap: 6px;
+  }
+
+  .report-workbook-filter__fields > label,
+  .report-workbook-filter--single .report-workbook-filter__fields > label {
+    flex: 0 0 auto;
+  }
+
+  .report-workbook-filter__fields > .report-period-field--month,
+  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--month {
+    flex-basis: 100px;
+  }
+
+  .report-workbook-filter__fields > .report-period-field--date,
+  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--date {
+    flex-basis: 118px;
+  }
+
+  .report-quick-periods {
+    gap: 4px;
+  }
+
+  .report-quick-periods__button {
+    padding-inline: 6px;
+    font-size: 12px;
+  }
+
+  .report-workbook-filter__actions {
+    gap: 6px;
+  }
+
+  .report-group-button {
+    padding-inline: 8px;
+    font-size: 12px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -9714,7 +9811,15 @@ button.operation-row:focus-visible {
   }
 
   .tariffs-page .contractors-heading {
+    position: sticky;
+    z-index: 2;
+    top: 0;
     padding-left: 50px;
+    background: #ffffff;
+  }
+
+  .workspace--tariffs > .topbar {
+    z-index: 3;
   }
 
   .workspace--contractors .contractors-heading {
