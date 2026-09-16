@@ -14550,6 +14550,81 @@ describe('App', () => {
     }), expect.any(AbortSignal))
   })
 
+  it('shows the supplier payment action immediately when a manual accrual creates debt in a settled row', async () => {
+    const user = userEvent.setup()
+    const getExpenseWorksheet = vi.fn(async () => createExpenseWorksheet({
+      accountingMonth: '2026-09-01',
+      accrualTotal: 3000,
+      expenseTotal: 3000,
+      balanceTotal: 0,
+      closingDebtTotal: 0,
+      rows: [{
+        rowKind: 'supplier',
+        supplierId: 'supplier-1',
+        staffMemberId: null,
+        counterpartyName: 'Водоканал',
+        expenseTypeId: 'expense-type-1',
+        expenseTypeName: 'Электроэнергия',
+        expenseFundName: 'Водоснабжение',
+        openingBalance: 0,
+        openingDebt: 0,
+        openingAdvance: 0,
+        closingDebt: 0,
+        closingAdvance: 0,
+        accrualAmount: 3000,
+        expenseAmount: 3000,
+        balance: 0,
+        collectedAmount: 0,
+        difference: 0,
+      }],
+    }))
+    const createSupplierAccrualRequest = vi.fn(async (_token: string, request: CreateSupplierAccrualRequest) => createSupplierAccrual({
+      id: 'supplier-accrual-reopens-debt',
+      supplierId: request.supplierId,
+      supplierName: 'Водоканал',
+      expenseTypeId: request.expenseTypeId,
+      expenseTypeName: 'Электроэнергия',
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: request.source,
+      documentNumber: request.documentNumber ?? null,
+      comment: request.comment ?? null,
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient()}
+      financeClient={createFinanceClient({ getExpenseWorksheet, createSupplierAccrual: createSupplierAccrualRequest })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    const settledRow = (await within(prototype).findByText('Водоканал')).closest('tr')
+    expect(settledRow).not.toBeNull()
+    expect(within(settledRow!).queryByRole('button', { name: 'Оплатить Электроэнергия' })).not.toBeInTheDocument()
+    const worksheetRequestCountBeforeCreate = getExpenseWorksheet.mock.calls.length
+
+    await user.click(within(prototype).getByRole('button', { name: 'Добавить начисление' }))
+    const accrualDialog = await screen.findByRole('dialog', { name: 'Начисление поставщику' })
+    await user.type(within(accrualDialog).getByLabelText('Сумма начисления поставщику'), '123')
+    await user.click(within(accrualDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
+    const updatedRow = within(prototype).getByText('Водоканал').closest('tr')
+    expect(updatedRow).not.toBeNull()
+    expect(within(updatedRow!).getByText('3 123.00')).toBeInTheDocument()
+    expect(within(updatedRow!).getByText('-123.00')).toBeInTheDocument()
+    expect(within(updatedRow!).getByRole('button', { name: 'Оплатить Электроэнергия' })).toBeInTheDocument()
+    expect(getExpenseWorksheet).toHaveBeenCalledTimes(worksheetRequestCountBeforeCreate)
+  })
+
   it('edits a supplier accrual from the payout breakdown context menu', async () => {
     const user = userEvent.setup()
     const linkedExpenseType = createAccountingType({ id: 'expense-linked', name: 'Контрольное обслуживание' })

@@ -5297,54 +5297,13 @@ function PaymentsPrototypePanel({
 
     const supplierRowName = supplier.name
     const expenseTypeRowName = expenseType.name
-
-    setExpenseRows((currentRows) => {
-      let updated = false
-      const nextRows = currentRows.map((row) => {
-        if (row.supplierId !== accrual.supplierId || row.expenseTypeId !== accrual.expenseTypeId) {
-          return row
-        }
-
-        updated = true
-        const cost = (typeof row.cost === 'number' ? row.cost : 0) + accrual.amount
-        const paid = typeof row.paid === 'number' ? row.paid : 0
-        const closing = calculateExpenseWorksheetClosingBalance(row.openingDebt, row.openingAdvance, cost, paid)
-        return { ...row, cost, balance: closing.debt, closingDebt: closing.debt, closingAdvance: closing.advance }
-      })
-
-      if (updated) {
-        return nextRows
-      }
-
-      return [
-        ...nextRows,
-        {
-          rowKind: 'supplier',
-          supplierId: accrual.supplierId,
-          expenseTypeId: accrual.expenseTypeId,
-          item: expenseTypeRowName,
-          counterparty: supplierRowName,
-          expenseFundName: supplier.expenseFundName,
-          openingDebt: 0,
-          openingAdvance: 0,
-          closingDebt: accrual.amount,
-          closingAdvance: 0,
-          cost: accrual.amount,
-          paid: 0,
-          balance: accrual.amount,
-          collected: '',
-          difference: '',
-          action: true,
-        },
-      ]
-    })
-
-    const breakdownRow: PaymentPrototypeRow = {
+    const newSupplierRow: PaymentPrototypeRow = {
       rowKind: 'supplier',
       supplierId: accrual.supplierId,
       expenseTypeId: accrual.expenseTypeId,
       item: expenseTypeRowName,
       counterparty: supplierRowName,
+      expenseFundName: supplier.expenseFundName,
       openingDebt: 0,
       openingAdvance: 0,
       closingDebt: accrual.amount,
@@ -5356,7 +5315,33 @@ function PaymentsPrototypePanel({
       difference: '',
       action: true,
     }
-    const breakdownKey = getExpenseSupplierBreakdownKey(breakdownRow)
+
+    setExpenseRows((currentRows) => {
+      let updated = false
+      const nextRows = currentRows.map((row) => {
+        if (row.supplierId !== accrual.supplierId || row.expenseTypeId !== accrual.expenseTypeId) {
+          return row
+        }
+
+        updated = true
+        const cost = (+row.cost || 0) + accrual.amount
+        const paid = +row.paid || 0
+        const closing = calculateExpenseWorksheetClosingBalance(row.openingDebt, row.openingAdvance, cost, paid)
+        const debt = closing.debt
+        return { ...row, cost, balance: debt, closingDebt: debt, closingAdvance: closing.advance, action: debt > 0 }
+      })
+
+      if (updated) {
+        return nextRows
+      }
+
+      return [
+        ...nextRows,
+        newSupplierRow,
+      ]
+    })
+
+    const breakdownKey = getExpenseSupplierBreakdownKey(newSupplierRow)
     if (breakdownKey && expandedExpenseSupplierRows[breakdownKey]) {
       const existingValue = expenseSupplierBreakdowns[breakdownKey]?.value
       if (existingValue && 'supplierId' in existingValue) {
@@ -5392,7 +5377,7 @@ function PaymentsPrototypePanel({
           }
         })
       } else {
-        void loadExpenseSupplierBreakdown(breakdownRow)
+        void loadExpenseSupplierBreakdown(newSupplierRow)
       }
     }
 
