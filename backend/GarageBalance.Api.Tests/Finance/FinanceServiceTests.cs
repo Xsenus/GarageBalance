@@ -1689,11 +1689,13 @@ public sealed class FinanceServiceTests
         var firstIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-0");
         Assert.Equal(600m, firstIncome.GarageDebtBefore);
         Assert.Equal(500m, firstIncome.GarageDebtAfter);
+        Assert.Equal(500m, firstIncome.GarageServiceAccrualTotal);
         Assert.Equal(400m, firstIncome.GarageServiceDebtAfter);
         Assert.NotEmpty(firstIncome.PaymentAllocations);
         var lastIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-2");
         Assert.Equal(400m, lastIncome.GarageDebtBefore);
         Assert.Equal(300m, lastIncome.GarageDebtAfter);
+        Assert.Equal(500m, lastIncome.GarageServiceAccrualTotal);
         Assert.Equal(200m, lastIncome.GarageServiceDebtAfter);
         var firstExpense = Assert.Single(page.Items, item => item.DocumentNumber == "RKO-BATCH-0");
         Assert.Equal(900m, firstExpense.SupplierDebtBefore);
@@ -4009,6 +4011,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(payment.Succeeded);
+        Assert.Equal(500m, payment.Value!.GarageServiceAccrualTotal);
         Assert.Equal(375m, payment.Value!.GarageServiceDebtAfter);
         Assert.Equal(1425m, payment.Value.GarageDebtAfter);
 
@@ -4017,6 +4020,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         var historyPayment = Assert.Single(page.Items);
+        Assert.Equal(500m, historyPayment.GarageServiceAccrualTotal);
         Assert.Equal(375m, historyPayment.GarageServiceDebtAfter);
         Assert.Equal(1425m, historyPayment.GarageDebtAfter);
     }

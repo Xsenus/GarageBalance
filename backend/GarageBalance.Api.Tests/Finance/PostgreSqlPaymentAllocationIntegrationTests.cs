@@ -133,9 +133,11 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         Assert.Equal(2, ordered.Length);
         Assert.Equal(1_200m, ordered[0].GarageDebtBefore);
         Assert.Equal(900m, ordered[0].GarageDebtAfter);
+        Assert.Equal(200m, ordered[0].GarageServiceAccrualTotal);
         Assert.Equal(0m, ordered[0].GarageServiceDebtAfter);
         Assert.Equal(900m, ordered[1].GarageDebtBefore);
         Assert.Equal(500m, ordered[1].GarageDebtAfter);
+        Assert.Equal(200m, ordered[1].GarageServiceAccrualTotal);
         Assert.Equal(0m, ordered[1].GarageServiceDebtAfter);
     }
 

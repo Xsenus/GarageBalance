@@ -13477,6 +13477,7 @@ describe('App', () => {
       amount: 1234,
       incomeTypeName: 'Серверная оплата',
       garageDebtAfter: 3200,
+      garageServiceAccrualTotal: 1714,
       garageServiceDebtAfter: 480,
       operationDate: '2026-06-19',
       accountingMonth: '2026-06-01',
@@ -13557,8 +13558,12 @@ describe('App', () => {
     }), expect.any(AbortSignal)))
     expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'true')
     const historyTable = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
+    expect(within(historyTable).getByRole('columnheader', { name: 'Начислено по услуге' })).toBeInTheDocument()
+    expect(within(historyTable).getByRole('columnheader', { name: 'Оплачено' })).toBeInTheDocument()
+    expect(within(historyTable).queryByRole('columnheader', { name: 'Сумма платежа' })).not.toBeInTheDocument()
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
     expect(within(historyTable).getByText('10:24:37')).toBeInTheDocument()
+    expect(within(historyTable).getByText('1 714.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('3 200.00')).toBeInTheDocument()
     expect(within(historyTable).getByText('480.00')).toBeInTheDocument()

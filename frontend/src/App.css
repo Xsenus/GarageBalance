@@ -4588,7 +4588,7 @@ input.meter-readings-control {
 
 .payments-prototype-mini-table {
   width: 100%;
-  min-width: 1024px;
+  min-width: 1180px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -4635,20 +4635,25 @@ input.meter-readings-control {
 
 .payments-prototype-mini-table th:nth-child(3),
 .payments-prototype-mini-table td:nth-child(3) {
-  width: 126px;
+  width: 142px;
 }
 
+.payments-prototype-mini-table th:nth-child(4),
 .payments-prototype-mini-table td:nth-child(4) {
-  text-align: left;
+  width: 118px;
 }
 
-.payments-prototype-mini-table th:nth-child(5),
 .payments-prototype-mini-table td:nth-child(5) {
-  width: 204px;
+  text-align: left;
 }
 
 .payments-prototype-mini-table th:nth-child(6),
 .payments-prototype-mini-table td:nth-child(6) {
+  width: 204px;
+}
+
+.payments-prototype-mini-table th:nth-child(7),
+.payments-prototype-mini-table td:nth-child(7) {
   width: 156px;
 }
 

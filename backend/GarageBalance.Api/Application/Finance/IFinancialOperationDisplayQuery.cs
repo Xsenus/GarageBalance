@@ -15,6 +15,7 @@ public sealed record FinancialOperationCalculationData(
     Guid CounterpartyId,
     DateOnly AccountingMonth,
     decimal PreviousPaymentTotal,
+    decimal? GarageServiceAccrualTotal,
     decimal? GarageServiceDebtAfter);
 
 public sealed record FinancialOperationAccrualBucketData(

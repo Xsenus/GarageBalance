@@ -348,12 +348,12 @@ describe('responsive layout styles', () => {
 
   it('keeps payment history columns compact, centered and readable', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-card--history {\n  display: block;\n  padding: 0;\n  overflow-x: auto;')
-    expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 1024px;\n  table-layout: fixed;')
+    expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 1180px;\n  table-layout: fixed;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:last-child,\n.payments-prototype-mini-table td:last-child {\n  width: 92px;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table th {\n  background: #f8fafc;\n  color: #475467;\n  font-size: 11px;\n  font-weight: 750;\n  line-height: 1.25;\n  text-align: center;\n  white-space: normal;\n  overflow: visible;\n  text-overflow: clip;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:nth-child(1),\n.payments-prototype-mini-table td:nth-child(1) {\n  width: 104px;\n  text-align: center;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:nth-child(2),\n.payments-prototype-mini-table td:nth-child(2) {\n  width: 88px;\n  text-align: center;')
-    expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:nth-child(5),\n.payments-prototype-mini-table td:nth-child(5) {\n  width: 204px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:nth-child(6),\n.payments-prototype-mini-table td:nth-child(6) {\n  width: 204px;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table th:last-child,\n.payments-prototype-mini-table td:last-child {\n  width: 92px;\n  padding-inline: 8px;\n  text-align: center;')
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 4px;\n  flex-wrap: nowrap;')
     expect(normalizedAppCss).toContain('min-width: max-content;\n  min-height: 100%;')

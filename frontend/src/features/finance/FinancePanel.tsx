@@ -289,6 +289,7 @@ type GaragePaymentHistoryPrototypeRow = {
   id: string
   date: string
   time: string
+  serviceAccrualTotal: number | null
   amount: number
   purpose: string
   serviceDebtAfter: number | null
@@ -3159,6 +3160,7 @@ function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOpera
       id: operation.id,
       date: formatDateOnly(operation.operationDate),
       time: formatOperationTime(operation.createdAtUtc),
+      serviceAccrualTotal: operation.garageServiceAccrualTotal ?? null,
       amount: operation.amount,
       purpose: operation.incomeTypeName ?? operation.comment ?? 'Поступление',
       serviceDebtAfter: operation.garageServiceDebtAfter == null
@@ -3319,7 +3321,8 @@ function GaragePaymentHistoryDialog({
               <tr>
                 <th scope="col">Дата</th>
                 <th scope="col">Время</th>
-                <th scope="col">Сумма платежа</th>
+                <th scope="col">Начислено по услуге</th>
+                <th scope="col">Оплачено</th>
                 <th scope="col">Назначение платежа</th>
                 <th scope="col">Долг по услуге после платежа</th>
                 <th scope="col">Долг после платежа</th>
@@ -3329,12 +3332,13 @@ function GaragePaymentHistoryDialog({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7}><TableLoadingState label="Загружаем историю платежей" /></td>
+                  <td colSpan={8}><TableLoadingState label="Загружаем историю платежей" /></td>
                 </tr>
               ) : rows.length > 0 ? rows.map((row) => (
                 <tr key={row.id}>
                   <td>{row.date}</td>
                   <td>{row.time}</td>
+                  <td>{row.serviceAccrualTotal == null ? '—' : formatPaymentMoney(row.serviceAccrualTotal)}</td>
                   <td>{formatPaymentMoney(row.amount)}</td>
                   <td>{row.purpose}</td>
                   <td>{row.serviceDebtAfter == null ? '—' : formatPaymentMoney(row.serviceDebtAfter)}</td>
@@ -3354,7 +3358,7 @@ function GaragePaymentHistoryDialog({
                 </tr>
               )) : error ? null : (
                 <tr>
-                  <td colSpan={7}><EmptyState>Платежей пока нет.</EmptyState></td>
+                  <td colSpan={8}><EmptyState>Платежей пока нет.</EmptyState></td>
                 </tr>
               )}
             </tbody>
@@ -4947,6 +4951,7 @@ function PaymentsPrototypePanel({
           id: operation.id,
           date: formatDateOnly(operation.operationDate),
           time: formatOperationTime(operation.createdAtUtc) || paymentTime,
+          serviceAccrualTotal: operation.garageServiceAccrualTotal ?? null,
           amount: operation.amount,
           purpose: operation.incomeTypeName ?? row.service,
           serviceDebtAfter: operation.garageServiceDebtAfter == null
@@ -5140,6 +5145,7 @@ function PaymentsPrototypePanel({
           id: operation.id,
           date: formatDateOnly(operation.operationDate),
           time: formatOperationTime(operation.createdAtUtc) || paymentTime,
+          serviceAccrualTotal: operation.garageServiceAccrualTotal ?? null,
           amount: operation.amount,
           purpose: operation.incomeTypeName ?? item.purposeFallback,
           serviceDebtAfter: operation.garageServiceDebtAfter == null

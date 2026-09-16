@@ -52,7 +52,8 @@ public sealed record FinancialOperationDto(
     Guid? FeeCampaignId = null,
     Guid? IrregularPaymentId = null,
     decimal? GarageServiceDebtAfter = null,
-    Guid? TargetAccrualId = null);
+    Guid? TargetAccrualId = null,
+    decimal? GarageServiceAccrualTotal = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,

@@ -38,6 +38,7 @@ export type FinancialOperationDto = {
   targetAccrualId?: string | null
   garageDebtBefore: number | null
   garageDebtAfter: number | null
+  garageServiceAccrualTotal?: number | null
   garageServiceDebtAfter?: number | null
   supplierDebtBefore: number | null
   supplierDebtAfter: number | null

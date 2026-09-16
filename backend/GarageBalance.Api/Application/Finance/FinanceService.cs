@@ -9051,7 +9051,8 @@ public sealed class FinanceService(
                     null,
                     null,
                     allocations,
-                    NormalizeServiceDebt(calculation.GarageServiceDebtAfter))
+                    NormalizeServiceDebt(calculation.GarageServiceDebtAfter),
+                    calculation.GarageServiceAccrualTotal)
                 : ToDto(operation, null, null, debtBefore, debtBefore - operation.Amount, allocations));
         }
 
@@ -9065,6 +9066,7 @@ public sealed class FinanceService(
         decimal? supplierDebtBefore = null;
         decimal? supplierDebtAfter = null;
         decimal? garageServiceDebtAfter = null;
+        decimal? garageServiceAccrualTotal = null;
         IReadOnlyList<PaymentAllocationDto> paymentAllocations = [];
         if (operation.OperationKind == FinancialOperationKinds.Income && operation.GarageId is not null)
         {
@@ -9072,6 +9074,7 @@ public sealed class FinanceService(
             garageDebtAfter = garageDebtBefore - operation.Amount;
             paymentAllocations = await CalculateGaragePaymentAllocationsAsync(operation, cancellationToken);
             var displayData = await financialOperationDisplayQuery.GetAsync([operation.Id], cancellationToken);
+            garageServiceAccrualTotal = displayData.Calculations.SingleOrDefault()?.GarageServiceAccrualTotal;
             garageServiceDebtAfter = NormalizeServiceDebt(
                 displayData.Calculations.SingleOrDefault()?.GarageServiceDebtAfter);
         }
@@ -9089,7 +9092,8 @@ public sealed class FinanceService(
             supplierDebtBefore,
             supplierDebtAfter,
             paymentAllocations,
-            garageServiceDebtAfter);
+            garageServiceDebtAfter,
+            garageServiceAccrualTotal);
     }
 
     private async Task<decimal> CalculateGarageDebtBeforeIncomeAsync(FinancialOperation operation, CancellationToken cancellationToken)
@@ -9249,7 +9253,8 @@ public sealed class FinanceService(
         decimal? supplierDebtBefore = null,
         decimal? supplierDebtAfter = null,
         IReadOnlyList<PaymentAllocationDto>? paymentAllocations = null,
-        decimal? garageServiceDebtAfter = null)
+        decimal? garageServiceDebtAfter = null,
+        decimal? garageServiceAccrualTotal = null)
     {
         return new FinancialOperationDto(
             operation.Id,
@@ -9289,7 +9294,8 @@ public sealed class FinanceService(
             operation.FeeCampaignId,
             operation.IrregularPaymentId,
             garageServiceDebtAfter,
-            operation.TargetAccrualId);
+            operation.TargetAccrualId,
+            garageServiceAccrualTotal);
     }
 
     private static decimal? NormalizeServiceDebt(decimal? value) =>
