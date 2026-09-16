@@ -11,6 +11,26 @@ describe('dictionariesApi response cache', () => {
     vi.unstubAllGlobals()
   })
 
+  it('creates a garage with its already-paid annual payments in one request', async () => {
+    const request = {
+      garage: { number: 'ГОД-1', peopleCount: 2, floorCount: 1, startingBalance: 0 },
+      accountingYear: 2026,
+      annualPayments: [{ incomeTypeId: 'annual-security', amount: 400 }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'garage-annual', number: 'ГОД-1' }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.createGarageWithAnnualPayments('token', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/with-annual-payments', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(request),
+    }))
+  })
+
   it('uses the independent supplier service contract and invalidates supplier names without invalidating tariffs', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'service', name: 'Уборка', version: 'v1', isArchived: false }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
@@ -80,25 +100,6 @@ describe('dictionariesApi response cache', () => {
     await dictionariesApi.getGarages('token', undefined, 100)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('creates a garage together with selected annual payments through the atomic endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'garage-17', number: '17' }), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    }))
-    vi.stubGlobal('fetch', fetchMock)
-    const request = {
-      garage: { number: '17', peopleCount: 2, floorCount: 1, startingBalance: 0 },
-      annualPayments: [{ incomeTypeId: 'membership', amount: 600 }],
-    }
-
-    await dictionariesApi.createGarageWithAnnualPayments!('token', request)
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/with-annual-payments', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify(request),
-    }))
   })
 
   it('deduplicates the complete tariff reference bundle across repeated section loads', async () => {

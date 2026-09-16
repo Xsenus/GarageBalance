@@ -42,14 +42,14 @@ public interface IFinanceService
         int year,
         CancellationToken cancellationToken);
 
-    Task<FinanceResult<GarageAnnualPaymentOptionsDto>> PreviewGarageAnnualPaymentsAsync(
-        PreviewGarageAnnualPaymentsRequest request,
-        CancellationToken cancellationToken);
-
     Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(
         Guid garageId,
         int year,
         Guid? actorUserId,
+        CancellationToken cancellationToken);
+
+    Task<FinanceResult<GarageAnnualPaymentPreviewDto>> PreviewGarageAnnualPaymentsAsync(
+        GarageAnnualPaymentPreviewRequest request,
         CancellationToken cancellationToken);
 
     Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken);

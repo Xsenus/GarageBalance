@@ -441,36 +441,39 @@ type SupplierAccrualPrototypeDialogPreset = {
 }
 
 function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): PaymentPrototypeRow[] {
-  return worksheet.rows.map((row) => ({
-    rowKind: row.rowKind,
-    supplierId: row.supplierId,
-    staffMemberId: row.staffMemberId,
-    expenseTypeId: row.expenseTypeId,
-    expenseFundName: row.expenseFundName,
-    counterparty: row.counterpartyName ?? '',
-    item: row.expenseTypeName,
-    openingDebt: row.openingDebt ?? Math.max(row.openingBalance ?? 0, 0),
-    openingAdvance: row.openingAdvance ?? Math.max(-(row.openingBalance ?? 0), 0),
-    closingDebt: row.closingDebt ?? Math.max((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount, 0),
-    closingAdvance: row.closingAdvance ?? Math.max(-((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount), 0),
-    cost: row.accrualAmount,
-    baseAccrual: row.baseAccrualAmount ?? row.accrualAmount,
-    bonus: row.bonusAmount ?? 0,
-    penalty: row.penaltyAmount ?? 0,
-    paid: row.expenseAmount,
-    balance: row.closingDebt ?? row.balance,
-    collected: row.collectedAmount ?? '',
-    difference: row.difference ?? '',
-    action: row.rowKind !== 'episodic',
-    operationId: row.operationId,
-    operationDate: row.operationDate,
-    accountingMonth: row.accountingMonth,
-    expensePaymentType: row.expensePaymentType,
-    expensePaymentSource: row.expensePaymentSource,
-    documentNumber: row.documentNumber,
-    comment: row.comment,
-    operationVersion: row.operationVersion,
-  }))
+  return worksheet.rows.map((row) => {
+    const closingDebt = row.closingDebt ?? Math.max((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount, 0)
+    return {
+      rowKind: row.rowKind,
+      supplierId: row.supplierId,
+      staffMemberId: row.staffMemberId,
+      expenseTypeId: row.expenseTypeId,
+      expenseFundName: row.expenseFundName,
+      counterparty: row.counterpartyName ?? '',
+      item: row.expenseTypeName,
+      openingDebt: row.openingDebt ?? Math.max(row.openingBalance ?? 0, 0),
+      openingAdvance: row.openingAdvance ?? Math.max(-(row.openingBalance ?? 0), 0),
+      closingDebt,
+      closingAdvance: row.closingAdvance ?? Math.max(-((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount), 0),
+      cost: row.accrualAmount,
+      baseAccrual: row.baseAccrualAmount ?? row.accrualAmount,
+      bonus: row.bonusAmount ?? 0,
+      penalty: row.penaltyAmount ?? 0,
+      paid: row.expenseAmount,
+      balance: row.closingDebt ?? row.balance,
+      collected: row.collectedAmount ?? '',
+      difference: row.difference ?? '',
+      action: row.rowKind !== 'episodic' && closingDebt > 0,
+      operationId: row.operationId,
+      operationDate: row.operationDate,
+      accountingMonth: row.accountingMonth,
+      expensePaymentType: row.expensePaymentType,
+      expensePaymentSource: row.expensePaymentSource,
+      documentNumber: row.documentNumber,
+      comment: row.comment,
+      operationVersion: row.operationVersion,
+    }
+  })
 }
 
 export function FinancePanel({
@@ -5992,7 +5995,7 @@ function PaymentsPrototypePanel({
                                 {savingPaymentRowId === row.id
                                   ? <span className="payments-prototype-payment-status" role="status" aria-live="polite">Сохраняем платёж…</span>
                                   : null}
-                              </div> : null}
+                              </div> : <span className="payments-prototype-payment-complete">—</span>}
                             </td>
                             <td>{formatPaymentMoney(row.paid)}</td>
                             {(() => {
@@ -6173,16 +6176,15 @@ function PaymentsPrototypePanel({
                             </td>
                             <td>
                               {row.action ? (
-                                <button className="link-button" type="button" aria-disabled={row.closingDebt <= 0} onClick={(event) => {
-                                  if (row.closingDebt <= 0) return
+                                <button className="link-button" type="button" onClick={(event) => {
                                   if (isStaffPaymentRow) {
                                     openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
                                     return
                                   }
 
                                   openExpenseDialog(event, { expensePaymentSource: 'bank', expenseTypeName: row.item, amount: suggestedAmount, rowIndex: index })
-                                }} aria-label={row.closingDebt <= 0 ? `${row.item} оплачено полностью` : isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
-                                  {row.closingDebt <= 0 ? 'Оплачено' : 'Оплатить'}
+                                }} aria-label={isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
+                                  Оплатить
                                 </button>
                               ) : null}
                             </td>

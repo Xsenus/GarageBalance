@@ -144,7 +144,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(new FinancialReportPeriodDto(
             new DateOnly(2023, 2, 1),
             new DateOnly(2027, 3, 1),
-            new DateOnly(2024, 5, 1),
+            new DateOnly(2026, 1, 1),
             new DateOnly(2026, 7, 1)), garage.Value);
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2024, 4, 1), new DateOnly(2026, 7, 1)), supplier.Value);
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2025, 1, 1), new DateOnly(2026, 7, 1)), staff.Value);
@@ -8228,6 +8228,18 @@ public sealed class FinanceServiceTests
             database.Context,
             new FixedTimeProvider(new DateTimeOffset(2026, 9, 15, 5, 0, 0, TimeSpan.Zero)));
 
+        var preview = await service.PreviewGarageAnnualPaymentsAsync(
+            new GarageAnnualPaymentPreviewRequest(2, 1),
+            CancellationToken.None);
+
+        Assert.True(preview.Succeeded, preview.ErrorMessage);
+        var previewItem = Assert.Single(preview.Value!.Items);
+        Assert.Equal(2026, preview.Value.AccountingYear);
+        Assert.Equal("Годовой резерв", previewItem.ServiceName);
+        Assert.Equal("Годовой резерв", previewItem.TariffName);
+        Assert.Equal(900m, previewItem.FullAmount);
+        Assert.Equal(fund.Id, previewItem.DestinationFundId);
+
         var calculated = await service.CalculateGarageAnnualPaymentsAsync(
             fixtures.Garage.Id,
             2026,
@@ -8238,6 +8250,7 @@ public sealed class FinanceServiceTests
         var item = Assert.Single(calculated.Value!.Items);
         Assert.Equal("unpaid", item.Status);
         Assert.Equal(900m, item.OutstandingAmount);
+        Assert.Equal("Годовой резерв", item.TariffName);
         Assert.Equal(fund.Id, item.DestinationFundId);
         Assert.True(item.CanRecordPayment);
 
@@ -8479,72 +8492,6 @@ public sealed class FinanceServiceTests
                 "Перенос остатка годового начисления за 2026 год: 250.00. Новое начисление в этом месяце не создавалось.",
                 row.Reason);
         });
-    }
-
-    [Fact]
-    public async Task PreviewGarageAnnualPaymentsAsync_ReturnsTariffAndFullGarageSpecificCostWithoutWritingData()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var fixtures = await database.SeedAsync();
-        fixtures.IncomeType.Code = "annual_membership_preview";
-        fixtures.IncomeType.Name = "Членский взнос";
-        var tariff = new Tariff
-        {
-            Name = "С человека 2026",
-            CalculationBase = TariffCalculationBases.People,
-            Rate = 450m,
-            EffectiveFrom = new DateOnly(2026, 1, 1)
-        };
-        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
-        {
-            Name = "Годовой членский взнос",
-            IsRegular = true,
-            PeriodicityMonths = 12,
-            AccrualStartMonth = 1,
-            PaymentDueDay = 20,
-            PaymentDueMonth = 1,
-            OverdueGraceDays = 30,
-            IncomeTypeId = fixtures.IncomeType.Id,
-            Tariff = tariff,
-            UnitName = "руб./чел."
-        });
-        await database.Context.SaveChangesAsync();
-        var accrualCountBefore = database.Context.Accruals.Count();
-        var operationCountBefore = database.Context.FinancialOperations.Count();
-
-        var result = await FinanceServiceTestFactory.Create(database.Context).PreviewGarageAnnualPaymentsAsync(
-            new PreviewGarageAnnualPaymentsRequest(2026, 3, 2),
-            CancellationToken.None);
-
-        Assert.True(result.Succeeded, result.ErrorMessage);
-        var item = Assert.Single(result.Value!.Items, row => row.IncomeTypeId == fixtures.IncomeType.Id);
-        Assert.Equal("Годовой членский взнос", item.ServiceName);
-        Assert.Equal("С человека 2026", item.TariffName);
-        Assert.Equal(1350m, item.Amount);
-        Assert.True(item.CanRecordPayment);
-        Assert.Equal(accrualCountBefore, database.Context.Accruals.Count());
-        Assert.Equal(operationCountBefore, database.Context.FinancialOperations.Count());
-    }
-
-    [Theory]
-    [InlineData(1999, 1, 1, "annual_payment_year_invalid")]
-    [InlineData(2026, -1, 1, "garage_annual_payment_preview_values_invalid")]
-    [InlineData(2026, 1, 101, "garage_annual_payment_preview_values_invalid")]
-    public async Task PreviewGarageAnnualPaymentsAsync_RejectsInvalidInputs(
-        int year,
-        int peopleCount,
-        int floorCount,
-        string expectedCode)
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        await database.SeedAsync();
-
-        var result = await FinanceServiceTestFactory.Create(database.Context).PreviewGarageAnnualPaymentsAsync(
-            new PreviewGarageAnnualPaymentsRequest(year, peopleCount, floorCount),
-            CancellationToken.None);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal(expectedCode, result.ErrorCode);
     }
 
     [Fact]

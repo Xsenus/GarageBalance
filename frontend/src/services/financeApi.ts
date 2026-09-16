@@ -591,21 +591,17 @@ export type GarageAnnualPaymentItemDto = {
   tariffName?: string | null
 }
 
-export type GarageAnnualPaymentOptionDto = {
-  incomeTypeId: string
-  serviceName: string
-  tariffName: string | null
+export type GarageAnnualPaymentPreviewDto = {
   accountingYear: number
-  accountingMonth: string
-  amount: number | null
-  destinationFundId: string | null
-  destinationFundName: string | null
-  canRecordPayment: boolean
-}
-
-export type GarageAnnualPaymentOptionsDto = {
-  accountingYear: number
-  items: GarageAnnualPaymentOptionDto[]
+  items: Array<{
+    incomeTypeId: string
+    serviceName: string
+    tariffName: string
+    accountingMonth: string
+    fullAmount: number
+    destinationFundId: string | null
+    destinationFundName: string | null
+  }>
 }
 
 export type GarageAnnualPaymentsDto = {
@@ -893,7 +889,7 @@ export type FinanceClient = {
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
   calculateGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
-  previewGarageAnnualPayments(accessToken: string, request: { year: number; peopleCount: number; floorCount: number }, signal?: AbortSignal): Promise<GarageAnnualPaymentOptionsDto>
+  previewGarageAnnualPayments(accessToken: string, request: { peopleCount: number; floorCount: number; initialWaterMeterValue?: number | null; initialElectricityMeterValue?: number | null }, signal?: AbortSignal): Promise<GarageAnnualPaymentPreviewDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<ExpenseWorksheetDto>
   getExpenseWorksheetSupplierBreakdown(accessToken: string, params: { supplierId: string; expenseTypeId: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetSupplierBreakdownDto>
   getExpenseWorksheetStaffBreakdown(accessToken: string, params: { staffMemberId: string; expenseTypeId?: string; monthFrom: string; monthTo: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<ExpenseWorksheetStaffBreakdownDto>
@@ -1103,7 +1099,14 @@ export const financeApi: FinanceClient = {
     })
   },
   previewGarageAnnualPayments(accessToken, request, signal) {
-    return requestJson(accessToken, withQuery('/api/finance/garages/annual-payments/preview', request), { signal })
+    return requestJson(accessToken, withQuery('/api/finance/garage-annual-payments/preview', {
+      peopleCount: request.peopleCount,
+      floorCount: request.floorCount,
+      initialWaterMeterValue: request.initialWaterMeterValue ?? undefined,
+      initialElectricityMeterValue: request.initialElectricityMeterValue ?? undefined,
+    }), {
+      signal,
+    })
   },
   getExpenseWorksheet(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/expenses-worksheet', {

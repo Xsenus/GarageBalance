@@ -919,48 +919,6 @@ public sealed class FinanceService(
             orderedRows));
     }
 
-    public async Task<FinanceResult<GarageAnnualPaymentOptionsDto>> PreviewGarageAnnualPaymentsAsync(
-        PreviewGarageAnnualPaymentsRequest request,
-        CancellationToken cancellationToken)
-    {
-        var validation = ValidateAnnualPaymentYear(request.Year);
-        if (validation is not null)
-        {
-            return FinanceResult<GarageAnnualPaymentOptionsDto>.Failure(validation.Value.Code, validation.Value.Message);
-        }
-
-        if (request.PeopleCount is < 0 or > 1000 || request.FloorCount is < 0 or > 100)
-        {
-            return FinanceResult<GarageAnnualPaymentOptionsDto>.Failure(
-                "garage_annual_payment_preview_values_invalid",
-                "Количество людей и этажей указано неверно.");
-        }
-
-        var garage = new Garage
-        {
-            Number = "Новый гараж",
-            PeopleCount = request.PeopleCount,
-            FloorCount = request.FloorCount,
-            RegisteredOn = businessDateProvider.Today
-        };
-        var currentMonth = GetCurrentAccountingMonth();
-        var definitions = await GetAnnualServiceDefinitionsAsync(request.Year, cancellationToken);
-        var items = definitions.Select(definition => new GarageAnnualPaymentOptionDto(
-                definition.IncomeType.Id,
-                definition.Setting.Name,
-                definition.Tariff?.Name,
-                request.Year,
-                definition.AccountingMonth,
-                CalculateAnnualPlannedAmount(garage, definition),
-                definition.IncomeType.DestinationFundId,
-                definition.IncomeType.DestinationFund?.Name,
-                definition.Tariff is not null && definition.AccountingMonth <= currentMonth))
-            .ToArray();
-
-        return FinanceResult<GarageAnnualPaymentOptionsDto>.Success(
-            new GarageAnnualPaymentOptionsDto(request.Year, items));
-    }
-
     public async Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(
         Guid garageId,
         int year,
@@ -1101,6 +1059,44 @@ public sealed class FinanceService(
         }
 
         return await GetGarageAnnualPaymentsAsync(garageId, year, cancellationToken);
+    }
+
+    public async Task<FinanceResult<GarageAnnualPaymentPreviewDto>> PreviewGarageAnnualPaymentsAsync(
+        GarageAnnualPaymentPreviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        var accountingYear = businessDateProvider.Today.Year;
+        var currentMonth = GetCurrentAccountingMonth();
+        var garage = new Garage
+        {
+            Number = "Предварительный расчёт",
+            PeopleCount = request.PeopleCount,
+            FloorCount = request.FloorCount,
+            InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue),
+            InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue),
+            RegisteredOn = businessDateProvider.Today
+        };
+        var definitions = await GetAnnualServiceDefinitionsAsync(accountingYear, cancellationToken);
+        var items = definitions
+            .Where(definition => definition.AccountingMonth <= currentMonth && definition.Tariff is not null)
+            .Select(definition => new
+            {
+                Definition = definition,
+                Amount = CalculateAnnualPlannedAmount(garage, definition)
+            })
+            .Where(item => item.Amount is > 0m)
+            .Select(item => new GarageAnnualPaymentPreviewItemDto(
+                item.Definition.IncomeType.Id,
+                item.Definition.Setting.Name,
+                item.Definition.Tariff!.Name,
+                item.Definition.AccountingMonth,
+                MoneyMath.RoundMoney(item.Amount!.Value),
+                item.Definition.IncomeType.DestinationFundId,
+                item.Definition.IncomeType.DestinationFund?.Name))
+            .ToArray();
+
+        return FinanceResult<GarageAnnualPaymentPreviewDto>.Success(
+            new GarageAnnualPaymentPreviewDto(accountingYear, items));
     }
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
@@ -1952,7 +1948,7 @@ public sealed class FinanceService(
         var monthTo = months.Where(month => month.HasValue).Max()!.Value;
         var defaultMonthFrom = request.GarageId.HasValue
             ? data.FirstUnpaidAccrualMonth is { } firstUnpaidMonth && firstUnpaidMonth <= currentMonth
-                ? firstUnpaidMonth
+                ? new DateOnly(currentMonth.Year, 1, 1)
                 : currentMonth
             : (DateOnly?)null;
         return FinanceResult<FinancialReportPeriodDto>.Success(new FinancialReportPeriodDto(

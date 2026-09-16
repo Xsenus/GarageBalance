@@ -180,7 +180,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-column-filters {\n  display: grid;\n  grid-template-columns: minmax(220px, 1.15fr) repeat(2, minmax(220px, 1fr)) auto;')
     expect(normalizedAppCss).toContain('.contractors-column-filters input {\n  width: 100%;\n  min-height: 40px;\n  border: 1px solid #d0d5dd;\n  border-radius: 8px;')
     expect(normalizedAppCss).toContain('.contractors-column-filters__range > div {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('.contractors-column-filters__actions {\n    grid-column: auto;\n    display: grid;\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.contractors-column-filters__actions {\n    grid-column: auto;\n    display: block;')
   })
 
   it('reserves financial report geometry while its data is loading', () => {

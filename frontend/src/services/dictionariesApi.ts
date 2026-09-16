@@ -252,11 +252,13 @@ export type UpsertGarageRequest = {
   version?: string
 }
 
-export type PaidAnnualPaymentRequest = { incomeTypeId: string; amount: number }
-
 export type CreateGarageWithAnnualPaymentsRequest = {
   garage: UpsertGarageRequest
-  annualPayments: PaidAnnualPaymentRequest[]
+  accountingYear: number
+  annualPayments: Array<{
+    incomeTypeId: string
+    amount: number
+  }>
 }
 
 export type UpsertSupplierGroupRequest = {

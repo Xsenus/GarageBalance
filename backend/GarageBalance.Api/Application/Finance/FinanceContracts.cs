@@ -85,25 +85,24 @@ public sealed record GarageAnnualPaymentItemDto(
     bool CanRecordPayment,
     string? TariffName = null);
 
-public sealed record PreviewGarageAnnualPaymentsRequest(
-    [Range(2000, 9999)] int Year,
+public sealed record GarageAnnualPaymentPreviewRequest(
     [Range(0, 1000)] int PeopleCount,
-    [Range(0, 100)] int FloorCount);
+    [Range(0, 100)] int FloorCount,
+    [Range(0, 999999999)] decimal? InitialWaterMeterValue = null,
+    [Range(0, 999999999)] decimal? InitialElectricityMeterValue = null);
 
-public sealed record GarageAnnualPaymentOptionDto(
+public sealed record GarageAnnualPaymentPreviewItemDto(
     Guid IncomeTypeId,
     string ServiceName,
-    string? TariffName,
-    int AccountingYear,
+    string TariffName,
     DateOnly AccountingMonth,
-    decimal? Amount,
+    decimal FullAmount,
     Guid? DestinationFundId,
-    string? DestinationFundName,
-    bool CanRecordPayment);
+    string? DestinationFundName);
 
-public sealed record GarageAnnualPaymentOptionsDto(
+public sealed record GarageAnnualPaymentPreviewDto(
     int AccountingYear,
-    IReadOnlyList<GarageAnnualPaymentOptionDto> Items);
+    IReadOnlyList<GarageAnnualPaymentPreviewItemDto> Items);
 
 public sealed record GarageAnnualPaymentsDto(
     Guid GarageId,

@@ -3,7 +3,7 @@ import type { CSSProperties, FormEvent, MouseEvent, ReactNode, RefObject } from 
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { SupplierServiceDto, UpsertSupplierServiceRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
-import type { FinanceClient, GarageAnnualPaymentItemDto, GarageAnnualPaymentOptionsDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto } from '../../services/financeApi'
+import type { FinanceClient, GarageAnnualPaymentItemDto, GarageAnnualPaymentPreviewDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
@@ -127,7 +127,11 @@ type ContractorGarageRow = {
   meters: string
   comment: string
   isDeleted: boolean
-  paidAnnualPayments?: Array<{ incomeTypeId: string; amount: number }>
+}
+
+type InitialGarageAnnualPayments = {
+  accountingYear: number
+  annualPayments: Array<{ incomeTypeId: string; amount: number }>
 }
 
 type ContractorSupplierRow = {
@@ -928,11 +932,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [supplierEditorLoadingId, setSupplierEditorLoadingId] = useState<string | null>(null)
   const garagePageRequestSequenceRef = useRef(0)
   const garagePageRequestControllerRef = useRef<AbortController | null>(null)
+  const garageFilterDebounceCancelRef = useRef<(() => void) | null>(null)
   const supplierPageRequestControllerRef = useRef<AbortController | null>(null)
   const staffPageRequestControllerRef = useRef<AbortController | null>(null)
-  const contractorSearchRef = useRef<Record<ContractorSection, string>>({ garages: '', suppliers: '', staff: '' })
-  const contractorSearchDelayRef = useRef<(() => void) | null>(null)
-  const garageFilterDelayRef = useRef<(() => void) | null>(null)
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -941,6 +943,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   useRestoreFocusOnClose(Boolean(employeeDeleteTarget))
   useRestoreFocusOnClose(Boolean(departmentDeleteTarget))
   useEffect(() => () => {
+    garageFilterDebounceCancelRef.current?.()
     garagePageRequestControllerRef.current?.abort()
     supplierPageRequestControllerRef.current?.abort()
     staffPageRequestControllerRef.current?.abort()
@@ -948,8 +951,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     contractorReferenceControllersRef.current.suppliers?.abort()
     supplierEditorRequestControllerRef.current?.abort()
     financialReportRequestControllerRef.current?.abort()
-    contractorSearchDelayRef.current?.()
-    garageFilterDelayRef.current?.()
   }, [])
   useEffect(() => () => {
     if (activeSection === 'garages') {
@@ -959,7 +960,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     } else {
       staffPageRequestControllerRef.current?.abort()
     }
-    contractorSearchDelayRef.current?.()
     if (activeSection !== 'staff') {
       contractorReferenceControllersRef.current[activeSection]?.abort()
     }
@@ -1292,7 +1292,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       : { section: 'garages', key: 'number', direction: 'asc' },
     debtorsOnly = showGarageDebtorsOnly,
     filters = garageColumnFilters,
-    search = contractorSearchRef.current.garages,
   ) {
     garagePageRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -1304,8 +1303,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     try {
       const page = dictionaryClient.getGaragesPage
         ? await (hasGarageColumnFilters(effectiveFilters)
-            ? dictionaryClient.getGaragesPage(auth.accessToken, search.trim() || undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters, controller.signal)
-            : dictionaryClient.getGaragesPage(auth.accessToken, search.trim() || undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, undefined, controller.signal))
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters, controller.signal)
+            : dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, undefined, controller.signal))
         : createFallbackPage(
             (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal))
               .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0))
@@ -1338,13 +1337,31 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
+  function updateGarageColumnFilter(field: keyof GarageColumnFilterForm, value: string) {
+    const nextForm = { ...garageColumnFilterForm, [field]: value }
+    const filters = toGarageColumnFilters(nextForm)
+    setGarageColumnFilterForm(nextForm)
+    setGarageColumnFilters(filters)
+    garageFilterDebounceCancelRef.current?.()
+    garageFilterDebounceCancelRef.current = scheduleDelayedAction(() => {
+      void loadGaragePage(0, garagePage.limit, undefined, undefined, filters)
+    })
+  }
+
+  function resetGarageColumnFilters() {
+    garageFilterDebounceCancelRef.current?.()
+    garageFilterDebounceCancelRef.current = null
+    setGarageColumnFilterForm(emptyGarageColumnFilterForm)
+    setGarageColumnFilters({})
+    void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
+  }
+
   async function loadSupplierPage(
     offset = supplierPage.offset,
     limit = supplierPage.limit,
     sort: ContractorSortState = contractorSort.section === 'suppliers' && isSupplierServerSortKey(contractorSort.key)
       ? contractorSort
       : { section: 'suppliers', key: 'service', direction: 'asc' },
-    search = contractorSearchRef.current.suppliers,
   ) {
     supplierPageRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -1353,7 +1370,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setSupplierContextMenu(null)
     try {
       const page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, search.trim() || undefined, offset, limit, true, sort.key, sort.key === 'debt' ? supplierDebtSortDirection(sort.direction) : sort.direction, controller.signal)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.key === 'debt' ? supplierDebtSortDirection(sort.direction) : sort.direction, controller.signal)
         : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
       if (controller.signal.aborted) {
         return
@@ -1379,7 +1396,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     sort: ContractorSortState = contractorSort.section === 'staff'
       ? contractorSort
       : { section: 'staff', key: 'fullName', direction: 'asc' },
-    search = contractorSearchRef.current.staff,
   ) {
     staffPageRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -1388,7 +1404,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setEmployeeContextMenu(null)
     try {
       const page = dictionaryClient.getStaffMembersPage
-        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, search.trim() || undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
+        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
         : createFallbackPage(await dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
       if (controller.signal.aborted) {
         return
@@ -1411,28 +1427,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const supplierColumnResize = useColumnResize(contractorSupplierColumnDefinitions, supplierColumnWidths, setSupplierColumnWidths)
   const staffColumnResize = useColumnResize(contractorStaffColumnDefinitions, staffColumnWidths, setStaffColumnWidths)
 
-  function scheduleContractorSearch(section: ContractorSection, value: string, load: (nextValue: string) => void) {
-    contractorSearchRef.current[section] = value
-    contractorSearchDelayRef.current?.()
-    contractorSearchDelayRef.current = scheduleDelayedAction(() => {
-      contractorSearchDelayRef.current = null
-      load(value)
-    })
-  }
-
-  function updateGarageColumnFilter(key: keyof GarageColumnFilterForm, value: string) {
-    const nextForm = { ...garageColumnFilterForm, [key]: value }
-    setGarageColumnFilterForm(nextForm)
-    garageFilterDelayRef.current?.()
-    garageFilterDelayRef.current = scheduleDelayedAction(() => {
-      garageFilterDelayRef.current = null
-      const filters = toGarageColumnFilters(nextForm)
-      setGarageColumnFilters(filters)
-      void loadGaragePage(0, garagePage.limit, undefined, undefined, filters)
-    })
-  }
-
-  const saveGarage = async (garage: ContractorGarageRow) => {
+  const saveGarage = async (garage: ContractorGarageRow, initialAnnualPayments?: InitialGarageAnnualPayments) => {
     const currentGarage = garages.find((item) => item.id === garage.id)
 
     try {
@@ -1448,14 +1443,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
 
       const request = createGarageRequestFromRow(garage, savedOwner?.id ?? null)
-      let savedGarage: GarageDto
-      if (isBackendDictionaryId(garage.id)) {
-        savedGarage = await dictionaryClient.updateGarage(auth.accessToken, garage.id, request)
-      } else if (garage.paidAnnualPayments?.length) {
-        savedGarage = await dictionaryClient.createGarageWithAnnualPayments(auth.accessToken, { garage: request, annualPayments: garage.paidAnnualPayments })
-      } else {
-        savedGarage = await dictionaryClient.createGarage(auth.accessToken, request)
-      }
+      const savedGarage = isBackendDictionaryId(garage.id)
+        ? await dictionaryClient.updateGarage(auth.accessToken, garage.id, request)
+        : initialAnnualPayments && initialAnnualPayments.annualPayments.length > 0
+          ? await dictionaryClient.createGarageWithAnnualPayments(auth.accessToken, { garage: request, ...initialAnnualPayments })
+          : await dictionaryClient.createGarage(auth.accessToken, request)
       const nextGarage = createGarageRowFromDto(savedGarage, savedOwner ? [...owners.filter((owner) => owner.id !== savedOwner.id), savedOwner] : owners)
 
       setGarages((currentGarages) => {
@@ -2260,8 +2252,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     )
   }
 
-  const hasActiveGarageFilters = contractorSearchRef.current.garages.trim().length > 0 || (canUseGarageColumnFilters && hasGarageColumnFilters(garageColumnFilters))
+  const hasActiveGarageFilters = canUseGarageColumnFilters && hasGarageColumnFilters(garageColumnFilters)
   const toggleGarageDebtorsFilter = () => {
+    garageFilterDebounceCancelRef.current?.()
+    garageFilterDebounceCancelRef.current = null
     const nextValue = !showGarageDebtorsOnly
     setShowGarageDebtorsOnly(nextValue)
     void loadGaragePage(0, garagePage.limit, undefined, nextValue).then((loaded) => {
@@ -2338,15 +2332,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     : contractorFinancialReportTarget?.row.department || 'Отдел не указан'
   const contractorFinancialReportDialogTitleId = 'contractor-financial-report-title'
   const contractorFinancialReportDialogDescriptionId = 'contractor-financial-report-description'
-  const liveSearch = (section: ContractorSection, label: string, load: (value: string) => void) => (
-    <label className="contractors-live-search">
-      <span className="visually-hidden">{label}</span>
-      <span className="contractors-column-filters__input-shell">
-        <Search size={16} aria-hidden="true" />
-        <input type="search" aria-label={label} defaultValue={contractorSearchRef.current[section]} onChange={(event) => scheduleContractorSearch(section, event.target.value, load)} />
-      </span>
-    </label>
-  )
 
   return (
     <section className="contractors-page contractors-page--directory" aria-label="Контрагенты">
@@ -2405,10 +2390,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       {formStateError && !modal ? (
         <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || contractorReferenceLoading !== null || supplierEditorLoadingId !== null} />
       ) : null}
+
       {activeSection === 'garages' ? (
         <section className="contractors-directory-card" aria-label="Гаражи">
-          {liveSearch('garages', 'Поиск гаражей', (value) => void loadGaragePage(0, garagePage.limit, undefined, undefined, undefined, value))}
-          {canUseGarageColumnFilters ? <div className="contractors-column-filters" role="group" aria-label="Фильтры гаражей">
+          {canUseGarageColumnFilters ? <div className="contractors-column-filters" role="search" aria-label="Фильтры гаражей">
             <label className="contractors-column-filters__field contractors-column-filters__field--number">
               <span>Номер гаража</span>
               <span className="contractors-column-filters__input-shell">
@@ -2443,12 +2428,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               </div>
             </fieldset>
             <div className="contractors-column-filters__actions">
-              <button className="ghost-button" type="button" aria-label="Сбросить фильтры" disabled={Object.values(garageColumnFilterForm).every((value) => value === '')} onClick={() => {
-                garageFilterDelayRef.current?.()
-                setGarageColumnFilterForm(emptyGarageColumnFilterForm)
-                setGarageColumnFilters({})
-                void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
-              }}>
+              <button className="ghost-button" type="button" aria-label="Сбросить фильтры" disabled={Object.values(garageColumnFilterForm).every((value) => value === '')} onClick={resetGarageColumnFilters}>
                 <RotateCcw size={16} aria-hidden="true" />
                 <span>Сбросить</span>
               </button>
@@ -2541,7 +2521,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       {activeSection === 'suppliers' ? (
         <section className="contractors-directory-card" aria-label="Поставщики">
           {supplierEditorLoadingId ? <span className="contractors-directory-loading-note" role="status" aria-live="polite">Загружаем контакты поставщика…</span> : null}
-          {liveSearch('suppliers', 'Поиск поставщиков', (value) => void loadSupplierPage(0, supplierPage.limit, undefined, value))}
           <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики" style={supplierTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorSupplierColumnDefinitions.map((column) => (
@@ -2634,7 +2613,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-card-header">
               <h2>Сотрудники</h2>
             </div>
-            {liveSearch('staff', 'Поиск сотрудников', (value) => void loadStaffPage(0, staffPage.limit, undefined, value))}
             <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 {contractorStaffColumnDefinitions.map((column) => (
@@ -3838,13 +3816,126 @@ function GarageAnnualPaymentsSection({ accessToken, canReadPayments, canWritePay
   )
 }
 
-function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayments, canWritePayments, financeClient, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onPaymentRecorded, onSave }: { accessToken: string; canAdjustOpeningData: boolean; canReadPayments: boolean; canWritePayments: boolean; financeClient: FinanceClient; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onPaymentRecorded: () => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
+function NewGarageAnnualPaymentsSection({ accessToken, canReadPayments, canWritePayments, financeClient, form, preview, drafts, onPreviewChange, onDraftChange }: {
+  accessToken: string
+  canReadPayments: boolean
+  canWritePayments: boolean
+  financeClient: FinanceClient
+  form: ContractorGarageRow
+  preview: GarageAnnualPaymentPreviewDto | null
+  drafts: Record<string, string>
+  onPreviewChange: (preview: GarageAnnualPaymentPreviewDto | null) => void
+  onDraftChange: (incomeTypeId: string, value: string) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadRevision, setReloadRevision] = useState(0)
+
+  useEffect(() => {
+    if (!canReadPayments || !form.peopleCount.trim() || !form.floorCount.trim()) {
+      return
+    }
+
+    const peopleCount = Number(form.peopleCount)
+    const floorCount = Number(form.floorCount)
+    if (!Number.isInteger(peopleCount) || peopleCount < 0 || peopleCount > 1000 || !Number.isInteger(floorCount) || floorCount < 0 || floorCount > 100) {
+      return
+    }
+
+    return scheduleDebouncedRequest({
+      request: (signal) => financeClient.previewGarageAnnualPayments(accessToken, {
+        peopleCount,
+        floorCount,
+        initialWaterMeterValue: parsePrototypeNullableNumber(form.initialWater),
+        initialElectricityMeterValue: parsePrototypeNullableNumber(form.initialElectricity),
+      }, signal),
+      onStart: () => {
+        setLoading(true)
+        setError(null)
+      },
+      onSuccess: (result) => {
+        setLoading(false)
+        onPreviewChange(result)
+      },
+      onError: (loadError) => {
+        setLoading(false)
+        onPreviewChange(null)
+        setError(loadError instanceof Error ? loadError.message : 'Не удалось рассчитать годовые платежи.')
+      },
+    })
+  }, [accessToken, canReadPayments, financeClient, form.floorCount, form.initialElectricity, form.initialWater, form.peopleCount, onPreviewChange, reloadRevision])
+
+  if (!canReadPayments) {
+    return null
+  }
+
+  return (
+    <section className="garage-annual-payments garage-annual-payments--new" aria-label="Погашенные годовые платежи">
+      <div className="garage-annual-payments__header">
+        <div>
+          <h4>Погашенные годовые платежи</h4>
+          <p>Укажите уже оплаченную сумму. Наименование тарифа и его полная стоимость приведены для сверки.</p>
+        </div>
+        {preview ? <strong>{preview.accountingYear} год</strong> : null}
+      </div>
+      {loading ? <LoadingSkeleton label="Рассчитываем годовые тарифы" rows={2} columns={3} /> : null}
+      {error ? <AsyncErrorState message={error} onRetry={() => setReloadRevision((revision) => revision + 1)} retrying={loading} /> : null}
+      {!loading && !error && preview?.items.length === 0 ? <StatusMessage>Действующих годовых тарифов на текущую дату нет.</StatusMessage> : null}
+      {!loading && preview && preview.items.length > 0 ? (
+        <div className="garage-annual-payments__new-list">
+          {preview.items.map((annualItem) => {
+            const draft = drafts[annualItem.incomeTypeId] ?? ''
+            const amount = parsePrototypeMoney(draft)
+            const invalid = amount < 0 || amount > annualItem.fullAmount
+            return (
+              <div className="garage-annual-payments__new-row" key={annualItem.incomeTypeId}>
+                <div className="garage-annual-payments__new-description">
+                  <strong>{annualItem.serviceName}</strong>
+                  <span>Тариф: {annualItem.tariffName}</span>
+                  <span>{annualItem.destinationFundName ? `Фонд: ${annualItem.destinationFundName}` : 'Общий нераспределённый пул'}</span>
+                </div>
+                <FormField label="Полная стоимость">
+                  <input aria-label={`Полная стоимость ${annualItem.serviceName}`} value={`${formatMoney(annualItem.fullAmount)} руб.`} readOnly />
+                </FormField>
+                <FormField label="Погашено">
+                  <MoneyTextInput
+                    aria-label={`Погашено по тарифу ${annualItem.serviceName}`}
+                    aria-invalid={invalid}
+                    disabled={!canWritePayments}
+                    value={draft}
+                    onValueChange={(value) => onDraftChange(annualItem.incomeTypeId, value)}
+                  />
+                </FormField>
+                {invalid ? <span className="garage-annual-payments__new-error" role="alert">Сумма должна быть от 0 до {formatMoney(annualItem.fullAmount)} руб.</span> : null}
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+      {!canWritePayments ? <StatusMessage>Для ввода погашенных сумм нужно право изменения платежей.</StatusMessage> : null}
+    </section>
+  )
+}
+
+function buildInitialGarageAnnualPayments(preview: GarageAnnualPaymentPreviewDto | null, drafts: Record<string, string>): InitialGarageAnnualPayments | undefined {
+  if (!preview) return undefined
+  const annualPayments = preview.items.flatMap((item) => {
+    const amount = parsePrototypeMoney(drafts[item.incomeTypeId] ?? '')
+    if (amount < 0 || amount > item.fullAmount) {
+      throw new Error(`Погашенная сумма «${item.serviceName}» должна быть от 0 до ${formatMoney(item.fullAmount)} руб.`)
+    }
+    return amount > 0 ? [{ incomeTypeId: item.incomeTypeId, amount }] : []
+  })
+  return annualPayments.length > 0 ? { accountingYear: preview.accountingYear, annualPayments } : undefined
+}
+
+function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayments, canWritePayments, financeClient, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onPaymentRecorded, onSave }: { accessToken: string; canAdjustOpeningData: boolean; canReadPayments: boolean; canWritePayments: boolean; financeClient: FinanceClient; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onPaymentRecorded: () => void; onSave: (item: ContractorGarageRow, initialAnnualPayments?: InitialGarageAnnualPayments) => Promise<void> }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<GaragePrototypeValidationErrors>({})
-  const [annualPaymentOptions, setAnnualPaymentOptions] = useState<GarageAnnualPaymentOptionsDto | string | null>()
+  const [annualPaymentPreview, setAnnualPaymentPreview] = useState<GarageAnnualPaymentPreviewDto | null>(null)
   const [annualPaymentDrafts, setAnnualPaymentDrafts] = useState<Record<string, string>>({})
   const formRef = useRef<HTMLFormElement>(null)
   useRestoreFocusOnClose(true)
@@ -3853,22 +3944,6 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
   const totalDebt = Math.max(parsePrototypeMoney(form.balance), 0)
   const overdueDebt = Math.min(parsePrototypeMoney(form.overdueDebt), totalDebt)
   const notYetOverdueDebt = Math.max(totalDebt - overdueDebt, 0)
-
-  useEffect(() => {
-    if (item || !canReadPayments || !form.peopleCount || !form.floorCount) return
-    const peopleCount = Number(form.peopleCount)
-    const floorCount = Number(form.floorCount)
-    return scheduleDebouncedRequest({
-      request: (signal) => financeClient.previewGarageAnnualPayments(accessToken, {
-        year: new Date().getFullYear(),
-        peopleCount,
-        floorCount,
-      }, signal),
-      onStart: () => setAnnualPaymentOptions(null),
-      onSuccess: setAnnualPaymentOptions,
-      onError: (error) => setAnnualPaymentOptions(error instanceof Error ? error.message : String(error)),
-    })
-  }, [accessToken, canReadPayments, financeClient, form.floorCount, form.peopleCount, item])
 
   function clearValidationError(field: GaragePrototypeField) {
     setValidationErrors((current) => {
@@ -3880,15 +3955,11 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
   }
 
   async function saveAndClose() {
-    const paidAnnualPayments = !item && canWritePayments
-      ? Object.entries(annualPaymentDrafts)
-          .map(([incomeTypeId, draft]) => ({ incomeTypeId, amount: parsePrototypeMoney(draft) }))
-          .filter((payment) => payment.amount > 0)
-      : []
     setSaving(true)
     setSaveError(null)
     try {
-      await onSave({ ...form, paidAnnualPayments })
+      const initialAnnualPayments = item ? undefined : buildInitialGarageAnnualPayments(annualPaymentPreview, annualPaymentDrafts)
+      await onSave(form, initialAnnualPayments)
       setSaveChanges([])
       onClose()
     } catch (error) {
@@ -3943,8 +4014,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
                   <input aria-label="Номер гаража" aria-invalid={Boolean(validationErrors.number)} data-garage-field="number" maxLength={80} pattern=".*\S.*" required value={form.number} onChange={(event) => { clearValidationError('number'); setForm({ ...form, number: event.target.value }) }} />
                 </label>
                 <div className="contractors-garage-form-occupancy">
-                  <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
-                  <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
+                  <FormField label="Количество человек"><input aria-label="Количество человек" aria-invalid={Boolean(validationErrors.peopleCount)} data-garage-field="peopleCount" type="number" min="0" max="1000" step="1" required value={form.peopleCount} onChange={(event) => { clearValidationError('peopleCount'); setAnnualPaymentPreview(null); setForm({ ...form, peopleCount: event.target.value }) }} /></FormField>
+                  <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setAnnualPaymentPreview(null); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
                 </div>
                 <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
               </div>
@@ -3976,8 +4047,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
                     <FormField label="Срок оплаты не наступил"><input aria-label="Непросроченная часть задолженности гаража" value={`${formatMoney(notYetOverdueDebt)} руб.`} readOnly /></FormField>
                   </>
                 )}
-                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
-                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
+                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setAnnualPaymentPreview(null); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
+                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setAnnualPaymentPreview(null); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
                 <div className="contractors-garage-form-details">
                   <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
                   <FormField label="Телефон"><PhoneInput aria-label="Телефон владельца гаража" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
@@ -3986,27 +4057,11 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReadPayme
             </div>
             <div className="contractors-garage-form-notes">
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
-              <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" maxLength={1000} value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
+              <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
-            {!item ? (
-              <section className="contractor-history-section" aria-labelledby="garage-create-annual-payments-title">
-                <h4 id="garage-create-annual-payments-title"><FileText size={17} /> Уже оплаченные годовые платежи</h4>
-                {!canWritePayments ? <p className="form-hint">{canReadPayments ? 'Для указания оплаты нужно право изменения платежей.' : 'Для просмотра годовых платежей нужен доступ к платежам.'}</p> : null}
-                {annualPaymentOptions === null ? <LoadingSkeleton label="Рассчитываем годовые платежи" rows={2} columns={3} /> : null}
-                {typeof annualPaymentOptions === 'string' ? <FormError>{annualPaymentOptions}</FormError> : null}
-                {annualPaymentOptions && typeof annualPaymentOptions !== 'string' && annualPaymentOptions.items.length === 0 ? <StatusMessage>Годовые платежи не настроены.</StatusMessage> : null}
-                {annualPaymentOptions && typeof annualPaymentOptions !== 'string' && annualPaymentOptions.items.length ? (
-                  <div className="form-grid" role="group" aria-label="Уже оплаченные годовые платежи нового гаража">
-                    {annualPaymentOptions.items.map((option) => (
-                      <FormField key={option.incomeTypeId} label={`${option.serviceName} · Тариф: ${option.tariffName ?? 'не задан'} · Стоимость: ${option.amount === null ? '—' : formatMoney(option.amount)} · ${option.destinationFundName ? `Фонд: ${option.destinationFundName}` : 'Общий пул'}`}>
-                        {canWritePayments && option.canRecordPayment && option.amount !== null ? <MoneyTextInput aria-label={`Уже оплачено: ${option.serviceName}`} disabled={saving} value={annualPaymentDrafts[option.incomeTypeId] ?? ''} onValueChange={(value) => setAnnualPaymentDrafts((current) => ({ ...current, [option.incomeTypeId]: value }))} /> : <span>Недоступно</span>}
-                      </FormField>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-            {item ? <GarageAnnualPaymentsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} financeClient={financeClient} garage={item} onPaymentRecorded={onPaymentRecorded} /> : null}
+            {item
+              ? <GarageAnnualPaymentsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} financeClient={financeClient} garage={item} onPaymentRecorded={onPaymentRecorded} />
+              : <NewGarageAnnualPaymentsSection accessToken={accessToken} canReadPayments={canReadPayments} canWritePayments={canWritePayments} financeClient={financeClient} form={form} preview={annualPaymentPreview} drafts={annualPaymentDrafts} onPreviewChange={setAnnualPaymentPreview} onDraftChange={(incomeTypeId, value) => setAnnualPaymentDrafts((current) => ({ ...current, [incomeTypeId]: value }))} />}
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
                 <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>

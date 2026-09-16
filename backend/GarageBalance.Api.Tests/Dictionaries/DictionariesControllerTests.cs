@@ -27,6 +27,20 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public void CreateGarageWithAnnualPayments_RequiresDictionaryAndPaymentWritePermissions()
+    {
+        var action = typeof(DictionariesController).GetMethod(nameof(DictionariesController.CreateGarageWithAnnualPayments));
+        Assert.NotNull(action);
+        var policies = action!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>()
+            .Select(attribute => attribute.Policy)
+            .ToArray();
+
+        Assert.Contains(SystemPermissions.DictionariesWrite, policies);
+        Assert.Contains(SystemPermissions.PaymentsWrite, policies);
+    }
+
+    [Fact]
     public async Task AdjustGarageOpeningBalance_ReturnsCreatedAndPassesActor()
     {
         var actorId = Guid.NewGuid();
@@ -130,6 +144,29 @@ public sealed class DictionariesControllerTests
         Assert.Equal(garageId, dto.Id);
         Assert.Equal(nameof(DictionariesController.GetGarages), created.ActionName);
         Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CreateGarageWithAnnualPayments_ReturnsCreatedAndPassesRequestAndActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var garage = new GarageDto(Guid.NewGuid(), "ГОД-1", 2, 1, null, null, 0m, null, null, null, false);
+        var onboarding = new FakeGarageOnboardingService
+        {
+            Result = DictionaryResult<GarageDto>.Success(garage)
+        };
+        var request = new CreateGarageWithAnnualPaymentsRequest(
+            new UpsertGarageRequest("ГОД-1", 2, 1, null, 0m, null, null, null),
+            2026,
+            [new InitialGarageAnnualPaymentRequest(Guid.NewGuid(), 400m)]);
+        var controller = CreateController(new FakeDictionaryService(), actorUserId, onboarding);
+
+        var result = await controller.CreateGarageWithAnnualPayments(request, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Same(garage, created.Value);
+        Assert.Equal(request, onboarding.LastRequest);
+        Assert.Equal(actorUserId, onboarding.LastActorUserId);
     }
 
     [Fact]
@@ -1731,15 +1768,32 @@ public sealed class DictionariesControllerTests
         Assert.Equal(staffId, service.LastRestoreId);
     }
 
-    private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null)
+    private static DictionariesController CreateController(FakeDictionaryService service, Guid? actorUserId = null, IGarageOnboardingService? onboardingService = null)
     {
-        var controller = new DictionariesController(service);
+        var controller = new DictionariesController(service, onboardingService);
         var claims = actorUserId is null ? [] : new[] { new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString()) };
         controller.ControllerContext.HttpContext = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
         };
         return controller;
+    }
+
+    private sealed class FakeGarageOnboardingService : IGarageOnboardingService
+    {
+        public DictionaryResult<GarageDto> Result { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public CreateGarageWithAnnualPaymentsRequest? LastRequest { get; private set; }
+        public Guid? LastActorUserId { get; private set; }
+
+        public Task<DictionaryResult<GarageDto>> CreateWithAnnualPaymentsAsync(
+            CreateGarageWithAnnualPaymentsRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(Result);
+        }
     }
 
     private static FakeDictionaryService CreateCoreMutationSuccessService(string operation, Guid recordId)
