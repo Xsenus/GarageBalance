@@ -8380,7 +8380,7 @@ button.operation-row:focus-visible {
 .report-workbook-filter {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 14px;
+  gap: 10px 8px;
   align-items: end;
   padding: 0 16px;
 }
@@ -8393,7 +8393,7 @@ button.operation-row:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -8412,14 +8412,14 @@ button.operation-row:focus-visible {
 .report-quick-periods {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
 }
 
 .report-quick-periods__button {
   min-height: 38px;
-  padding: 6px 8px;
-  font-size: 13px;
+  padding: 6px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -8429,7 +8429,7 @@ button.operation-row:focus-visible {
   color: #101828;
 }
 
-.report-workbook-filter--single .report-workbook-filter__fields > label {
+.report-workbook-filter--single .report-workbook-filter__fields > label:not(.report-period-field) {
   flex-basis: 150px;
 }
 
@@ -8443,7 +8443,7 @@ button.operation-row:focus-visible {
   flex-wrap: wrap;
   align-items: end;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   min-height: 38px;
 }
 
@@ -8726,8 +8726,8 @@ button.operation-row:focus-visible {
 
 .report-group-button {
   min-height: 38px;
-  padding: 7px 10px;
-  font-size: 13px;
+  padding: 7px 8px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -8826,52 +8826,10 @@ button.operation-row:focus-visible {
 }
 
 @media (min-width: 1280px) {
-  .report-workbook-filter {
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 8px;
-  }
-
   .report-workbook-filter__fields,
   .report-quick-periods,
   .report-workbook-filter__actions {
     flex-wrap: nowrap;
-  }
-
-  .report-workbook-filter__fields {
-    gap: 6px;
-  }
-
-  .report-workbook-filter__fields > label,
-  .report-workbook-filter--single .report-workbook-filter__fields > label {
-    flex: 0 0 auto;
-  }
-
-  .report-workbook-filter__fields > .report-period-field--month,
-  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--month {
-    flex-basis: 100px;
-  }
-
-  .report-workbook-filter__fields > .report-period-field--date,
-  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--date {
-    flex-basis: 118px;
-  }
-
-  .report-quick-periods {
-    gap: 4px;
-  }
-
-  .report-quick-periods__button {
-    padding-inline: 6px;
-    font-size: 12px;
-  }
-
-  .report-workbook-filter__actions {
-    gap: 6px;
-  }
-
-  .report-group-button {
-    padding-inline: 8px;
-    font-size: 12px;
   }
 }
 

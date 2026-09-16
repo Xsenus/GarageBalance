@@ -463,12 +463,13 @@ describe('responsive layout styles', () => {
 
   it('keeps desktop report periods and exports in one compact row', () => {
     expect(normalizedAppCss).toContain('.report-workbook-filter .localized-date-picker input {\n  padding-inline: 6px 36px;\n  font-weight: 500;\n  text-align: center;')
-    expect(normalizedAppCss).toContain('@media (min-width: 1280px) {\n  .report-workbook-filter {\n    grid-template-columns: minmax(0, 1fr) auto;\n    column-gap: 8px;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  gap: 10px 8px;')
     expect(normalizedAppCss).toContain('.report-workbook-filter__fields,\n  .report-quick-periods,\n  .report-workbook-filter__actions {\n    flex-wrap: nowrap;')
-    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > .report-period-field--month,\n  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--month {\n    flex-basis: 100px;')
-    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > .report-period-field--date,\n  .report-workbook-filter--single .report-workbook-filter__fields > .report-period-field--date {\n    flex-basis: 118px;')
-    expect(normalizedAppCss).toContain('.report-quick-periods__button {\n    padding-inline: 6px;\n    font-size: 12px;')
-    expect(normalizedAppCss).toContain('.report-group-button {\n    padding-inline: 8px;\n    font-size: 12px;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > .report-period-field--month {\n  flex-basis: 100px;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > .report-period-field--date {\n  flex-basis: 118px;')
+    expect(normalizedAppCss).toContain('.report-workbook-filter--single .report-workbook-filter__fields > label:not(.report-period-field) {\n  flex-basis: 150px;')
+    expect(normalizedAppCss).toContain('.report-quick-periods__button {\n  min-height: 38px;\n  padding: 6px;\n  font-size: 12px;')
+    expect(normalizedAppCss).toContain('.report-group-button {\n  min-height: 38px;\n  padding: 7px 8px;\n  font-size: 12px;')
   })
 
   it('keeps history details reachable through horizontal scrolling on mobile', () => {
