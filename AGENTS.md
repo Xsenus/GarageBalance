@@ -30,12 +30,12 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 
 - clarify only when the missing answer cannot be discovered and guessing would be risky;
 - implement the requested behavior completely, including backend, frontend, data, documentation, and deployment pieces that are in scope;
-- add or update tests for every developed element, workflow, form, dialog, endpoint, permission branch, validation state, and important edge case so the behavior is protected from regressions;
-- run relevant backend/frontend tests, builds, lint, formatting, privacy checks, and encoding checks;
+- add or update tests for every developed behavior, workflow, form, dialog, endpoint, permission branch, validation state, and important edge case so the behavior is protected from regressions; a purely presentational change does not require a new broad regression test when behavior, accessibility, contracts, and state are unchanged, but update an existing focused contract/snapshot test when it intentionally describes the changed presentation;
+- choose backend/frontend tests, builds, lint, formatting, privacy checks, and encoding checks according to the risk-based test gate below instead of running every available check after every edit;
 - after local verification, stop every temporary process you started for testing or development, including frontend dev/preview servers, backend API hosts, database containers, background workers, file watchers, browser automation helpers, and one-off smoke-test servers;
 - before the final response and before committing, perform an explicit process audit by command line for workspace-related `dotnet`, `testhost`, `node`, Vitest, Vite, Playwright, database, watcher, and dev-server processes; stop every process started for the task, run `dotnet build-server shutdown` when .NET checks were used, and verify that no task-owned process remains; do not stop shared Codex/MCP servers, language servers, IDE processes, or user-started services, and record any intentionally retained process with its purpose in the final response;
 - clean up temporary artifacts created during the work, such as generated previews, screenshots, scratch exports, copied customer files, temporary reports, migration scripts used only for inspection, logs, caches, and local analysis folders; keep an artifact only when the user explicitly asked for it, it is intentionally part of the deliverable, or it is required for a committed test fixture/documentation example;
-- check local database behavior whenever a local PostgreSQL/database environment is available; if it is unavailable, state that honestly in the roadmap history and final response, and use the closest safe substitute such as migration SQL generation, EF/integration tests, or the VPS test environment when appropriate;
+- check local database behavior when the task changes backend persistence, migrations, queries, transactions, imports, financial/data rules, or another path that can affect PostgreSQL; do not start a database solely for documentation or isolated presentational frontend work; if a required database environment is unavailable, state that honestly in the roadmap history and final response, and use the closest safe substitute such as migration SQL generation, EF/integration tests, or the VPS test environment when appropriate;
 - update the relevant active roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains; if there is no active roadmap, skip this step and do not create a replacement roadmap unless the user asks for one;
 - add an end-user "Что нового" entry when the change is visible to cooperative staff/admins or changes business rules, permissions, integrations, data handling, reports, imports, or visible defects;
 - if no release note is required because the change is infrastructure-only or documentation-only, leave the release file unchanged and mention the reason when useful;
@@ -44,19 +44,54 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 
 When the user asks to check whether the last task is done, inspect the current code, active docs, tests, active roadmap when one exists, and release notes before deciding. Archived roadmaps must not be used to expand or resume the task unless the user explicitly orders work from the archive.
 
-## Mandatory Test Gate
+## Risk-Based Test Gate
 
-Every new or changed method, function, endpoint, component, hook, query, filter, sort, pagination path, permission branch, validation rule, save/edit operation, error state, and performance-sensitive path must be covered by an automated test at the closest practical level. When existing code is touched, inspect its success, empty, invalid, failure, cancellation/stale-response, and permission-denied branches and add missing regression coverage before considering the task complete.
+Every new or changed method, function, endpoint, component behavior, hook, query, filter, sort, pagination path, permission branch, validation rule, save/edit operation, error state, and performance-sensitive path must be covered by an automated test at the closest practical level. When behavioral code is touched, inspect its applicable success, empty, invalid, failure, cancellation/stale-response, and permission-denied branches and add missing regression coverage before considering the behavior complete.
 
-Tests are an execution gate, not optional documentation:
+Tests remain an execution gate, but their local scope must be proportional to the change. Optimize feedback time by selecting the smallest sufficient check during development and batching full suites at the publication boundary. Never gain speed by deleting tests, weakening assertions or coverage gates, skipping a relevant failing check, or broadening a timeout.
 
-- run the relevant focused tests while developing and the complete backend and frontend suites before committing or publishing;
-- run frontend lint, production build and bundle budget together with backend formatting, privacy and migration checks required by the task;
-- do not commit, merge, push or deploy while a required test, coverage threshold, build, lint, formatting, privacy or migration check is failing;
-- do not delete, skip, weaken or broaden a timeout merely to make a failing test green; fix the production defect or make the test deterministic while preserving the asserted behavior;
-- GitHub Actions must execute the complete backend and frontend suites and enforce the configured coverage thresholds before packaging or deployment steps;
-- when CI fails, inspect the exact failing logs, fix the cause, add or strengthen a regression test, push the correction and wait for a fully successful rerun;
-- report the exact local and CI test totals, coverage gates and any environment limitation in the final response.
+Before starting a long-running check, inspect the changed files and decide whether the change affects behavior, shared contracts, public APIs, financial/security/data rules, persistence, dependencies, or only presentation. Briefly tell the user which verification tier is being used when that choice materially affects task duration.
+
+### Low Risk
+
+Low-risk work includes icon replacement, copy or label changes, CSS colors/sizes/spacing/alignment, moving a control without changing its handler, minor responsive layout, static images, and documentation.
+
+- During development, run only the closest existing component/contract test when relevant, lint or formatting for the changed files when supported, type checking when typed code or imports changed, and a visual check of the affected screen when useful.
+- For a pure presentation change, do not run backend tests, PostgreSQL, migrations, Docker, end-to-end suites, or the complete frontend suite locally merely because files changed.
+- A documentation-only or `AGENTS.md`-only task requires no application test run; inspect the diff and run only an available documentation/link/format check that is directly relevant.
+
+### Medium Risk
+
+Medium-risk work includes component state, an event handler, form validation, filtering/sorting/pagination, a call to an unchanged API contract, or a contained backend service change without a public contract change.
+
+- Run the focused component, hook, service, controller, or module tests that exercise the changed behavior, plus a targeted build/type check when imports, compilation, or bundling may be affected.
+- Do not run unrelated frontend or backend suites during each edit. Run broader affected-area checks once when the change stabilizes if the focused tests reveal shared impact.
+
+### High Risk
+
+High-risk work includes financial calculations, payments, balances, tariffs, accruals, authentication, roles and permissions, personal/protected data, API contract changes, persistence and migrations, import/export and integrations, background jobs, concurrency, transactions, caching, dependency updates, and shared infrastructure/components used across many sections.
+
+- Run the relevant expanded tests as soon as the behavior is implemented, including important success, failure, validation, permission, transaction, and stale/cancellation paths as applicable.
+- Check both frontend and backend when their contract or interaction changes. Check PostgreSQL and migrations when persistence can be affected.
+- Before push or publication, run every full suite and specialized gate applicable to the affected areas.
+
+### Checks By Changed Area
+
+- Frontend-only with no API contract change: run focused frontend tests while developing; do not run backend tests. Before push, run the complete frontend suite, lint, type/production build, bundle budget, and other configured frontend gates.
+- Backend-only with no frontend contract change: run focused backend tests while developing; do not run frontend tests. Before push, run the complete backend suite, formatting, coverage, and applicable privacy/migration/database gates.
+- API contract or frontend/backend interaction: test both sides and run both applicable full suites before push.
+- Documentation/instructions only: do not run application suites solely for the documentation change.
+
+### Full Verification Boundary
+
+- Run the project's complete applicable verification once after the intended batch of changes is finished and before push, pull request publication, release, or deployment. Also run it when the user explicitly asks for a full audit or final publication check.
+- Full verification may include complete frontend/backend suites, lint, formatting, type checks, production build, coverage thresholds, dependency/security/privacy audits, migration checks, Docker, integration, and end-to-end tests; use only commands and gates that actually exist in this project and are applicable to the changed area.
+- A local commit does not by itself require both complete application suites. Commit after the risk-appropriate checks are green; the mandatory full local gate is the later push/publication boundary.
+- If the user asks to defer tests during a series of low-risk edits, batch them until the user requests verification, commit/push preparation, or publication. Do not defer an immediately relevant high-risk check without explicitly identifying the risk.
+- Do not repeat an already successful full check when no code in its scope has changed since that run.
+- GitHub Actions must continue to execute the complete backend and frontend suites and enforce configured coverage, build, security/privacy, migration, and packaging/deployment gates. Do not weaken CI to implement this policy.
+- Do not commit, merge, push, publish, or deploy while a check required for that boundary is failing. When CI fails, inspect the exact logs, fix the cause, add or strengthen a regression test when appropriate, push the correction, and wait for a fully successful rerun.
+- Report the focused checks actually run during development and, when a full local or CI gate was required, its exact totals, coverage gates, and environment limitations. Do not imply that an intentionally deferred or inapplicable suite passed.
 
 ## Roadmaps
 
@@ -174,7 +209,7 @@ For important flows, design loading, empty, error, validation, and permission-de
 
 Use one loading pattern throughout the application. Initial screen, form, card, and table loads must render a shared skeleton that follows the final content shape and keeps the layout stable; do not show a bare `Загрузка...` / `Загружаем...` paragraph in place of content. Use a compact progress indicator inside the affected button only for short submit/save actions. Loading UI must expose a concise `role="status"` announcement with `aria-live="polite"`, keep decorative skeleton bars hidden from assistive technologies, honor `prefers-reduced-motion`, prevent conflicting actions, and never show an empty-state message until loading has finished. Empty table states must use the shared empty-state presentation with comfortable vertical padding instead of an unstyled hint directly under the header.
 
-React functionality must be covered by tests. Add component, hook, service, and integration-style tests for visible behavior, validation, permissions, filters, tables, reports, dialogs, imports, and error states. Any user-facing change should include or update frontend tests unless it is documentation-only.
+React functionality must be covered by tests. Add component, hook, service, and integration-style tests for visible behavior, validation, permissions, filters, tables, reports, dialogs, imports, and error states. A user-facing behavioral change should include or update frontend tests. A purely presentational change may rely on the closest existing UI/contract test plus visual verification when behavior, accessibility, state, and API contracts are unchanged; do not add a low-value broad test solely because an icon, label, spacing, or alignment changed.
 
 Do not merge untested UI paths for money, permissions, imports, reports, or data editing. Use stable selectors or accessible roles/names in tests so the tests describe the user's real workflow.
 
