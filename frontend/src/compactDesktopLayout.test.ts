@@ -42,8 +42,13 @@ describe('compact desktop layout contract', () => {
   })
 
   it('marks every large workspace so compact height rules apply consistently', () => {
-    for (const section of ['users', 'tariffs', 'contractors', 'dictionaries', 'meter-readings', 'payments', 'funds', 'reports', 'import', 'audit', 'releases', 'settings']) {
-      expect(appShellSource).toContain(`workspace--${section}`)
+    expect(appShellSource).toContain("effectiveActiveSection === 'tariffsAndFees'")
+    expect(appShellSource).toContain("effectiveActiveSection === 'meterReadings'")
+    expect(appShellSource).toContain('`workspace workspace--${workspaceClassSuffix}`')
+
+    for (const section of ['users', 'contractors', 'dictionaries', 'payments', 'funds', 'reports', 'import', 'audit', 'releases', 'settings']) {
+      expect(appShellSource).toContain(`section: '${section}'`)
+      expect(appCss).toContain(`workspace--${section}`)
     }
   })
 

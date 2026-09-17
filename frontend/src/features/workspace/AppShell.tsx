@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  BookOpenCheck,
+  Bell,
+  ChartPie,
   DatabaseZap,
   FileSpreadsheet,
-  FileText,
   Gauge,
-  LockKeyhole,
+  History,
+  Landmark,
   PanelLeftClose,
   PanelLeftOpen,
+  RussianRuble,
+  Search,
+  Settings,
   ShieldCheck,
+  Table2,
   UsersRound,
-  WalletCards,
 } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import { auditApi } from '../../services/auditApi'
@@ -50,19 +54,19 @@ type NavigationItem = {
 }
 
 const navigation: NavigationItem[] = [
-  { section: 'dashboard', label: 'Главное меню', icon: Gauge },
+  { section: 'dashboard', label: 'Главное меню', icon: Landmark },
   { section: 'users', label: 'Пользователи', icon: ShieldCheck },
   { section: 'tariffsAndFees', label: 'Тарифы и сборы', icon: FileSpreadsheet },
   { section: 'contractors', label: 'Контрагенты', icon: UsersRound },
-  { section: 'dictionaries', label: 'Справочники', icon: UsersRound },
-  { section: 'meterReadings', label: 'Показания', icon: FileSpreadsheet },
-  { section: 'payments', label: 'Платежи', icon: WalletCards },
-  { section: 'funds', label: 'Фонды', icon: WalletCards },
-  { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet },
+  { section: 'dictionaries', label: 'Справочники', icon: Search },
+  { section: 'meterReadings', label: 'Показания', icon: Gauge },
+  { section: 'payments', label: 'Платежи', icon: RussianRuble },
+  { section: 'funds', label: 'Фонды', icon: ChartPie },
+  { section: 'reports', label: 'Отчеты', icon: Table2 },
   { section: 'import', label: 'Импорт', icon: DatabaseZap },
-  { section: 'audit', label: 'История изменений', icon: FileText },
-  { section: 'releases', label: 'Что нового', icon: BookOpenCheck },
-  { section: 'settings', label: 'Настройки', icon: LockKeyhole },
+  { section: 'audit', label: 'История изменений', icon: History },
+  { section: 'releases', label: 'Что нового', icon: Bell },
+  { section: 'settings', label: 'Настройки', icon: Settings },
 ]
 
 function loadStoredSidebarExpanded(): boolean {
@@ -114,21 +118,14 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient = auditApi
   )
   const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
-  const workspaceClassName = [
-    'workspace',
-    effectiveActiveSection === 'users' ? 'workspace--users' : '',
-    effectiveActiveSection === 'tariffsAndFees' ? 'workspace--tariffs' : '',
-    effectiveActiveSection === 'meterReadings' ? 'workspace--meter-readings' : '',
-    effectiveActiveSection === 'contractors' ? 'workspace--contractors' : '',
-    effectiveActiveSection === 'dictionaries' ? 'workspace--dictionaries' : '',
-    effectiveActiveSection === 'payments' ? 'workspace--payments' : '',
-    effectiveActiveSection === 'reports' ? 'workspace--reports' : '',
-    effectiveActiveSection === 'funds' ? 'workspace--funds' : '',
-    effectiveActiveSection === 'import' ? 'workspace--import' : '',
-    effectiveActiveSection === 'audit' ? 'workspace--audit' : '',
-    effectiveActiveSection === 'releases' ? 'workspace--releases' : '',
-    effectiveActiveSection === 'settings' ? 'workspace--settings' : '',
-  ].filter(Boolean).join(' ')
+  const workspaceClassSuffix = effectiveActiveSection === 'tariffsAndFees'
+    ? 'tariffs'
+    : effectiveActiveSection === 'meterReadings'
+      ? 'meter-readings'
+      : effectiveActiveSection
+  const workspaceClassName = workspaceClassSuffix === 'dashboard'
+    ? 'workspace'
+    : `workspace workspace--${workspaceClassSuffix}`
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarExpanded((current) => {

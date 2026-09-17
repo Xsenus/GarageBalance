@@ -107,6 +107,33 @@ describe('AuthenticatedAppShell performance', () => {
     expect(workspaceRenderSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('uses distinct semantic icons for every sidebar section', () => {
+    renderShell()
+
+    const expectedIcons = new Map([
+      ['Главное меню', 'lucide-landmark'],
+      ['Пользователи', 'lucide-shield-check'],
+      ['Тарифы и сборы', 'lucide-file-spreadsheet'],
+      ['Контрагенты', 'lucide-users-round'],
+      ['Справочники', 'lucide-search'],
+      ['Показания', 'lucide-gauge'],
+      ['Платежи', 'lucide-russian-ruble'],
+      ['Фонды', 'lucide-chart-pie'],
+      ['Отчеты', 'lucide-table-2'],
+      ['Импорт', 'lucide-database-zap'],
+      ['История изменений', 'lucide-history'],
+      ['Что нового', 'lucide-bell'],
+      ['Настройки', 'lucide-settings'],
+    ])
+    const renderedIcons = [...expectedIcons].map(([label, iconClass]) => {
+      const icon = screen.getByRole('button', { name: label }).querySelector('svg')
+      expect(icon).toHaveClass(iconClass)
+      return iconClass
+    })
+
+    expect(new Set(renderedIcons).size).toBe(expectedIcons.size)
+  })
+
   it('opens every section and commits only the final section during a rapid navigation burst', () => {
     renderShell()
     const navigation = screen.getByRole('navigation', { name: 'Основные разделы' })
