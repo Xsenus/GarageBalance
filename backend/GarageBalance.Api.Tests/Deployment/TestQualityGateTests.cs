@@ -3,15 +3,17 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class TestQualityGateTests
 {
     [Fact]
-    public void AgentInstructionsRequireTestsForChangedBehaviorAndBlockPublicationOnFailures()
+    public void AgentInstructionsRequireRiskBasedTestsAndBlockPublicationOnFailures()
     {
         var instructions = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "AGENTS.md"));
 
-        Assert.Contains("## Mandatory Test Gate", instructions, StringComparison.Ordinal);
-        Assert.Contains("Every new or changed method, function, endpoint, component, hook, query, filter, sort, pagination path, permission branch, validation rule, save/edit operation, error state, and performance-sensitive path", instructions, StringComparison.Ordinal);
-        Assert.Contains("complete backend and frontend suites before committing or publishing", instructions, StringComparison.Ordinal);
-        Assert.Contains("do not commit, merge, push or deploy while a required test, coverage threshold, build, lint, formatting, privacy or migration check is failing", instructions, StringComparison.Ordinal);
-        Assert.Contains("GitHub Actions must execute the complete backend and frontend suites and enforce the configured coverage thresholds", instructions, StringComparison.Ordinal);
+        Assert.Contains("## Risk-Based Test Gate", instructions, StringComparison.Ordinal);
+        Assert.Contains("Every new or changed method, function, endpoint, component behavior, hook, query, filter, sort, pagination path, permission branch, validation rule, save/edit operation, error state, and performance-sensitive path", instructions, StringComparison.Ordinal);
+        Assert.Contains("selecting the smallest sufficient check during development and batching full suites at the publication boundary", instructions, StringComparison.Ordinal);
+        Assert.Contains("For a pure presentation change, do not run backend tests, PostgreSQL, migrations, Docker, end-to-end suites, or the complete frontend suite locally", instructions, StringComparison.Ordinal);
+        Assert.Contains("Run the project's complete applicable verification once after the intended batch of changes is finished and before push, pull request publication, release, or deployment", instructions, StringComparison.Ordinal);
+        Assert.Contains("Do not commit, merge, push, publish, or deploy while a check required for that boundary is failing", instructions, StringComparison.Ordinal);
+        Assert.Contains("GitHub Actions must continue to execute the complete backend and frontend suites and enforce configured coverage, build, security/privacy, migration, and packaging/deployment gates", instructions, StringComparison.Ordinal);
     }
 
     [Fact]
