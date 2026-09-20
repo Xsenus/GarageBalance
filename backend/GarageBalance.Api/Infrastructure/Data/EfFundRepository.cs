@@ -115,6 +115,29 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<FundReplenishingServiceData>> GetReplenishingServicesAsync(
+        IReadOnlyCollection<Guid> fundIds,
+        CancellationToken cancellationToken)
+    {
+        if (fundIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await dbContext.IncomeTypes.AsNoTracking()
+            .Where(incomeType =>
+                !incomeType.IsArchived &&
+                incomeType.DestinationFundId.HasValue &&
+                fundIds.Contains(incomeType.DestinationFundId.Value))
+            .OrderBy(incomeType => incomeType.Name)
+            .ThenBy(incomeType => incomeType.Id)
+            .Select(incomeType => new FundReplenishingServiceData(
+                incomeType.DestinationFundId!.Value,
+                incomeType.Id,
+                incomeType.Name))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Supplier>> GetSuppliersForFundUpdateAsync(
         Guid fundId,
         CancellationToken cancellationToken)

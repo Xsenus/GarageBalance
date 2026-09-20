@@ -11,7 +11,7 @@ import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '
 import { ForegroundDialogError, FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { formatCount, formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
+import { formatCount, formatDateOnly, formatMoney, formatMonth, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { filterAndRankReportOptions } from '../../shared/reportFilters'
@@ -1042,7 +1042,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
             <button className="link-button" type="button" disabled={!sort || sortOptions.disabled} onClick={() => clearReportSort(sortOptions.tab)}>Сбросить сортировку</button>
           </div>
         ) : null}
-        <div className="report-workbook-table" role="table" aria-label={ariaLabel}>
+        <div className={`report-workbook-table${ariaLabel === 'Отчет по поступлениям' ? ' report-workbook-table--income' : ''}`} role="table" aria-label={ariaLabel}>
           <div className="report-workbook-row report-workbook-row--header" role="row" style={{ '--report-columns': normalizedColumns.length } as CSSProperties}>
             {normalizedColumns.map((column, columnIndex) => {
               const isActive = Boolean(column.sortField && sort?.field === column.sortField)
@@ -1391,7 +1391,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
       const incomeRows = report?.rows.filter((row) => row.rowType === 'payments').map((row) => [
         row.garageNumber,
         formatDateOnly(row.date),
-        formatOperationTime(row.createdAtUtc),
         formatMoney(row.incomeAmount),
         row.incomeTypeName,
         row.debtAfterPayment === null || row.debtAfterPayment === undefined ? '' : formatMoney(row.debtAfterPayment),
@@ -1441,9 +1440,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
           {renderReportTotal('ИТОГО поступлений', report?.incomeTotal)}
           {renderReportTable(
             'Отчет по поступлениям',
-            [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Дата', sortField: 'date' }, 'Время', { label: 'Сумма платежа', sortField: 'incomeAmount' }, { label: 'Назначение платежа', sortField: 'incomeTypeName' }, { label: 'Остаток долга после платежа', sortField: 'debt' }],
+            [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Дата', sortField: 'date' }, { label: 'Сумма платежа', sortField: 'incomeAmount' }, { label: 'Назначение платежа', sortField: 'incomeTypeName' }, { label: 'Остаток долга после платежа', sortField: 'debt' }],
             incomeRows,
-            report ? ['ИТОГО', '', '', formatMoney(report.incomeTotal), '', ''] : undefined,
+            report ? ['ИТОГО', '', formatMoney(report.incomeTotal), '', ''] : undefined,
             { tab: 'income', disabled: incomeReportLoading, totalCount: report?.rowCount },
             primaryLoading || incomeReportError ? undefined : 'Данных за период нет',
           )}

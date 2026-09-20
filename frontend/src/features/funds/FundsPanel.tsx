@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Landmark, Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundReconciliationDto, FundsClient } from '../../services/fundsApi'
+import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundReconciliationDto, FundReplenishingServiceDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
@@ -26,6 +26,7 @@ type FundPrototypeRow = {
   amount: number | null
   sortOrder: number
   linkedServices: FundLinkedServiceDto[]
+  replenishingServices: FundReplenishingServiceDto[]
   actions?: false
 }
 
@@ -37,6 +38,7 @@ type FundEditorDraft = {
   name: string
   balance: number
   linkedServices: FundLinkedServiceDto[]
+  replenishingServices: FundReplenishingServiceDto[]
 }
 
 type FundDeleteDraft = {
@@ -89,6 +91,7 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
     amount: fund.balance,
     sortOrder: fund.sortOrder,
     linkedServices: fund.linkedServices,
+    replenishingServices: fund.replenishingServices,
     actions: fund.allowOperations ? undefined : false,
   }
 }
@@ -325,7 +328,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   }
 
   function openFundCreate() {
-    setFundEditor({ mode: 'create', name: '', balance: 0, linkedServices: [] })
+    setFundEditor({ mode: 'create', name: '', balance: 0, linkedServices: [], replenishingServices: [] })
     setFundEditorError(null)
     setFundMessage(null)
   }
@@ -339,6 +342,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       name: fund.name,
       balance: fund.amount ?? 0,
       linkedServices: fund.linkedServices,
+      replenishingServices: fund.replenishingServices,
     })
     setFundEditorError(null)
     setFundMessage(null)
@@ -906,19 +910,35 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 />
               </FormField>
               {fundEditor.mode === 'edit' ? (
-                <section className="fund-linked-services" aria-labelledby="fund-linked-services-title">
-                  <div className="fund-linked-services-heading">
-                    <h4 id="fund-linked-services-title">Услуги, оплачиваемые из фонда</h4>
-                    <span>{fundEditor.linkedServices.length}</span>
-                  </div>
-                  <p>Привязка изменяется в карточке поставщика.</p>
-                  {fundEditor.linkedServices.length > 0 ? (
-                    <ul>
-                      {fundEditor.linkedServices.map((service) => <li key={service.id}>{service.name}</li>)}
-                    </ul>
-                  ) : (
-                    <p className="fund-linked-services-empty">К фонду пока не привязано ни одной услуги.</p>
-                  )}
+                <section className="fund-linked-services" aria-label="Связанные услуги фонда">
+                  <section className="fund-linked-services-group" aria-labelledby="fund-replenishing-services-title">
+                    <div className="fund-linked-services-heading">
+                      <h4 id="fund-replenishing-services-title">Услуги, пополняющие фонд</h4>
+                      <span>{fundEditor.replenishingServices.length}</span>
+                    </div>
+                    <p>Привязка изменяется в виде поступления.</p>
+                    {fundEditor.replenishingServices.length > 0 ? (
+                      <ul>
+                        {fundEditor.replenishingServices.map((service) => <li key={service.id}>{service.name}</li>)}
+                      </ul>
+                    ) : (
+                      <p className="fund-linked-services-empty">Поступления в этот фонд пока не настроены.</p>
+                    )}
+                  </section>
+                  <section className="fund-linked-services-group" aria-labelledby="fund-linked-services-title">
+                    <div className="fund-linked-services-heading">
+                      <h4 id="fund-linked-services-title">Услуги, оплачиваемые из фонда</h4>
+                      <span>{fundEditor.linkedServices.length}</span>
+                    </div>
+                    <p>Привязка изменяется в карточке поставщика.</p>
+                    {fundEditor.linkedServices.length > 0 ? (
+                      <ul>
+                        {fundEditor.linkedServices.map((service) => <li key={service.id}>{service.name}</li>)}
+                      </ul>
+                    ) : (
+                      <p className="fund-linked-services-empty">К фонду пока не привязано ни одной услуги.</p>
+                    )}
+                  </section>
                   {fundEditor.balance < 0 ? (
                     <p className="fund-delete-restriction">Перед удалением погасите отрицательный остаток фонда.</p>
                   ) : fundEditor.balance > 0 ? (

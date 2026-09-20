@@ -96,6 +96,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+function findTariffIdForEffectiveDate(periods: ChargeServiceTariffPeriodDto[], effectiveDate: string) {
+  return periods.find((period) =>
+    (!period.effectiveFrom || period.effectiveFrom <= effectiveDate)
+    && (!period.effectiveTo || effectiveDate <= period.effectiveTo))?.tariffId
+}
+
 type ContractorTariffRow = {
   id: string
   backendTariffId?: string
@@ -1476,13 +1482,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     )
   }
 
-  async function reloadServiceTariff(serviceId: string) {
-    const [tariffs, settings] = await Promise.all([
+  async function reloadServiceTariff(serviceId: string, effectiveDate?: string | null, preferredTariffId?: string) {
+    const [tariffs, settings, periods] = await Promise.all([
       dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
       dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
+      effectiveDate
+        ? dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, serviceId)
+        : Promise.resolve([]),
     ])
     const setting = settings.find((item) => item.id === serviceId)
-    return [setting, tariffs.find((item) => item.id === setting?.tariffId)] as const
+    const effectiveTariffId = effectiveDate ? findTariffIdForEffectiveDate(periods, effectiveDate) : undefined
+    const tariff = tariffs.find((item) => item.id === effectiveTariffId)
+      ?? tariffs.find((item) => item.id === preferredTariffId)
+      ?? tariffs.find((item) => item.id === setting?.tariffId)
+    return [setting, tariff] as const
   }
 
   async function persistServiceSettingRow(
@@ -1605,7 +1618,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         let retryError: unknown = caught
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
-            const [latestSetting, latestTariff] = await reloadServiceTariff(serviceSetting.id)
+            const [latestSetting, latestTariff] = await reloadServiceTariff(
+              serviceSetting.id,
+              request.effectiveFrom,
+              sourceTariff.id,
+            )
             if (!latestSetting || !latestTariff) {
               break
             }
@@ -1749,7 +1766,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     } catch (caught) {
       if (isConcurrentWriteConflict(caught) && linkedSetting && backendTariff) {
         try {
-          const [latestSetting, latestTariff] = await reloadServiceTariff(linkedSetting.id)
+          const [latestSetting, latestTariff] = await reloadServiceTariff(
+            linkedSetting.id,
+            request.effectiveFrom,
+            backendTariff.id,
+          )
           if (latestSetting && latestTariff) {
             const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, latestSetting.id, {
               service: { ...buildChargeServiceRequest(latestSetting, nextRows), tariffId: latestTariff.id },

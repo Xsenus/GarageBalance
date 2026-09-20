@@ -286,7 +286,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.garage-overdue-debt-table {\n  width: 100%;\n  min-width: 900px;')
     expect(normalizedAppCss).toContain('.payments-prototype-payable > .field-help {\n  grid-column: 1;\n  justify-self: start;')
     expect(normalizedAppCss).toContain('.payments-prototype-payable-amount {\n  grid-column: 2;\n  justify-self: end;')
-    expect(normalizedAppCss).toContain('.field-help__tooltip.payments-prototype-calculation-tooltip {\n  width: max-content;\n  max-width: min(420px, calc(100vw - 48px));\n  white-space: nowrap;')
+    expect(normalizedAppCss).toContain('.field-help__tooltip.payments-prototype-calculation-tooltip {\n  width: min(420px, calc(100vw - 48px));\n  max-width: min(420px, calc(100vw - 48px));\n  white-space: normal;\n  overflow-wrap: anywhere;')
     expect(normalizedAppCss).toContain('.detail-dialog.payments-prototype-calculation-dialog {\n  width: min(920px, 100%);')
     expect(normalizedAppCss).toContain('.payments-prototype-calculation--historical > p {\n  max-width: none;\n  line-height: 1.45;')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary {\n  display: grid;\n  grid-template-columns: minmax(190px, 0.72fr) minmax(300px, 1.18fr) minmax(290px, 1fr);')
@@ -577,11 +577,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .detail-dialog-header {\n  top: -14px;\n  margin: -14px -14px 10px;\n  padding: 12px 14px;')
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .contractors-modal-form {\n  gap: 7px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-column--financial {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('.contractors-garage-form-occupancy,\n.contractors-garage-form-details,\n.contractors-garage-form-notes {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('.contractors-garage-form-details {\n  grid-column: 1 / -1;\n  gap: 7px 12px;')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-identity {\n  grid-template-columns: minmax(110px, 1.35fr) minmax(110px, 1fr) minmax(90px, 0.8fr);')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-owner {\n  grid-template-columns: minmax(0, 1.7fr) minmax(150px, 1fr);\n  gap: 7px 12px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-notes textarea {\n  min-height: 52px;')
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .detail-dialog-actions {\n  margin-top: 6px;\n  padding-top: 10px;')
-    expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-column--financial,\n  .contractors-garage-form-occupancy,\n  .contractors-garage-form-details,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-column--financial,\n  .contractors-garage-form-identity,\n  .contractors-garage-form-owner,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')
   })
 
   it('uses a compact payments workspace on the customer laptop viewport', () => {

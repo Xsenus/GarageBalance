@@ -10,6 +10,7 @@ export type FundDto = {
   allowOperations: boolean
   isSystem: boolean
   linkedServices: FundLinkedServiceDto[]
+  replenishingServices: FundReplenishingServiceDto[]
   version: string
   isArchived?: boolean
 }
@@ -21,6 +22,11 @@ export type FundOptionDto = {
 }
 
 export type FundLinkedServiceDto = {
+  id: string
+  name: string
+}
+
+export type FundReplenishingServiceDto = {
   id: string
   name: string
 }

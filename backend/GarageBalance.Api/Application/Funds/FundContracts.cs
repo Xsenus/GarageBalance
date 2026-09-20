@@ -12,6 +12,7 @@ public sealed record FundDto(
     bool AllowOperations,
     bool IsSystem,
     IReadOnlyList<FundLinkedServiceDto> LinkedServices,
+    IReadOnlyList<FundReplenishingServiceDto> ReplenishingServices,
     Guid Version = default,
     bool IsArchived = false);
 
@@ -21,6 +22,10 @@ public sealed record FundOptionDto(
     bool AllowOperations);
 
 public sealed record FundLinkedServiceDto(
+    Guid Id,
+    string Name);
+
+public sealed record FundReplenishingServiceDto(
     Guid Id,
     string Name);
 

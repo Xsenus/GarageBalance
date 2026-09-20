@@ -45,7 +45,8 @@ public sealed class FundsControllerTests
             10,
             true,
             true,
-            [new FundLinkedServiceDto(Guid.NewGuid(), "Электроэнергия по счётчику")]);
+            [new FundLinkedServiceDto(Guid.NewGuid(), "Электроэнергия по счётчику")],
+            [new FundReplenishingServiceDto(Guid.NewGuid(), "Электроэнергия")]);
         var service = new FakeFundService { Funds = [fund] };
         var controller = CreateController(service);
 
@@ -55,6 +56,7 @@ public sealed class FundsControllerTests
         var returned = Assert.IsAssignableFrom<IReadOnlyList<FundDto>>(ok.Value);
         Assert.Same(fund, Assert.Single(returned));
         Assert.Equal("Электроэнергия по счётчику", Assert.Single(returned[0].LinkedServices).Name);
+        Assert.Equal("Электроэнергия", Assert.Single(returned[0].ReplenishingServices).Name);
         Assert.True(service.LastFundsIncludeArchived);
     }
 
@@ -398,7 +400,7 @@ public sealed class FundsControllerTests
 
     private static FundDto CreateFund(string name)
     {
-        return new FundDto(Guid.NewGuid(), name, 0m, 0m, 80, true, false, []);
+        return new FundDto(Guid.NewGuid(), name, 0m, 0m, 80, true, false, [], []);
     }
 
     private sealed class FakeFundService : IFundService

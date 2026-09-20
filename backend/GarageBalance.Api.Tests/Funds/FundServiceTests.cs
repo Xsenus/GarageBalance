@@ -79,6 +79,17 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task GetReplenishingServicesAsync_ReturnsEmptyResultForEmptyFundSet()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var repository = new EfFundRepository(database.Context);
+
+        var replenishingServices = await repository.GetReplenishingServicesAsync([], CancellationToken.None);
+
+        Assert.Empty(replenishingServices);
+    }
+
+    [Fact]
     public async Task GetFundsAsync_DoesNotSeedOrWriteWhenCatalogIsEmpty()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -238,7 +249,7 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task GetFundsAsync_ReturnsOnlyActiveServicesLinkedThroughExpenseFunds()
+    public async Task GetFundsAsync_ReturnsActiveReplenishingAndPayableServices()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
@@ -323,6 +334,19 @@ public sealed class FundServiceTests
         Assert.DoesNotContain(
             reloaded.SelectMany(fund => fund.LinkedServices),
             linkedService => linkedService.Name.Contains("Архив", StringComparison.Ordinal));
+        Assert.Collection(
+            electricity.ReplenishingServices,
+            replenishingService =>
+            {
+                Assert.Equal(electricityIncome.Id, replenishingService.Id);
+                Assert.Equal("Поступления за электроэнергию", replenishingService.Name);
+            });
+        Assert.Collection(
+            reloaded.Single(fund => fund.Id == waterFund.Id).ReplenishingServices,
+            replenishingService => Assert.Equal("Поступления за воду", replenishingService.Name));
+        Assert.DoesNotContain(
+            reloaded.SelectMany(fund => fund.ReplenishingServices),
+            replenishingService => replenishingService.Name.Contains("Архив", StringComparison.Ordinal));
     }
 
     [Fact]

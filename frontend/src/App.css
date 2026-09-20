@@ -743,7 +743,14 @@ h1 {
 
 .contractors-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
+}
+
+.contractors-hide-deleted-toggle {
+  min-height: 36px;
+  padding-block: 6px;
 }
 
 .contractors-primary-action {
@@ -2749,21 +2756,30 @@ h1 {
   padding-left: 18px;
 }
 
-.contractors-garage-form-occupancy,
-.contractors-garage-form-details,
+.contractors-garage-form-identity,
+.contractors-garage-form-owner,
 .contractors-garage-form-notes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 18px;
 }
 
-.contractors-garage-form-details {
-  grid-column: 1 / -1;
+.contractors-garage-form-identity {
+  grid-template-columns: minmax(110px, 1.35fr) minmax(110px, 1fr) minmax(90px, 0.8fr);
+}
+
+.contractors-garage-form-owner {
+  grid-template-columns: minmax(0, 1.7fr) minmax(150px, 1fr);
   gap: 7px 12px;
 }
 
 .contractors-garage-form-notes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px 12px;
+}
+
+.contractors-opening-data-button {
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 
 .contractors-garage-form-notes textarea {
@@ -2860,8 +2876,8 @@ h1 {
 
   .contractors-garage-form-columns,
   .contractors-garage-form-column--financial,
-  .contractors-garage-form-occupancy,
-  .contractors-garage-form-details,
+  .contractors-garage-form-identity,
+  .contractors-garage-form-owner,
   .contractors-garage-form-notes {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -5121,9 +5137,10 @@ input.meter-readings-control {
 }
 
 .field-help__tooltip.payments-prototype-calculation-tooltip {
-  width: max-content;
+  width: min(420px, calc(100vw - 48px));
   max-width: min(420px, calc(100vw - 48px));
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .payments-prototype-calculation-toggle {
@@ -5354,8 +5371,12 @@ input.meter-readings-control {
 }
 
 .payments-prototype-month-cell {
-  font-weight: 800;
+  font-weight: 400;
   white-space: nowrap;
+}
+
+.payments-prototype-service-name {
+  font-weight: 800;
 }
 
 .payments-prototype-table .payments-prototype-visible-count {
@@ -5642,11 +5663,21 @@ input.meter-readings-control {
 
 .fund-linked-services {
   display: grid;
-  gap: 8px;
+  gap: 14px;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.fund-linked-services-group {
+  display: grid;
+  gap: 8px;
+}
+
+.fund-linked-services-group + .fund-linked-services-group {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
 }
 
 .fund-linked-services-heading {
@@ -5676,7 +5707,7 @@ input.meter-readings-control {
   text-align: center;
 }
 
-.fund-linked-services > p {
+.fund-linked-services-group > p {
   color: var(--text-muted);
   font-size: 0.84rem;
 }
@@ -8937,6 +8968,11 @@ button.operation-row:focus-visible {
   display: grid;
   grid-template-columns: repeat(var(--report-columns), minmax(130px, 1fr));
   min-width: calc(var(--report-columns) * 130px);
+}
+
+.report-workbook-table--income .report-workbook-row {
+  grid-template-columns: minmax(72px, 0.55fr) minmax(96px, 0.7fr) minmax(120px, 0.9fr) minmax(240px, 2fr) minmax(190px, 1.45fr);
+  min-width: 718px;
 }
 
 .report-workbook-row > span {

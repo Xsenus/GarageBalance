@@ -5932,7 +5932,7 @@ function PaymentsPrototypePanel({
                           <tr>
                             <td className="payments-prototype-month-cell">{row.monthLabel}</td>
                             <td>
-                              <span>{getGarageIncomeRowTitle(row)}</span>
+                              <span className="payments-prototype-service-name">{getGarageIncomeRowTitle(row)}</span>
                               {shouldShowAccrualReason(row, accrualReasonDisplayMode) ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
                             </td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>

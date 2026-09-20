@@ -13,6 +13,9 @@ public interface IFundRepository
     Task<IReadOnlyList<FundLinkedServiceData>> GetLinkedServicesAsync(
         IReadOnlyCollection<Guid> fundIds,
         CancellationToken cancellationToken);
+    Task<IReadOnlyList<FundReplenishingServiceData>> GetReplenishingServicesAsync(
+        IReadOnlyCollection<Guid> fundIds,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<IncomeType>> GetIncomeTypesForFundUpdateAsync(
         Guid fundId,
         CancellationToken cancellationToken);
@@ -48,3 +51,5 @@ public sealed record FundPoolBalancesData(decimal AccountingBalance, decimal Ava
 public sealed record FundOperationPageData(IReadOnlyList<FundOperation> Items, int TotalCount);
 
 public sealed record FundLinkedServiceData(Guid FundId, Guid ServiceId, string ServiceName);
+
+public sealed record FundReplenishingServiceData(Guid FundId, Guid IncomeTypeId, string ServiceName);
