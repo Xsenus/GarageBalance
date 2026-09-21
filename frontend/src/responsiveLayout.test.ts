@@ -403,7 +403,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.dictionary-editor-dialog {\n  box-sizing: border-box;\n  max-width: min(620px, calc(100vw - 32px));\n  overflow-x: hidden;')
     expect(normalizedAppCss).toContain('.dictionary-editor-dialog--owners {\n  width: min(860px, calc(100vw - 32px));\n  max-width: 860px;')
     expect(normalizedAppCss).toContain('.owner-name-grid,\n.owner-contact-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('.owner-name-grid__middle-name {\n  grid-column: 1 / -1;')
+    expect(normalizedAppCss).toContain('.full-grid-row {\n  grid-column: 1 / -1;')
     expect(normalizedAppCss).toContain('.field-label-with-help {\n  position: relative;')
     expect(normalizedAppCss).toContain("[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label):not(:has(.field-label-with-help))::after,\n[aria-modal] :is(.form-field:has(:required, [aria-required='true']) > .form-field-label, [data-required='true'] > .form-field-label) .form-field-label-text::after {\n  color: #f04438;\n  content: ' *';")
     expect(normalizedAppCss).not.toContain("[data-required='true'] > .form-field-label)::after")

@@ -35,7 +35,7 @@ export function PhoneListInput({ values, onChange, label, firstPhoneLabel, requi
         </div>
       </div>
       {values.length > 1 ? (
-        <div className="phone-list-additional">
+        <div className="contractors-garage-form-notes full-grid-row">
           {values.slice(1).map((phone, index) => (
             <div className="suggest" key={index}>
               <PhoneInput

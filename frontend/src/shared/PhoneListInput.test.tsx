@@ -43,7 +43,7 @@ describe('PhoneListInput', () => {
     await user.click(within(group).getByRole('button', { name: 'Добавить телефон' }))
     await user.click(within(group).getByRole('button', { name: 'Добавить телефон' }))
 
-    const additionalPhones = group.querySelector('.phone-list-additional')
+    const additionalPhones = group.querySelector('.contractors-garage-form-notes')
     expect(additionalPhones).not.toBeNull()
     expect(additionalPhones?.children).toHaveLength(2)
     expect(additionalPhones).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 2' }))

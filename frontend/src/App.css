@@ -2776,11 +2776,8 @@ h1 {
   display: contents;
 }
 
-.contractors-garage-form-owner > .phone-list > .phone-list-additional {
-  display: grid;
+.full-grid-row {
   grid-column: 1 / -1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px 12px;
 }
 
 .contractors-garage-form-notes {
@@ -2800,51 +2797,6 @@ h1 {
 .contractors-garage-form-comment {
   border-left: 1px solid #eaecf0;
   padding-left: 18px;
-}
-
-.garage-annual-payments {
-  display: grid;
-  gap: 10px;
-  border: 1px solid #dbe5f6;
-  border-radius: 10px;
-  background: #f8fbff;
-  padding: 12px;
-}
-
-.garage-annual-payments__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.garage-annual-payments__header h4,
-.garage-annual-payments__header p {
-  margin: 0;
-}
-
-.garage-annual-payments__header h4 {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.garage-annual-payments__fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 14px;
-}
-
-.garage-annual-payments__field {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  min-width: 0;
-}
-
-.garage-annual-payments__error {
-  color: #b42318;
-  font-size: 12px;
 }
 
 .contractors-dialog--garage .detail-dialog-actions {
@@ -2894,10 +2846,6 @@ h1 {
     gap: 10px;
   }
 
-  .contractors-garage-form-owner > .phone-list > .phone-list-additional {
-    grid-template-columns: 1fr;
-  }
-
   .contractors-garage-form-column--financial {
     border-top: 1px solid #eaecf0;
     border-left: 0;
@@ -2908,10 +2856,6 @@ h1 {
   .contractors-garage-form-comment {
     border-left: 0;
     padding-left: 0;
-  }
-
-  .garage-annual-payments__fields {
-    grid-template-columns: 1fr;
   }
 
   .contractors-supplier-primary-grid,
@@ -7547,7 +7491,7 @@ input.meter-readings-control {
   gap: 10px 16px;
 }
 
-.owner-name-grid__middle-name {
+.full-grid-row {
   grid-column: 1 / -1;
 }
 
@@ -10117,7 +10061,7 @@ button.operation-row:focus-visible {
     gap: 8px;
   }
 
-  .dictionary-editor-dialog--owners .owner-name-grid__middle-name {
+  .dictionary-editor-dialog--owners .full-grid-row {
     grid-column: auto;
   }
 
@@ -10914,7 +10858,7 @@ button.operation-row:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .owner-name-grid__middle-name {
+  .full-grid-row {
     grid-column: 1;
   }
 

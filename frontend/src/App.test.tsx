@@ -20683,7 +20683,7 @@ describe('App', () => {
     expect(ownerNameGrid).not.toBeNull()
     expect(within(editorDialog).getByLabelText('Фамилия владельца').closest('.form-field')?.parentElement).toBe(ownerNameGrid)
     expect(within(editorDialog).getByLabelText('Имя владельца').closest('.form-field')?.parentElement).toBe(ownerNameGrid)
-    expect(within(editorDialog).getByLabelText('Отчество владельца').closest('.form-field')).toHaveClass('owner-name-grid__middle-name')
+    expect(within(editorDialog).getByLabelText('Отчество владельца').closest('.form-field')).toHaveClass('full-grid-row')
 
     const ownerAddressInput = within(editorDialog).getByRole('combobox', { name: 'Адрес владельца' })
     await user.type(ownerAddressInput, 'Советская')
