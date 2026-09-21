@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -24,9 +24,29 @@ describe('PhoneListInput', () => {
     expect(secondPhone).toHaveValue('+7 (923) 765-43-21')
     expect(firstPhone).toBeRequired()
     expect(secondPhone).not.toBeRequired()
+    expect(screen.queryByRole('button', { name: 'Удалить телефон 1' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Удалить телефон 1' }))
-    expect(screen.getByRole('textbox', { name: 'Телефон владельца' })).toHaveValue('+7 (923) 765-43-21')
+    await user.click(screen.getByRole('button', { name: 'Удалить телефон 2' }))
+    expect(screen.getByRole('textbox', { name: 'Телефон владельца' })).toHaveValue('+7 (913) 123-45-67')
+    expect(screen.queryByRole('textbox', { name: 'Телефон владельца: телефон 2' })).not.toBeInTheDocument()
+  })
+
+  it('places additional garage phones in a separate parent-grid row', async () => {
+    const user = userEvent.setup()
+    render(<PhoneListHarness />)
+
+    const group = screen.getByRole('group', { name: 'Телефоны владельца' })
+    expect(within(group).getByRole('button', { name: 'Добавить телефон' }).parentElement).toContainElement(
+      within(group).getByRole('textbox', { name: 'Телефон владельца' }),
+    )
+
+    await user.click(within(group).getByRole('button', { name: 'Добавить телефон' }))
+    await user.click(within(group).getByRole('button', { name: 'Добавить телефон' }))
+
+    const phoneItems = group.querySelectorAll(':scope > div')
+    expect(phoneItems).toHaveLength(3)
+    expect(phoneItems[1]).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 2' }))
+    expect(phoneItems[2]).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 3' }))
   })
 
   it('limits the owner to ten phone numbers', () => {

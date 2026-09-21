@@ -71,7 +71,7 @@ export function ForegroundDialogError({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const surface = <div ref={surfaceRef} className="foreground-dialog-error-surface">{children}</div>
+  const surface = <div ref={surfaceRef} className="contents">{children}</div>
   return portalHost ? createPortal(surface, portalHost) : surface
 }
 

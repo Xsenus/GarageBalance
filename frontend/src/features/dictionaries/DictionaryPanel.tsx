@@ -1002,7 +1002,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             />
             {dictionaryField('ownerAddress', (
               <>
-                <div className="suggestion-combobox">
+                <div className="suggest">
                   <input
                     aria-label={fieldMeta('ownerAddress').ariaLabel}
                     placeholder={fieldMeta('ownerAddress').placeholder}

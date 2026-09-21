@@ -2656,7 +2656,7 @@ h1 {
   min-height: 76px;
 }
 
-.suggestion-combobox {
+.suggest {
   position: relative;
   min-width: 0;
 }
@@ -2770,6 +2770,10 @@ h1 {
 .contractors-garage-form-owner {
   grid-template-columns: minmax(0, 1.7fr) minmax(150px, 1fr);
   gap: 7px 12px;
+}
+
+.contractors-garage-form-owner > .phone-list {
+  display: contents;
 }
 
 .contractors-garage-form-notes {
@@ -6615,7 +6619,7 @@ input.meter-readings-control {
   text-align: center;
 }
 
-.localized-date-picker__trigger {
+.field-btn {
   position: absolute;
   top: 4px;
   right: 4px;
@@ -6630,13 +6634,13 @@ input.meter-readings-control {
   cursor: pointer;
 }
 
-.localized-date-picker__trigger:hover,
-.localized-date-picker__trigger:focus-visible {
+.field-btn:hover,
+.field-btn:focus-visible {
   background: #eef4ff;
   color: #175cd3;
 }
 
-.localized-date-picker__trigger:disabled {
+.field-btn:disabled {
   cursor: not-allowed;
   color: #98a2b3;
 }
@@ -7541,7 +7545,7 @@ input.meter-readings-control {
 }
 
 .owner-address-field,
-.owner-address-field .suggestion-combobox {
+.owner-address-field .suggest {
   min-width: 0;
 }
 
@@ -9254,7 +9258,7 @@ button.operation-row:focus-visible {
   margin: 0 0 16px;
 }
 
-.foreground-dialog-error-surface {
+.contents {
   display: contents;
 }
 

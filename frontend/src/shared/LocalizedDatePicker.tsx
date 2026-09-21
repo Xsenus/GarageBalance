@@ -143,7 +143,7 @@ export function LocalizedDatePicker({
       />
       <button
         ref={triggerRef}
-        className="localized-date-picker__trigger"
+        className="field-btn"
         type="button"
         aria-label={`Открыть календарь: ${ariaLabel}`}
         aria-expanded={effectiveOpen}

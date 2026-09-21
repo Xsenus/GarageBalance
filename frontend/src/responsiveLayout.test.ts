@@ -579,6 +579,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-garage-form-column--financial {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-garage-form-identity {\n  grid-template-columns: minmax(110px, 1.35fr) minmax(110px, 1fr) minmax(90px, 0.8fr);')
     expect(normalizedAppCss).toContain('.contractors-garage-form-owner {\n  grid-template-columns: minmax(0, 1.7fr) minmax(150px, 1fr);\n  gap: 7px 12px;')
+    expect(normalizedAppCss).toContain('.contractors-garage-form-owner > .phone-list {\n  display: contents;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-notes textarea {\n  min-height: 52px;')
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .detail-dialog-actions {\n  margin-top: 6px;\n  padding-top: 10px;')
     expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-column--financial,\n  .contractors-garage-form-identity,\n  .contractors-garage-form-owner,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')

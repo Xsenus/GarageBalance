@@ -3607,7 +3607,7 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
   return (
     <FormField label={label}>
       <div
-        className="suggestion-combobox"
+        className="suggest"
         ref={suggestionsRef}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setSearchEnabled(false)
@@ -3851,7 +3851,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                 <div className="contractors-garage-form-owner">
                   <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
                   <PhoneListInput
-                    label="Телефоны"
+                    label="Телефон"
                     firstPhoneLabel="Телефон владельца гаража"
                     values={form.phones?.length ? form.phones : [form.phone]}
                     onChange={(phones) => setForm({ ...form, phone: phones[0] ?? '', phones })}
@@ -4120,7 +4120,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
             </div>
             <div className="contractors-modal-grid contractors-supplier-lookup-grid">
               <FormField label="ИНН">
-                <div className="suggestion-combobox">
+                <div className="suggest">
                   <input
                     aria-label="ИНН поставщика"
                     role="combobox"
