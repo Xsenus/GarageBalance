@@ -14,6 +14,7 @@ export type OwnerDto = {
   middleName: string | null
   fullName: string
   phone: string | null
+  phones?: string[]
   address: string | null
   meterNotes: string | null
   isArchived: boolean
@@ -235,6 +236,7 @@ export type UpsertOwnerRequest = {
   firstName: string
   middleName?: string
   phone?: string
+  phones?: string[]
   address?: string
   meterNotes?: string
 }

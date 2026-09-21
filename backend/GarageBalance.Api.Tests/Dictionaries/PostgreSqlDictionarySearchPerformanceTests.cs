@@ -110,7 +110,9 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
         var owner = Assert.Single(ownerPage.Items);
         Assert.Equal(1, ownerPage.TotalCount);
         Assert.Equal("0073", Assert.Single(owner.Garages).Number);
-        var ownerCommand = Assert.Single(capture.TakeCommandsAndClear());
+        var ownerCommands = capture.TakeCommandsAndClear();
+        Assert.Equal(2, ownerCommands.Count);
+        var ownerCommand = ownerCommands[0];
         Assert.Contains("COUNT(*)", ownerCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("UNION ALL", ownerCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT", ownerCommand, StringComparison.OrdinalIgnoreCase);
@@ -119,6 +121,7 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
         Assert.DoesNotContain("InitialWaterMeterValue", ownerCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("InitialElectricityMeterValue", ownerCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("Comment", ownerCommand, StringComparison.Ordinal);
+        Assert.Contains("owner_additional_phones", ownerCommands[1], StringComparison.OrdinalIgnoreCase);
 
         var garagePage = await new EfGarageRepository(context).GetPageAsync(
             "%",
@@ -448,8 +451,10 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
         Assert.Equal(2, emptyPage.TotalCount);
         Assert.Empty(emptyPage.Items);
         var commands = capture.TakeCommandsAndClear();
-        Assert.Equal(2, commands.Count);
-        Assert.All(commands, command => Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(3, commands.Count);
+        Assert.Contains("UNION ALL", commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("owner_additional_phones", commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", commands[2], StringComparison.OrdinalIgnoreCase);
         Assert.Empty(context.ChangeTracker.Entries());
     }
 

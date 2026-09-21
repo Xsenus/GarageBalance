@@ -22,6 +22,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AppUserRole> UserRoles => Set<AppUserRole>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Owner> Owners => Set<Owner>();
+    public DbSet<OwnerAdditionalPhone> OwnerAdditionalPhones => Set<OwnerAdditionalPhone>();
     public DbSet<Garage> Garages => Set<Garage>();
     public DbSet<GaragePeopleCountPeriod> GaragePeopleCountPeriods => Set<GaragePeopleCountPeriod>();
     public DbSet<SupplierGroup> SupplierGroups => Set<SupplierGroup>();
@@ -219,6 +220,22 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(owner => owner.MeterNotes).HasMaxLength(1000);
             entity.HasIndex(owner => new { owner.LastName, owner.FirstName, owner.MiddleName });
             entity.HasIndex(owner => owner.Phone);
+        });
+
+        modelBuilder.Entity<OwnerAdditionalPhone>(entity =>
+        {
+            entity.ToTable("owner_additional_phones");
+            entity.HasKey(phone => phone.Id);
+            entity.Property(phone => phone.Phone).HasMaxLength(80).IsRequired();
+            entity.Property(phone => phone.SortOrder).IsRequired();
+            entity.Property(phone => phone.CreatedAtUtc).IsRequired();
+            entity.HasIndex(phone => phone.Phone);
+            entity.HasIndex(phone => new { phone.OwnerId, phone.Phone }).IsUnique();
+            entity.HasIndex(phone => new { phone.OwnerId, phone.IsArchived, phone.SortOrder });
+            entity.HasOne(phone => phone.Owner)
+                .WithMany(owner => owner.AdditionalPhones)
+                .HasForeignKey(phone => phone.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Garage>(entity =>

@@ -12,6 +12,8 @@ public sealed class DbContextIndexTests
     [InlineData(typeof(Garage), nameof(Garage.OwnerId))]
     [InlineData(typeof(Owner), nameof(Owner.LastName), nameof(Owner.FirstName), nameof(Owner.MiddleName))]
     [InlineData(typeof(Owner), nameof(Owner.Phone))]
+    [InlineData(typeof(OwnerAdditionalPhone), nameof(OwnerAdditionalPhone.Phone))]
+    [InlineData(typeof(OwnerAdditionalPhone), nameof(OwnerAdditionalPhone.OwnerId), nameof(OwnerAdditionalPhone.Phone))]
     [InlineData(typeof(Supplier), nameof(Supplier.Name))]
     [InlineData(typeof(Supplier), nameof(Supplier.GroupId))]
     [InlineData(typeof(Supplier), nameof(Supplier.Inn))]

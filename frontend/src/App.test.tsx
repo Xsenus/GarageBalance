@@ -3405,7 +3405,7 @@ describe('App', () => {
       id: 'owner-1',
       lastName: 'Иванов',
       firstName: 'Иван',
-      phone: '+7 900 000-00-01',
+      phone: '+7 (900) 000-00-01',
       address: 'ГСК, ряд 1',
       meterNotes: 'Вода № 15, электричество № 27',
     })
@@ -3424,6 +3424,7 @@ describe('App', () => {
     })
     let savedGarageStartingBalance: number | null = null
     let savedGarageMeterNotes: string | null = null
+    let savedGaragePhones: string[] = []
     let archivedGarageReason: string | null = null
     let archivedSupplierReason: string | null = null
     let deletedSupplierContactReason: string | null = null
@@ -3453,12 +3454,14 @@ describe('App', () => {
       getGarages: async () => [contractorGarage],
       updateOwner: async (_token, id, request) => {
         savedGarageMeterNotes = request.meterNotes ?? null
+        savedGaragePhones = request.phones ?? []
         return createOwner({
           id,
           lastName: request.lastName,
           firstName: request.firstName,
           middleName: request.middleName ?? null,
           phone: request.phone ?? null,
+          phones: request.phones ?? [],
           address: request.address ?? null,
           meterNotes: request.meterNotes ?? null,
         })
@@ -3729,9 +3732,12 @@ describe('App', () => {
     expect(within(garageDialog).getByLabelText('Владелец гаража').closest('.contractors-garage-form-owner')).not.toBeNull()
     expect(within(garageDialog).getByLabelText('Телефон владельца гаража').closest('.contractors-garage-form-owner')).not.toBeNull()
     expect(within(garageDialog).getByLabelText('Владелец гаража').closest('[role="group"]')).toHaveAttribute('aria-label', 'Основные сведения о гараже')
-    expect(within(garageDialog).getByLabelText('Телефон владельца гаража').closest('[role="group"]')).toHaveAttribute('aria-label', 'Основные сведения о гараже')
+    expect(within(garageDialog).getByLabelText('Телефон владельца гаража').closest('.contractors-garage-form-owner')?.closest('[role="group"]')).toHaveAttribute('aria-label', 'Основные сведения о гараже')
     expect(within(garageDialog).getByLabelText('Телефон владельца гаража')).toHaveValue('+7 (900) 000-00-01')
     expect(within(garageDialog).getByLabelText('Телефон владельца гаража')).toHaveAttribute('placeholder', '+7 (___) ___-__-__')
+    await user.click(within(garageDialog).getByRole('button', { name: 'Добавить телефон' }))
+    await user.type(within(garageDialog).getByLabelText('Телефон владельца гаража: телефон 2'), '9237654321')
+    expect(within(garageDialog).getByLabelText('Телефон владельца гаража: телефон 2')).toHaveValue('+7 (923) 765-43-21')
     expect(within(garageDialog).getByLabelText('Счетчики гаража')).toHaveValue('Вода № 15, электричество № 27')
     expect(within(garageDialog).getByLabelText('Счетчики гаража').closest('.contractors-garage-form-notes')).not.toBeNull()
     expect(within(garageDialog).getByLabelText('Комментарий гаража').closest('.contractors-garage-form-notes')).not.toBeNull()
@@ -3804,6 +3810,7 @@ describe('App', () => {
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).getByText('Новый владелец')).toBeInTheDocument())
     expect(savedGarageStartingBalance).toBe(100)
     expect(savedGarageMeterNotes).toBe('Вода № 31, электричество № 44')
+    expect(savedGaragePhones).toEqual(['+7 (900) 000-00-01', '+7 (923) 765-43-21'])
 
     const garagesTable = within(contractorsPanel).getByRole('table', { name: 'Гаражи' })
     const garageRow = within(garagesTable).getByText('Новый владелец').closest('[role="row"]')!
@@ -19845,7 +19852,7 @@ describe('App', () => {
 
     expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Укажите фамилию владельца.')).toBeInTheDocument()
-    expect(within(validationDialog).getByText('Телефон владельца должен быть указан в формате +7 (999) 123-45-67.')).toBeInTheDocument()
+    expect(within(validationDialog).getByText('Основной телефон владельца должен быть указан в формате +7 (999) 123-45-67.')).toBeInTheDocument()
     expect(createOwnerCalled).toBe(false)
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument())
@@ -19881,7 +19888,7 @@ describe('App', () => {
 
     expect(await within(dictionaryPanel).findByText('Проверьте владельца')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Укажите фамилию владельца.')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Телефон владельца должен быть указан в формате +7 (999) 123-45-67.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Основной телефон владельца должен быть указан в формате +7 (999) 123-45-67.')).toBeInTheDocument()
     expect(createOwnerCalled).toBe(false)
 
     await user.type(within(dictionaryPanel).getByLabelText('Номер гаража'), '   ')
@@ -20623,6 +20630,7 @@ describe('App', () => {
         firstName: request.firstName,
         middleName: request.middleName ?? null,
         phone: request.phone ?? null,
+        phones: request.phones ?? [],
         address: request.address ?? null,
         meterNotes: request.meterNotes ?? null,
       })
@@ -20692,14 +20700,16 @@ describe('App', () => {
 
     await user.clear(within(editorDialog).getByLabelText('Телефон владельца'))
     await user.type(within(editorDialog).getByLabelText('Телефон владельца'), '9011112233')
+    await user.click(within(editorDialog).getByRole('button', { name: 'Добавить телефон' }))
+    await user.type(within(editorDialog).getByLabelText('Телефон владельца: телефон 2'), '9237654321')
     const editorSaveButton = within(editorDialog).getByRole('button', { name: 'Сохранить' })
     await user.click(editorSaveButton)
 
     expect(updateOwner).not.toHaveBeenCalled()
     const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения' })
-    expect(within(confirmationDialog).getByText('Телефон')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('Телефоны')).toBeInTheDocument()
     expect(within(confirmationDialog).getByText('+7 (900) 000-00-00')).toBeInTheDocument()
-    expect(within(confirmationDialog).getByText('+7 (901) 111-22-33')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('+7 (901) 111-22-33, +7 (923) 765-43-21')).toBeInTheDocument()
 
     const confirmationCancelButton = within(confirmationDialog).getByRole('button', { name: 'Отмена' })
     const confirmationSaveButton = within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' })
@@ -20724,6 +20734,7 @@ describe('App', () => {
     await waitFor(() => expect(updateOwner).toHaveBeenCalledTimes(1))
     expect(updateOwner.mock.calls[0][1]).toBe('owner-1')
     expect(updateOwner.mock.calls[0][2].phone).toBe('+7 (901) 111-22-33')
+    expect(updateOwner.mock.calls[0][2].phones).toEqual(['+7 (901) 111-22-33', '+7 (923) 765-43-21'])
     expect(updateOwner.mock.calls[0][2].address).toBe('630000, г Новосибирск, ул Советская, д 2')
     await refreshStarted
     expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()

@@ -9,6 +9,7 @@ public sealed class SecurityDataProtectionPolicyTests
 
         Assert.Contains("Owner.LastName", document, StringComparison.Ordinal);
         Assert.Contains("Owner.Phone", document, StringComparison.Ordinal);
+        Assert.Contains("OwnerAdditionalPhone.Phone", document, StringComparison.Ordinal);
         Assert.Contains("Owner.Address", document, StringComparison.Ordinal);
         Assert.Contains("AppUser.Email", document, StringComparison.Ordinal);
         Assert.Contains("AppUser.PasswordHash", document, StringComparison.Ordinal);

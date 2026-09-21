@@ -127,6 +127,77 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task OwnerPhones_CreateUpdateSearchAndAuditMultipleNormalizedNumbers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var createRequest = new UpsertOwnerRequest("Иванов", "Иван", null, "9131234567", null, null)
+        {
+            Phones = ["9131234567", "8 923 765-43-21"]
+        };
+
+        var created = await service.CreateOwnerAsync(createRequest, actorUserId, CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal("+7 (913) 123-45-67", created.Value!.Phone);
+        Assert.Equal(["+7 (913) 123-45-67", "+7 (923) 765-43-21"], created.Value.Phones);
+        var storedAdditionalPhone = Assert.Single(database.Context.OwnerAdditionalPhones);
+        Assert.Equal("+7 (923) 765-43-21", storedAdditionalPhone.Phone);
+        Assert.Equal(0, storedAdditionalPhone.SortOrder);
+        Assert.Equal(created.Value.Id, storedAdditionalPhone.OwnerId);
+
+        var foundByAdditionalPhone = await service.GetOwnersAsync("765-43", CancellationToken.None);
+        Assert.Equal(created.Value.Id, Assert.Single(foundByAdditionalPhone).Id);
+
+        database.Context.ChangeTracker.Clear();
+        service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var updateRequest = new UpsertOwnerRequest("Иванов", "Иван", null, "9330001122", null, null)
+        {
+            Phones = ["9330001122", "9131234567", "9441112233"]
+        };
+        var updated = await service.UpdateOwnerAsync(created.Value.Id, updateRequest, actorUserId, CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Equal(
+            ["+7 (933) 000-11-22", "+7 (913) 123-45-67", "+7 (944) 111-22-33"],
+            updated.Value!.Phones);
+        Assert.Equal(2, database.Context.OwnerAdditionalPhones.Count(phone => !phone.IsArchived));
+        Assert.Single(database.Context.OwnerAdditionalPhones, phone => phone.IsArchived && phone.Phone == "+7 (923) 765-43-21");
+        var updateAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_updated");
+        Assert.DoesNotContain("933", updateAudit.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("913", updateAudit.MetadataJson, StringComparison.Ordinal);
+        using var updateMetadata = JsonDocument.Parse(updateAudit.MetadataJson!);
+        Assert.Contains("[секрет скрыт]", updateMetadata.RootElement.GetProperty("oldValue").GetString(), StringComparison.Ordinal);
+        Assert.Contains("[секрет скрыт]", updateMetadata.RootElement.GetProperty("newValue").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OwnerPhones_RejectIncompleteAdditionalNumberAndMoreThanTenEntries()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var incompleteRequest = new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null)
+        {
+            Phones = ["9131234567", "+7 923"]
+        };
+        var excessiveRequest = new UpsertOwnerRequest("Петров", "Петр", null, null, null, null)
+        {
+            Phones = Enumerable.Range(0, 11).Select(index => $"+7 (900) 000-00-{index:00}").ToList()
+        };
+
+        var incomplete = await service.CreateOwnerAsync(incompleteRequest, null, CancellationToken.None);
+        var excessive = await service.CreateOwnerAsync(excessiveRequest, null, CancellationToken.None);
+
+        Assert.False(incomplete.Succeeded);
+        Assert.Equal("phone_invalid", incomplete.ErrorCode);
+        Assert.False(excessive.Succeeded);
+        Assert.Equal("owner_phone_limit", excessive.ErrorCode);
+        Assert.Empty(database.Context.Owners);
+    }
+
+    [Fact]
     public async Task OwnerAudit_UsesWriterStructuredFieldsAndArchiveReason()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -132,8 +132,19 @@ export function getOwnerValidationErrors(form: UpsertOwnerRequest) {
     errors.push('Укажите имя владельца.')
   }
 
-  if (!isCompleteRussianPhone(form.phone)) {
-    errors.push('Телефон владельца должен быть указан в формате +7 (999) 123-45-67.')
+  const phones = form.phones?.length ? form.phones : [form.phone ?? '']
+  if (phones.length > 10) {
+    errors.push('Для владельца можно указать не более 10 телефонов.')
+  }
+  if (!isCompleteRussianPhone(phones[0])) {
+    errors.push('Основной телефон владельца должен быть указан в формате +7 (999) 123-45-67.')
+  }
+  if (phones.slice(1).some((phone) => phone.trim() && !isCompleteRussianPhone(phone))) {
+    errors.push('Каждый дополнительный телефон должен быть указан полностью в формате +7 (999) 123-45-67.')
+  }
+  const enteredPhones = phones.filter((phone) => phone.trim())
+  if (new Set(enteredPhones).size !== enteredPhones.length) {
+    errors.push('Один и тот же телефон нельзя указывать дважды.')
   }
 
   return errors

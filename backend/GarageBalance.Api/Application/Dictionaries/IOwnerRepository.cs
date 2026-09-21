@@ -10,6 +10,7 @@ public interface IOwnerRepository
     Task<Owner?> FindArchivedWithGaragesAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> HasActiveGaragesAsync(Guid id, CancellationToken cancellationToken);
     void Add(Owner owner);
+    void AddAdditionalPhones(IEnumerable<OwnerAdditionalPhone> phones);
 }
 
 public sealed record OwnerPageData(IReadOnlyList<Owner> Items, int TotalCount);

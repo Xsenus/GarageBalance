@@ -8,14 +8,15 @@
 | --- | --- | --- | --- |
 | Публичные служебные | версия приложения, health-status без деталей, названия системных ролей | Можно показывать авторизованным пользователям по правам | `GET /health/live`, `GET /health/ready`, `GET /api/app-releases`, `GET /api/users/roles` |
 | Рабочие данные ГСК | номера гаражей, тарифы, виды поступлений/выплат, суммы начислений, платежи, поставщики | Доступ только по permissions, audit действий, no-store cache для API | справочники, финансы, отчеты |
-| Персональные данные | ФИО владельцев, телефоны, адреса, email пользователей, контактные лица поставщиков | Минимизация выдачи, masking в audit/logs, доступ по ролям, не отправлять в issue/чат без обезличивания | `owners`, `app_users`, `suppliers` |
+| Персональные данные | ФИО владельцев, телефоны, адреса, email пользователей, контактные лица поставщиков | Минимизация выдачи, masking в audit/logs, доступ по ролям, не отправлять в issue/чат без обезличивания | `owners`, `owner_additional_phones`, `app_users`, `suppliers` |
 | Импортные данные | `.accdb`/`.mdb`, dry-run report, SHA-256 файла, quarantine/error bucket, строки с ошибками | Хранить вне Git, ограниченный доступ, checksum вместо лишнего копирования, удалить raw-файлы после приемки | `access_import_runs`, private import folders |
 | Секреты и токены | JWT signing key, connection string с паролем, токены 1C Fresh, ключ DaData, ключи фискального оборудования/API | Только env/user-secrets/deployment secrets; хранение чувствительных настроек и токенов интеграций шифровать перед записью в БД | `Jwt__SigningKey`, `.env`, integration settings |
 | Диагностические данные | application logs, nginx/systemd/docker logs, stack traces, export logs | Перед передачей маскировать email, token, secret, api_key, password, Bearer, длинные номера; не прикладывать дампы целиком | troubleshooting, deploy, support |
 
 ## Поля Повышенной Защиты
 
-- `Owner.LastName`, `Owner.FirstName`, `Owner.MiddleName`, `Owner.Phone`, `Owner.Address`, `Owner.MeterNotes` - персональные данные владельцев и заметки по счетчикам.
+- `Owner.LastName`, `Owner.FirstName`, `Owner.MiddleName`, `Owner.Phone`, `OwnerAdditionalPhone.Phone`, `Owner.Address`, `Owner.MeterNotes` - персональные данные владельцев и заметки по счетчикам.
+- Удалённый из карточки дополнительный телефон помечается как архивный, не участвует в выдаче и поиске, но не удаляется физически; изменение списка фиксируется в audit с маскированием номеров.
 - `AppUser.Email`, `AppUser.DisplayName`, `AppUser.PasswordHash` - учетные данные пользователей; `PasswordHash` никогда не возвращать через API и не логировать.
 - `Supplier.ContactPerson`, `Supplier.Phone`, `Supplier.Email`, `Supplier.Inn` - контакты и реквизиты поставщика; выдача только пользователям с рабочими правами.
 - `FinancialOperation.Amount`, `DocumentNumber`, `Comment`, `CancelReason` - финансовые сведения и возможные персональные комментарии; видимость по permissions, запись действий в audit.

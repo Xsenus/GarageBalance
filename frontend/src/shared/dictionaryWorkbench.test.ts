@@ -66,6 +66,7 @@ describe('dictionary workbench metadata', () => {
       firstName: '',
       middleName: '',
       phone: '',
+      phones: [''],
       address: '',
       meterNotes: '',
     })
@@ -93,6 +94,7 @@ describe('dictionary workbench metadata', () => {
     expect(createOwnerFormFromDto(createOwner({
       middleName: 'Петрович',
       phone: '+79990000000',
+      phones: ['+79990000000'],
       address: 'ул. Ленина, 1',
       meterNotes: 'Счетчик в боксе',
     }))).toEqual({
@@ -100,6 +102,7 @@ describe('dictionary workbench metadata', () => {
       firstName: 'Иван',
       middleName: 'Петрович',
       phone: '+79990000000',
+      phones: ['+79990000000'],
       address: 'ул. Ленина, 1',
       meterNotes: 'Счетчик в боксе',
     })
@@ -109,6 +112,7 @@ describe('dictionary workbench metadata', () => {
       firstName: 'Иван',
       middleName: '',
       phone: '',
+      phones: [''],
       address: '',
       meterNotes: '',
     })

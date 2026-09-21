@@ -81,8 +81,48 @@ describe('shared validation helpers', () => {
     expect(getOwnerValidationErrors({ lastName: '', firstName: '', middleName: null, phone: '12', address: null, meterNotes: null })).toEqual([
       'Укажите фамилию владельца.',
       'Укажите имя владельца.',
-      'Телефон владельца должен быть указан в формате +7 (999) 123-45-67.',
+      'Основной телефон владельца должен быть указан в формате +7 (999) 123-45-67.',
     ])
+
+    expect(getOwnerValidationErrors({
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      middleName: null,
+      phone: '+7 (913) 123-45-67',
+      phones: ['+7 (913) 123-45-67', '+7 (923) 765'],
+      address: null,
+      meterNotes: null,
+    })).toEqual(['Каждый дополнительный телефон должен быть указан полностью в формате +7 (999) 123-45-67.'])
+
+    expect(getOwnerValidationErrors({
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      middleName: null,
+      phone: '+7 (913) 123-45-67',
+      phones: ['+7 (913) 123-45-67', '+7 (913) 123-45-67'],
+      address: null,
+      meterNotes: null,
+    })).toEqual(['Один и тот же телефон нельзя указывать дважды.'])
+
+    expect(getOwnerValidationErrors({
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      middleName: null,
+      phone: '+7 (913) 123-45-67',
+      phones: ['+7 (913) 123-45-67', '', ''],
+      address: null,
+      meterNotes: null,
+    })).toEqual([])
+
+    expect(getOwnerValidationErrors({
+      lastName: 'Иванов',
+      firstName: 'Иван',
+      middleName: null,
+      phone: '+7 (913) 123-45-67',
+      phones: Array.from({ length: 11 }, (_, index) => `+7 (900) 000-00-${index.toString().padStart(2, '0')}`),
+      address: null,
+      meterNotes: null,
+    })).toEqual(['Для владельца можно указать не более 10 телефонов.'])
 
     expect(getOwnerGarageLinkValidationErrors({
       existingGarageId: '',

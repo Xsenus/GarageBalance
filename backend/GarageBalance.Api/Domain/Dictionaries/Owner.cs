@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace GarageBalance.Api.Domain.Dictionaries;
 
 public sealed class Owner
@@ -15,4 +17,12 @@ public sealed class Owner
 
     public string FullName => string.Join(' ', new[] { LastName, FirstName, MiddleName }.Where(part => !string.IsNullOrWhiteSpace(part)));
     public List<Garage> Garages { get; set; } = [];
+    public List<OwnerAdditionalPhone> AdditionalPhones { get; set; } = [];
+
+    [NotMapped]
+    public IReadOnlyList<string> AllPhones => new[] { Phone }
+        .Concat(AdditionalPhones.Where(phone => !phone.IsArchived).OrderBy(phone => phone.SortOrder).Select(phone => phone.Phone))
+        .Where(phone => !string.IsNullOrWhiteSpace(phone))
+        .Select(phone => phone!)
+        .ToList();
 }

@@ -1684,6 +1684,16 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void OwnerAdditionalPhonesMigration_AddsPostgresTrigramIndexForPhoneSearch()
+    {
+        var source = ReadApiSource("Infrastructure/Data/Migrations/20260921033539_AddOwnerAdditionalPhones.cs");
+
+        Assert.Contains("IX_owner_additional_phones_Phone_trgm", source, StringComparison.Ordinal);
+        Assert.Contains("USING gin", source, StringComparison.Ordinal);
+        Assert.Contains("gin_trgm_ops", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReportSearchMigration_AddsPostgresTrigramIndexesForRawIlikeExpressions()
     {
         var source = ReadApiSource(

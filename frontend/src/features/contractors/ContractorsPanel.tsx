@@ -13,6 +13,8 @@ import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
+import { PhoneListInput } from '../../shared/PhoneListInput'
+import { isCompleteRussianPhone } from '../../shared/phoneNumber'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
@@ -117,6 +119,7 @@ type ContractorGarageRow = {
   floorCount: string
   owner: string
   phone: string
+  phones: string[]
   address: string
   startingBalance?: string
   startingOverdueDebt?: string
@@ -460,7 +463,7 @@ function parsePrototypeNullableNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-type GaragePrototypeField = 'number' | 'peopleCount' | 'floorCount' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity'
+type GaragePrototypeField = 'number' | 'peopleCount' | 'floorCount' | 'phone' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity'
 type GaragePrototypeValidationErrors = Partial<Record<GaragePrototypeField, string>>
 
 function getGaragePrototypeValidationErrors(row: ContractorGarageRow, isCreate: boolean) {
@@ -476,6 +479,14 @@ function getGaragePrototypeValidationErrors(row: ContractorGarageRow, isCreate: 
   }
   if (!row.floorCount.trim() || !Number.isInteger(floorCount) || floorCount < 0 || floorCount > 100) {
     errors.floorCount = 'Количество этажей должно быть целым числом от 0 до 100.'
+  }
+  const phones = getGarageRowPhones(row)
+  if (phones.length > 10) {
+    errors.phone = 'Для владельца можно указать не более 10 телефонов.'
+  } else if (phones.some((phone) => !isCompleteRussianPhone(phone))) {
+    errors.phone = 'Каждый телефон должен быть указан полностью в формате +7 (999) 123-45-67.'
+  } else if (new Set(phones).size !== phones.length) {
+    errors.phone = 'Один и тот же телефон нельзя указывать дважды.'
   }
 
   if (isCreate) {
@@ -519,14 +530,24 @@ function splitOwnerName(value: string) {
   }
 }
 
+function getGarageRowPhones(row: ContractorGarageRow) {
+  return (row.phones.length ? row.phones : [row.phone]).filter(Boolean)
+}
+
+function getOwnerPhones(owner?: OwnerDto | null) {
+  return owner?.phones?.length ? owner.phones : owner?.phone ? [owner.phone] : []
+}
+
 function createOwnerRequestFromGarage(row: ContractorGarageRow): UpsertOwnerRequest {
   const parsedName = splitOwnerName(row.owner)
+  const phones = getGarageRowPhones(row)
 
   return {
     lastName: parsedName.lastName || 'Без фамилии',
     firstName: parsedName.firstName,
     middleName: parsedName.middleName,
-    phone: row.phone.trim(),
+    phone: phones[0]?.trim() ?? '',
+    phones,
     address: row.address.trim(),
     meterNotes: row.meters.trim(),
   }
@@ -534,6 +555,8 @@ function createOwnerRequestFromGarage(row: ContractorGarageRow): UpsertOwnerRequ
 
 function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): ContractorGarageRow {
   const owner = garage.ownerId ? owners.find((item) => item.id === garage.ownerId) : null
+  const phones = getOwnerPhones(owner)
+  if (phones.length === 0) phones.push(garage.ownerPhone ?? '')
   const balance = garage.balance ?? garage.startingBalance ?? 0
   const overdueDebt = garage.overdueDebt ?? Math.max(balance, 0)
 
@@ -545,7 +568,8 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
     peopleCount: String(garage.peopleCount),
     floorCount: String(garage.floorCount),
     owner: garage.ownerName ?? owner?.fullName ?? '',
-    phone: owner?.phone ?? '',
+    phone: phones[0] ?? '',
+    phones,
     address: owner?.address ?? '',
     startingBalance: formatPrototypeMoney(toDisplayedGarageStartingBalance(garage.startingBalance)),
     startingOverdueDebt: formatPrototypeMoney(garage.startingOverdueDebt),
@@ -593,7 +617,9 @@ async function resolveGarageOwner(
   const request = createOwnerRequestFromGarage(row)
 
   if (existing) {
-    const shouldUpdate = existing.phone !== (request.phone || null)
+    const existingPhones = getOwnerPhones(existing)
+    const requestPhones = request.phones ?? (request.phone ? [request.phone] : [])
+    const shouldUpdate = existingPhones.join('\n') !== requestPhones.join('\n')
       || existing.address !== (request.address || null)
       || existing.meterNotes !== (request.meterNotes || null)
       || normalizeOwnerName(existing.fullName) !== ownerName
@@ -821,8 +847,10 @@ async function loadAllContractorReportPages<T>(
 }
 
 function applyGarageOwner(row: ContractorGarageRow, owner?: OwnerDto | null): ContractorGarageRow {
+  const phones = getOwnerPhones(owner)
+  if (phones.length === 0) phones.push('')
   return owner
-    ? { ...row, owner: row.owner || owner.fullName, phone: owner.phone ?? '', address: owner.address ?? '', meters: owner.meterNotes ?? '' }
+    ? { ...row, owner: row.owner || owner.fullName, phone: phones[0] ?? '', phones, address: owner.address ?? '', meters: owner.meterNotes ?? '' }
     : row
 }
 
@@ -2487,7 +2515,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span role="cell" className="contractors-directory-cell--center">{row.peopleCount}</span>
                 <span role="cell" className="contractors-directory-cell--center">{row.floorCount}</span>
                 <span role="cell">{row.owner}</span>
-                <span role="cell">{row.phone}</span>
+                <span role="cell">{getGarageRowPhones(row).join(', ')}</span>
                 <span role="cell" className={row.overdueDebt ? 'contractors-directory-cell--right money-expense' : 'contractors-directory-cell--right'}>
                   {row.isDeleted ? 'Удален' : row.overdueDebt || 'Нет'}
                 </span>
@@ -3283,6 +3311,7 @@ function createEmptyGaragePrototype(): ContractorGarageRow {
     floorCount: '',
     owner: '',
     phone: '',
+    phones: [''],
     address: '',
     startingBalance: '',
     startingOverdueDebt: '',
@@ -3356,7 +3385,7 @@ function getGaragePrototypeChanges(previous: ContractorGarageRow, next: Contract
     createPrototypeChangeEntry('Стартовое значение счетчика воды', previous.initialWater, next.initialWater),
     createPrototypeChangeEntry('Стартовое значение счетчика электричества', previous.initialElectricity, next.initialElectricity),
     createPrototypeChangeEntry('Владелец', previous.owner, next.owner),
-    createPrototypeChangeEntry('Телефон', previous.phone, next.phone),
+    createPrototypeChangeEntry('Телефоны', getGarageRowPhones(previous).join(', '), getGarageRowPhones(next).join(', ')),
     createPrototypeChangeEntry('Адрес', previous.address, next.address),
     createPrototypeChangeEntry('Счётчики', previous.meters, next.meters),
     createPrototypeChangeEntry('Комментарий', previous.comment, next.comment),
@@ -3821,7 +3850,12 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                 </div>
                 <div className="contractors-garage-form-owner">
                   <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
-                  <FormField label="Телефон"><PhoneInput aria-label="Телефон владельца гаража" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
+                  <PhoneListInput
+                    label="Телефоны"
+                    firstPhoneLabel="Телефон владельца гаража"
+                    values={form.phones?.length ? form.phones : [form.phone]}
+                    onChange={(phones) => setForm({ ...form, phone: phones[0] ?? '', phones })}
+                  />
                 </div>
                 <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
               </div>

@@ -20,6 +20,7 @@ export type DictionaryOwnerFormState = {
   firstName: string
   middleName: string
   phone: string
+  phones: string[]
   address: string
   meterNotes: string
 }
@@ -162,6 +163,7 @@ export function createEmptyOwnerForm(): DictionaryOwnerFormState {
     firstName: '',
     middleName: '',
     phone: '',
+    phones: [''],
     address: '',
     meterNotes: '',
   }
@@ -173,6 +175,7 @@ export function createOwnerFormFromDto(owner: OwnerDto): DictionaryOwnerFormStat
     firstName: owner.firstName,
     middleName: owner.middleName ?? '',
     phone: owner.phone ?? '',
+    phones: owner.phones?.length ? owner.phones : [owner.phone ?? ''],
     address: owner.address ?? '',
     meterNotes: owner.meterNotes ?? '',
   }
@@ -287,7 +290,7 @@ export function usesElectricityTariffTiers(calculationBase: string) {
 export function getDictionaryRecordCells(section: DictionarySectionKey, item: DictionaryRecord): Array<string | number> {
   if (section === 'owners') {
     const owner = item as OwnerDto
-    return [owner.fullName, owner.garageNumbers?.length ? owner.garageNumbers.join(', ') : 'без гаража', owner.phone ?? 'не указан', owner.address ?? 'не указан']
+    return [owner.fullName, owner.garageNumbers?.length ? owner.garageNumbers.join(', ') : 'без гаража', owner.phones?.length ? owner.phones.join(', ') : owner.phone ?? 'не указан', owner.address ?? 'не указан']
   }
 
   if (section === 'garages') {

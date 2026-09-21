@@ -23,7 +23,7 @@ import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtCla
 import { restoreFocusAfterClose, useDismissOnWindowClick, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput } from '../../shared/MoneyInput'
-import { PhoneInput } from '../../shared/PhoneInput'
+import { PhoneListInput } from '../../shared/PhoneListInput'
 import { createEmptyPage, createFallbackPage, getLastPageOffset } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { ToastViewport } from '../../shared/Toast'
@@ -927,7 +927,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       addDictionaryChange(changes, 'Фамилия', formatChangeText(owner.lastName), formatChangeText(ownerForm.lastName))
       addDictionaryChange(changes, 'Имя', formatChangeText(owner.firstName), formatChangeText(ownerForm.firstName))
       addDictionaryChange(changes, 'Отчество', formatChangeText(owner.middleName), formatChangeText(ownerForm.middleName))
-      addDictionaryChange(changes, 'Телефон', formatChangeText(owner.phone), formatChangeText(ownerForm.phone))
+      addDictionaryChange(
+        changes,
+        'Телефоны',
+        formatChangeText(owner.phones?.length ? owner.phones.join(', ') : owner.phone),
+        formatChangeText(ownerForm.phones?.filter((phone) => phone.trim()).join(', ') || ownerForm.phone),
+      )
       addDictionaryChange(changes, 'Адрес', formatChangeText(owner.address), formatChangeText(ownerForm.address))
       addDictionaryChange(changes, 'Заметки по счетчикам', formatChangeText(owner.meterNotes), formatChangeText(ownerForm.meterNotes))
       addDictionaryChange(changes, 'Привязанный гараж', formatGarageLabel(currentGarageId), formatGarageLabel(ownerGarageLinkForm.existingGarageId))
@@ -988,7 +993,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             {dictionaryField('ownerMiddleName', <input aria-label={fieldMeta('ownerMiddleName').ariaLabel} placeholder={fieldMeta('ownerMiddleName').placeholder} value={ownerForm.middleName ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, middleName: event.target.value })} />, { className: 'owner-name-grid__middle-name' })}
           </div>
           <div className="owner-contact-grid">
-            {dictionaryField('ownerPhone', <PhoneInput aria-label={fieldMeta('ownerPhone').ariaLabel} required value={ownerForm.phone ?? ''} onValueChange={(phone) => setOwnerForm({ ...ownerForm, phone })} />)}
+            <PhoneListInput
+              label="Телефоны"
+              firstPhoneLabel={fieldMeta('ownerPhone').ariaLabel}
+              required
+              values={ownerForm.phones?.length ? ownerForm.phones : [ownerForm.phone ?? '']}
+              onChange={(phones) => setOwnerForm({ ...ownerForm, phone: phones[0] ?? '', phones })}
+            />
             {dictionaryField('ownerAddress', (
               <>
                 <div className="suggestion-combobox">

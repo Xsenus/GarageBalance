@@ -42,7 +42,7 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
             .ThenBy(row => row.GarageId)
             .ToListAsync(cancellationToken);
 
-        return rows
+        var owners = rows
             .GroupBy(row => row.OwnerId)
             .Select(group =>
             {
@@ -71,6 +71,8 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
                 return owner;
             })
             .ToList();
+        await LoadAdditionalPhonesAsync(owners, cancellationToken);
+        return owners;
     }
 
     public async Task<OwnerPageData> GetPageAsync(
@@ -89,6 +91,7 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .Include(owner => owner.Garages)
+            .Include(owner => owner.AdditionalPhones)
             .AsSplitQuery()
             .OrderBy(owner => owner.LastName)
             .ThenBy(owner => owner.FirstName)
@@ -190,18 +193,22 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
                 return owner;
             })
             .ToList();
+        await LoadAdditionalPhonesAsync(owners, cancellationToken);
         return new OwnerPageData(owners, totalCount);
     }
 
     public Task<Owner?> FindActiveAsync(Guid id, CancellationToken cancellationToken)
     {
-        return dbContext.Owners.SingleOrDefaultAsync(owner => owner.Id == id && !owner.IsArchived, cancellationToken);
+        return dbContext.Owners
+            .Include(owner => owner.AdditionalPhones)
+            .SingleOrDefaultAsync(owner => owner.Id == id && !owner.IsArchived, cancellationToken);
     }
 
     public Task<Owner?> FindArchivedWithGaragesAsync(Guid id, CancellationToken cancellationToken)
     {
         return dbContext.Owners
             .Include(owner => owner.Garages)
+            .Include(owner => owner.AdditionalPhones)
             .AsSplitQuery()
             .SingleOrDefaultAsync(owner => owner.Id == id && owner.IsArchived, cancellationToken);
     }
@@ -212,6 +219,11 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
     public void Add(Owner owner)
     {
         dbContext.Owners.Add(owner);
+    }
+
+    public void AddAdditionalPhones(IEnumerable<OwnerAdditionalPhone> phones)
+    {
+        dbContext.OwnerAdditionalPhones.AddRange(phones);
     }
 
     private IQueryable<Owner> ApplyFilters(string? normalizedSearch, bool includeArchived)
@@ -227,7 +239,8 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
                     EF.Functions.ILike(owner.LastName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
                     EF.Functions.ILike(owner.FirstName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
                     (owner.MiddleName != null && EF.Functions.ILike(owner.MiddleName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
-                    (owner.Phone != null && EF.Functions.ILike(owner.Phone, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
+                    (owner.Phone != null && EF.Functions.ILike(owner.Phone, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    owner.AdditionalPhones.Any(phone => !phone.IsArchived && EF.Functions.ILike(phone.Phone, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
             else
             {
@@ -235,11 +248,35 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
                     owner.LastName.ToLower().Contains(normalizedSearch) ||
                     owner.FirstName.ToLower().Contains(normalizedSearch) ||
                     (owner.MiddleName != null && owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                    (owner.Phone != null && owner.Phone.ToLower().Contains(normalizedSearch)));
+                    (owner.Phone != null && owner.Phone.ToLower().Contains(normalizedSearch)) ||
+                    owner.AdditionalPhones.Any(phone => !phone.IsArchived && phone.Phone.ToLower().Contains(normalizedSearch)));
             }
         }
 
         return query;
+    }
+
+    private async Task LoadAdditionalPhonesAsync(IReadOnlyList<Owner> owners, CancellationToken cancellationToken)
+    {
+        if (owners.Count == 0)
+        {
+            return;
+        }
+
+        var ownerIds = owners.Select(owner => owner.Id).ToList();
+        var additionalPhones = await dbContext.OwnerAdditionalPhones
+            .AsNoTracking()
+            .Where(phone => ownerIds.Contains(phone.OwnerId) && !phone.IsArchived)
+            .OrderBy(phone => phone.OwnerId)
+            .ThenBy(phone => phone.SortOrder)
+            .ToListAsync(cancellationToken);
+        var phonesByOwner = additionalPhones
+            .GroupBy(phone => phone.OwnerId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        foreach (var owner in owners)
+        {
+            owner.AdditionalPhones = phonesByOwner.GetValueOrDefault(owner.Id) ?? [];
+        }
     }
 
     private bool IsNpgsqlProvider() =>

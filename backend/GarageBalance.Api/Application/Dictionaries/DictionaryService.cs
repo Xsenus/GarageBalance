@@ -122,7 +122,11 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<OwnerDto>> CreateOwnerAsync(UpsertOwnerRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        if (request.Phones is { Count: > 10 })
+        {
+            return OwnerPhoneLimitExceeded<OwnerDto>();
+        }
+        if (!TryNormalizeOwnerPhones(request, out var phones))
         {
             return InvalidPhone<OwnerDto>();
         }
@@ -132,10 +136,11 @@ public sealed class DictionaryService(
             LastName = request.LastName.Trim(),
             FirstName = request.FirstName.Trim(),
             MiddleName = NormalizeOptional(request.MiddleName),
-            Phone = phone,
+            Phone = phones.FirstOrDefault(),
             Address = NormalizeOptional(request.Address),
             MeterNotes = NormalizeOptional(request.MeterNotes)
         };
+        SyncOwnerAdditionalPhones(owner, phones.Skip(1));
 
         ownerRepository.Add(owner);
         AddAudit(actorUserId, "dictionary.owner_created", "owner", owner.Id, $"Создан владелец {owner.FullName}.");
@@ -154,13 +159,17 @@ public sealed class DictionaryService(
         var lastName = request.LastName.Trim();
         var firstName = request.FirstName.Trim();
         var middleName = NormalizeOptional(request.MiddleName);
-        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        if (request.Phones is { Count: > 10 })
+        {
+            return OwnerPhoneLimitExceeded<OwnerDto>();
+        }
+        if (!TryNormalizeOwnerPhones(request, out var phones))
         {
             return InvalidPhone<OwnerDto>();
         }
         var address = NormalizeOptional(request.Address);
         var meterNotes = NormalizeOptional(request.MeterNotes);
-        if (OwnerMatches(owner, lastName, firstName, middleName, phone, address, meterNotes))
+        if (OwnerMatches(owner, lastName, firstName, middleName, phones, address, meterNotes))
         {
             return DictionaryResult<OwnerDto>.Success(ToOwnerDto(owner));
         }
@@ -170,7 +179,7 @@ public sealed class DictionaryService(
             ["lastName"] = owner.LastName,
             ["firstName"] = owner.FirstName,
             ["middleName"] = owner.MiddleName,
-            ["phone"] = owner.Phone,
+            ["phones"] = string.Join(", ", owner.AllPhones),
             ["address"] = owner.Address,
             ["meterNotes"] = owner.MeterNotes
         };
@@ -179,7 +188,7 @@ public sealed class DictionaryService(
             ["lastName"] = lastName,
             ["firstName"] = firstName,
             ["middleName"] = middleName,
-            ["phone"] = phone,
+            ["phones"] = string.Join(", ", phones),
             ["address"] = address,
             ["meterNotes"] = meterNotes
         };
@@ -187,7 +196,17 @@ public sealed class DictionaryService(
         owner.LastName = lastName;
         owner.FirstName = firstName;
         owner.MiddleName = middleName;
-        owner.Phone = phone;
+        owner.Phone = phones.FirstOrDefault();
+        var desiredAdditionalPhones = phones.Skip(1).ToList();
+        var removedAdditionalPhones = owner.AdditionalPhones
+            .Where(phone => !phone.IsArchived && !desiredAdditionalPhones.Contains(phone.Phone, StringComparer.Ordinal))
+            .ToList();
+        foreach (var removedPhone in removedAdditionalPhones)
+        {
+            removedPhone.IsArchived = true;
+        }
+        var addedAdditionalPhones = SyncOwnerAdditionalPhones(owner, desiredAdditionalPhones);
+        ownerRepository.AddAdditionalPhones(addedAdditionalPhones);
         owner.Address = address;
         owner.MeterNotes = meterNotes;
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -4929,12 +4948,12 @@ public sealed class DictionaryService(
             && tariff.ElectricityThirdRate.HasValue;
     }
 
-    private static bool OwnerMatches(Owner owner, string lastName, string firstName, string? middleName, string? phone, string? address, string? meterNotes)
+    private static bool OwnerMatches(Owner owner, string lastName, string firstName, string? middleName, IReadOnlyList<string> phones, string? address, string? meterNotes)
     {
         return StringEquals(owner.LastName, lastName) &&
             StringEquals(owner.FirstName, firstName) &&
             StringEquals(owner.MiddleName, middleName) &&
-            StringEquals(owner.Phone, phone) &&
+            owner.AllPhones.SequenceEqual(phones, StringComparer.Ordinal) &&
             StringEquals(owner.Address, address) &&
             StringEquals(owner.MeterNotes, meterNotes);
     }
@@ -5101,10 +5120,63 @@ public sealed class DictionaryService(
         return string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
     }
 
+    private static bool TryNormalizeOwnerPhones(UpsertOwnerRequest request, out IReadOnlyList<string> phones)
+    {
+        var requestedPhones = request.Phones is null
+            ? new[] { request.Phone }
+            : request.Phones.Cast<string?>();
+        var normalizedPhones = new List<string>();
+        foreach (var requestedPhone in requestedPhones)
+        {
+            if (!PhoneNumberNormalizer.TryNormalize(requestedPhone, out var normalizedPhone))
+            {
+                phones = [];
+                return false;
+            }
+            if (normalizedPhone is not null && !normalizedPhones.Contains(normalizedPhone, StringComparer.Ordinal))
+            {
+                normalizedPhones.Add(normalizedPhone);
+            }
+        }
+
+        phones = normalizedPhones;
+        return true;
+    }
+
+    private static IReadOnlyList<OwnerAdditionalPhone> SyncOwnerAdditionalPhones(Owner owner, IEnumerable<string> requestedPhones)
+    {
+        var desiredPhones = requestedPhones.ToList();
+        var addedPhones = new List<OwnerAdditionalPhone>();
+        for (var index = 0; index < desiredPhones.Count; index++)
+        {
+            var phone = desiredPhones[index];
+            var existing = owner.AdditionalPhones.FirstOrDefault(item => string.Equals(item.Phone, phone, StringComparison.Ordinal));
+            if (existing is null)
+            {
+                var addedPhone = new OwnerAdditionalPhone
+                {
+                    OwnerId = owner.Id,
+                    Owner = owner,
+                    Phone = phone,
+                    SortOrder = index
+                };
+                owner.AdditionalPhones.Add(addedPhone);
+                addedPhones.Add(addedPhone);
+                continue;
+            }
+
+            existing.SortOrder = index;
+            existing.IsArchived = false;
+        }
+
+        return addedPhones;
+    }
+
     private static OwnerDto ToOwnerDto(Owner owner)
     {
         return new OwnerDto(owner.Id, owner.LastName, owner.FirstName, owner.MiddleName, owner.FullName, owner.Phone, owner.Address, owner.MeterNotes, owner.IsArchived)
         {
+            Phones = owner.AllPhones,
             GarageNumbers = owner.Garages
                 .Where(garage => !garage.IsArchived)
                 .OrderBy(garage => garage.Number)
@@ -5142,7 +5214,10 @@ public sealed class DictionaryService(
     }
 
     private static DictionaryResult<T> InvalidPhone<T>() =>
-        DictionaryResult<T>.Failure("phone_invalid", $"Укажите телефон в формате {PhoneNumberNormalizer.FormatHint}.");
+        DictionaryResult<T>.Failure("phone_invalid", $"Укажите каждый телефон в формате {PhoneNumberNormalizer.FormatHint}.");
+
+    private static DictionaryResult<T> OwnerPhoneLimitExceeded<T>() =>
+        DictionaryResult<T>.Failure("owner_phone_limit", "Для владельца можно указать не более 10 телефонов.");
 
     private static GarageDto ToGarageDto(GarageListItemData garage, decimal balance, decimal overdueDebt) =>
         new(

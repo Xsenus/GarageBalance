@@ -17,6 +17,7 @@ public sealed record OwnerDto(
     bool IsArchived)
 {
     public IReadOnlyList<string> GarageNumbers { get; init; } = [];
+    public IReadOnlyList<string> Phones { get; init; } = [];
 }
 
 public sealed record UpsertOwnerRequest(
@@ -25,7 +26,11 @@ public sealed record UpsertOwnerRequest(
     [MaxLength(120)] string? MiddleName,
     [MaxLength(80)] string? Phone,
     [MaxLength(500)] string? Address,
-    [MaxLength(1000)] string? MeterNotes);
+    [MaxLength(1000)] string? MeterNotes)
+{
+    [MaxLength(10)]
+    public IReadOnlyList<string>? Phones { get; init; }
+}
 
 public sealed record ArchiveDictionaryEntryRequest(
     [ActionComment, MaxLength(1000)] string Reason);

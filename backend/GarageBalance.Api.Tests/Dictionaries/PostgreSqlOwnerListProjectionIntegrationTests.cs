@@ -10,7 +10,7 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlOwnerListProjectionIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task GetListAsync_UsesOneBoundedCompactProjectionForDisplayedOwnerData()
+    public async Task GetListAsync_UsesBoundedCompactProjectionsForDisplayedOwnerDataAndPhones()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var firstOwner = new Owner
@@ -22,6 +22,12 @@ public sealed class PostgreSqlOwnerListProjectionIntegrationTests
             Address = "Отображаемый адрес",
             MeterNotes = "Отображаемая заметка"
         };
+        firstOwner.AdditionalPhones.Add(new OwnerAdditionalPhone
+        {
+            Owner = firstOwner,
+            Phone = "+7 900 444-55-66",
+            SortOrder = 0
+        });
         var activeGarage = new Garage
         {
             Number = "OWN-COMPACT-02",
@@ -65,6 +71,7 @@ public sealed class PostgreSqlOwnerListProjectionIntegrationTests
         Assert.Equal("Анна", actual.FirstName);
         Assert.Equal("Ивановна", actual.MiddleName);
         Assert.Equal("+7 900 111-22-33", actual.Phone);
+        Assert.Equal(["+7 900 111-22-33", "+7 900 444-55-66"], actual.AllPhones);
         Assert.Equal("Отображаемый адрес", actual.Address);
         Assert.Equal("Отображаемая заметка", actual.MeterNotes);
         Assert.Equal(
@@ -74,7 +81,9 @@ public sealed class PostgreSqlOwnerListProjectionIntegrationTests
         Assert.Empty(result[1].Garages);
         Assert.Empty(queryContext.ChangeTracker.Entries());
 
-        var command = Assert.Single(capture.TakeCommandsAndClear());
+        var commands = capture.TakeCommandsAndClear();
+        Assert.Equal(2, commands.Count);
+        var command = commands[0];
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LEFT JOIN", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Number", command, StringComparison.Ordinal);
@@ -88,15 +97,25 @@ public sealed class PostgreSqlOwnerListProjectionIntegrationTests
         Assert.DoesNotContain("CreatedAtUtc", command, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
         Assert.DoesNotContain("Version", command, StringComparison.Ordinal);
+        Assert.Contains("owner_additional_phones", commands[1], StringComparison.Ordinal);
 
         var literalSearch = await repository.GetListAsync("%_", false, 10, CancellationToken.None);
 
         Assert.Equal(firstOwner.Id, Assert.Single(literalSearch).Id);
-        var searchCommand = Assert.Single(capture.TakeCommandsAndClear());
+        var searchCommands = capture.TakeCommandsAndClear();
+        Assert.Equal(2, searchCommands.Count);
+        var searchCommand = searchCommands[0];
         Assert.Contains("ILIKE", searchCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
         Assert.Contains("LIMIT", searchCommand, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("PeopleCount", searchCommand, StringComparison.Ordinal);
+
+        var additionalPhoneSearch = await repository.GetListAsync("444-55", false, 10, CancellationToken.None);
+
+        Assert.Equal(firstOwner.Id, Assert.Single(additionalPhoneSearch).Id);
+        var additionalPhoneCommands = capture.TakeCommandsAndClear();
+        Assert.Equal(2, additionalPhoneCommands.Count);
+        Assert.Contains("owner_additional_phones", additionalPhoneCommands[0], StringComparison.Ordinal);
     }
 
     [PostgreSqlFact]
