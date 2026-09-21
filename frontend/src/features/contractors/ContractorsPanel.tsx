@@ -3763,7 +3763,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<GaragePrototypeValidationErrors>({})
-  const [openingDataEditing, setOpeningDataEditing] = useState(false)
+  const [continueWithOpeningAdjustment, setContinueWithOpeningAdjustment] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
@@ -3785,11 +3785,25 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
     setSaving(true)
     setSaveError(null)
     try {
+      if (continueWithOpeningAdjustment && item) {
+        const openingDataDraft = form
+        await onSave({
+          ...form,
+          startingBalance: item.startingBalance,
+          startingOverdueDebt: item.startingOverdueDebt,
+        })
+        setSaveChanges([])
+        setContinueWithOpeningAdjustment(false)
+        onAdjustOpeningBalance(openingDataDraft)
+        return
+      }
+
       await onSave(form)
       setSaveChanges([])
       onClose()
     } catch (error) {
       setSaveChanges([])
+      setContinueWithOpeningAdjustment(false)
       setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить гараж.')
     } finally {
       setSaving(false)
@@ -3814,10 +3828,18 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
     }
 
     if (openingDataChanged) {
-      setSaveError('Начальные баланс и просрочка сохраняются отдельной корректировкой с датой и причиной. Нажмите «Продолжить корректировку».')
+      const regularChanges = getGaragePrototypeChanges(item, form)
+      if (regularChanges.length > 0) {
+        setContinueWithOpeningAdjustment(true)
+        setSaveChanges(regularChanges)
+        return
+      }
+
+      onAdjustOpeningBalance(form)
       return
     }
 
+    setContinueWithOpeningAdjustment(false)
     const changes = getGaragePrototypeChanges(item, form)
     if (changes.length === 0) {
       onClose()
@@ -3849,7 +3871,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                   <FormField label="Этажи"><input aria-label="Этажи гаража" aria-invalid={Boolean(validationErrors.floorCount)} data-garage-field="floorCount" type="number" min="0" max="100" step="1" required value={form.floorCount} onChange={(event) => { clearValidationError('floorCount'); setForm({ ...form, floorCount: event.target.value }) }} /></FormField>
                 </div>
                 <div className="contractors-garage-form-owner">
-                  <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
+                  <FormField className="contractors-garage-form-owner-field" label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
                   <PhoneListInput
                     label="Телефон"
                     firstPhoneLabel="Телефон владельца гаража"
@@ -3858,15 +3880,16 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                   />
                 </div>
                 <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
+                <FormField className="contractors-garage-form-meters" label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
                 <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
                 <FormField label="Начальный баланс" help={garageBalanceWithOverdueHelp}>
-                  <MoneyTextInput aria-label="Начальный баланс гаража" aria-invalid={Boolean(validationErrors.startingBalance)} data-garage-field="startingBalance" readOnly={Boolean(item) && !openingDataEditing} value={form.startingBalance ?? ''} onValueChange={(startingBalance) => { clearValidationError('startingBalance'); setForm({ ...form, startingBalance }) }} />
+                  <MoneyTextInput aria-label="Начальный баланс гаража" aria-invalid={Boolean(validationErrors.startingBalance)} data-garage-field="startingBalance" readOnly={Boolean(item) && !canAdjustOpeningData} value={form.startingBalance ?? ''} onValueChange={(startingBalance) => { clearValidationError('startingBalance'); setForm({ ...form, startingBalance }) }} />
                 </FormField>
                 <FormField label="Начальная просрочка" help={garageOverdueHelp}>
-                  <MoneyTextInput aria-label="Начальная просрочка" aria-invalid={Boolean(validationErrors.startingOverdueDebt)} data-garage-field="startingOverdueDebt" readOnly={Boolean(item) && !openingDataEditing} value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => {
+                  <MoneyTextInput aria-label="Начальная просрочка" aria-invalid={Boolean(validationErrors.startingOverdueDebt)} data-garage-field="startingOverdueDebt" readOnly={Boolean(item) && !canAdjustOpeningData} value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => {
                     clearValidationError('startingOverdueDebt')
                     const previousOverdueDebt = parsePrototypeMoney(form.startingOverdueDebt ?? '')
                     const nextOverdueDebt = parsePrototypeMoney(startingOverdueDebt)
@@ -3879,17 +3902,8 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
                     })
                   }} />
                 </FormField>
-                {item && canAdjustOpeningData ? (
-                  <button className="link-button contractors-opening-data-button" type="button" disabled={saving || (openingDataEditing && !openingDataChanged)} onClick={() => openingDataEditing ? onAdjustOpeningBalance(form) : setOpeningDataEditing(true)}>
-                    <Pencil size={15} />
-                    <span>{openingDataEditing ? 'Продолжить корректировку' : 'Редактировать начальные данные'}</span>
-                  </button>
-                ) : null}
+                <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
               </div>
-            </div>
-            <div className="contractors-garage-form-notes">
-              <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
-              <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
@@ -3906,7 +3920,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, financialRep
       </div>
 
       {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} saving={saving} onCancel={() => setSaveChanges([])} onConfirm={() => void saveAndClose()} title="Подтвердить изменения гаража" />
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} saving={saving} onCancel={() => { setSaveChanges([]); setContinueWithOpeningAdjustment(false) }} onConfirm={() => void saveAndClose()} title="Подтвердить изменения гаража" />
       ) : null}
     </>
   )
