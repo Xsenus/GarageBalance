@@ -53,6 +53,24 @@ public sealed class JwtSessionValidationEventsTests
         Assert.NotNull(inactiveContext.Result?.Failure);
     }
 
+    [Fact]
+    public async Task TokenValidated_IgnoresCanceledRequestWithoutAuthenticationFailure()
+    {
+        var repository = new InMemoryUserRepository();
+        var user = CreateUser();
+        repository.Users.Add(user);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var context = CreateContext(user.Id, user.SessionVersion);
+        context.HttpContext.RequestAborted = cancellation.Token;
+
+        await new JwtSessionValidationEvents(repository).TokenValidated(context);
+
+        Assert.NotNull(context.Result);
+        Assert.True(context.Result.None);
+        Assert.Null(context.Result.Failure);
+    }
+
     [Theory]
     [InlineData(null, "1")]
     [InlineData("not-a-guid", "1")]

@@ -19,9 +19,16 @@ public sealed class JwtSessionValidationEvents(IUserRepository users) : JwtBeare
             return;
         }
 
-        if (!await users.IsSessionValidAsync(userId, sessionVersion, context.HttpContext.RequestAborted))
+        try
         {
-            context.Fail("Сессия пользователя отозвана.");
+            if (!await users.IsSessionValidAsync(userId, sessionVersion, context.HttpContext.RequestAborted))
+            {
+                context.Fail("Сессия пользователя отозвана.");
+            }
+        }
+        catch (OperationCanceledException) when (context.HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            context.NoResult();
         }
     }
 }

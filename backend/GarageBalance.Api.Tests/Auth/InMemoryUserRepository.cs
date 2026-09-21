@@ -28,6 +28,7 @@ internal sealed class InMemoryUserRepository : IUserRepository
 
     public Task<bool> IsSessionValidAsync(Guid userId, long sessionVersion, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(Users.Any(user =>
             user.Id == userId &&
             user.IsActive &&
