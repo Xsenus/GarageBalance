@@ -31,7 +31,7 @@ describe('PhoneListInput', () => {
     expect(screen.queryByRole('textbox', { name: 'Телефон владельца: телефон 2' })).not.toBeInTheDocument()
   })
 
-  it('places additional garage phones in a separate parent-grid row', async () => {
+  it('groups additional garage phones in a separate two-column row', async () => {
     const user = userEvent.setup()
     render(<PhoneListHarness />)
 
@@ -43,10 +43,11 @@ describe('PhoneListInput', () => {
     await user.click(within(group).getByRole('button', { name: 'Добавить телефон' }))
     await user.click(within(group).getByRole('button', { name: 'Добавить телефон' }))
 
-    const phoneItems = group.querySelectorAll(':scope > div')
-    expect(phoneItems).toHaveLength(3)
-    expect(phoneItems[1]).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 2' }))
-    expect(phoneItems[2]).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 3' }))
+    const additionalPhones = group.querySelector('.phone-list-additional')
+    expect(additionalPhones).not.toBeNull()
+    expect(additionalPhones?.children).toHaveLength(2)
+    expect(additionalPhones).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 2' }))
+    expect(additionalPhones).toContainElement(within(group).getByRole('textbox', { name: 'Телефон владельца: телефон 3' }))
   })
 
   it('limits the owner to ten phone numbers', () => {

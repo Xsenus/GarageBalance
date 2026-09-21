@@ -34,23 +34,27 @@ export function PhoneListInput({ values, onChange, label, firstPhoneLabel, requi
           >+</button>
         </div>
       </div>
-      {values.slice(1).map((phone, index) => (
-        <div className="suggest" key={index}>
-          <PhoneInput
-            aria-label={`${firstPhoneLabel}: телефон ${index + 2}`}
-            value={phone}
-            onValueChange={(nextPhone) => updatePhone(index + 1, nextPhone)}
-          />
-          <button
-            className="field-btn danger-icon-button"
-            type="button"
-            aria-label={`Удалить телефон ${index + 2}`}
-            onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index + 1))}
-          >
-            <Trash2 size={15} aria-hidden="true" />
-          </button>
+      {values.length > 1 ? (
+        <div className="phone-list-additional">
+          {values.slice(1).map((phone, index) => (
+            <div className="suggest" key={index}>
+              <PhoneInput
+                aria-label={`${firstPhoneLabel}: телефон ${index + 2}`}
+                value={phone}
+                onValueChange={(nextPhone) => updatePhone(index + 1, nextPhone)}
+              />
+              <button
+                className="field-btn danger-icon-button"
+                type="button"
+                aria-label={`Удалить телефон ${index + 2}`}
+                onClick={() => onChange(values.filter((_, currentIndex) => currentIndex !== index + 1))}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
+      ) : null}
     </div>
   )
 }

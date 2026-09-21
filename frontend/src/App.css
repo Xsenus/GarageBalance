@@ -2776,6 +2776,13 @@ h1 {
   display: contents;
 }
 
+.contractors-garage-form-owner > .phone-list > .phone-list-additional {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+}
+
 .contractors-garage-form-notes {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px 12px;
@@ -2885,6 +2892,10 @@ h1 {
   .contractors-garage-form-notes {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .contractors-garage-form-owner > .phone-list > .phone-list-additional {
+    grid-template-columns: 1fr;
   }
 
   .contractors-garage-form-column--financial {
