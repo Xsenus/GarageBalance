@@ -250,17 +250,27 @@ public interface IStorageProviderRegistry
     IReadOnlyList<IStorageProvider> GetAll();
 }
 
-public sealed class StorageProviderRegistry : IStorageProviderRegistry
+public sealed class StorageProviderRegistry : IStorageProviderRegistry, IDisposable
 {
     private readonly IReadOnlyDictionary<string, IStorageProvider> providers;
 
-    public StorageProviderRegistry(StorageConfigurationResolver resolver)
+    public StorageProviderRegistry(
+        StorageConfigurationResolver resolver,
+        IS3ObjectClientFactory s3ClientFactory,
+        TimeProvider timeProvider)
     {
         providers = resolver.Resolve().Destinations
-            .Where(destination => destination.Type == StorageProviderType.LocalFileSystem)
-            .Select(destination => (IStorageProvider)new LocalFileStorageProvider(
-                destination.Id,
-                destination.RootPath ?? throw new InvalidOperationException($"Local destination '{destination.Id}' has no root path.")))
+            .Select(destination => destination.Type switch
+            {
+                StorageProviderType.LocalFileSystem => (IStorageProvider)new LocalFileStorageProvider(
+                    destination.Id,
+                    destination.RootPath ?? throw new InvalidOperationException($"Local destination '{destination.Id}' has no root path.")),
+                StorageProviderType.S3Compatible => new S3CompatibleStorageProvider(
+                    destination,
+                    s3ClientFactory.Create(destination),
+                    timeProvider),
+                _ => throw new InvalidOperationException($"Storage provider type '{destination.Type}' is not supported.")
+            })
             .ToDictionary(provider => provider.DestinationId, StringComparer.Ordinal);
     }
 
@@ -270,4 +280,12 @@ public sealed class StorageProviderRegistry : IStorageProviderRegistry
             : throw new InvalidOperationException($"Storage provider '{destinationId}' is not registered.");
 
     public IReadOnlyList<IStorageProvider> GetAll() => providers.Values.ToArray();
+
+    public void Dispose()
+    {
+        foreach (var provider in providers.Values.OfType<IDisposable>())
+        {
+            provider.Dispose();
+        }
+    }
 }

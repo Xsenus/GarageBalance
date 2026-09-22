@@ -104,7 +104,7 @@ public sealed class StorageOptionsTests
             Prefix = "garagebalance",
             AllowInsecureLoopbackEndpoint = true,
             AllowedEndpointHosts = ["127.0.0.1"],
-            Capabilities = ["Read", "Write", "Stat", "Delete"]
+            Capabilities = ["Read", "Write", "Stat", "Delete", "ServerSideEncryption"]
         };
 
         var result = new StorageOptionsValidator().Validate(null, options);

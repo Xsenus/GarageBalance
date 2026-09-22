@@ -62,6 +62,10 @@ public sealed class StorageDestinationOptions
     public string? Endpoint { get; init; }
     public string? Bucket { get; init; }
     public string Prefix { get; init; } = "garagebalance";
+    public string SigningRegion { get; init; } = "us-east-1";
+    public bool ForcePathStyle { get; init; } = true;
+    public long MultipartThresholdBytes { get; init; } = 64L * 1024 * 1024;
+    public int MultipartPartSizeBytes { get; init; } = 16 * 1024 * 1024;
     public string CredentialSource { get; init; } = "DefaultChain";
     public bool PrivateAccess { get; init; } = true;
     public bool EncryptionAtRest { get; init; } = true;
@@ -115,6 +119,10 @@ public sealed record EffectiveStorageDestination(
     Uri? Endpoint,
     string? Bucket,
     string Prefix,
+    string SigningRegion,
+    bool ForcePathStyle,
+    long MultipartThresholdBytes,
+    int MultipartPartSizeBytes,
     string CredentialSource,
     StorageCapability Capabilities);
 
@@ -282,6 +290,22 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
         {
             errors.Add($"S3 destination '{destination.Id}' requires a bucket.");
         }
+        if (destination.State is StorageDestinationState.Enabled or StorageDestinationState.Recovering &&
+            !capabilities.HasFlag(StorageCapability.ServerSideEncryption))
+        {
+            errors.Add($"S3 destination '{destination.Id}' must support server-side encryption.");
+        }
+        if (string.IsNullOrWhiteSpace(destination.SigningRegion) || destination.SigningRegion.Length > 64 ||
+            destination.SigningRegion.Any(character => !(char.IsLetterOrDigit(character) || character is '-')))
+        {
+            errors.Add($"S3 destination '{destination.Id}' requires a safe signing region.");
+        }
+        if (capabilities.HasFlag(StorageCapability.MultipartUpload) &&
+            (destination.MultipartPartSizeBytes < 5 * 1024 * 1024 ||
+             destination.MultipartThresholdBytes < destination.MultipartPartSizeBytes))
+        {
+            errors.Add($"S3 destination '{destination.Id}' requires multipart parts of at least 5 MiB and a threshold not smaller than one part.");
+        }
         try
         {
             _ = StorageObjectKey.Normalize(destination.Prefix);
@@ -385,6 +409,10 @@ public sealed class StorageConfigurationResolver(
                 null,
                 null,
                 "garagebalance",
+                "us-east-1",
+                true,
+                64L * 1024 * 1024,
+                16 * 1024 * 1024,
                 "DefaultChain",
                 StorageCapability.Read | StorageCapability.Write | StorageCapability.Stat | StorageCapability.Delete);
             var pool = new StoragePoolOptions { Id = "database-backups", DestinationIds = [local.Id] };
@@ -411,6 +439,10 @@ public sealed class StorageConfigurationResolver(
             Uri.TryCreate(item.Endpoint, UriKind.Absolute, out var endpoint) ? endpoint : null,
             item.Bucket,
             StorageObjectKey.Normalize(item.Prefix),
+            item.SigningRegion,
+            item.ForcePathStyle,
+            item.MultipartThresholdBytes,
+            item.MultipartPartSizeBytes,
             item.CredentialSource,
             StorageOptionsValidator.ParseCapabilities(item.Capabilities, $"destination '{item.Id}'", errors))).ToArray();
         if (errors.Count > 0)

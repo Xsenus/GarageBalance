@@ -303,6 +303,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<StorageOptions>, StorageOptionsValidator>();
 builder.Services.AddSingleton<StorageConfigurationResolver>();
+builder.Services.AddSingleton<IS3ObjectClientFactory, AwsS3ObjectClientFactory>();
 builder.Services.AddSingleton<IStorageProviderRegistry, StorageProviderRegistry>();
 builder.Services.AddScoped<IStorageCatalog, EfStorageCatalog>();
 builder.Services
