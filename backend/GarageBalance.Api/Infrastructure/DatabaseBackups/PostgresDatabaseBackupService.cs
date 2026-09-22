@@ -6,6 +6,9 @@ using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Diagnostics;
 using GarageBalance.Api.Application.Settings;
+using GarageBalance.Api.Application.Storage;
+using GarageBalance.Api.Domain.Storage;
+using GarageBalance.Api.Infrastructure.Storage;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -19,9 +22,12 @@ public sealed partial class PostgresDatabaseBackupService(
     IAuditEventWriter auditEventWriter,
     IApplicationUnitOfWork unitOfWork,
     TimeProvider timeProvider,
-    ILogger<PostgresDatabaseBackupService> logger) : IDatabaseBackupService
+    ILogger<PostgresDatabaseBackupService> logger,
+    IStorageProviderRegistry? storageProviderRegistry = null,
+    StorageConfigurationResolver? storageConfigurationResolver = null,
+    IStorageCatalog? storageCatalog = null) : IDatabaseBackupService
 {
-    private const int ManifestSchemaVersion = 1;
+    private const int ManifestSchemaVersion = 2;
     private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -30,18 +36,23 @@ public sealed partial class PostgresDatabaseBackupService(
     private static DateTimeOffset? _lastSuccessfulBackupAtUtc;
     private static string? _lastError;
     private readonly DatabaseBackupOptions _options = options.Value;
-    private readonly string _directory = ResolveBackupDirectory(options.Value.Directory);
+    private readonly EffectiveStorageConfiguration? _storageConfiguration = storageConfigurationResolver?.Resolve();
+    private readonly string _directory = DatabaseBackupPathResolver.Resolve(
+        storageConfigurationResolver?.Resolve().Destinations
+            .FirstOrDefault(destination => destination.Type == StorageProviderType.LocalFileSystem)?.RootPath
+        ?? options.Value.Directory);
 
-    public Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken)
+    public async Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var backups = EnumerateBackups(20, verifyChecksum: true);
+        await ReconcileCatalogAsync(backups, cancellationToken);
         var lastSuccessful = backups.FirstOrDefault()?.CreatedAtUtc ?? _lastSuccessfulBackupAtUtc;
         var freshnessThresholdHours = _options.IntervalHours + _options.FreshnessGraceHours;
         var isStale = _options.Enabled &&
             (lastSuccessful is null || timeProvider.GetUtcNow() - lastSuccessful.Value > TimeSpan.FromHours(freshnessThresholdHours));
         var toolError = _options.Enabled ? GetToolAvailabilityError() : null;
-        return Task.FromResult(new DatabaseBackupStatusDto(
+        return new DatabaseBackupStatusDto(
             _options.Enabled,
             _options.AutomaticEnabled,
             _options.IntervalHours,
@@ -53,7 +64,7 @@ public sealed partial class PostgresDatabaseBackupService(
             backups,
             isStale,
             freshnessThresholdHours,
-            "Локальное хранилище"));
+            "Локальное хранилище");
     }
 
     public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken)
@@ -148,14 +159,54 @@ public sealed partial class PostgresDatabaseBackupService(
                 return Fail("database_backup_verification_failed", "Не удалось проверить структуру резервной копии.", verifyResult.StandardError);
             }
 
-            File.Move(temporaryPath, finalPath, overwrite: false);
+            var backupId = Guid.NewGuid();
+            var hash = await ComputeSha256Async(temporaryPath, cancellationToken);
+            var localProvider = GetLocalProvider();
+            var storageWriteRequest = new StorageWriteRequest(
+                backupId,
+                fileName,
+                1,
+                temporaryFile.Length,
+                hash,
+                new Dictionary<string, string>
+                {
+                    ["backup-kind"] = kindName,
+                    ["manifest-schema"] = ManifestSchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                });
+            if (localProvider is ILocalFileStorageProvider localFileProvider)
+            {
+                await localFileProvider.CommitVerifiedFileAsync(storageWriteRequest, temporaryPath, cancellationToken);
+            }
+            else
+            {
+                await using var source = new FileStream(
+                    temporaryPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 64 * 1024,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await localProvider.WriteAsync(storageWriteRequest, source, cancellationToken);
+                File.Delete(temporaryPath);
+            }
             temporaryPath = null;
             var file = new FileInfo(finalPath);
-            var manifest = await CreateManifestAsync(file, kindName, now, cancellationToken);
+            var (policyId, policyRevision) = GetDatabaseBackupPolicy();
+            var manifest = await CreateManifestAsync(
+                file,
+                backupId,
+                generation: 1,
+                hash,
+                kindName,
+                now,
+                policyId,
+                policyRevision,
+                cancellationToken);
+            await RegisterCatalogAsync(file, manifest, cancellationToken);
             var dto = ToDto(file, manifest, verifyChecksum: true, manifestAlreadyVerified: true);
             _lastSuccessfulBackupAtUtc = now;
             _lastError = null;
-            DeleteExpiredBackups();
+            await DeleteExpiredBackupsAsync(cancellationToken);
 
             if (kind != DatabaseBackupKind.PreUpdate)
             {
@@ -220,17 +271,10 @@ public sealed partial class PostgresDatabaseBackupService(
                 backup.ErrorMessage!);
         }
 
-        FileStream? stream = null;
+        Stream? stream = null;
         try
         {
-            var path = Path.Combine(_directory, backup.Value.FileName);
-            stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 64 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            stream = await GetLocalProvider().OpenReadAsync(backup.Value.FileName, cancellationToken);
 
             auditEventWriter.Add(new AuditEventWriteRequest(
                 actorUserId,
@@ -312,9 +356,8 @@ public sealed partial class PostgresDatabaseBackupService(
 
         try
         {
-            var backupPath = Path.Combine(_directory, backup.Value.FileName);
-            File.Delete(backupPath);
-            File.Delete(GetManifestPath(backupPath));
+            await GetLocalProvider().DeleteAsync(backup.Value.FileName, cancellationToken);
+            await GetLocalProvider().DeleteAsync(GetManifestKey(backup.Value.FileName), cancellationToken);
             auditEventWriter.Add(new AuditEventWriteRequest(
                 actorUserId,
                 "database.backup_deleted",
@@ -437,64 +480,55 @@ public sealed partial class PostgresDatabaseBackupService(
         return DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup);
     }
 
-    private void DeleteExpiredBackups()
+    private async Task DeleteExpiredBackupsAsync(CancellationToken cancellationToken)
     {
         var expired = EnumerateBackups(int.MaxValue, verifyChecksum: false).Skip(_options.RetentionCount);
         foreach (var backup in expired)
         {
-            var backupPath = Path.Combine(_directory, backup.FileName);
-            File.Delete(backupPath);
-            File.Delete(GetManifestPath(backupPath));
+            await GetLocalProvider().DeleteAsync(backup.FileName, cancellationToken);
+            await GetLocalProvider().DeleteAsync(GetManifestKey(backup.FileName), cancellationToken);
         }
     }
 
     private async Task<DatabaseBackupManifest> CreateManifestAsync(
         FileInfo file,
+        Guid backupId,
+        long generation,
+        string sha256,
         string kind,
         DateTimeOffset createdAtUtc,
+        string policyId,
+        int policyRevision,
         CancellationToken cancellationToken)
     {
-        await using var content = new FileStream(
-            file.FullName,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 64 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var hash = await SHA256.HashDataAsync(content, cancellationToken);
         var manifest = new DatabaseBackupManifest(
             ManifestSchemaVersion,
-            Guid.NewGuid(),
+            backupId,
+            generation,
             file.Name,
             file.Length,
-            Convert.ToHexStringLower(hash),
+            sha256,
             kind,
             createdAtUtc,
-            typeof(PostgresDatabaseBackupService).Assembly.GetName().Version?.ToString() ?? "unknown");
+            typeof(PostgresDatabaseBackupService).Assembly.GetName().Version?.ToString() ?? "unknown",
+            policyId,
+            policyRevision);
 
-        var manifestPath = GetManifestPath(file.FullName);
-        var temporaryManifestPath = manifestPath + ".tmp";
-        try
-        {
-            await using (var destination = new FileStream(
-                temporaryManifestPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 16 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            {
-                await JsonSerializer.SerializeAsync(destination, manifest, ManifestJsonOptions, cancellationToken);
-                await destination.FlushAsync(cancellationToken);
-            }
-
-            File.Move(temporaryManifestPath, manifestPath, overwrite: true);
-            return manifest;
-        }
-        finally
-        {
-            File.Delete(temporaryManifestPath);
-        }
+        await using var content = new MemoryStream();
+        await JsonSerializer.SerializeAsync(content, manifest, ManifestJsonOptions, cancellationToken);
+        var bytes = content.ToArray();
+        content.Position = 0;
+        await GetLocalProvider().WriteAsync(
+            new StorageWriteRequest(
+                backupId,
+                GetManifestKey(file.Name),
+                generation,
+                bytes.LongLength,
+                Convert.ToHexStringLower(SHA256.HashData(bytes)),
+                new Dictionary<string, string> { ["content"] = "database-backup-manifest" }),
+            content,
+            cancellationToken);
+        return manifest;
     }
 
     private DatabaseBackupFileDto ToDto(
@@ -508,6 +542,9 @@ public sealed partial class PostgresDatabaseBackupService(
             string.Equals(manifest.FileName, file.Name, StringComparison.Ordinal) &&
             manifest.SizeBytes == file.Length &&
             manifest.SchemaVersion == ManifestSchemaVersion &&
+            manifest.Generation > 0 &&
+            manifest.PolicyRevision > 0 &&
+            StorageObjectKey.IsValidId(manifest.PolicyId) &&
             IsSha256(manifest.Sha256);
         var checksumMatches = manifestMatches &&
             (manifestAlreadyVerified || !verifyChecksum || HasMatchingChecksum(file, manifest!.Sha256));
@@ -582,6 +619,7 @@ public sealed partial class PostgresDatabaseBackupService(
     }
 
     private static string GetManifestPath(string backupPath) => backupPath + ".manifest.json";
+    private static string GetManifestKey(string backupKey) => backupKey + ".manifest.json";
 
     private string? GetToolAvailabilityError()
     {
@@ -590,20 +628,98 @@ public sealed partial class PostgresDatabaseBackupService(
             : "Не найдены утилиты PostgreSQL pg_dump и pg_restore. Установите клиентские инструменты PostgreSQL или задайте POSTGRESQL_BIN.";
     }
 
-    private static string ResolveBackupDirectory(string configuredDirectory)
+    private IStorageProvider GetLocalProvider()
     {
-        if (!string.Equals(configuredDirectory, "auto", StringComparison.OrdinalIgnoreCase))
+        var localDestinationId = _storageConfiguration?.Destinations
+            .FirstOrDefault(destination => destination.Type == StorageProviderType.LocalFileSystem)?.Id
+            ?? "local-hot";
+        return storageProviderRegistry?.GetRequired(localDestinationId)
+            ?? new LocalFileStorageProvider(localDestinationId, _directory);
+    }
+
+    private (string PolicyId, int Revision) GetDatabaseBackupPolicy()
+    {
+        var policy = _storageConfiguration?.Policies
+            .SingleOrDefault(item => item.DataClass == StorageDataClass.DatabaseBackup);
+        return policy is null ? ("database-backups", 1) : (policy.Id, policy.Revision);
+    }
+
+    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
+    {
+        await using var content = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return Convert.ToHexStringLower(await SHA256.HashDataAsync(content, cancellationToken));
+    }
+
+    private async Task RegisterCatalogAsync(
+        FileInfo file,
+        DatabaseBackupManifest manifest,
+        CancellationToken cancellationToken)
+    {
+        if (storageCatalog is null)
         {
-            return Path.GetFullPath(configuredDirectory);
+            return;
         }
 
-        var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localData))
+        var local = _storageConfiguration?.Destinations
+            .FirstOrDefault(destination => destination.Type == StorageProviderType.LocalFileSystem);
+        var localDestinationId = local?.Id ?? "local-hot";
+        var localFailureDomain = local?.FailureDomain ?? "local-host";
+        var policy = _storageConfiguration?.Policies
+            .SingleOrDefault(item => item.DataClass == StorageDataClass.DatabaseBackup);
+        var pool = policy is null
+            ? null
+            : _storageConfiguration?.Pools.Single(item => item.Id == policy.PoolId);
+        var targets = pool?.DestinationIds
+            .Where(destinationId => !string.Equals(destinationId, localDestinationId, StringComparison.Ordinal))
+            .Select(destinationId => _storageConfiguration!.Destinations.Single(destination => destination.Id == destinationId))
+            .Select(destination => new StorageReplicationTarget(destination.Id, destination.FailureDomain))
+            .ToArray() ?? [];
+        await storageCatalog.RegisterCommittedObjectAsync(
+            new RegisterCommittedStorageObjectRequest(
+                manifest.BackupId,
+                _storageConfiguration?.TenantId ?? "garagebalance",
+                StorageDataClass.DatabaseBackup,
+                file.Name,
+                manifest.PolicyId,
+                manifest.PolicyRevision,
+                manifest.Generation,
+                manifest.SizeBytes,
+                manifest.Sha256,
+                manifest.FileName,
+                "application/vnd.postgresql.custom-dump",
+                localDestinationId,
+                localFailureDomain,
+                file.Name,
+                targets,
+                _storageConfiguration?.Replication.MaximumAttempts ?? 12,
+                manifest.CreatedAtUtc),
+            cancellationToken);
+    }
+
+    private async Task ReconcileCatalogAsync(
+        IReadOnlyList<DatabaseBackupFileDto> backups,
+        CancellationToken cancellationToken)
+    {
+        if (storageCatalog is null)
         {
-            localData = AppContext.BaseDirectory;
+            return;
         }
 
-        return Path.Combine(localData, "GarageBalance", "backups");
+        foreach (var backup in backups.Where(item => item.ProtectionState == "local_verified"))
+        {
+            var file = new FileInfo(Path.Combine(_directory, backup.FileName));
+            var manifest = TryReadManifest(file);
+            if (manifest is not null && manifest.SchemaVersion == ManifestSchemaVersion)
+            {
+                await RegisterCatalogAsync(file, manifest, cancellationToken);
+            }
+        }
     }
 
     private DatabaseBackupResult<DatabaseBackupFileDto> Fail(string code, string message, string? diagnostic = null)

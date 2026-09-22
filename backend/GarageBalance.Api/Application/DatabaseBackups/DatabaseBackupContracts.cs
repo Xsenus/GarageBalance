@@ -58,12 +58,15 @@ public sealed record DatabaseBackupFileDto(
 public sealed record DatabaseBackupManifest(
     int SchemaVersion,
     Guid BackupId,
+    long Generation,
     string FileName,
     long SizeBytes,
     string Sha256,
     string Kind,
     DateTimeOffset CreatedAtUtc,
-    string ApplicationVersion);
+    string ApplicationVersion,
+    string PolicyId,
+    int PolicyRevision);
 
 public sealed record DatabaseBackupDownloadDto(
     string FileName,

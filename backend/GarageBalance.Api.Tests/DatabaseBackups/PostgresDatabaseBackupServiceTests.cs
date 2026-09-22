@@ -1,8 +1,10 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Storage;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Infrastructure.Backups;
+using GarageBalance.Api.Domain.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -39,6 +41,10 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             await File.ReadAllTextAsync(manifestPath),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(manifest);
+        Assert.Equal(2, manifest.SchemaVersion);
+        Assert.Equal(1, manifest.Generation);
+        Assert.Equal("database-backups", manifest.PolicyId);
+        Assert.Equal(1, manifest.PolicyRevision);
         Assert.Equal(result.Value.FileName, manifest.FileName);
         Assert.Equal(4, manifest.SizeBytes);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData([1, 2, 3, 4])), manifest.Sha256);
@@ -65,6 +71,25 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.Null(status.LastError);
         Assert.Equal(result.Value.FileName, Assert.Single(status.Backups).FileName);
         Assert.Equal(result.Value.Sha256, status.Backups[0].Sha256);
+    }
+
+    [Fact]
+    public async Task CreateBackup_RegistersCommittedGenerationInStorageCatalog()
+    {
+        var catalog = new CaptureStorageCatalog();
+        var service = CreateService(new FakeCommandRunner(), storageCatalog: catalog);
+
+        var result = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var request = Assert.Single(catalog.Registrations);
+        Assert.Equal(StorageDataClass.DatabaseBackup, request.DataClass);
+        Assert.Equal(1, request.Generation);
+        Assert.Equal(4, request.SizeBytes);
+        Assert.Equal(result.Value!.Sha256, request.Sha256);
+        Assert.Equal(result.Value.FileName, request.LogicalKey);
+        Assert.Equal("local-hot", request.LocalDestinationId);
+        Assert.Empty(request.ReplicationTargets);
     }
 
     [Fact]
@@ -369,7 +394,8 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         bool enabled = true,
         int retentionCount = 30,
         string? directory = null,
-        IBackupToolLocator? toolLocator = null)
+        IBackupToolLocator? toolLocator = null,
+        IStorageCatalog? storageCatalog = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -393,7 +419,8 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             audit ?? new CaptureAuditWriter(),
             unitOfWork ?? new CaptureUnitOfWork(),
             new FixedTimeProvider(_now),
-            NullLogger<PostgresDatabaseBackupService>.Instance);
+            NullLogger<PostgresDatabaseBackupService>.Instance,
+            storageCatalog: storageCatalog);
     }
 
     private sealed class FakeToolLocator(bool available) : IBackupToolLocator
@@ -467,6 +494,34 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             SaveCount++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class CaptureStorageCatalog : IStorageCatalog
+    {
+        public List<RegisterCommittedStorageObjectRequest> Registrations { get; } = [];
+
+        public Task<StorageCatalogRegistration> RegisterCommittedObjectAsync(RegisterCommittedStorageObjectRequest request, CancellationToken cancellationToken)
+        {
+            Registrations.Add(request);
+            var storageObject = new StorageObject
+            {
+                OperationId = request.OperationId,
+                DataClass = request.DataClass,
+                LogicalKey = request.LogicalKey,
+                CommittedGeneration = request.Generation,
+                SizeBytes = request.SizeBytes,
+                Sha256 = request.Sha256
+            };
+            var replica = new StorageObjectReplica { DestinationId = request.LocalDestinationId };
+            return Task.FromResult(new StorageCatalogRegistration(storageObject, replica, [], false));
+        }
+
+        public Task<StorageObject?> FindObjectAsync(Guid objectId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StorageObject?> FindByLogicalKeyAsync(string tenantId, StorageDataClass dataClass, string logicalKey, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StorageTransferJob?> ClaimNextJobAsync(string leaseOwner, TimeSpan leaseDuration, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task CompleteJobAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ScheduleJobRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, string category, string safeError, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<StorageManifestEntry>> ExportManifestAsync(StorageDataClass dataClass, int take, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

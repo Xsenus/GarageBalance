@@ -65,8 +65,8 @@ Roadmap принимает `DEC-001..010` из ТЗ. Ключевые значе
 | `STG-00` | Freeze baseline/contracts | P0 | none | `TASK-001..002` | implementation permission | characterization and decisions register | Codex + owner for policy | `DONE` |
 | `STG-01` | Harden current local system | P0 | STG-00 | `TASK-003..005` | baseline green | SHA/manifest, freshness, permissions, orphan cleanup green | Codex | `DONE` |
 | `STG-02` | Add policy/provider/catalog foundations off by default | P0 | STG-01 | `TASK-006..007` | restore point | additive schema/options/feature-off compatibility | Codex | `DONE` |
-| `STG-03` | Preserve current local behavior through new abstraction | P0 | STG-02 | `TASK-008` | schema deployed locally | local contract parity and registered existing files | Codex | `IN_PROGRESS` |
-| `STG-04` | Add secure S3-compatible destination | P0 | STG-03 | `TASK-009` | isolated test S3 | adapter contract + security green | Codex/operator for real test | `TODO` |
+| `STG-03` | Preserve current local behavior through new abstraction | P0 | STG-02 | `TASK-008` | schema deployed locally | local contract parity and registered existing files | Codex | `DONE` |
+| `STG-04` | Add secure S3-compatible destination | P0 | STG-03 | `TASK-009` | isolated test S3 | adapter contract + security green | Codex/operator for real test | `IN_PROGRESS` |
 | `STG-05` | Durable replication and write/backup fallback | P0 | STG-04 | `TASK-010..011` | adapter green | partial/UNKNOWN/restart/all-failed tested | Codex | `TODO` |
 | `STG-06` | Read failover, repair, delete, UI/API | P0 | STG-05 | `TASK-012..016` | durable copies | current-generation read, recovery/failback/delete/UI tests green | Codex | `TODO` |
 | `STG-07` | Historical inventory/backfill and coverage proof | P0 | STG-06 | `TASK-018` | CLI + destinations | retained objects verified; rollback lookup proven | Codex/operator | `TODO` |
@@ -261,7 +261,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-008 — Local provider adapter and legacy parity
 
-- Stage/status/priority: `STG-03`, `IN_PROGRESS` after `TASK-006/007`, P0. Links: `REQ-001/012`, `AC-001/015/019`.
+- Stage/status/priority: `STG-03`, `DONE` after `TASK-006/007`, P0. Links: `REQ-001/012`, `AC-001/015/019`.
 - Result: current directory operates through local adapter/catalog without changed user contract.
 - Touchpoints: NEW `LocalFileStorageProvider`; existing backup service/controller; DI; tests.
 - Actions: safe root/path normalization; streaming/stat/delete; register new backups; lazy/inventory registration of old files; keep exact managed names, Range, audit, pre-update and retention behavior (except safer protection gate).
@@ -272,7 +272,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-009 — S3-compatible adapter and secure provider contract
 
-- Stage/status/priority: `STG-04`, `TODO` after `TASK-006/008`, P0. Links: `REQ-002/003/010/016`, `RISK-016/019`, `AC-003/010/016/018`.
+- Stage/status/priority: `STG-04`, `IN_PROGRESS` after `TASK-006/008`, P0. Links: `REQ-002/003/010/016`, `RISK-016/019`, `AC-003/010/016/018`.
 - Result: one adapter can serve N configured S3-compatible destinations with explicit capabilities.
 - Touchpoints: API `.csproj`/lock; NEW `S3CompatibleStorageProvider`; options/DI; isolated integration fixtures; Docker CI only if justified.
 - Actions: select maintained SDK/version; streaming put/get/head/delete; metadata SHA/generation; deterministic key; cancellation/timeouts; multipart above measured threshold; abort cleanup; optional signed GET; map native errors; private/TLS/encryption defaults; endpoint allowlist/path-style config.
@@ -570,8 +570,8 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 ### Progress summary
 
-- Stages: 3/10 `DONE`; 1 `IN_PROGRESS`; 6 `TODO`; 2 stages contain external `BLOCKED` tasks.
-- Tasks: 7/24 `DONE`; `TASK-008` in progress; `TASK-021/022` externally blocked; remaining tasks dependent TODO.
+- Stages: 4/10 `DONE`; 1 `IN_PROGRESS`; 5 `TODO`; 2 stages contain external `BLOCKED` tasks.
+- Tasks: 8/24 `DONE`; `TASK-009` in progress; `TASK-021/022` externally blocked; remaining tasks dependent TODO.
 - Current implementation baseline is not counted as new roadmap completion.
 
 ### Plan change log
@@ -582,6 +582,7 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 | 22.09.2026 / 1.1 | Implementation authorized. `STG-00` completed: backend baseline 40/40 and frontend settings API 16/16 passed; proposed policy values retained pending external provisioning approval. `STG-01/TASK-003` started. |
 | 22.09.2026 / 1.2 | `STG-01` completed: atomic SHA-256 manifests and byte verification; damaged-download blocking; stale/catch-up status; five backup permissions and hidden server path; Access orphan quarantine/TTL and bounded work directory. Focused backend 71/71, frontend contracts 21/21 and backup UI 8/8 passed. `STG-02/TASK-006` started. |
 | 22.09.2026 / 1.3 | `STG-02` completed: feature-off `Single` compatibility resolver; capability-aware destination/pool/policy validation; safe endpoint/key rules; additive object/replica/job catalog, idempotent atomic registration, optimistic versions and expiring leases. Unit/SQLite 17/17 and real local PostgreSQL migration/concurrency 1/1 passed; EF pending-model check clean. `STG-03/TASK-008` started. |
+| 22.09.2026 / 1.4 | `STG-03` completed: local provider contract for atomic write/adopt, read/stat/delete and checksum enforcement; backup create/download/delete/retention routed through it; manifest v2 carries ID/generation/policy and committed backups register catalog debt. Focused backup/storage 46/46 passed (4 unrelated/provider-gated PostgreSQL tests skipped in that filter). `STG-04/TASK-009` started. |
 
 ### Execution journal
 
@@ -593,11 +594,13 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 22.09.2026: completed `TASK-006..007`. Added vendor-neutral provider contract and capability/error vocabulary, strict `AsyncMirror` policy validation, SSRF-safe endpoint allowlist and legacy `Single/local-hot` synthesis. Added additive EF migration `AddStorageCatalog` with logical objects, per-destination replicas and durable transfer jobs; registration is transactional/idempotent and lease claim is cross-instance safe. Checks: unit/SQLite 17/17, local PostgreSQL upgrade and concurrent lease 1/1, no pending EF model changes. No release note was added because this stage is disabled infrastructure with no user-visible behavior.
 
+22.09.2026: completed `TASK-008`. Implemented the local filesystem provider contract with exact checksum/size enforcement, atomic adoption of an already-created dump without a second full-size copy, safe key confinement, read/stat/delete and cancellation. PostgreSQL backup creation now emits manifest schema 2 with logical ID/generation/policy, registers the committed local replica/catalog jobs, and uses the provider for create/download/delete/retention while preserving filenames/routes and legacy `Single` defaults. Focused backup/storage checks passed 46/46; no release note because default user workflow and UI are unchanged.
+
 ### Continuation checkpoint
 
 - Baseline revision: Roadmap 1.0, commit `e5309e8a`.
-- Last completed implementation stage: `STG-02`.
-- Current task: `TASK-008 — Local provider adapter and legacy parity`.
+- Last completed implementation stage: `STG-03`.
+- Current task: `TASK-009 — Secure S3-compatible provider adapter`.
 - Preconditions already checked: repo structure, current storage flows, focused test batch, baseline Git state.
 - Before continuing: re-read the active task card and current diff; preserve completed evidence and unrelated user work.
 - Parallel next decision: `TASK-002` can collect policy values without blocking `TASK-001`.

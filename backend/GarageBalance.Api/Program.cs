@@ -28,6 +28,7 @@ using GarageBalance.Api.Infrastructure.Import;
 using GarageBalance.Api.Infrastructure.Integrations;
 using GarageBalance.Api.Infrastructure.Maintenance;
 using GarageBalance.Api.Infrastructure.Security;
+using GarageBalance.Api.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
@@ -302,6 +303,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<StorageOptions>, StorageOptionsValidator>();
 builder.Services.AddSingleton<StorageConfigurationResolver>();
+builder.Services.AddSingleton<IStorageProviderRegistry, StorageProviderRegistry>();
 builder.Services.AddScoped<IStorageCatalog, EfStorageCatalog>();
 builder.Services
     .AddOptions<DatabaseStartupOptions>()
