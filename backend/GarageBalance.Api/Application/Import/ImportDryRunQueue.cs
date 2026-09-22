@@ -24,6 +24,15 @@ public sealed class ImportDryRunQueueOptions
 
     [Range(ImportFileLimits.MaximumFileSizeMegabytes, ImportFileLimits.MaximumFileSizeMegabytes)]
     public int MaximumFileSizeMegabytes { get; init; } = ImportFileLimits.MaximumFileSizeMegabytes;
+
+    [Range(ImportFileLimits.MaximumFileSizeMegabytes, 102400)]
+    public int MaximumWorkDirectorySizeMegabytes { get; init; } = 512;
+
+    [Range(1, 720)]
+    public int OrphanRetentionHours { get; init; } = 24;
+
+    [Range(1, 1440)]
+    public int OrphanSweepIntervalMinutes { get; init; } = 60;
 }
 
 public sealed record ImportDryRunJob(Guid RunId);
@@ -88,6 +97,7 @@ public sealed class ImportDryRunDispatcher(
     IImportDryRunQueue queue,
     IOptions<ImportDryRunQueueOptions> options) : IImportDryRunDispatcher
 {
+    private static readonly SemaphoreSlim WorkDirectoryLock = new(1, 1);
     private readonly ImportDryRunQueueOptions _options = options.Value;
 
     public async Task<ImportResult<AccessImportRunDto>> QueueAsync(
@@ -122,8 +132,18 @@ public sealed class ImportDryRunDispatcher(
         var runId = Guid.NewGuid();
         var path = ImportDryRunWorkFiles.GetPath(_options, runId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await WorkDirectoryLock.WaitAsync(cancellationToken);
         try
         {
+            var maximumWorkDirectoryBytes = _options.MaximumWorkDirectorySizeMegabytes * 1024L * 1024L;
+            var occupiedBytes = ImportDryRunWorkFiles.GetManagedFiles(_options).Sum(file => file.Length);
+            if (occupiedBytes > maximumWorkDirectoryBytes - declaredLength)
+            {
+                return ImportResult<AccessImportRunDto>.Failure(
+                    "import_staging_capacity_exceeded",
+                    "Временное хранилище импорта заполнено. Дождитесь завершения текущих импортов или обратитесь к администратору.");
+            }
+
             await using (var destination = new FileStream(
                 path,
                 FileMode.CreateNew,
@@ -172,6 +192,10 @@ public sealed class ImportDryRunDispatcher(
 
             throw;
         }
+        finally
+        {
+            WorkDirectoryLock.Release();
+        }
     }
 
     private static async Task CopyBoundedAsync(
@@ -203,12 +227,120 @@ public sealed class ImportDryRunDispatcher(
 
 internal static class ImportDryRunWorkFiles
 {
-    internal static string GetPath(ImportDryRunQueueOptions options, Guid runId)
-    {
-        var directory = string.Equals(options.WorkDirectory, "auto", StringComparison.OrdinalIgnoreCase)
+    internal static string GetDirectory(ImportDryRunQueueOptions options) =>
+        string.Equals(options.WorkDirectory, "auto", StringComparison.OrdinalIgnoreCase)
             ? Path.Combine(Path.GetTempPath(), "GarageBalance", "import-queue")
             : Path.GetFullPath(options.WorkDirectory);
-        return Path.Combine(directory, $"{runId:N}.pending");
+
+    internal static string GetPath(ImportDryRunQueueOptions options, Guid runId)
+    {
+        return Path.Combine(GetDirectory(options), $"{runId:N}.pending");
+    }
+
+    internal static IEnumerable<FileInfo> GetManagedFiles(ImportDryRunQueueOptions options)
+    {
+        var directory = GetDirectory(options);
+        if (!Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+            .Select(path => new FileInfo(path))
+            .Where(file =>
+                (file.Extension is ".pending" or ".orphan") &&
+                (file.Attributes & FileAttributes.ReparsePoint) == 0 &&
+                Guid.TryParseExact(Path.GetFileNameWithoutExtension(file.Name), "N", out _))
+            .ToArray();
+    }
+}
+
+public sealed class ImportDryRunOrphanSweeper(
+    IServiceScopeFactory scopeFactory,
+    IOptions<ImportDryRunQueueOptions> options,
+    TimeProvider timeProvider,
+    ILogger<ImportDryRunOrphanSweeper> logger) : BackgroundService
+{
+    private readonly ImportDryRunQueueOptions _options = options.Value;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await SweepOnceAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(
+                    "Access import orphan sweep failed and will be retried. ExceptionType={ExceptionType}",
+                    exception.GetType().Name);
+            }
+
+            await Task.Delay(TimeSpan.FromMinutes(_options.OrphanSweepIntervalMinutes), stoppingToken);
+        }
+    }
+
+    internal async Task<int> SweepOnceAsync(CancellationToken cancellationToken)
+    {
+        var directory = ImportDryRunWorkFiles.GetDirectory(_options);
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        var cutoff = timeProvider.GetUtcNow().AddHours(-_options.OrphanRetentionHours).UtcDateTime;
+        var changed = 0;
+        using var scope = scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IImportRepository>();
+        foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = new FileInfo(path);
+            if (file.LastWriteTimeUtc >= cutoff || (file.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+
+            var extension = file.Extension;
+            if (extension is not ".pending" and not ".orphan")
+            {
+                continue;
+            }
+
+            if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(file.Name), "N", out var runId))
+            {
+                continue;
+            }
+
+            var status = await repository.FindRunStatusAsync(runId, cancellationToken);
+            if (status?.Status is "queued" or "processing")
+            {
+                continue;
+            }
+
+            if (extension == ".pending")
+            {
+                var quarantinePath = Path.Combine(directory, $"{runId:N}.orphan");
+                File.Move(file.FullName, quarantinePath, overwrite: false);
+                File.SetLastWriteTimeUtc(quarantinePath, timeProvider.GetUtcNow().UtcDateTime);
+                logger.LogWarning("Quarantined orphaned Access import staging file. RunId={RunId}", runId);
+            }
+            else
+            {
+                file.Delete();
+                logger.LogWarning("Deleted expired quarantined Access import staging file. RunId={RunId}", runId);
+            }
+
+            changed++;
+        }
+
+        return changed;
     }
 }
 

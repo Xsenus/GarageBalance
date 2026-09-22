@@ -20,6 +20,7 @@ public sealed class ImportDryRunQueueTests
 
         Assert.Equal(50, options.MaximumFileSizeMegabytes);
         Assert.Equal(50L * 1024L * 1024L, ImportFileLimits.MaximumFileSizeBytes);
+        Assert.Equal(512, options.MaximumWorkDirectorySizeMegabytes);
     }
 
     [Fact]
@@ -32,6 +33,50 @@ public sealed class ImportDryRunQueueTests
 
         Assert.False(valid);
         Assert.Contains(results, result => result.MemberNames.Contains(nameof(options.MaximumFileSizeMegabytes)));
+    }
+
+    [Fact]
+    public async Task Dispatcher_RejectsUploadWhenManagedWorkDirectoryHasReachedItsBound()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"garagebalance-import-capacity-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var options = Options.Create(new ImportDryRunQueueOptions
+            {
+                WorkDirectory = root,
+                MaximumFileSizeMegabytes = 50,
+                MaximumWorkDirectorySizeMegabytes = 50
+            });
+            var occupiedPath = ImportDryRunWorkFiles.GetPath(options.Value, Guid.NewGuid());
+            await using (var occupied = File.Create(occupiedPath))
+            {
+                occupied.SetLength(50L * 1024L * 1024L);
+            }
+            var dispatcher = new ImportDryRunDispatcher(
+                null!,
+                new ImportDryRunQueue(options),
+                options);
+            await using var upload = CreateAccessLikeStream("new import");
+
+            var result = await dispatcher.QueueAsync(
+                "new.accdb",
+                upload,
+                upload.Length,
+                null,
+                CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("import_staging_capacity_exceeded", result.ErrorCode);
+            Assert.Single(Directory.EnumerateFiles(root, "*.pending"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -211,6 +256,82 @@ public sealed class ImportDryRunQueueTests
             () => worker.TryProcessAsync(new ImportDryRunJob(Guid.NewGuid()), cancellation.Token));
     }
 
+    [Fact]
+    public async Task OrphanSweeper_QuarantinesUnknownPendingFile_DeletesExpiredQuarantine_AndPreservesQueuedRun()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"garagebalance-import-orphans-{Guid.NewGuid():N}");
+        var databasePath = Path.Combine(root, "queue.db");
+        Directory.CreateDirectory(root);
+        ServiceProvider? provider = null;
+        try
+        {
+            var now = new DateTimeOffset(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
+            var options = Options.Create(new ImportDryRunQueueOptions
+            {
+                WorkDirectory = root,
+                MaximumFileSizeMegabytes = 50,
+                OrphanRetentionHours = 24
+            });
+            provider = BuildProvider(databasePath, options);
+            await EnsureDatabaseAsync(provider);
+
+            var unknownRunId = Guid.NewGuid();
+            var quarantinedRunId = Guid.NewGuid();
+            var queuedRunId = Guid.NewGuid();
+            var unknownPath = ImportDryRunWorkFiles.GetPath(options.Value, unknownRunId);
+            var quarantinePath = Path.Combine(root, $"{quarantinedRunId:N}.orphan");
+            var queuedPath = ImportDryRunWorkFiles.GetPath(options.Value, queuedRunId);
+            await File.WriteAllTextAsync(unknownPath, "unknown");
+            await File.WriteAllTextAsync(quarantinePath, "expired");
+            await File.WriteAllTextAsync(queuedPath, "queued");
+            var oldTimestamp = now.AddHours(-25).UtcDateTime;
+            File.SetLastWriteTimeUtc(unknownPath, oldTimestamp);
+            File.SetLastWriteTimeUtc(quarantinePath, oldTimestamp);
+            File.SetLastWriteTimeUtc(queuedPath, oldTimestamp);
+
+            using (var scope = provider.CreateScope())
+            {
+                var service = scope.ServiceProvider.GetRequiredService<IImportService>();
+                var result = await service.CreateQueuedDryRunAsync(
+                    new QueuedAccessImportDryRunRequest(queuedRunId, "queued.accdb", 6, null),
+                    CancellationToken.None);
+                Assert.True(result.Succeeded);
+            }
+
+            var sweeper = new ImportDryRunOrphanSweeper(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                options,
+                new FixedTimeProvider(now),
+                NullLogger<ImportDryRunOrphanSweeper>.Instance);
+
+            var changed = await sweeper.SweepOnceAsync(CancellationToken.None);
+
+            Assert.Equal(2, changed);
+            Assert.False(File.Exists(unknownPath));
+            var newlyQuarantinedPath = Path.Combine(root, $"{unknownRunId:N}.orphan");
+            Assert.True(File.Exists(newlyQuarantinedPath));
+            Assert.Equal(now.UtcDateTime, File.GetLastWriteTimeUtc(newlyQuarantinedPath), TimeSpan.FromSeconds(2));
+            Assert.False(File.Exists(quarantinePath));
+            Assert.True(File.Exists(queuedPath));
+
+            var immediateSecondSweep = await sweeper.SweepOnceAsync(CancellationToken.None);
+            Assert.Equal(0, immediateSecondSweep);
+            Assert.True(File.Exists(newlyQuarantinedPath));
+        }
+        finally
+        {
+            if (provider is not null)
+            {
+                await provider.DisposeAsync();
+            }
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static ServiceProvider BuildProvider(string databasePath, IOptions<ImportDryRunQueueOptions> options)
     {
         var services = new ServiceCollection();
@@ -254,5 +375,10 @@ public sealed class ImportDryRunQueueTests
     private sealed class ThrowingScopeFactory(Exception exception) : IServiceScopeFactory
     {
         public IServiceScope CreateScope() => throw exception;
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

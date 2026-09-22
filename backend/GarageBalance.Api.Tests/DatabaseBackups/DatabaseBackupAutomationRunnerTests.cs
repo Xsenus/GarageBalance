@@ -101,9 +101,11 @@ public sealed class DatabaseBackupAutomationRunnerTests
     }
 
     [Fact]
-    public async Task RunIfDue_DoesNotCompeteWithWorkingRequestsOutsideAutomaticWindow()
+    public async Task RunIfDue_CatchesUpOutsideWindowWhenPreviousBackupIsOverdue()
     {
-        var service = new FakeBackupService(CreateStatus([])) { ThrowOnStatusRead = true };
+        var service = new FakeBackupService(CreateStatus([
+            new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, Now.AddHours(-25), "automatic")
+        ]));
         var runner = new DatabaseBackupAutomationRunner(
             service,
             Options.Create(new DatabaseBackupOptions
@@ -118,8 +120,35 @@ public sealed class DatabaseBackupAutomationRunnerTests
             new FixedTimeProvider(Now),
             NullLogger<DatabaseBackupAutomationRunner>.Instance);
 
+        Assert.True(await runner.RunIfDueAsync(CancellationToken.None));
+        Assert.Equal(1, service.StatusReadCount);
+        Assert.Equal(DatabaseBackupKind.Automatic, service.ReceivedKind);
+    }
+
+    [Fact]
+    public async Task RunIfDue_SkipsOutsideWindowWhenCatchUpIsDisabled()
+    {
+        var service = new FakeBackupService(CreateStatus([
+            new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, Now.AddHours(-25), "automatic")
+        ]));
+        var runner = new DatabaseBackupAutomationRunner(
+            service,
+            Options.Create(new DatabaseBackupOptions
+            {
+                Enabled = true,
+                AutomaticEnabled = true,
+                CatchUpEnabled = false,
+                IntervalHours = 24,
+                AutomaticWindowStartHour = 2,
+                AutomaticWindowEndHour = 5,
+                AutomaticWindowTimeZoneId = "UTC"
+            }),
+            new FixedTimeProvider(Now),
+            NullLogger<DatabaseBackupAutomationRunner>.Instance);
+
         Assert.False(await runner.RunIfDueAsync(CancellationToken.None));
-        Assert.Equal(0, service.StatusReadCount);
+        Assert.Equal(1, service.StatusReadCount);
+        Assert.Null(service.ReceivedKind);
     }
 
     [Theory]

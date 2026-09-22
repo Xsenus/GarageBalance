@@ -15,6 +15,11 @@ public sealed class DatabaseBackupOptions
     [Range(1, 168)]
     public int IntervalHours { get; init; } = 24;
 
+    public bool CatchUpEnabled { get; init; } = true;
+
+    [Range(1, 168)]
+    public int FreshnessGraceHours { get; init; } = 6;
+
     [Range(0, 23)]
     public int AutomaticWindowStartHour { get; init; } = 2;
 
@@ -45,7 +50,20 @@ public sealed record DatabaseBackupFileDto(
     string FileName,
     long SizeBytes,
     DateTimeOffset CreatedAtUtc,
-    string Kind);
+    string Kind,
+    string? Sha256 = null,
+    string ProtectionState = "local_only",
+    DateTimeOffset? LastVerifiedAtUtc = null);
+
+public sealed record DatabaseBackupManifest(
+    int SchemaVersion,
+    Guid BackupId,
+    string FileName,
+    long SizeBytes,
+    string Sha256,
+    string Kind,
+    DateTimeOffset CreatedAtUtc,
+    string ApplicationVersion);
 
 public sealed record DatabaseBackupDownloadDto(
     string FileName,
@@ -61,7 +79,10 @@ public sealed record DatabaseBackupStatusDto(
     bool IsRunning,
     DateTimeOffset? LastSuccessfulBackupAtUtc,
     string? LastError,
-    IReadOnlyList<DatabaseBackupFileDto> Backups);
+    IReadOnlyList<DatabaseBackupFileDto> Backups,
+    bool IsStale = false,
+    int FreshnessThresholdHours = 48,
+    string StorageLocation = "Локальное хранилище");
 
 public sealed record DatabaseBackupResult<T>(bool Succeeded, T? Value, string? ErrorCode, string? ErrorMessage)
 {

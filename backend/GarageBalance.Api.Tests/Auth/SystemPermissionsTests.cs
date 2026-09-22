@@ -31,4 +31,26 @@ public sealed class SystemPermissionsTests
 
         Assert.Equal([SystemPermissions.AuditRead, SystemPermissions.UsersManage], expanded);
     }
+
+    [Fact]
+    public void ExpandWithDependencies_BackupMutationsRequireBackupRead()
+    {
+        var expanded = SystemPermissions.ExpandWithDependencies(
+            [
+                SystemPermissions.BackupsCreate,
+                SystemPermissions.BackupsDownload,
+                SystemPermissions.BackupsDelete,
+                SystemPermissions.BackupsRepair
+            ]);
+
+        Assert.Equal(
+            [
+                SystemPermissions.BackupsCreate,
+                SystemPermissions.BackupsDelete,
+                SystemPermissions.BackupsDownload,
+                SystemPermissions.BackupsRead,
+                SystemPermissions.BackupsRepair
+            ],
+            expanded);
+    }
 }

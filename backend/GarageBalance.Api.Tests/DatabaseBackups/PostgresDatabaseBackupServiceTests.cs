@@ -6,6 +6,8 @@ using GarageBalance.Api.Infrastructure.Backups;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Backups;
 
@@ -28,8 +30,20 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.NotNull(result.Value);
         Assert.Equal("garagebalance_manual_20260715_093000_000.pgdump", result.Value.FileName);
         Assert.Equal(4, result.Value.SizeBytes);
-        Assert.True(File.Exists(Path.Combine(_directory, result.Value.FileName)));
+        var backupPath = Path.Combine(_directory, result.Value.FileName);
+        Assert.True(File.Exists(backupPath));
         Assert.False(File.Exists(Path.Combine(_directory, result.Value.FileName + ".tmp")));
+        var manifestPath = backupPath + ".manifest.json";
+        Assert.True(File.Exists(manifestPath));
+        var manifest = JsonSerializer.Deserialize<DatabaseBackupManifest>(
+            await File.ReadAllTextAsync(manifestPath),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(manifest);
+        Assert.Equal(result.Value.FileName, manifest.FileName);
+        Assert.Equal(4, manifest.SizeBytes);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData([1, 2, 3, 4])), manifest.Sha256);
+        Assert.Equal(manifest.Sha256, result.Value.Sha256);
+        Assert.Equal("local_verified", result.Value.ProtectionState);
         Assert.Equal(2, runner.Commands.Count);
         var dump = runner.Commands[0];
         Assert.Equal("pg_dump", dump.FileName);
@@ -50,6 +64,31 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.False(status.IsRunning);
         Assert.Null(status.LastError);
         Assert.Equal(result.Value.FileName, Assert.Single(status.Backups).FileName);
+        Assert.Equal(result.Value.Sha256, status.Backups[0].Sha256);
+    }
+
+    [Fact]
+    public async Task GetStatus_MarksBackupFailedWhenBytesNoLongerMatchManifest()
+    {
+        var service = CreateService(new FakeCommandRunner());
+        var created = await service.CreateAsync(
+            DatabaseBackupKind.Automatic,
+            null,
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+        var path = Path.Combine(_directory, created.Value!.FileName);
+        await File.WriteAllBytesAsync(path, [4, 3, 2, 1]);
+
+        var status = await service.GetStatusAsync(CancellationToken.None);
+
+        var backup = Assert.Single(status.Backups);
+        Assert.Equal("failed", backup.ProtectionState);
+        Assert.Null(backup.LastVerifiedAtUtc);
+        Assert.Equal(created.Value.Sha256, backup.Sha256);
+        var download = await service.OpenDownloadAsync(backup.FileName, null, CancellationToken.None);
+        Assert.False(download.Succeeded);
+        Assert.Equal("database_backup_integrity_failed", download.ErrorCode);
     }
 
     [Fact]
@@ -140,14 +179,15 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetStatus_UsesPersistentOperatingSystemDirectoryForAutoMode()
+    public async Task GetStatus_DoesNotExposePersistentOperatingSystemDirectoryForAutoMode()
     {
         var service = CreateService(new FakeCommandRunner(), directory: "auto");
 
         var status = await service.GetStatusAsync(CancellationToken.None);
 
-        Assert.True(Path.IsPathFullyQualified(status.Directory));
-        Assert.EndsWith(Path.Combine("GarageBalance", "backups"), status.Directory, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(status.Directory);
+        Assert.Equal(30, status.FreshnessThresholdHours);
+        Assert.Equal("Локальное хранилище", status.StorageLocation);
     }
 
     [Fact]
@@ -173,6 +213,7 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.Equal(20, status.Backups.Count);
         Assert.DoesNotContain(status.Backups, backup => backup.Kind == "automatic");
         Assert.Equal(new DateTimeOffset(File.GetLastWriteTimeUtc(automaticPath), TimeSpan.Zero), lastAutomatic);
+        Assert.All(status.Backups, backup => Assert.Equal("manifest_missing", backup.ProtectionState));
     }
 
     [Fact]
@@ -208,6 +249,7 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.False(File.Exists(oldest));
+        Assert.False(File.Exists(oldest + ".manifest.json"));
         Assert.True(File.Exists(newer));
         Assert.True(File.Exists(foreign));
         Assert.Equal(2, (await service.GetStatusAsync(CancellationToken.None)).Backups.Count);
@@ -282,6 +324,7 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         const string fileName = "garagebalance_automatic_20260715_093000_000.pgdump";
         var path = Path.Combine(_directory, fileName);
         await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        await File.WriteAllTextAsync(path + ".manifest.json", "{}");
         var audit = new CaptureAuditWriter();
         var unitOfWork = new CaptureUnitOfWork();
         var actorUserId = Guid.NewGuid();
@@ -297,6 +340,7 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.Equal("database_backup_delete_reason_invalid", longReason.ErrorCode);
         Assert.True(deleted.Succeeded);
         Assert.False(File.Exists(path));
+        Assert.False(File.Exists(path + ".manifest.json"));
         var auditRequest = Assert.Single(audit.Requests);
         Assert.Equal("database.backup_deleted", auditRequest.Action);
         Assert.Equal(actorUserId, auditRequest.ActorUserId);

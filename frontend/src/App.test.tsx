@@ -17430,11 +17430,14 @@ describe('App', () => {
       automaticEnabled: true,
       intervalHours: 24,
       retentionCount: 30,
-      directory: '/backups',
+      directory: '',
       isRunning: false,
       lastSuccessfulBackupAtUtc: backupCreated ? createdBackup.createdAtUtc : existingBackup.createdAtUtc,
       lastError: null,
       backups: backupCreated ? [createdBackup, existingBackup] : [existingBackup],
+      isStale: false,
+      freshnessThresholdHours: 30,
+      storageLocation: 'Локальное хранилище',
     }))
     const createDatabaseBackup = vi.fn(async () => {
       backupCreated = true
@@ -17456,7 +17459,7 @@ describe('App', () => {
     expect(backupSummary).toHaveTextContent('каждые 24 ч.')
     expect(backupSummary.parentElement).toHaveClass('settings-card-body')
     expect(backupTable.closest('.settings-card-body')).toBe(backupSummary.parentElement)
-    expect(within(backupsPanel).getByText(/Папка хранения: \/backups/)).toHaveTextContent('При обычном запуске система выбирает постоянный локальный каталог автоматически')
+    expect(within(backupsPanel).getByText(/Место хранения: Локальное хранилище/)).toHaveTextContent('Технический путь остаётся скрытым')
     expect(backupTable).toHaveTextContent(existingBackup.fileName)
     const createButton = within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' })
     await user.click(createButton)
@@ -17477,6 +17480,48 @@ describe('App', () => {
     expect(await within(backupsPanel).findByText(`Резервная копия ${createdBackup.fileName} создана и проверена.`)).toHaveAttribute('role', 'status')
     expect(within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })).toHaveTextContent(createdBackup.fileName)
     expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
+  })
+
+  it('allows backup read-only access without exposing create, download, or delete actions', async () => {
+    const user = userEvent.setup()
+    const backup = {
+      fileName: 'garagebalance_automatic_20260714_020000_000.pgdump',
+      sizeBytes: 2048,
+      createdAtUtc: '2026-07-14T02:00:00Z',
+      kind: 'automatic' as const,
+    }
+    const auth = createAuthResponse({
+      user: { roles: ['operator'], permissions: ['backups.read'] },
+    })
+    const settingsClient = createSettingsClient({
+      getDatabaseBackups: async () => ({
+        enabled: true,
+        automaticEnabled: true,
+        intervalHours: 24,
+        retentionCount: 30,
+        directory: '',
+        isRunning: false,
+        lastSuccessfulBackupAtUtc: backup.createdAtUtc,
+        lastError: null,
+        backups: [backup],
+        isStale: false,
+        freshnessThresholdHours: 30,
+        storageLocation: 'Локальное хранилище',
+      }),
+    })
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+
+    expect(within(backupsPanel).getByText(backup.fileName)).toBeInTheDocument()
+    expect(within(backupsPanel).queryByRole('button', { name: 'Создать резервную копию' })).not.toBeInTheDocument()
+    expect(within(backupsPanel).queryByRole('button', { name: `Скачать резервную копию ${backup.fileName}` })).not.toBeInTheDocument()
+    expect(within(backupsPanel).queryByRole('button', { name: `Удалить резервную копию ${backup.fileName}` })).not.toBeInTheDocument()
   })
 
   it('resets working data from backups settings only after password and exact confirmation', async () => {
@@ -30912,7 +30957,7 @@ function createAuthResponse(overrides: Partial<AuthResponse> & { user?: Partial<
       email: 'admin@example.com',
       displayName: 'Администратор',
       roles: ['administrator'],
-      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'],
+      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read', 'backups.read', 'backups.create', 'backups.download', 'backups.delete', 'backups.repair'],
     },
   }
 
@@ -30960,7 +31005,7 @@ function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
 
 function createRoles(): ManagedRoleDto[] {
   return [
-    { code: 'administrator', version: 'role-version', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
+    { code: 'administrator', version: 'role-version', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read', 'backups.read', 'backups.create', 'backups.download', 'backups.delete', 'backups.repair'] },
     { code: 'operator', version: 'role-version', name: 'Оператор', permissions: ['dictionaries.read', 'payments.read', 'payments.write'] },
     { code: 'accountant', version: 'role-version', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'opening_data.adjust', 'reports.read', 'import.run'] },
     { code: 'reports_viewer', version: 'role-version', name: 'Просмотр отчетов', permissions: ['dictionaries.read', 'reports.read'] },

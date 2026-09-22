@@ -317,7 +317,7 @@ public sealed class SettingsController(
     }
 
     [HttpGet("backups")]
-    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPermissions.BackupsRead)]
     [ProducesResponseType<DatabaseBackupStatusDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<DatabaseBackupStatusDto>> GetDatabaseBackups(CancellationToken cancellationToken)
     {
@@ -325,7 +325,7 @@ public sealed class SettingsController(
     }
 
     [HttpPost("backups")]
-    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPermissions.BackupsCreate)]
     [ProducesResponseType<DatabaseBackupFileDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -354,7 +354,7 @@ public sealed class SettingsController(
     }
 
     [HttpGet("backups/{fileName}/download")]
-    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPermissions.BackupsDownload)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -377,7 +377,7 @@ public sealed class SettingsController(
     }
 
     [HttpDelete("backups/{fileName}")]
-    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPermissions.BackupsDelete)]
     [ProducesResponseType<DatabaseBackupFileDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

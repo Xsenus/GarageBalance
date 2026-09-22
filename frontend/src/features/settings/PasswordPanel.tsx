@@ -68,13 +68,18 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
   const canManageDadataSettings = dadataSettingsVisible
   const integrationTabVisible = canViewIntegrationStatus || canViewReceiptPrintingStatus || canManageIntegrationSettings || canManageDadataSettings
+  const canReadBackups = hasPermission(auth, permissions.backupsRead)
+  const canCreateBackups = hasPermission(auth, permissions.backupsCreate)
+  const canDownloadBackups = hasPermission(auth, permissions.backupsDownload)
+  const canDeleteBackups = hasPermission(auth, permissions.backupsDelete)
   const defaultSettingsTab: SettingsTab = integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
     ? 'integrations'
     : 'security'
   const availableSettingsTabs: SettingsTab[] = [
     'security',
     ...(isAdministrator(auth) ? ['business-date', 'cash-bank'] as const : []),
-    ...(hasPermission(auth, permissions.usersManage) ? ['display', 'backups', 'diagnostics'] as const : []),
+    ...(hasPermission(auth, permissions.usersManage) ? ['display', 'diagnostics'] as const : []),
+    ...(canReadBackups ? ['backups'] as const : []),
     ...(integrationTabVisible ? ['integrations'] as const : []),
   ]
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => loadStoredWorkspaceView(
@@ -289,7 +294,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
-    if (!canManageApplicationSettings || activeSettingsTab !== 'backups') {
+    if (!canReadBackups || activeSettingsTab !== 'backups') {
       return
     }
 
@@ -318,7 +323,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ignore = true
       controller.abort()
     }
-  }, [activeSettingsTab, auth.accessToken, backupReloadToken, canManageApplicationSettings, settingsClient])
+  }, [activeSettingsTab, auth.accessToken, backupReloadToken, canReadBackups, settingsClient])
 
   useEffect(() => {
     if (!canManageApplicationSettings || activeSettingsTab !== 'diagnostics') {
@@ -964,7 +969,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <span>Отображение</span>
               </button>
             ) : null}
-            {canManageApplicationSettings ? (
+            {canReadBackups ? (
               <button
                 id="settings-backups-tab"
                 className={activeSettingsTab === 'backups' ? 'settings-tab is-active' : 'settings-tab'}
@@ -1342,7 +1347,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       </section>
       ) : null}
-      {canManageApplicationSettings && activeSettingsTab === 'backups' ? (
+      {canReadBackups && activeSettingsTab === 'backups' ? (
       <section className="password-panel settings-card settings-card--backups" aria-label="Резервное копирование базы данных">
         <div className="settings-card-intro">
           <p className="eyebrow">Резервные копии</p>
@@ -1382,9 +1387,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <strong>{backupStatus.lastSuccessfulBackupAtUtc ? formatDateTime(backupStatus.lastSuccessfulBackupAtUtc) : 'еще не создавалась'}</strong>
               </div>
             </div>
-            <p className="form-hint">Папка хранения: {backupStatus.directory}. При обычном запуске система выбирает постоянный локальный каталог автоматически; путь можно переопределить параметром DatabaseBackup__Directory. В Docker используется BACKUP_HOST_PATH.</p>
+            <p className="form-hint">Место хранения: {backupStatus.storageLocation}. Технический путь остаётся скрытым и задаётся на сервере параметром DatabaseBackup__Directory или BACKUP_HOST_PATH.</p>
+            {backupStatus.isStale ? <FormError>Последняя резервная копия старше допустимого интервала {backupStatus.freshnessThresholdHours} ч.</FormError> : null}
             {backupStatus.lastError ? <FormError>{backupStatus.lastError}</FormError> : null}
-            <button
+            {canCreateBackups ? <button
               className="secondary-button create-action-button"
               type="button"
               disabled={!backupStatus.enabled || backupStatus.isRunning || backupCreating}
@@ -1395,7 +1401,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             >
               <DatabaseBackup size={17} aria-hidden="true" />
               <span>{backupStatus.isRunning ? 'Копия создается...' : 'Создать резервную копию'}</span>
-            </button>
+            </button> : null}
             <div className="dictionary-table-scroll settings-backup-table-shell" aria-busy={backupDeleting || backupDownloadingFileName !== null}>
               <table className="dictionary-data-table settings-backup-table" aria-label="Резервные копии базы данных">
                 <thead>
@@ -1416,7 +1422,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                       <td className="settings-backup-size">{formatFileSize(backup.sizeBytes)}</td>
                       <td className="table-actions-column">
                         <div className="dictionary-row-actions">
-                          <button
+                          {canDownloadBackups ? <button
                             className="icon-button dictionary-row-action"
                             type="button"
                             aria-label={`Скачать резервную копию ${backup.fileName}`}
@@ -1425,8 +1431,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                             onClick={() => void downloadDatabaseBackup(backup)}
                           >
                             <ArrowDownCircle size={16} aria-hidden="true" />
-                          </button>
-                          <button
+                          </button> : null}
+                          {canDeleteBackups ? <button
                             className="icon-button dictionary-row-action danger-icon-button"
                             type="button"
                             aria-label={`Удалить резервную копию ${backup.fileName}`}
@@ -1438,7 +1444,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                             }}
                           >
                             <X size={16} aria-hidden="true" />
-                          </button>
+                          </button> : null}
                         </div>
                       </td>
                     </tr>

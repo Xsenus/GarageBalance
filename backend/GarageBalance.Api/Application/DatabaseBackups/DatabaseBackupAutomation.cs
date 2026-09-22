@@ -20,12 +20,18 @@ public sealed class DatabaseBackupAutomationRunner(
         var localNow = TimeZoneInfo.ConvertTime(
             timeProvider.GetUtcNow(),
             TimeZoneInfo.FindSystemTimeZoneById(_options.AutomaticWindowTimeZoneId));
-        if (localNow.Hour < _options.AutomaticWindowStartHour || localNow.Hour >= _options.AutomaticWindowEndHour)
+        var lastAutomaticAtUtc = await backupService.GetLastSuccessfulAutomaticBackupAtUtcAsync(cancellationToken);
+        var isInsideWindow = localNow.Hour >= _options.AutomaticWindowStartHour &&
+            localNow.Hour < _options.AutomaticWindowEndHour;
+        if (!isInsideWindow)
         {
-            return false;
+            if (!_options.CatchUpEnabled || lastAutomaticAtUtc is null ||
+                timeProvider.GetUtcNow() < lastAutomaticAtUtc.Value.AddHours(_options.IntervalHours))
+            {
+                return false;
+            }
         }
 
-        var lastAutomaticAtUtc = await backupService.GetLastSuccessfulAutomaticBackupAtUtcAsync(cancellationToken);
         if (lastAutomaticAtUtc is not null)
         {
             var lastAutomaticLocalDate = TimeZoneInfo.ConvertTime(

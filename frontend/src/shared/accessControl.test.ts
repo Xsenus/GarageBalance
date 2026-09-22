@@ -74,6 +74,11 @@ describe('accessControl', () => {
       { label: 'Импорт', permission: permissions.importRun },
       { label: 'История изменений', permission: permissions.auditRead },
       { label: 'Что нового', permission: permissions.appReleasesManage },
+      { label: 'Просмотр резервных копий', permission: permissions.backupsRead },
+      { label: 'Создание резервных копий', permission: permissions.backupsCreate },
+      { label: 'Скачивание резервных копий', permission: permissions.backupsDownload },
+      { label: 'Удаление резервных копий', permission: permissions.backupsDelete },
+      { label: 'Восстановление защиты резервных копий', permission: permissions.backupsRepair },
     ])
     expect(rolePermissionGroups.map((group) => group.permission).sort()).toEqual(Object.values(permissions).sort())
   })

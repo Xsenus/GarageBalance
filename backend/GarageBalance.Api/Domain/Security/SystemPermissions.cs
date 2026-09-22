@@ -14,6 +14,11 @@ public static class SystemPermissions
     public const string ImportRun = "import.run";
     public const string AppReleasesManage = "app_releases.manage";
     public const string AuditRead = "audit.read";
+    public const string BackupsRead = "backups.read";
+    public const string BackupsCreate = "backups.create";
+    public const string BackupsDownload = "backups.download";
+    public const string BackupsDelete = "backups.delete";
+    public const string BackupsRepair = "backups.repair";
 
     public static readonly string[] Administrator =
     [
@@ -28,7 +33,12 @@ public static class SystemPermissions
         ReportsRead,
         ImportRun,
         AppReleasesManage,
-        AuditRead
+        AuditRead,
+        BackupsRead,
+        BackupsCreate,
+        BackupsDownload,
+        BackupsDelete,
+        BackupsRepair
     ];
 
     public static readonly string[] Accountant =
@@ -69,7 +79,12 @@ public static class SystemPermissions
         ReportsRead,
         ImportRun,
         AppReleasesManage,
-        AuditRead
+        AuditRead,
+        BackupsRead,
+        BackupsCreate,
+        BackupsDownload,
+        BackupsDelete,
+        BackupsRepair
     ];
 
     private static readonly IReadOnlyDictionary<string, string[]> Dependencies =
@@ -80,7 +95,11 @@ public static class SystemPermissions
             [PaymentsWrite] = [PaymentsRead, DictionariesRead],
             [HistoricalMeterReadingsCorrect] = [PaymentsWrite],
             [OpeningDataAdjust] = [DictionariesWrite],
-            [ReportsRead] = [DictionariesRead]
+            [ReportsRead] = [DictionariesRead],
+            [BackupsCreate] = [BackupsRead],
+            [BackupsDownload] = [BackupsRead],
+            [BackupsDelete] = [BackupsRead],
+            [BackupsRepair] = [BackupsRead]
         };
 
     public static IReadOnlyList<string> ExpandWithDependencies(IEnumerable<string> permissions)

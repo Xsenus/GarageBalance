@@ -13,6 +13,11 @@ export const permissions = {
   importRun: 'import.run',
   auditRead: 'audit.read',
   appReleasesManage: 'app_releases.manage',
+  backupsRead: 'backups.read',
+  backupsCreate: 'backups.create',
+  backupsDownload: 'backups.download',
+  backupsDelete: 'backups.delete',
+  backupsRepair: 'backups.repair',
 } as const
 
 export type Permission = (typeof permissions)[keyof typeof permissions]
@@ -24,6 +29,10 @@ const permissionDependencies: Readonly<Partial<Record<Permission, readonly Permi
   [permissions.historicalMeterReadingsCorrect]: [permissions.paymentsWrite],
   [permissions.openingDataAdjust]: [permissions.dictionariesWrite],
   [permissions.reportsRead]: [permissions.dictionariesRead],
+  [permissions.backupsCreate]: [permissions.backupsRead],
+  [permissions.backupsDownload]: [permissions.backupsRead],
+  [permissions.backupsDelete]: [permissions.backupsRead],
+  [permissions.backupsRepair]: [permissions.backupsRead],
 }
 
 export function expandPermissionDependencies(selectedPermissions: readonly string[]): string[] {
@@ -61,6 +70,11 @@ export const rolePermissionGroups: ReadonlyArray<{ label: string; permission: Pe
   { label: 'Импорт', permission: permissions.importRun },
   { label: 'История изменений', permission: permissions.auditRead },
   { label: 'Что нового', permission: permissions.appReleasesManage },
+  { label: 'Просмотр резервных копий', permission: permissions.backupsRead },
+  { label: 'Создание резервных копий', permission: permissions.backupsCreate },
+  { label: 'Скачивание резервных копий', permission: permissions.backupsDownload },
+  { label: 'Удаление резервных копий', permission: permissions.backupsDelete },
+  { label: 'Восстановление защиты резервных копий', permission: permissions.backupsRepair },
 ]
 
 export function hasPermission(auth: AuthResponse, permission: string): boolean {

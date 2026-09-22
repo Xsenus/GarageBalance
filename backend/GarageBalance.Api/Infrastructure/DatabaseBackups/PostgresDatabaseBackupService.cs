@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Common;
@@ -19,6 +21,11 @@ public sealed partial class PostgresDatabaseBackupService(
     TimeProvider timeProvider,
     ILogger<PostgresDatabaseBackupService> logger) : IDatabaseBackupService
 {
+    private const int ManifestSchemaVersion = 1;
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
     private static readonly SemaphoreSlim OperationLock = new(1, 1);
     private static DateTimeOffset? _lastSuccessfulBackupAtUtc;
     private static string? _lastError;
@@ -28,25 +35,31 @@ public sealed partial class PostgresDatabaseBackupService(
     public Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var backups = EnumerateBackups(20);
+        var backups = EnumerateBackups(20, verifyChecksum: true);
         var lastSuccessful = backups.FirstOrDefault()?.CreatedAtUtc ?? _lastSuccessfulBackupAtUtc;
+        var freshnessThresholdHours = _options.IntervalHours + _options.FreshnessGraceHours;
+        var isStale = _options.Enabled &&
+            (lastSuccessful is null || timeProvider.GetUtcNow() - lastSuccessful.Value > TimeSpan.FromHours(freshnessThresholdHours));
         var toolError = _options.Enabled ? GetToolAvailabilityError() : null;
         return Task.FromResult(new DatabaseBackupStatusDto(
             _options.Enabled,
             _options.AutomaticEnabled,
             _options.IntervalHours,
             _options.RetentionCount,
-            _directory,
+            string.Empty,
             OperationLock.CurrentCount == 0,
             lastSuccessful,
             toolError ?? _lastError,
-            backups));
+            backups,
+            isStale,
+            freshnessThresholdHours,
+            "Локальное хранилище"));
     }
 
     public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var latest = EnumerateBackups(int.MaxValue)
+        var latest = EnumerateBackups(int.MaxValue, verifyChecksum: false)
             .FirstOrDefault(backup => backup.Kind == "automatic")
             ?.CreatedAtUtc;
         return Task.FromResult(latest);
@@ -138,7 +151,8 @@ public sealed partial class PostgresDatabaseBackupService(
             File.Move(temporaryPath, finalPath, overwrite: false);
             temporaryPath = null;
             var file = new FileInfo(finalPath);
-            var dto = new DatabaseBackupFileDto(file.Name, file.Length, now, kindName);
+            var manifest = await CreateManifestAsync(file, kindName, now, cancellationToken);
+            var dto = ToDto(file, manifest, verifyChecksum: true, manifestAlreadyVerified: true);
             _lastSuccessfulBackupAtUtc = now;
             _lastError = null;
             DeleteExpiredBackups();
@@ -160,7 +174,8 @@ public sealed partial class PostgresDatabaseBackupService(
                     Metadata: new Dictionary<string, object?>
                     {
                         ["kind"] = kindName,
-                        ["sizeBytes"] = file.Length
+                        ["sizeBytes"] = file.Length,
+                        ["sha256"] = manifest.Sha256
                     }));
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
@@ -197,7 +212,7 @@ public sealed partial class PostgresDatabaseBackupService(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var backup = FindManagedBackup(fileName);
+        var backup = FindManagedBackup(fileName, requireVerifiedIntegrity: true);
         if (!backup.Succeeded || backup.Value is null)
         {
             return DatabaseBackupResult<DatabaseBackupDownloadDto>.Failure(
@@ -297,7 +312,9 @@ public sealed partial class PostgresDatabaseBackupService(
 
         try
         {
-            File.Delete(Path.Combine(_directory, backup.Value.FileName));
+            var backupPath = Path.Combine(_directory, backup.Value.FileName);
+            File.Delete(backupPath);
+            File.Delete(GetManifestPath(backupPath));
             auditEventWriter.Add(new AuditEventWriteRequest(
                 actorUserId,
                 "database.backup_deleted",
@@ -373,7 +390,7 @@ public sealed partial class PostgresDatabaseBackupService(
             : new Dictionary<string, string> { ["PGPASSWORD"] = connection.Password };
     }
 
-    private IReadOnlyList<DatabaseBackupFileDto> EnumerateBackups(int limit)
+    private IReadOnlyList<DatabaseBackupFileDto> EnumerateBackups(int limit, bool verifyChecksum = true)
     {
         if (!Directory.Exists(_directory))
         {
@@ -385,15 +402,13 @@ public sealed partial class PostgresDatabaseBackupService(
             .Where(file => ManagedBackupName().IsMatch(file.Name))
             .OrderByDescending(file => file.LastWriteTimeUtc)
             .Take(limit)
-            .Select(file => new DatabaseBackupFileDto(
-                file.Name,
-                file.Length,
-                new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero),
-                ParseKind(file.Name)))
+            .Select(file => ToDto(file, TryReadManifest(file), verifyChecksum))
             .ToArray();
     }
 
-    private DatabaseBackupResult<DatabaseBackupFileDto> FindManagedBackup(string fileName)
+    private DatabaseBackupResult<DatabaseBackupFileDto> FindManagedBackup(
+        string fileName,
+        bool requireVerifiedIntegrity = false)
     {
         fileName = fileName?.Trim() ?? string.Empty;
         if (!ManagedBackupName().IsMatch(fileName) || !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
@@ -403,23 +418,170 @@ public sealed partial class PostgresDatabaseBackupService(
                 "Указано недопустимое имя резервной копии.");
         }
 
-        var backup = EnumerateBackups(int.MaxValue)
+        var backup = EnumerateBackups(int.MaxValue, verifyChecksum: requireVerifiedIntegrity)
             .FirstOrDefault(item => string.Equals(item.FileName, fileName, StringComparison.Ordinal));
-        return backup is null
-            ? DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+        if (backup is null)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
                 "database_backup_not_found",
-                "Резервная копия не найдена или уже удалена.")
-            : DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup);
+                "Резервная копия не найдена или уже удалена.");
+        }
+
+        if (requireVerifiedIntegrity && backup.ProtectionState == "failed")
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_integrity_failed",
+                "Контрольная сумма резервной копии не совпадает с манифестом. Скачивание заблокировано.");
+        }
+
+        return DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup);
     }
 
     private void DeleteExpiredBackups()
     {
-        var expired = EnumerateBackups(int.MaxValue).Skip(_options.RetentionCount);
+        var expired = EnumerateBackups(int.MaxValue, verifyChecksum: false).Skip(_options.RetentionCount);
         foreach (var backup in expired)
         {
-            File.Delete(Path.Combine(_directory, backup.FileName));
+            var backupPath = Path.Combine(_directory, backup.FileName);
+            File.Delete(backupPath);
+            File.Delete(GetManifestPath(backupPath));
         }
     }
+
+    private async Task<DatabaseBackupManifest> CreateManifestAsync(
+        FileInfo file,
+        string kind,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var content = new FileStream(
+            file.FullName,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var hash = await SHA256.HashDataAsync(content, cancellationToken);
+        var manifest = new DatabaseBackupManifest(
+            ManifestSchemaVersion,
+            Guid.NewGuid(),
+            file.Name,
+            file.Length,
+            Convert.ToHexStringLower(hash),
+            kind,
+            createdAtUtc,
+            typeof(PostgresDatabaseBackupService).Assembly.GetName().Version?.ToString() ?? "unknown");
+
+        var manifestPath = GetManifestPath(file.FullName);
+        var temporaryManifestPath = manifestPath + ".tmp";
+        try
+        {
+            await using (var destination = new FileStream(
+                temporaryManifestPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 16 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await JsonSerializer.SerializeAsync(destination, manifest, ManifestJsonOptions, cancellationToken);
+                await destination.FlushAsync(cancellationToken);
+            }
+
+            File.Move(temporaryManifestPath, manifestPath, overwrite: true);
+            return manifest;
+        }
+        finally
+        {
+            File.Delete(temporaryManifestPath);
+        }
+    }
+
+    private DatabaseBackupFileDto ToDto(
+        FileInfo file,
+        DatabaseBackupManifest? manifest,
+        bool verifyChecksum,
+        bool manifestAlreadyVerified = false)
+    {
+        var createdAtUtc = new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero);
+        var manifestMatches = manifest is not null &&
+            string.Equals(manifest.FileName, file.Name, StringComparison.Ordinal) &&
+            manifest.SizeBytes == file.Length &&
+            manifest.SchemaVersion == ManifestSchemaVersion &&
+            IsSha256(manifest.Sha256);
+        var checksumMatches = manifestMatches &&
+            (manifestAlreadyVerified || !verifyChecksum || HasMatchingChecksum(file, manifest!.Sha256));
+        var protectionState = manifest switch
+        {
+            null => "manifest_missing",
+            _ when !manifestMatches => "failed",
+            _ when verifyChecksum && !checksumMatches => "failed",
+            _ when verifyChecksum || manifestAlreadyVerified => "local_verified",
+            _ => "protection_pending"
+        };
+        return new DatabaseBackupFileDto(
+            file.Name,
+            file.Length,
+            manifestMatches ? manifest!.CreatedAtUtc : createdAtUtc,
+            manifestMatches ? manifest!.Kind : ParseKind(file.Name),
+            manifestMatches ? manifest!.Sha256 : null,
+            protectionState,
+            checksumMatches && (verifyChecksum || manifestAlreadyVerified)
+                ? (manifestAlreadyVerified ? manifest!.CreatedAtUtc : timeProvider.GetUtcNow())
+                : null);
+    }
+
+    private static bool IsSha256(string value) =>
+        value.Length == 64 && value.All(Uri.IsHexDigit);
+
+    private static bool HasMatchingChecksum(FileInfo file, string expectedSha256)
+    {
+        try
+        {
+            using var content = new FileStream(
+                file.FullName,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 64 * 1024,
+                FileOptions.SequentialScan);
+            var actual = SHA256.HashData(content);
+            var expected = Convert.FromHexString(expectedSha256);
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static DatabaseBackupManifest? TryReadManifest(FileInfo file)
+    {
+        var path = GetManifestPath(file.FullName);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<DatabaseBackupManifest>(File.ReadAllText(path), ManifestJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string GetManifestPath(string backupPath) => backupPath + ".manifest.json";
 
     private string? GetToolAvailabilityError()
     {

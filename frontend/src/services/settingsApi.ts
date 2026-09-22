@@ -104,6 +104,9 @@ export type DatabaseBackupFileDto = {
   sizeBytes: number
   createdAtUtc: string
   kind: 'manual' | 'automatic' | 'pre_update'
+  sha256: string | null
+  protectionState: 'local_only' | 'local_verified' | 'manifest_missing' | 'protection_pending' | 'protection_degraded' | 'protected' | 'failed'
+  lastVerifiedAtUtc: string | null
 }
 
 export type DatabaseBackupStatusDto = {
@@ -116,6 +119,9 @@ export type DatabaseBackupStatusDto = {
   lastSuccessfulBackupAtUtc: string | null
   lastError: string | null
   backups: DatabaseBackupFileDto[]
+  isStale: boolean
+  freshnessThresholdHours: number
+  storageLocation: string
 }
 
 export type StagingDatabaseResetDto = {

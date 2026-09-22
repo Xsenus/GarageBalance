@@ -320,6 +320,7 @@ builder.Services.AddHostedService<InitialAdministratorHostedService>();
 builder.Services.AddHostedService<BusinessDateSettingsInitializer>();
 builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
 builder.Services.AddHostedService<ImportDryRunWorker>();
+builder.Services.AddHostedService<ImportDryRunOrphanSweeper>();
 builder.Services.AddHostedService<OneCFreshSyncBackgroundWorker>();
 builder.Services.AddHostedService<DatabaseBackupWorker>();
 builder.Services.AddScoped<IRegularAccrualAutomationRunner, RegularAccrualAutomationRunner>();
