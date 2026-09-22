@@ -35,3 +35,17 @@ Baseline: `master` / `e5309e8ae851d6a5f4ce4960e01066ded651e8fb`
 - Protection policy: предложено `required=2` независимые copies total (local + минимум одна off-site), `desired=3` (local + две off-site), но это `PROPOSED` до согласования.
 - Разрешение на real-provider test, production restore drill, cutover и удаление source отсутствует.
 
+## Статус после локальной реализации 22.09.2026
+
+Baseline-таблица выше сохранена как исходная оценка. Актуальный остаточный статус:
+
+| Риски | Актуальный статус | Доказательство / что остаётся |
+|---|---|---|
+| `RISK-003/006/007/008/009/012/013/014/015/017/020` | `MITIGATED_LOCALLY` | Manifest/catalog/leases, quarantine, durable replication/delete, least privilege, version-aware read and recovery covered by `EVID-035..044`. Production rollout and observation ещё не выполнялись. |
+| `RISK-002/010` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Catch-up/stale status, metrics and deduplicated protection events implemented; external alert channel, owner and sustained observation remain open. |
+| `RISK-004` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Full local PostgreSQL restore check passed (`EVID-041`); restore from independent provider plus application smoke and measured business RPO/RTO remain open. |
+| `RISK-005` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Encrypted recovery-bundle round trip passed (`EVID-042`); independent operator key custody and production protected-secret decrypt drill remain open. |
+| `RISK-001/016/018/019` | `OPEN_EXTERNAL` | Generic secure adapter, migration tool, budgets and rollback gates exist, but independent accounts/regions, native provider tests, historical coverage and representative capacity measurements require owner/operator resources. |
+| `RISK-011` | `OPEN / DEFERRED` | Report/diagnostic export memory behavior is outside the storage-backup implementation and still requires production-volume evidence. |
+
+No `CRITICAL` risk is declared closed solely by code or emulator tests. Production certification remains blocked by `TASK-021..023`.

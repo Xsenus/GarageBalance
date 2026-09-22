@@ -31,7 +31,31 @@ public sealed class BackupScriptTests
         Assert.Contains("garagebalance_local", script, StringComparison.Ordinal);
         Assert.Contains("--no-owner", script, StringComparison.Ordinal);
         Assert.Contains("--no-privileges", script, StringComparison.Ordinal);
+        Assert.Contains("--exit-on-error", script, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", script, StringComparison.Ordinal);
+        Assert.Contains("pg_restore could not read the backup table of contents", script, StringComparison.Ordinal);
+        Assert.Contains("restoredTableCount=", script, StringComparison.Ordinal);
+        Assert.Contains("restoreCheckStatus=completed", script, StringComparison.Ordinal);
+        Assert.Contains("VerifyAndDrop", script, StringComparison.Ordinal);
+        Assert.Contains("VerifyAndDrop is forbidden for protected database names", script, StringComparison.Ordinal);
         Assert.Contains("restoreDatabase=", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecoveryBundleUsesAuthenticatedEncryptionAndRejectsSecretConfigFiles()
+    {
+        var script = ReadRepositoryFile("infrastructure", "scripts", "recovery-bundle.ps1");
+
+        Assert.Contains("AesGcm", script, StringComparison.Ordinal);
+        Assert.Contains("RandomNumberGenerator", script, StringComparison.Ordinal);
+        Assert.Contains("[System.Array]::Clear($key", script, StringComparison.Ordinal);
+        Assert.Contains("Secret-bearing files cannot be included", script, StringComparison.Ordinal);
+        Assert.Contains("include only secret references", script, StringComparison.Ordinal);
+        Assert.Contains("Store the encryption key independently", script, StringComparison.Ordinal);
+        Assert.Contains("manifest.json", script, StringComparison.Ordinal);
+        Assert.Contains("recoveryBundleProtected=True", script, StringComparison.Ordinal);
+        Assert.Contains("recoveryBundleRestored=True", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Write-Output $key", script, StringComparison.Ordinal);
     }
 
     [Fact]

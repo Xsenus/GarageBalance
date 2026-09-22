@@ -47,6 +47,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/visual-audit-remediation-2026-09-07-roadmap.md",
         "security-data-protection.md",
         "staging-showcase-guide.md",
+        "storage-operations.md",
         "testing-guide.md",
         "troubleshooting-guide.md",
         "user-guide.md",
@@ -58,9 +59,12 @@ public sealed partial class DocumentationStructureTests
     public void DocumentationDirectoryContainsOnlyMaintainedGuides()
     {
         var docsDirectory = Path.Combine(FindRepositoryRoot(), "docs");
+        // Dated audit working copies are local evidence, not maintained product guides.
+        // They are intentionally kept outside the documentation index and Git history.
         var actualFiles = Directory
             .EnumerateFiles(docsDirectory, "*.md", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(docsDirectory, path).Replace('\\', '/'))
+            .Where(path => !DatedAuditWorkingCopyRegex().IsMatch(path))
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
 
@@ -143,6 +147,9 @@ public sealed partial class DocumentationStructureTests
 
     [GeneratedRegex(@"\[[^\]]+\]\(([^)]+)\)", RegexOptions.CultureInvariant)]
     private static partial Regex MarkdownLinkRegex();
+
+    [GeneratedRegex(@"(^|/)storage-backup-multistorage-audit-\d{4}-\d{2}-\d{2}\.md$", RegexOptions.CultureInvariant)]
+    private static partial Regex DatedAuditWorkingCopyRegex();
 
     private static string FindRepositoryRoot()
     {

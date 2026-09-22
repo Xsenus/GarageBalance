@@ -2,7 +2,7 @@
 
 Дата: 22.09.2026  
 Baseline: ветка `master`, commit `e5309e8ae851d6a5f4ce4960e01066ded651e8fb`  
-Режим: `ANALYZE_AND_PLAN_ONLY`
+Режим: реализация отдельно разрешена владельцем после baseline-аудита; `EVID-001..034` сохраняют исходное состояние, `EVID-035+` фиксируют реализованное.
 
 ## 1. Правила чтения индекса
 
@@ -53,6 +53,17 @@ Baseline: ветка `master`, commit `e5309e8ae851d6a5f4ce4960e01066ded651e8fb`
 | `EVID-032` | Документация требует внешнее копирование и защищённое хранение keys/config, но automation и доказательство выполнения отсутствуют. | `docs/postgres-backup-restore.md`; `docs/docker-install-update-guide.md:143-170`; `docs/docker-windows-lan-guide.md:177-213` | DOC/CODE GAP | Высокая для gap; реальная ручная off-site копия `NOT VERIFIED`. | `RISK-001`, `RISK-005` |
 | `EVID-033` | Existing DB schema не содержит logical storage object/replica/job catalog. | `GarageBalanceDbContext.cs`; migrations и model snapshot; поиск `StorageObject`, `Replica`, `ProviderId` | ABSENCE SEARCH | Высокая на baseline. | `REQ-004`, `DEC-003` |
 | `EVID-034` | Production/frontend manifests не содержат storage SDK; dependency lock не показывает AWS/MinIO/Azure/Drive packages. | `GarageBalance.Api.csproj`; `packages.lock.json`; `frontend/package.json`, `package-lock.json` | CONFIG | Высокая. | `EVID-002` |
+| `EVID-035` | Добавлены additive storage catalog/replica/job schema, manifest v2, optimistic versions и lease-based durable processing; feature-off/`Single` сохраняет прежний локальный контракт. | migration `AddStorageCatalog`; `Domain/Storage/*`; `EfStorageCatalog`; `StorageReplicationWorker`; tests | CODE/TEST | Высокая локально; production migration ещё не применялась. | `RISK-003/007/012/014/020` |
+| `EVID-036` | S3-compatible adapter использует AWS SDK v4, private SSE-S3 writes, deterministic generation key, SHA metadata, TLS/endpoint validation, multipart abort и stable error categories. | `S3CompatibleStorageProvider.cs`; provider/options tests | CODE/TEST | Moto real SDK cycle 1/1; выбранный production provider `NOT VERIFIED`. | `RISK-001/016/019` |
+| `EVID-037` | Read router выбирает только actual Available replica текущей generation/size/SHA, проверяет stat и fallback; remote-only backup остаётся видимым и скачиваемым. | `StorageReadRouter.cs`; `PostgresDatabaseBackupService`; focused tests | CODE/TEST | Локальные fakes/adapter contracts; mid-stream resume ограничен одной generation. | `RISK-013/015/018` |
+| `EVID-038` | Separate read/write/delete/verify circuits, bounded retry/UNKNOWN reconciliation, recovery worker with anomaly stop and tombstone-first per-replica delete реализованы. | `StorageOperationHealth.cs`; `StorageReconciliationWorker.cs`; `StorageReplicationWorker.cs`; tests | CODE/TEST | Provider-specific flapping remains external certification. | `RISK-008/013/014/015/019` |
+| `EVID-039` | UI/API показывает protection state/last verify и разрешает permission-gated audited retry/verify; server paths, bucket and secrets are not returned. | `SettingsController`; `PasswordPanel.tsx`; `settingsApi.ts`; controller/UI tests | CODE/TEST | Backend 73/73 focused; UI workflow 1/1; frontend production build passed. | `RISK-009/010` |
+| `EVID-040` | `GarageBalance.StorageTool` provides dry-run guarded inventory/plan/copy/verify/diff/delta/resume/repair/status/report/cutover/rollback and has no source-delete command. | `backend/GarageBalance.StorageTool`; `StorageToolTests` | CODE/TEST | Tool help/guard verified; customer data/backfill `NOT EXECUTED`. | `RISK-018/020` |
+| `EVID-041` | Restore verifier checks manifest size/SHA, TOC, restores with `--exit-on-error`, validates tables/migration history, measures duration and removes disposable DB. | `restore-postgres.ps1`; actual PostgreSQL 17 drill | CODE/TEST/RUNTIME | Local isolated drill restored 2 tables in 1.43 s and cleaned both test DBs; independent provider/app DR remains `NOT VERIFIED`. | `RISK-004/020` |
+| `EVID-042` | Recovery key/config bundle uses AES-256-GCM, random nonce, separate 32-byte key, content manifest and rejects obvious secret-bearing/inline-sensitive config. | `recovery-bundle.ps1`; local round trip | CODE/TEST | Protect/unprotect round trip passed; operator-held key and existing production secret decrypt remain external. | `RISK-005/016` |
+| `EVID-043` | Storage metrics expose bounded operation/destination/category counters and protection gauges; monitor logs deduplicated degraded/failed/recovered transitions without object names. | `StorageOperationHealth.cs`; `StorageProtectionMonitor.cs` | CODE/TEST | External alert transport/owner not configured. | `RISK-002/010/019` |
+| `EVID-044` | Focused implementation gate passed 128 tests with 5 expected external/provider skips; local PostgreSQL catalog integration passed 1/1; frontend settings API 16/16, backup workflow 1/1 and production build passed. | commands in Roadmap execution journal | TEST | Full publication suite still required before push/deployment; no push performed. | all implemented tasks |
+| `EVID-045` | Final local gate passed: backend 2634/2634 with 368 expected external PostgreSQL/S3 skips, affected PostgreSQL classes 11/11 sequentially, frontend full run confirmed 1290 unaffected tests and the intentionally changed bundle contract then passed 5/5; corrected role-matrix and backup workflows passed 1/1 each. Lint/build/format/EF checks are clean. | `TEST-010..012`; final execution journal | TEST | Real provider, production data, alert delivery and independent-copy DR remain external; no push performed. | all implemented tasks |
 
 ## 3. Выполненные команды и результаты
 
@@ -62,12 +73,19 @@ Baseline: ветка `master`, commit `e5309e8ae851d6a5f4ce4960e01066ded651e8fb`
 | `TEST-002` | `pg_restore --list` для двух локальных managed dumps | exit 0 для обоих | Read-only; БД не создавалась и не изменялась. |
 | `TEST-003` | Поиск storage/cloud SDK, adapters, endpoints и конфигурации через `rg` | Совпадений production storage adapters нет | Read-only. |
 | `TEST-004` | `git status`, branch, commit, repository file inventory | Baseline зафиксирован; до новых отчётов был один untracked файл `docs/storage-backup-multistorage-audit-2026-09-22.md` | Read-only. |
+| `TEST-005` | Focused storage/backup/controller/deployment backend gate | 128 passed; 0 failed; 5 skipped (external/provider-gated) | Test/build artifacts only. |
+| `TEST-006` | `PostgreSqlStorageCatalogIntegrationTests` with local PostgreSQL 17 port 5433 | 1 passed; 0 failed/skipped | Disposable test DB created and removed by fixture. |
+| `TEST-007` | Frontend `settingsApi`, isolated App backup workflow and production build | 16/16 API; 1/1 workflow; build exit 0 | Generated shards cleaned by runner; `dist` is ignored build output. |
+| `TEST-008` | Isolated local `pg_dump` + manifest + hardened `restore-postgres.ps1 -VerifyAndDrop` | SHA/TOC/restore/table/migration checks passed; 1.43 s | Two disposable DBs and temporary dump/manifest removed. |
+| `TEST-009` | `recovery-bundle.ps1` Protect/Unprotect with generated test key ring | AES-GCM round trip passed | Temporary key, bundle, extraction and directory removed. |
+| `TEST-010` | Full backend Release run without external integration connection; TRX recorded | 2634 passed; 0 failed; 368 expected PostgreSQL/S3 skips; 3002 total | Temporary TRX/results directory removed after recording totals. |
+| `TEST-011` | Local PostgreSQL 17, sequential affected classes: storage catalog, report sorting and income report payment query | 1/1 + 4/4 + 6/6 passed; 0 failed/skipped | Disposable fixture databases removed by tests. |
+| `TEST-012` | Full frontend Vitest, lint, production build and bundle gate | 1290 application tests passed in full run; changed bundle contract 5/5 and corrected bootstrap scenario 1/1; lint/build passed; 292.9/293.0 KiB total gzip | App shards cleaned by runner; ignored `dist` removed during final cleanup. |
 
 ## 4. Неподтверждённые области
 
 - Состояние production/VPS, наличие внешних ручных копий, фактическая свежесть production backup — `NOT VERIFIED`.
-- Любые provider capabilities, цены, Object Lock, versioning, region, quota и credentials — `NOT VERIFIED`, потому что provider не выбран и интеграции нет.
+- Capabilities/prices/Object Lock/versioning/region/quota and native error behavior of the future selected provider are `NOT VERIFIED`; the generic S3 adapter and isolated emulator are implemented.
 - Полный DR restore с PostgreSQL + Data Protection keys + config + запуском приложения — `NOT VERIFIED`.
 - Реальные production DB size, object count, рост, egress и RPO/RTO — `NOT VERIFIED`.
 - Managed backups вне репозитория/хоста (snapshot VPS, provider backup) — `NOT VERIFIED`; их отсутствие не утверждается.
-
