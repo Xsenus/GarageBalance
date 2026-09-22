@@ -99,6 +99,7 @@ public sealed class StorageReplicationOptions
     public int OperationDeadlineSeconds { get; init; } = 300;
     public int LeaseSeconds { get; init; } = 120;
     public int MaximumAttempts { get; init; } = 12;
+    public long MaximumPendingBytes { get; init; } = 20L * 1024 * 1024 * 1024;
 }
 
 public sealed record EffectiveStorageConfiguration(
@@ -242,7 +243,8 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
             options.MaxParallelPerDestination is < 1 or > 32 ||
             options.OperationDeadlineSeconds is < 10 or > 86400 ||
             options.LeaseSeconds is < 30 or > 3600 ||
-            options.MaximumAttempts is < 1 or > 100)
+            options.MaximumAttempts is < 1 or > 100 ||
+            options.MaximumPendingBytes is < 1024 * 1024)
         {
             errors.Add("Storage replication limits are outside the supported ranges.");
         }
@@ -469,6 +471,7 @@ public interface IStorageProvider
 {
     string DestinationId { get; }
     StorageCapability Capabilities { get; }
+    string GetWriteLocator(StorageWriteRequest request);
     Task<StorageWriteResult> WriteAsync(StorageWriteRequest request, Stream content, CancellationToken cancellationToken);
     Task<Stream> OpenReadAsync(string nativeLocator, CancellationToken cancellationToken);
     Task<StorageObjectStat?> StatAsync(string nativeLocator, CancellationToken cancellationToken);

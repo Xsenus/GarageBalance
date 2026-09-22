@@ -58,9 +58,31 @@ public sealed class PostgreSqlStorageCatalogIntegrationTests
 
         Assert.Single(claims, claim => claim?.Id == firstJobId);
         Assert.Single(claims, claim => claim is not null);
+        var winningCatalog = claims[0] is not null ? workerA : workerB;
+        var winningOwner = claims[0] is not null ? "worker-a" : "worker-b";
+        var transferContext = await winningCatalog.GetLeasedJobContextAsync(firstJobId, winningOwner, CancellationToken.None);
+        Assert.Single(transferContext.AvailableSources);
+        await winningCatalog.MarkReplicationUploadingAsync(
+            firstJobId,
+            winningOwner,
+            "private/object/g00000000000000000001/postgresql-copy.pgdump",
+            now,
+            CancellationToken.None);
+        await winningCatalog.CompleteReplicationAsync(
+            firstJobId,
+            winningOwner,
+            "private/object/g00000000000000000001/postgresql-copy.pgdump",
+            "version-1",
+            new string('a', 64),
+            requiredCopies: 2,
+            desiredCopies: 2,
+            now,
+            CancellationToken.None);
         await using var verificationContext = database.CreateContext();
         Assert.Equal(1, await verificationContext.StorageObjects.CountAsync());
         Assert.Equal(2, await verificationContext.StorageObjectReplicas.CountAsync());
         Assert.Equal(1, await verificationContext.StorageTransferJobs.CountAsync());
+        Assert.Equal(StorageTransferJobState.Completed, (await verificationContext.StorageTransferJobs.SingleAsync()).State);
+        Assert.Equal(StorageObjectState.Protected, (await verificationContext.StorageObjects.SingleAsync()).State);
     }
 }

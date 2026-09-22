@@ -45,8 +45,9 @@ public sealed partial class PostgresDatabaseBackupService(
     public async Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var backups = EnumerateBackups(20, verifyChecksum: true);
+        IReadOnlyList<DatabaseBackupFileDto> backups = EnumerateBackups(20, verifyChecksum: true);
         await ReconcileCatalogAsync(backups, cancellationToken);
+        backups = await ApplyCatalogProtectionAsync(backups, cancellationToken);
         var lastSuccessful = backups.FirstOrDefault()?.CreatedAtUtc ?? _lastSuccessfulBackupAtUtc;
         var freshnessThresholdHours = _options.IntervalHours + _options.FreshnessGraceHours;
         var isStale = _options.Enabled &&
@@ -60,11 +61,13 @@ public sealed partial class PostgresDatabaseBackupService(
             string.Empty,
             OperationLock.CurrentCount == 0,
             lastSuccessful,
-            toolError ?? _lastError,
+            toolError ?? GetStorageCapacityWarning() ?? _lastError,
             backups,
             isStale,
             freshnessThresholdHours,
-            "Локальное хранилище");
+            _storageConfiguration?.Mode == StorageMode.AsyncMirror
+                ? "Локальное и удалённое хранилища"
+                : "Локальное хранилище");
     }
 
     public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken)
@@ -87,6 +90,14 @@ public sealed partial class PostgresDatabaseBackupService(
             return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
                 "database_backup_disabled",
                 "Резервное копирование отключено в конфигурации сервера.");
+        }
+
+        if (_storageConfiguration?.Mode == StorageMode.AsyncMirror &&
+            GetLocalBackupBytes() >= _storageConfiguration.Replication.MaximumPendingBytes)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_storage_capacity",
+                "Локальная очередь резервных копий заполнена. Проверьте удалённое хранилище и освободите место безопасным способом.");
         }
 
         if (kind == DatabaseBackupKind.Manual)
@@ -204,6 +215,10 @@ public sealed partial class PostgresDatabaseBackupService(
                 cancellationToken);
             await RegisterCatalogAsync(file, manifest, cancellationToken);
             var dto = ToDto(file, manifest, verifyChecksum: true, manifestAlreadyVerified: true);
+            if (_storageConfiguration?.Mode == StorageMode.AsyncMirror)
+            {
+                dto = dto with { ProtectionState = "protection_pending" };
+            }
             _lastSuccessfulBackupAtUtc = now;
             _lastError = null;
             await DeleteExpiredBackupsAsync(cancellationToken);
@@ -482,6 +497,12 @@ public sealed partial class PostgresDatabaseBackupService(
 
     private async Task DeleteExpiredBackupsAsync(CancellationToken cancellationToken)
     {
+        if (_storageConfiguration?.Mode == StorageMode.AsyncMirror)
+        {
+            // Remote-aware tombstoning and replica deletion are handled by the storage lifecycle stage.
+            // Until then, keeping the verified local source is safer than deleting it behind the catalog.
+            return;
+        }
         var expired = EnumerateBackups(int.MaxValue, verifyChecksum: false).Skip(_options.RetentionCount);
         foreach (var backup in expired)
         {
@@ -628,6 +649,37 @@ public sealed partial class PostgresDatabaseBackupService(
             : "Не найдены утилиты PostgreSQL pg_dump и pg_restore. Установите клиентские инструменты PostgreSQL или задайте POSTGRESQL_BIN.";
     }
 
+    private string? GetStorageCapacityWarning()
+    {
+        if (_storageConfiguration?.Mode != StorageMode.AsyncMirror)
+        {
+            return null;
+        }
+        var used = GetLocalBackupBytes();
+        return used >= _storageConfiguration.Replication.MaximumPendingBytes * 8 / 10
+            ? "Локальная очередь резервных копий близка к установленному пределу. Проверьте состояние удалённой защиты."
+            : null;
+    }
+
+    private long GetLocalBackupBytes()
+    {
+        if (!Directory.Exists(_directory))
+        {
+            return 0;
+        }
+        try
+        {
+            return Directory.EnumerateFiles(_directory, "garagebalance_*.pgdump", SearchOption.TopDirectoryOnly)
+                .Select(path => new FileInfo(path))
+                .Where(file => ManagedBackupName().IsMatch(file.Name))
+                .Sum(file => file.Length);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return _storageConfiguration?.Replication.MaximumPendingBytes ?? long.MaxValue;
+        }
+    }
+
     private IStorageProvider GetLocalProvider()
     {
         var localDestinationId = _storageConfiguration?.Destinations
@@ -720,6 +772,49 @@ public sealed partial class PostgresDatabaseBackupService(
                 await RegisterCatalogAsync(file, manifest, cancellationToken);
             }
         }
+    }
+
+    private async Task<IReadOnlyList<DatabaseBackupFileDto>> ApplyCatalogProtectionAsync(
+        IReadOnlyList<DatabaseBackupFileDto> backups,
+        CancellationToken cancellationToken)
+    {
+        if (storageCatalog is null || _storageConfiguration?.Mode != StorageMode.AsyncMirror)
+        {
+            return backups;
+        }
+
+        var result = new List<DatabaseBackupFileDto>(backups.Count);
+        foreach (var backup in backups)
+        {
+            var storageObject = await storageCatalog.FindByLogicalKeyAsync(
+                _storageConfiguration.TenantId,
+                StorageDataClass.DatabaseBackup,
+                backup.FileName,
+                cancellationToken);
+            if (storageObject is null)
+            {
+                result.Add(backup with { ProtectionState = "protection_pending" });
+                continue;
+            }
+            var protectionState = storageObject.State switch
+            {
+                StorageObjectState.Protected => "protected",
+                StorageObjectState.ProtectionDegraded => "protection_degraded",
+                StorageObjectState.Failed => "failed",
+                StorageObjectState.Deleting or StorageObjectState.Deleted => "deleted",
+                _ => "protection_pending"
+            };
+            var lastVerified = storageObject.Replicas
+                .Where(replica => replica.State == StorageReplicaState.Available)
+                .Select(replica => replica.LastVerifiedAtUtc)
+                .Max();
+            result.Add(backup with
+            {
+                ProtectionState = protectionState,
+                LastVerifiedAtUtc = lastVerified ?? backup.LastVerifiedAtUtc
+            });
+        }
+        return result;
     }
 
     private DatabaseBackupResult<DatabaseBackupFileDto> Fail(string code, string message, string? diagnostic = null)

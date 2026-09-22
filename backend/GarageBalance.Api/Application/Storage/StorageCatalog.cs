@@ -29,6 +29,12 @@ public sealed record StorageCatalogRegistration(
     IReadOnlyList<StorageTransferJob> Jobs,
     bool AlreadyExisted);
 
+public sealed record StorageTransferContext(
+    StorageTransferJob Job,
+    StorageObject Object,
+    StorageObjectReplica TargetReplica,
+    IReadOnlyList<StorageObjectReplica> AvailableSources);
+
 public sealed record StorageManifestEntry(
     Guid ObjectId,
     Guid OperationId,
@@ -65,6 +71,46 @@ public interface IStorageCatalog
     Task<StorageTransferJob?> ClaimNextJobAsync(
         string leaseOwner,
         TimeSpan leaseDuration,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task<StorageTransferContext> GetLeasedJobContextAsync(
+        Guid jobId,
+        string leaseOwner,
+        CancellationToken cancellationToken);
+    Task MarkReplicationUploadingAsync(
+        Guid jobId,
+        string leaseOwner,
+        string nativeLocator,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task CompleteReplicationAsync(
+        Guid jobId,
+        string leaseOwner,
+        string nativeLocator,
+        string? providerVersionId,
+        string? providerChecksum,
+        int requiredCopies,
+        int desiredCopies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task ScheduleReplicationRetryAsync(
+        Guid jobId,
+        string leaseOwner,
+        DateTimeOffset dueAtUtc,
+        StorageReplicaState replicaState,
+        string category,
+        string safeError,
+        int requiredCopies,
+        int desiredCopies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task BlockReplicationAsync(
+        Guid jobId,
+        string leaseOwner,
+        string category,
+        string safeError,
+        int requiredCopies,
+        int desiredCopies,
         DateTimeOffset now,
         CancellationToken cancellationToken);
     Task CompleteJobAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken);

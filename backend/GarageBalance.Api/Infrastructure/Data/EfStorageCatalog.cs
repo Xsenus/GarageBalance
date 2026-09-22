@@ -82,6 +82,10 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             })
             .ToArray();
         storageObject.Replicas.AddRange(remoteReplicas);
+        if (remoteReplicas.Length > 0)
+        {
+            storageObject.State = StorageObjectState.ProtectionPending;
+        }
         var jobs = remoteReplicas
             .Select(replica => new StorageTransferJob
             {
@@ -201,6 +205,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                     cancellationToken);
             if (updated == 1)
             {
+                dbContext.ChangeTracker.Clear();
                 return await dbContext.StorageTransferJobs.AsNoTracking()
                     .SingleAsync(job => job.Id == candidateId, cancellationToken);
             }
@@ -213,6 +218,127 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
     {
         var job = await GetOwnedLeasedJobAsync(jobId, leaseOwner, cancellationToken);
         job.Complete(now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<StorageTransferContext> GetLeasedJobContextAsync(
+        Guid jobId,
+        string leaseOwner,
+        CancellationToken cancellationToken)
+    {
+        var job = await dbContext.StorageTransferJobs.AsNoTracking()
+            .Include(item => item.StorageObject)
+                .ThenInclude(item => item!.Replicas)
+            .Include(item => item.StorageObjectReplica)
+            .SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
+            ?? throw new InvalidOperationException("Storage job was not found.");
+        EnsureLeaseOwner(job, leaseOwner);
+        var storageObject = job.StorageObject
+            ?? throw new InvalidOperationException("Storage job has no logical object.");
+        var target = job.StorageObjectReplica
+            ?? throw new InvalidOperationException("Storage job has no target replica.");
+        var sources = storageObject.Replicas
+            .Where(replica => replica.Id != target.Id &&
+                replica.State == StorageReplicaState.Available &&
+                replica.Generation == storageObject.CommittedGeneration &&
+                replica.SizeBytes == storageObject.SizeBytes &&
+                string.Equals(replica.Sha256, storageObject.Sha256, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(replica => replica.CreatedAtUtc)
+            .ToArray();
+        return new StorageTransferContext(job, storageObject, target, sources);
+    }
+
+    public async Task MarkReplicationUploadingAsync(
+        Guid jobId,
+        string leaseOwner,
+        string nativeLocator,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
+        var replica = job.StorageObjectReplica
+            ?? throw new InvalidOperationException("Storage job has no target replica.");
+        replica.MarkUploading(nativeLocator, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task CompleteReplicationAsync(
+        Guid jobId,
+        string leaseOwner,
+        string nativeLocator,
+        string? providerVersionId,
+        string? providerChecksum,
+        int requiredCopies,
+        int desiredCopies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
+        var storageObject = job.StorageObject
+            ?? throw new InvalidOperationException("Storage job has no logical object.");
+        var replica = job.StorageObjectReplica
+            ?? throw new InvalidOperationException("Storage job has no target replica.");
+        EnsureCurrentGeneration(job, storageObject, replica);
+        replica.NativeLocator = StorageObjectKey.Normalize(nativeLocator);
+        replica.ProviderVersionId = providerVersionId;
+        replica.MarkAvailable(storageObject.SizeBytes, storageObject.Sha256, providerChecksum, now);
+        job.Complete(now);
+        RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ScheduleReplicationRetryAsync(
+        Guid jobId,
+        string leaseOwner,
+        DateTimeOffset dueAtUtc,
+        StorageReplicaState replicaState,
+        string category,
+        string safeError,
+        int requiredCopies,
+        int desiredCopies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
+        var storageObject = job.StorageObject
+            ?? throw new InvalidOperationException("Storage job has no logical object.");
+        var replica = job.StorageObjectReplica
+            ?? throw new InvalidOperationException("Storage job has no target replica.");
+        if (replicaState == StorageReplicaState.Unknown)
+        {
+            replica.MarkUnknown(safeError, now);
+        }
+        else if (replicaState == StorageReplicaState.Failed)
+        {
+            replica.MarkFailed(category, safeError, now);
+        }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(replicaState));
+        }
+        job.ScheduleRetry(dueAtUtc, category, safeError, now);
+        RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task BlockReplicationAsync(
+        Guid jobId,
+        string leaseOwner,
+        string category,
+        string safeError,
+        int requiredCopies,
+        int desiredCopies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
+        var storageObject = job.StorageObject
+            ?? throw new InvalidOperationException("Storage job has no logical object.");
+        var replica = job.StorageObjectReplica
+            ?? throw new InvalidOperationException("Storage job has no target replica.");
+        replica.MarkFailed(category, safeError, now);
+        job.Block(category, safeError, now);
+        RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -294,6 +420,61 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             throw new InvalidOperationException("Storage job lease is not owned by this worker.");
         }
         return job;
+    }
+
+    private async Task<StorageTransferJob> GetOwnedLeasedJobWithGraphAsync(
+        Guid jobId,
+        string leaseOwner,
+        CancellationToken cancellationToken)
+    {
+        var job = await dbContext.StorageTransferJobs
+            .Include(item => item.StorageObject)
+                .ThenInclude(item => item!.Replicas)
+            .Include(item => item.StorageObjectReplica)
+            .SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
+            ?? throw new InvalidOperationException("Storage job was not found.");
+        EnsureLeaseOwner(job, leaseOwner);
+        return job;
+    }
+
+    private static void EnsureLeaseOwner(StorageTransferJob job, string leaseOwner)
+    {
+        if (job.State != StorageTransferJobState.Leased ||
+            !string.Equals(job.LeaseOwner, leaseOwner, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Storage job lease is not owned by this worker.");
+        }
+    }
+
+    private static void EnsureCurrentGeneration(
+        StorageTransferJob job,
+        StorageObject storageObject,
+        StorageObjectReplica replica)
+    {
+        if (storageObject.TombstonedAtUtc is not null ||
+            job.Generation != storageObject.CommittedGeneration ||
+            replica.Generation != storageObject.CommittedGeneration ||
+            job.PolicyRevision != storageObject.PolicyRevision)
+        {
+            throw new InvalidOperationException("Storage replication job no longer targets the committed object generation and policy.");
+        }
+    }
+
+    private static void RefreshProtection(
+        StorageObject storageObject,
+        int requiredCopies,
+        int desiredCopies,
+        DateTimeOffset now)
+    {
+        var availableFailureDomains = storageObject.Replicas
+            .Where(replica => replica.State == StorageReplicaState.Available &&
+                replica.Generation == storageObject.CommittedGeneration &&
+                replica.SizeBytes == storageObject.SizeBytes &&
+                string.Equals(replica.Sha256, storageObject.Sha256, StringComparison.OrdinalIgnoreCase))
+            .Select(replica => replica.FailureDomain)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+        storageObject.SetProtection(availableFailureDomains, requiredCopies, desiredCopies, now);
     }
 
     private static void ValidateRegistration(RegisterCommittedStorageObjectRequest request)

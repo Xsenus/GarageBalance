@@ -30,6 +30,8 @@ public sealed class LocalFileStorageProvider : ILocalFileStorageProvider
     public StorageCapability Capabilities =>
         StorageCapability.Read | StorageCapability.Write | StorageCapability.Stat | StorageCapability.Delete;
 
+    public string GetWriteLocator(StorageWriteRequest request) => StorageObjectKey.Normalize(request.ObjectKey);
+
     public async Task<StorageWriteResult> CommitVerifiedFileAsync(
         StorageWriteRequest request,
         string sourcePath,

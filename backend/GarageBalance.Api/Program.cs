@@ -306,6 +306,7 @@ builder.Services.AddSingleton<StorageConfigurationResolver>();
 builder.Services.AddSingleton<IS3ObjectClientFactory, AwsS3ObjectClientFactory>();
 builder.Services.AddSingleton<IStorageProviderRegistry, StorageProviderRegistry>();
 builder.Services.AddScoped<IStorageCatalog, EfStorageCatalog>();
+builder.Services.AddScoped<StorageReplicationRunner>();
 builder.Services
     .AddOptions<DatabaseStartupOptions>()
     .Bind(builder.Configuration.GetSection(DatabaseStartupOptions.SectionName))
@@ -334,6 +335,7 @@ builder.Services.AddHostedService<ImportDryRunWorker>();
 builder.Services.AddHostedService<ImportDryRunOrphanSweeper>();
 builder.Services.AddHostedService<OneCFreshSyncBackgroundWorker>();
 builder.Services.AddHostedService<DatabaseBackupWorker>();
+builder.Services.AddHostedService<StorageReplicationWorker>();
 builder.Services.AddScoped<IRegularAccrualAutomationRunner, RegularAccrualAutomationRunner>();
 builder.Services.AddScoped<IRegularAccrualAutomationLock, EfRegularAccrualAutomationLock>();
 builder.Services.AddHostedService<RegularAccrualAutomationWorker>();

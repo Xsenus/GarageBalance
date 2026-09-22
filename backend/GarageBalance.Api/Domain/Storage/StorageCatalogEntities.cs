@@ -175,6 +175,32 @@ public sealed class StorageObjectReplica : IOptimisticConcurrencyEntity
         UpdatedAtUtc = now;
     }
 
+    public void MarkUploading(string nativeLocator, DateTimeOffset now)
+    {
+        if (State is StorageReplicaState.Deleting or StorageReplicaState.Deleted or StorageReplicaState.Disabled ||
+            string.IsNullOrWhiteSpace(nativeLocator))
+        {
+            throw new InvalidOperationException("A terminal replica cannot start uploading and a locator is required.");
+        }
+        NativeLocator = nativeLocator;
+        State = StorageReplicaState.Uploading;
+        LastErrorCategory = null;
+        LastError = null;
+        UpdatedAtUtc = now;
+    }
+
+    public void MarkFailed(string category, string safeError, DateTimeOffset now)
+    {
+        if (State is StorageReplicaState.Deleted or StorageReplicaState.Disabled)
+        {
+            throw new InvalidOperationException("A terminal replica cannot fail again.");
+        }
+        State = StorageReplicaState.Failed;
+        LastErrorCategory = LimitError(category);
+        LastError = LimitError(safeError);
+        UpdatedAtUtc = now;
+    }
+
     public void BeginDelete(DateTimeOffset now)
     {
         State = StorageReplicaState.Deleting;
@@ -240,6 +266,16 @@ public sealed class StorageTransferJob : IOptimisticConcurrencyEntity
         EnsureLeased();
         State = AttemptCount >= MaximumAttempts ? StorageTransferJobState.DeadLetter : StorageTransferJobState.RetryScheduled;
         DueAtUtc = dueAtUtc;
+        LastErrorCategory = category;
+        LastError = StorageObjectReplica.LimitError(safeError);
+        ClearLease();
+        UpdatedAtUtc = now;
+    }
+
+    public void Block(string category, string safeError, DateTimeOffset now)
+    {
+        EnsureLeased();
+        State = StorageTransferJobState.Blocked;
         LastErrorCategory = category;
         LastError = StorageObjectReplica.LimitError(safeError);
         ClearLease();

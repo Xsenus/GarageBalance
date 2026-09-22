@@ -67,8 +67,8 @@ Roadmap принимает `DEC-001..010` из ТЗ. Ключевые значе
 | `STG-02` | Add policy/provider/catalog foundations off by default | P0 | STG-01 | `TASK-006..007` | restore point | additive schema/options/feature-off compatibility | Codex | `DONE` |
 | `STG-03` | Preserve current local behavior through new abstraction | P0 | STG-02 | `TASK-008` | schema deployed locally | local contract parity and registered existing files | Codex | `DONE` |
 | `STG-04` | Add secure S3-compatible destination | P0 | STG-03 | `TASK-009` | isolated test S3 | adapter contract + security green | Codex/operator for real test | `DONE` |
-| `STG-05` | Durable replication and write/backup fallback | P0 | STG-04 | `TASK-010..011` | adapter green | partial/UNKNOWN/restart/all-failed tested | Codex | `IN_PROGRESS` |
-| `STG-06` | Read failover, repair, delete, UI/API | P0 | STG-05 | `TASK-012..016` | durable copies | current-generation read, recovery/failback/delete/UI tests green | Codex | `TODO` |
+| `STG-05` | Durable replication and write/backup fallback | P0 | STG-04 | `TASK-010..011` | adapter green | partial/UNKNOWN/restart/all-failed tested | Codex | `DONE` |
+| `STG-06` | Read failover, repair, delete, UI/API | P0 | STG-05 | `TASK-012..016` | durable copies | current-generation read, recovery/failback/delete/UI tests green | Codex | `IN_PROGRESS` |
 | `STG-07` | Historical inventory/backfill and coverage proof | P0 | STG-06 | `TASK-018` | CLI + destinations | retained objects verified; rollback lookup proven | Codex/operator | `TODO` |
 | `STG-08` | Prove full restore and key/config recovery | P0 | STG-05, STG-07 | `TASK-019..021` | independent copy | weekly verifier + one full DR drill evidence | Codex/operator/owner | `TODO` |
 | `STG-09` | Observe, pilot, roll out and accept | P1 | STG-06..08 | `TASK-017`, `TASK-022..024` | all gates green | observation accepted; runbooks/current release note | Codex/operator/owner | `TODO` |
@@ -283,7 +283,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-010 — Durable replication worker and multi-instance coordination
 
-- Stage/status/priority: `STG-05`, `TODO` after `TASK-007/009`, P0. Links: `REQ-005/016`, `RISK-007/012/014/019`, `AC-004/018`.
+- Stage/status/priority: `STG-05`, `DONE` after `TASK-007/009`, P0. Links: `REQ-005/016`, `RISK-007/012/014/019`, `AC-004/018`.
 - Result: jobs survive restart, claim once, stream replayable source, independently advance replicas and enforce resource budgets.
 - Touchpoints: NEW worker/service; catalog/job repo; `Program.cs`; backup finalization; tests.
 - Actions: create pending replicas/jobs transactionally; claim with `SKIP LOCKED`/lease; verify policy revision/source generation/tombstone; stream upload; record actual locator/unknown/result; jitter/backoff/dead-letter; fair per-destination concurrency; release/recover leases; keep local source until policy/retention.
@@ -294,7 +294,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-011 — Backup write/destination failover and ACK semantics
 
-- Stage/status/priority: `STG-05`, `TODO` after `TASK-010`, P0. Links: `REQ-002/005/008`, `RISK-012/014`, `AC-005/006/011`.
+- Stage/status/priority: `STG-05`, `DONE` after `TASK-010`, P0. Links: `REQ-002/005/008`, `RISK-012/014`, `AC-005/006/011`.
 - Result: valid backup automatically tries eligible B when A unavailable and reports exact local/protection result.
 - Touchpoints: backup orchestration/router/contracts/controller/UI preliminary status; policy tests.
 - Actions: classify source vs destination failure; choose candidates by policy/capability/health; set overall deadline/max attempts; reconcile UNKNOWN before retry; calculate independent copy count; expose `CreatedLocal`, `ProtectionPending/Degraded`, `Protected`, `Failed`; all-down bounded staging/capacity alert.
@@ -570,8 +570,8 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 ### Progress summary
 
-- Stages: 5/10 `DONE`; 1 `IN_PROGRESS`; 4 `TODO`; 2 stages contain external `BLOCKED` tasks.
-- Tasks: 9/24 `DONE`; `TASK-010` in progress; `TASK-021/022` externally blocked; remaining tasks dependent TODO.
+- Stages: 6/10 `DONE`; 1 `IN_PROGRESS`; 3 `TODO`; 2 stages contain external `BLOCKED` tasks.
+- Tasks: 11/24 `DONE`; `TASK-012` in progress; `TASK-021/022` externally blocked; remaining tasks dependent TODO.
 - Current implementation baseline is not counted as new roadmap completion.
 
 ### Plan change log
@@ -584,6 +584,7 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 | 22.09.2026 / 1.3 | `STG-02` completed: feature-off `Single` compatibility resolver; capability-aware destination/pool/policy validation; safe endpoint/key rules; additive object/replica/job catalog, idempotent atomic registration, optimistic versions and expiring leases. Unit/SQLite 17/17 and real local PostgreSQL migration/concurrency 1/1 passed; EF pending-model check clean. `STG-03/TASK-008` started. |
 | 22.09.2026 / 1.4 | `STG-03` completed: local provider contract for atomic write/adopt, read/stat/delete and checksum enforcement; backup create/download/delete/retention routed through it; manifest v2 carries ID/generation/policy and committed backups register catalog debt. Focused backup/storage 46/46 passed (4 unrelated/provider-gated PostgreSQL tests skipped in that filter). `STG-04/TASK-009` started. |
 | 22.09.2026 / 1.5 | `STG-04` completed: AWS SDK v4 S3-compatible adapter, deterministic immutable keys, SHA/generation metadata, SSE-S3, endpoint/TLS constraints, stable error categories, cancellation, bounded signed links and opt-in multipart with abort/checksum enforcement. Isolated HTTP S3 cycle passed 1/1; focused storage/backup 78/78 (5 provider-gated tests skipped), dependency audit 12/12 and Release build without warnings passed. Real target-provider certification remains an external gate. `STG-05/TASK-010` started. |
+| 22.09.2026 / 1.6 | `STG-05` completed: lease-based durable replication worker, current policy/generation checks, source fallback, pre-write reconciliation, bounded deadlines/backoff, UNKNOWN recovery and independent destination progress. Backup ACK now reports protection pending/degraded/protected through catalog state, local pending capacity is bounded, and AsyncMirror retention no longer deletes replayable local sources prematurely. Focused storage/backup 72/72 passed (isolated S3 skipped), including local PostgreSQL multi-worker/state transition 1/1; Release build 0 warnings/errors. `STG-06/TASK-012` started. |
 
 ### Execution journal
 
@@ -599,11 +600,13 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 22.09.2026: completed `TASK-009`. Added a single vendor-neutral S3-compatible provider backed by maintained AWS SDK v4, with default credential chain only, explicit endpoint/signing/path-style options, private SSE-S3 writes, deterministic generation keys, server SHA metadata, safe short-lived links and normalized provider errors. Multipart is capability-gated, bounded by configurable threshold/part size, validates the full stream SHA before commit and aborts failed uploads. A disposable Moto HTTP S3 endpoint exposed and verified real SDK behavior for metadata prefixes and presigned URL protocol; write/stat/read/link/delete passed 1/1. Unit/focused checks: S3/options 25/25, storage/backup 78/78 (5 provider-gated skips), dependency audit 12/12, Release build 0 warnings/errors. Temporary MinIO/Moto processes and files were removed; no credentials persisted. Certification against the future selected provider/account remains externally blocked and does not block the generic adapter.
 
+22.09.2026: completed `TASK-010..011`. Added a hosted replication worker that claims durable catalog jobs under expiring ownership leases, rejects stale policy/generation/tombstones, finds a readable verified source, reconciles a deterministic destination locator before re-upload, streams the write, verifies destination size/SHA, and atomically commits replica/job/protection state. Provider failures produce bounded deterministic backoff; ambiguous writes become `Unknown` and are resolved by HEAD after restart without duplicate upload; immutable conflicts and unsafe configuration are blocked. Jobs for A and B progress independently, so A failure cannot stop B. Backup creation in `AsyncMirror` acknowledges `protection_pending`, status is overlaid from catalog, local retention cannot delete a replayable source before lifecycle support, and `MaximumPendingBytes` prevents an unbounded all-down queue. Tests cover A-fail/B-success, all remote down, lost response/restart, immutable conflict and capacity gate. Focused storage/backup 72/72 passed (isolated S3 skipped); real PostgreSQL concurrent lease plus atomic completion 1/1; Release build clean.
+
 ### Continuation checkpoint
 
 - Baseline revision: Roadmap 1.0, commit `e5309e8a`.
-- Last completed implementation stage: `STG-04`.
-- Current task: `TASK-010 — Durable replication worker and multi-instance coordination`.
+- Last completed implementation stage: `STG-05`.
+- Current task: `TASK-012 — Version-aware read/restore router and proxy/direct access`.
 - Preconditions already checked: repo structure, current storage flows, focused test batch, baseline Git state.
 - Before continuing: re-read the active task card and current diff; preserve completed evidence and unrelated user work.
 - Parallel next decision: `TASK-002` can collect policy values without blocking `TASK-001`.

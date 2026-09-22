@@ -305,6 +305,12 @@ public sealed class S3CompatibleStorageProvider(
     public string DestinationId => destination.Id;
     public StorageCapability Capabilities => destination.Capabilities;
 
+    public string GetWriteLocator(StorageWriteRequest request)
+    {
+        ValidateWriteRequest(request);
+        return BuildKey(request);
+    }
+
     public async Task<StorageWriteResult> WriteAsync(
         StorageWriteRequest request,
         Stream content,

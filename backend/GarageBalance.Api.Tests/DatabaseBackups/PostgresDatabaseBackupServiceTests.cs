@@ -4,6 +4,7 @@ using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Storage;
 using GarageBalance.Api.Domain.Audit;
 using GarageBalance.Api.Infrastructure.Backups;
+using GarageBalance.Api.Infrastructure.Storage;
 using GarageBalance.Api.Domain.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -90,6 +91,48 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.Equal(result.Value.FileName, request.LogicalKey);
         Assert.Equal("local-hot", request.LocalDestinationId);
         Assert.Empty(request.ReplicationTargets);
+    }
+
+    [Fact]
+    public async Task AsyncMirror_CreateAcknowledgesLocalCommitAndExposesProtectionDebt()
+    {
+        var catalog = new CaptureStorageCatalog();
+        var resolver = CreateAsyncMirrorResolver();
+        var registry = new LocalOnlyProviderRegistry(new LocalFileStorageProvider("local-hot", _directory));
+        var service = CreateService(
+            new FakeCommandRunner(),
+            storageCatalog: catalog,
+            storageConfigurationResolver: resolver,
+            storageProviderRegistry: registry);
+
+        var result = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        var status = await service.GetStatusAsync(CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("protection_pending", result.Value!.ProtectionState);
+        var registration = catalog.Registrations[0];
+        Assert.Equal("offsite-a", Assert.Single(registration.ReplicationTargets).DestinationId);
+        Assert.Equal("protection_pending", Assert.Single(status.Backups).ProtectionState);
+        Assert.Equal("Локальное и удалённое хранилища", status.StorageLocation);
+    }
+
+    [Fact]
+    public async Task AsyncMirror_CapacityLimitBlocksAnotherDumpBeforeStartingPostgresTool()
+    {
+        Directory.CreateDirectory(_directory);
+        await File.WriteAllBytesAsync(
+            Path.Combine(_directory, "garagebalance_automatic_20260701_020000_000.pgdump"),
+            new byte[1024 * 1024]);
+        var runner = new FakeCommandRunner();
+        var service = CreateService(
+            runner,
+            storageConfigurationResolver: CreateAsyncMirrorResolver(1024 * 1024));
+
+        var result = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("database_backup_storage_capacity", result.ErrorCode);
+        Assert.Empty(runner.Commands);
     }
 
     [Fact]
@@ -395,7 +438,9 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         int retentionCount = 30,
         string? directory = null,
         IBackupToolLocator? toolLocator = null,
-        IStorageCatalog? storageCatalog = null)
+        IStorageCatalog? storageCatalog = null,
+        StorageConfigurationResolver? storageConfigurationResolver = null,
+        IStorageProviderRegistry? storageProviderRegistry = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -420,7 +465,56 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             unitOfWork ?? new CaptureUnitOfWork(),
             new FixedTimeProvider(_now),
             NullLogger<PostgresDatabaseBackupService>.Instance,
+            storageProviderRegistry: storageProviderRegistry,
+            storageConfigurationResolver: storageConfigurationResolver,
             storageCatalog: storageCatalog);
+    }
+
+    private StorageConfigurationResolver CreateAsyncMirrorResolver(long maximumPendingBytes = 20L * 1024 * 1024 * 1024)
+    {
+        var storage = new StorageOptions
+        {
+            Mode = StorageMode.AsyncMirror,
+            Destinations =
+            [
+                new StorageDestinationOptions
+                {
+                    Id = "local-hot",
+                    Type = StorageProviderType.LocalFileSystem,
+                    FailureDomain = "local-host",
+                    RootPath = _directory,
+                    Capabilities = ["Read", "Write", "Stat", "Delete"]
+                },
+                new StorageDestinationOptions
+                {
+                    Id = "offsite-a",
+                    Type = StorageProviderType.S3Compatible,
+                    FailureDomain = "host-a",
+                    Endpoint = "https://s3.example.test",
+                    Bucket = "backups",
+                    Prefix = "garagebalance",
+                    AllowedEndpointHosts = ["s3.example.test"],
+                    Capabilities = ["Read", "Write", "Stat", "Delete", "ServerSideEncryption"]
+                }
+            ],
+            Pools = [new StoragePoolOptions { Id = "database-backups", DestinationIds = ["local-hot", "offsite-a"] }],
+            Policies =
+            [
+                new StoragePolicyOptions
+                {
+                    Id = "database-backups",
+                    DataClass = StorageDataClass.DatabaseBackup,
+                    PoolId = "database-backups",
+                    RequiredIndependentCopies = 2,
+                    DesiredCopies = 2,
+                    MinimumOffsiteCopies = 1
+                }
+            ],
+            Replication = new StorageReplicationOptions { MaximumPendingBytes = maximumPendingBytes }
+        };
+        return new StorageConfigurationResolver(
+            Options.Create(storage),
+            Options.Create(new DatabaseBackupOptions { Directory = _directory }));
     }
 
     private sealed class FakeToolLocator(bool available) : IBackupToolLocator
@@ -499,10 +593,16 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
     private sealed class CaptureStorageCatalog : IStorageCatalog
     {
         public List<RegisterCommittedStorageObjectRequest> Registrations { get; } = [];
+        public List<StorageObject> Objects { get; } = [];
 
         public Task<StorageCatalogRegistration> RegisterCommittedObjectAsync(RegisterCommittedStorageObjectRequest request, CancellationToken cancellationToken)
         {
             Registrations.Add(request);
+            var existing = Objects.SingleOrDefault(item => item.OperationId == request.OperationId);
+            if (existing is not null)
+            {
+                return Task.FromResult(new StorageCatalogRegistration(existing, existing.Replicas.Single(), [], true));
+            }
             var storageObject = new StorageObject
             {
                 OperationId = request.OperationId,
@@ -510,18 +610,50 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
                 LogicalKey = request.LogicalKey,
                 CommittedGeneration = request.Generation,
                 SizeBytes = request.SizeBytes,
-                Sha256 = request.Sha256
+                Sha256 = request.Sha256,
+                PolicyId = request.PolicyId,
+                PolicyRevision = request.PolicyRevision,
+                State = request.ReplicationTargets.Count > 0
+                    ? StorageObjectState.ProtectionPending
+                    : StorageObjectState.CreatedLocal
             };
-            var replica = new StorageObjectReplica { DestinationId = request.LocalDestinationId };
+            var replica = new StorageObjectReplica
+            {
+                DestinationId = request.LocalDestinationId,
+                FailureDomain = request.LocalFailureDomain,
+                Generation = request.Generation,
+                State = StorageReplicaState.Available,
+                SizeBytes = request.SizeBytes,
+                Sha256 = request.Sha256,
+                LastVerifiedAtUtc = request.CreatedAtUtc
+            };
+            storageObject.Replicas.Add(replica);
+            Objects.Add(storageObject);
             return Task.FromResult(new StorageCatalogRegistration(storageObject, replica, [], false));
         }
 
         public Task<StorageObject?> FindObjectAsync(Guid objectId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<StorageObject?> FindByLogicalKeyAsync(string tenantId, StorageDataClass dataClass, string logicalKey, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StorageObject?> FindByLogicalKeyAsync(string tenantId, StorageDataClass dataClass, string logicalKey, CancellationToken cancellationToken) =>
+            Task.FromResult(Objects.SingleOrDefault(item => item.DataClass == dataClass && string.Equals(item.LogicalKey, logicalKey, StringComparison.Ordinal)));
         public Task<StorageTransferJob?> ClaimNextJobAsync(string leaseOwner, TimeSpan leaseDuration, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StorageTransferContext> GetLeasedJobContextAsync(Guid jobId, string leaseOwner, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task MarkReplicationUploadingAsync(Guid jobId, string leaseOwner, string nativeLocator, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task CompleteReplicationAsync(Guid jobId, string leaseOwner, string nativeLocator, string? providerVersionId, string? providerChecksum, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ScheduleReplicationRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, StorageReplicaState replicaState, string category, string safeError, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task BlockReplicationAsync(Guid jobId, string leaseOwner, string category, string safeError, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteJobAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ScheduleJobRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, string category, string safeError, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<StorageManifestEntry>> ExportManifestAsync(StorageDataClass dataClass, int take, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class LocalOnlyProviderRegistry(IStorageProvider localProvider) : IStorageProviderRegistry
+    {
+        public IStorageProvider GetRequired(string destinationId) =>
+            string.Equals(destinationId, localProvider.DestinationId, StringComparison.Ordinal)
+                ? localProvider
+                : throw new InvalidOperationException("Remote provider is intentionally not needed by the backup creation path.");
+
+        public IReadOnlyList<IStorageProvider> GetAll() => [localProvider];
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
