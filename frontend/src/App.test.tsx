@@ -525,7 +525,7 @@ describe('App', () => {
     const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
     const accessTable = within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })
     expect(accessTable).toBeInTheDocument()
-    expect(within(accessTable).getAllByRole('columnheader')).toHaveLength(14)
+    expect(within(accessTable).getAllByRole('columnheader')).toHaveLength(19)
     expect(within(accessTable).getAllByRole('row')).toHaveLength(5)
     expect(within(roleMatrix).getByRole('region', { name: 'Прокручиваемая матрица ролей и прав' })).toHaveAttribute('tabindex', '0')
     expect(within(roleMatrix).getByText('Администратор')).toBeInTheDocument()
@@ -17489,6 +17489,8 @@ describe('App', () => {
       sizeBytes: 2048,
       createdAtUtc: '2026-07-14T02:00:00Z',
       kind: 'automatic' as const,
+      protectionState: 'protection_degraded' as const,
+      lastVerifiedAtUtc: '2026-07-14T02:05:00Z',
     }
     const auth = createAuthResponse({
       user: { roles: ['operator'], permissions: ['backups.read'] },
@@ -17718,6 +17720,8 @@ describe('App', () => {
       sizeBytes: 2048,
       createdAtUtc: '2026-07-14T02:00:00Z',
       kind: 'automatic' as const,
+      protectionState: 'protection_degraded' as const,
+      lastVerifiedAtUtc: '2026-07-14T02:05:00Z',
     }
     let deleted = false
     const getDatabaseBackups = vi.fn(async () => ({
@@ -17736,12 +17740,14 @@ describe('App', () => {
       deleted = true
       return backup
     })
+    const retryDatabaseBackupProtection = vi.fn(async () => ({ ...backup, protectionState: 'protection_pending' as const }))
+    const verifyDatabaseBackupProtection = vi.fn(async () => ({ ...backup, protectionState: 'protected' as const }))
     const createObjectUrl = vi.fn(() => 'blob:database-backup')
     const revokeObjectUrl = vi.fn()
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl })
     const linkClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
-    const settingsClient = createSettingsClient({ getDatabaseBackups, downloadDatabaseBackup, deleteDatabaseBackup })
+    const settingsClient = createSettingsClient({ getDatabaseBackups, downloadDatabaseBackup, deleteDatabaseBackup, retryDatabaseBackupProtection, verifyDatabaseBackupProtection })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -17752,7 +17758,17 @@ describe('App', () => {
     const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
     const backupTable = await within(backupsPanel).findByRole('table', { name: 'Резервные копии базы данных' })
 
-    expect(within(backupTable).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Дата', 'Тип', 'Файл', 'Размер', 'Действия'])
+    const headers = within(backupTable).getAllByRole('columnheader')
+    expect(headers.slice(0, 4).map((cell) => cell.textContent)).toEqual(['Дата', 'Тип', 'Файл', 'Размер'])
+    expect(headers[4]).toHaveTextContent('Защита')
+    expect(headers[5]).toHaveTextContent('Действия')
+    expect(within(backupTable).getByText('Защита ослаблена')).toBeInTheDocument()
+    await user.click(within(backupTable).getByRole('button', { name: `Повторить защиту резервной копии ${backup.fileName}` }))
+    await waitFor(() => expect(retryDatabaseBackupProtection).toHaveBeenCalledWith('token', backup.fileName))
+    expect(await within(backupsPanel).findByText(`Повторная защита копии ${backup.fileName} запущена.`)).toBeInTheDocument()
+    await user.click(within(backupTable).getByRole('button', { name: `Проверить защиту резервной копии ${backup.fileName}` }))
+    await waitFor(() => expect(verifyDatabaseBackupProtection).toHaveBeenCalledWith('token', backup.fileName))
+    expect(within(backupTable).getByText('Защищена')).toBeInTheDocument()
     await user.click(within(backupTable).getByRole('button', { name: `Скачать резервную копию ${backup.fileName}` }))
     await waitFor(() => expect(downloadDatabaseBackup).toHaveBeenCalledWith('token', backup.fileName))
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
@@ -28816,6 +28832,21 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       sizeBytes: 1024,
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',
+      protectionState: 'local_verified',
+    }),
+    retryDatabaseBackupProtection: async (_accessToken, fileName) => ({
+      fileName,
+      sizeBytes: 1024,
+      createdAtUtc: '2026-07-15T12:00:00Z',
+      kind: 'manual',
+      protectionState: 'protection_pending',
+    }),
+    verifyDatabaseBackupProtection: async (_accessToken, fileName) => ({
+      fileName,
+      sizeBytes: 1024,
+      createdAtUtc: '2026-07-15T12:00:00Z',
+      kind: 'manual',
+      protectionState: 'protected',
     }),
     resetDatabase: async () => ({
       backupFileName: 'garagebalance_pre_update_20260904_120000_000.pgdump',

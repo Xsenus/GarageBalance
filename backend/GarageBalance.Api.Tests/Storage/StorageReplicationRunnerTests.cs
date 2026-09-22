@@ -101,6 +101,63 @@ public sealed class StorageReplicationRunnerTests
         Assert.Equal(StorageReplicaState.Available, storageObject.Replicas.Single(item => item.DestinationId == "local-hot").State);
     }
 
+    [Fact]
+    public async Task Tombstone_IsDurableBeforeEachReplicaIsDeletedAndObjectBecomesDeletedLast()
+    {
+        await using var fixture = await ReplicationFixture.CreateAsync(includeSecondOffsite: false);
+        Assert.True(await fixture.Runner.ProcessNextAsync("replicator", CancellationToken.None));
+        await using (var tombstoneContext = fixture.CreateContext())
+        {
+            var catalog = new EfStorageCatalog(tombstoneContext);
+            var tombstoned = await catalog.TombstoneAndScheduleDeleteAsync(
+                "garagebalance",
+                StorageDataClass.DatabaseBackup,
+                "database/2026/replication.pgdump",
+                4,
+                fixture.Clock.GetUtcNow(),
+                CancellationToken.None);
+            Assert.NotNull(tombstoned);
+            Assert.Equal(StorageObjectState.Deleting, tombstoned.State);
+        }
+
+        Assert.True(await fixture.Runner.ProcessNextAsync("deleter", CancellationToken.None));
+        Assert.True(await fixture.Runner.ProcessNextAsync("deleter", CancellationToken.None));
+
+        await using var verification = fixture.CreateContext();
+        var storageObject = await verification.StorageObjects.Include(item => item.Replicas).SingleAsync();
+        Assert.Equal(StorageObjectState.Deleted, storageObject.State);
+        Assert.All(storageObject.Replicas, replica => Assert.Equal(StorageReplicaState.Deleted, replica.State));
+        Assert.All(await verification.StorageTransferJobs.Where(item => item.Kind == StorageTransferJobKind.Delete).ToArrayAsync(),
+            job => Assert.Equal(StorageTransferJobState.Completed, job.State));
+    }
+
+    [Fact]
+    public async Task Reconciliation_SchedulesMissingReplicaAndRepairRestoresProtection()
+    {
+        await using var fixture = await ReplicationFixture.CreateAsync(includeSecondOffsite: false);
+        Assert.True(await fixture.Runner.ProcessNextAsync("replicator", CancellationToken.None));
+        await fixture.OffsiteA.DeleteAsync(fixture.ExpectedRemoteLocator("offsite-a"), CancellationToken.None);
+        await using (var reconcileContext = fixture.CreateContext())
+        {
+            var reconciliation = new StorageReconciliationRunner(
+                new EfStorageCatalog(reconcileContext),
+                fixture.Registry,
+                fixture.Resolver,
+                new StorageOperationHealthTracker(fixture.Clock),
+                fixture.Clock,
+                NullLogger<StorageReconciliationRunner>.Instance);
+            Assert.Equal(1, await reconciliation.ReconcileOnceAsync(CancellationToken.None));
+        }
+
+        Assert.True(await fixture.Runner.ProcessNextAsync("repairer", CancellationToken.None));
+
+        await using var verification = fixture.CreateContext();
+        var storageObject = await verification.StorageObjects.Include(item => item.Replicas).SingleAsync();
+        Assert.Equal(StorageObjectState.Protected, storageObject.State);
+        Assert.Equal(StorageReplicaState.Available, storageObject.Replicas.Single(item => item.DestinationId == "offsite-a").State);
+        Assert.Equal(2, fixture.OffsiteA.WriteCalls);
+    }
+
     private sealed class ReplicationFixture : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -119,6 +176,8 @@ public sealed class StorageReplicationRunnerTests
             FakeStorageProvider local,
             FakeStorageProvider offsiteA,
             FakeStorageProvider offsiteB,
+            StorageConfigurationResolver resolver,
+            IStorageProviderRegistry registry,
             StorageReplicationRunner runner)
         {
             this.connection = connection;
@@ -130,6 +189,8 @@ public sealed class StorageReplicationRunnerTests
             Local = local;
             OffsiteA = offsiteA;
             OffsiteB = offsiteB;
+            Resolver = resolver;
+            Registry = registry;
             Runner = runner;
         }
 
@@ -137,6 +198,8 @@ public sealed class StorageReplicationRunnerTests
         public FakeStorageProvider Local { get; }
         public FakeStorageProvider OffsiteA { get; }
         public FakeStorageProvider OffsiteB { get; }
+        public StorageConfigurationResolver Resolver { get; }
+        public IStorageProviderRegistry Registry { get; }
         public StorageReplicationRunner Runner { get; }
 
         public static async Task<ReplicationFixture> CreateAsync(bool includeSecondOffsite = true)
@@ -197,8 +260,9 @@ public sealed class StorageReplicationRunnerTests
                 registry,
                 resolver,
                 clock,
+                new StorageOperationHealthTracker(clock),
                 NullLogger<StorageReplicationRunner>.Instance);
-            return new ReplicationFixture(connection, dbOptions, operationId, logicalKey, runnerContext, clock, local, offsiteA, offsiteB, runner);
+            return new ReplicationFixture(connection, dbOptions, operationId, logicalKey, runnerContext, clock, local, offsiteA, offsiteB, resolver, registry, runner);
         }
 
         public GarageBalanceDbContext CreateContext() => new(dbOptions);

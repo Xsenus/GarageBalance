@@ -479,6 +479,12 @@ public interface IStorageProvider
     Task<StorageDownloadLink?> GetDownloadLinkAsync(string nativeLocator, TimeSpan lifetime, CancellationToken cancellationToken);
 }
 
+public interface IStorageProviderRegistry
+{
+    IStorageProvider GetRequired(string destinationId);
+    IReadOnlyList<IStorageProvider> GetAll();
+}
+
 public enum StorageErrorCategory
 {
     TransientNetwork,

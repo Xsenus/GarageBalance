@@ -105,7 +105,7 @@ export type DatabaseBackupFileDto = {
   createdAtUtc: string
   kind: 'manual' | 'automatic' | 'pre_update'
   sha256: string | null
-  protectionState: 'local_only' | 'local_verified' | 'manifest_missing' | 'protection_pending' | 'protection_degraded' | 'protected' | 'failed'
+  protectionState: 'local_only' | 'local_verified' | 'manifest_missing' | 'protection_pending' | 'protection_degraded' | 'protected' | 'failed' | 'deleting' | 'deleted'
   lastVerifiedAtUtc: string | null
 }
 
@@ -169,6 +169,8 @@ export type ApplicationSettingsClient = {
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
   downloadDatabaseBackup(accessToken: string, fileName: string): Promise<Blob>
   deleteDatabaseBackup(accessToken: string, fileName: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
+  retryDatabaseBackupProtection(accessToken: string, fileName: string): Promise<DatabaseBackupFileDto>
+  verifyDatabaseBackupProtection(accessToken: string, fileName: string): Promise<DatabaseBackupFileDto>
   resetDatabase(accessToken: string, request: { password: string; confirmation: string; reason: string }): Promise<StagingDatabaseResetDto>
   getDiagnosticLogStatus(accessToken: string, signal?: AbortSignal): Promise<DiagnosticLogStatusDto>
   createDiagnosticPackage(accessToken: string): Promise<Blob>
@@ -268,6 +270,12 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   deleteDatabaseBackup(accessToken, fileName, request) {
     return requestJson(accessToken, `/api/settings/backups/${encodeURIComponent(fileName)}`, { method: 'DELETE', body: JSON.stringify(request) })
+  },
+  retryDatabaseBackupProtection(accessToken, fileName) {
+    return requestJson(accessToken, `/api/settings/backups/${encodeURIComponent(fileName)}/retry-protection`, { method: 'POST' })
+  },
+  verifyDatabaseBackupProtection(accessToken, fileName) {
+    return requestJson(accessToken, `/api/settings/backups/${encodeURIComponent(fileName)}/verify-protection`, { method: 'POST' })
   },
   resetDatabase(accessToken, request) {
     return requestJson(accessToken, '/api/settings/database-reset', { method: 'POST', body: JSON.stringify(request) })

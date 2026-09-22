@@ -72,6 +72,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const canCreateBackups = hasPermission(auth, permissions.backupsCreate)
   const canDownloadBackups = hasPermission(auth, permissions.backupsDownload)
   const canDeleteBackups = hasPermission(auth, permissions.backupsDelete)
+  const canRepairBackups = hasPermission(auth, permissions.backupsRepair)
   const defaultSettingsTab: SettingsTab = integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
     ? 'integrations'
     : 'security'
@@ -143,6 +144,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [backupDeleteConfirmation, setBackupDeleteConfirmation] = useState<{ backup: DatabaseBackupFileDto; reason: string; error: string | null } | null>(null)
   const [backupDownloadingFileName, setBackupDownloadingFileName] = useState<string | null>(null)
   const [backupDeleting, setBackupDeleting] = useState(false)
+  const [backupProtectingFileName, setBackupProtectingFileName] = useState<string | null>(null)
   const [databaseResetConfirmation, setDatabaseResetConfirmation] = useState<{ password: string; error: string | null } | null>(null)
   const [diagnosticStatus, setDiagnosticStatus] = useState<DiagnosticLogStatusDto | null>(null)
   const [diagnosticLoading, setDiagnosticLoading] = useState(false)
@@ -549,7 +551,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       )
       setBackupStatus((current) => current ? {
         ...current,
-        backups: current.backups.filter((backup) => backup.fileName !== deleted.fileName),
+        backups: deleted.protectionState === 'deleting'
+          ? current.backups.map((backup) => backup.fileName === deleted.fileName ? deleted : backup)
+          : current.backups.filter((backup) => backup.fileName !== deleted.fileName),
       } : current)
       setBackupDeleteConfirmation(null)
       setBackupMessage(`Резервная копия ${deleted.fileName} удалена. Действие записано в историю изменений.`)
@@ -560,6 +564,28 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       } : current)
     } finally {
       setBackupDeleting(false)
+    }
+  }
+
+  async function changeDatabaseBackupProtection(backup: DatabaseBackupFileDto, action: 'retry' | 'verify') {
+    setBackupProtectingFileName(backup.fileName)
+    setBackupError(null)
+    setBackupMessage(null)
+    try {
+      const updated = action === 'retry'
+        ? await settingsClient.retryDatabaseBackupProtection(auth.accessToken, backup.fileName)
+        : await settingsClient.verifyDatabaseBackupProtection(auth.accessToken, backup.fileName)
+      setBackupStatus((current) => current ? {
+        ...current,
+        backups: current.backups.map((item) => item.fileName === updated.fileName ? updated : item),
+      } : current)
+      setBackupMessage(action === 'retry'
+        ? `Повторная защита копии ${backup.fileName} запущена.`
+        : `Доступность копий ${backup.fileName} проверена.`)
+    } catch (caught) {
+      setBackupError(caught instanceof Error ? caught.message : 'Не удалось обновить защиту резервной копии.')
+    } finally {
+      setBackupProtectingFileName(null)
     }
   }
 
@@ -1402,7 +1428,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <DatabaseBackup size={17} aria-hidden="true" />
               <span>{backupStatus.isRunning ? 'Копия создается...' : 'Создать резервную копию'}</span>
             </button> : null}
-            <div className="dictionary-table-scroll settings-backup-table-shell" aria-busy={backupDeleting || backupDownloadingFileName !== null}>
+            <div className="dictionary-table-scroll settings-backup-table-shell" aria-busy={backupDeleting || backupDownloadingFileName !== null || backupProtectingFileName !== null}>
               <table className="dictionary-data-table settings-backup-table" aria-label="Резервные копии базы данных">
                 <thead>
                   <tr>
@@ -1410,6 +1436,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                     <th>Тип</th>
                     <th>Файл</th>
                     <th>Размер</th>
+                    <th>
+                      <span className="field-label-with-help">Защита<FieldHelp label="Статус защиты резервной копии">Показывает, есть ли проверенные независимые копии и требуется ли повторная доставка.</FieldHelp></span>
+                    </th>
                     <th className="table-actions-column">Действия</th>
                   </tr>
                 </thead>
@@ -1420,8 +1449,31 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                       <td className="settings-backup-kind"><span className="dictionary-status-pill dictionary-status-pill-archived">{formatBackupKind(backup.kind)}</span></td>
                       <td className="settings-backup-file" title={backup.fileName}>{backup.fileName}</td>
                       <td className="settings-backup-size">{formatFileSize(backup.sizeBytes)}</td>
+                      <td className="settings-backup-protection">
+                        <BackupProtectionState state={backup.protectionState} lastVerifiedAtUtc={backup.lastVerifiedAtUtc} />
+                      </td>
                       <td className="table-actions-column">
                         <div className="dictionary-row-actions">
+                          {canRepairBackups && backup.protectionState !== 'deleting' && backup.protectionState !== 'deleted' ? <button
+                            className="icon-button dictionary-row-action"
+                            type="button"
+                            aria-label={`Проверить защиту резервной копии ${backup.fileName}`}
+                            title="Проверить доступность копий"
+                            disabled={backupProtectingFileName !== null}
+                            onClick={() => void changeDatabaseBackupProtection(backup, 'verify')}
+                          >
+                            <ShieldCheck size={16} aria-hidden="true" />
+                          </button> : null}
+                          {canRepairBackups && ['protection_pending', 'protection_degraded', 'failed', 'manifest_missing'].includes(backup.protectionState) ? <button
+                            className="icon-button dictionary-row-action"
+                            type="button"
+                            aria-label={`Повторить защиту резервной копии ${backup.fileName}`}
+                            title="Повторить доставку копий"
+                            disabled={backupProtectingFileName !== null}
+                            onClick={() => void changeDatabaseBackupProtection(backup, 'retry')}
+                          >
+                            <RefreshCw size={16} aria-hidden="true" />
+                          </button> : null}
                           {canDownloadBackups ? <button
                             className="icon-button dictionary-row-action"
                             type="button"
@@ -1451,7 +1503,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                   ))}
                   {backupStatus.backups.length === 0 ? (
                     <tr>
-                      <td colSpan={5}><EmptyState>Резервные копии еще не создавались.</EmptyState></td>
+                      <td colSpan={6}><EmptyState>Резервные копии еще не создавались.</EmptyState></td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -1917,6 +1969,42 @@ function formatBackupKind(kind: string) {
   if (kind === 'automatic') return 'Автоматическая'
   if (kind === 'pre_update') return 'Перед обновлением'
   return kind
+}
+
+function BackupProtectionState({ state, lastVerifiedAtUtc }: {
+  state: DatabaseBackupFileDto['protectionState']
+  lastVerifiedAtUtc: DatabaseBackupFileDto['lastVerifiedAtUtc']
+}) {
+  let presentation: [string, string]
+  switch (state) {
+    case 'protected':
+      presentation = ['Защищена', 'dictionary-status-pill-active']
+      break
+    case 'protection_degraded':
+      presentation = ['Защита ослаблена', 'dictionary-status-pill-warning']
+      break
+    case 'protection_pending':
+      presentation = ['Ожидает копирования', 'dictionary-status-pill-archived']
+      break
+    case 'failed':
+      presentation = ['Требует внимания', 'dictionary-status-pill-danger']
+      break
+    case 'manifest_missing':
+      presentation = ['Нет манифеста', 'dictionary-status-pill-warning']
+      break
+    case 'local_verified':
+      presentation = ['Проверена локально', 'dictionary-status-pill-active']
+      break
+    case 'deleting':
+      presentation = ['Удаляется', 'dictionary-status-pill-archived']
+      break
+    case 'deleted':
+      presentation = ['Удалена', 'dictionary-status-pill-archived']
+      break
+    default:
+      presentation = ['Только локально', 'dictionary-status-pill-archived']
+  }
+  return <span className={`dictionary-status-pill ${presentation[1]}`} title={lastVerifiedAtUtc ? formatDateTime(lastVerifiedAtUtc) : undefined}>{presentation[0]}</span>
 }
 
 function formatBusinessDate(value: string) {

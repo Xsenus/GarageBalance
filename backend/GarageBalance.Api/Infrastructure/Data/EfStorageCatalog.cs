@@ -342,6 +342,254 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> ScheduleRepairAsync(
+        Guid objectId,
+        string destinationId,
+        StorageReplicaState observedState,
+        string category,
+        string safeError,
+        int requiredCopies,
+        int desiredCopies,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (observedState is not (StorageReplicaState.Missing or StorageReplicaState.Corrupted) ||
+            maximumAttempts < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(observedState));
+        }
+        var storageObject = await dbContext.StorageObjects
+            .Include(item => item.Replicas)
+            .Include(item => item.Jobs)
+            .SingleOrDefaultAsync(item => item.Id == objectId, cancellationToken)
+            ?? throw new InvalidOperationException("Storage object was not found.");
+        if (storageObject.TombstonedAtUtc is not null || storageObject.State is StorageObjectState.Deleting or StorageObjectState.Deleted)
+        {
+            return false;
+        }
+        var replica = storageObject.Replicas.SingleOrDefault(item =>
+            string.Equals(item.DestinationId, destinationId, StringComparison.Ordinal) &&
+            item.Generation == storageObject.CommittedGeneration)
+            ?? throw new InvalidOperationException("Storage replica was not found.");
+        replica.State = observedState;
+        replica.LastErrorCategory = StorageObjectReplica.LimitError(category);
+        replica.LastError = StorageObjectReplica.LimitError(safeError);
+        replica.UpdatedAtUtc = now;
+        var idempotencyKey = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{destinationId}:repair";
+        var job = storageObject.Jobs.SingleOrDefault(item => string.Equals(item.IdempotencyKey, idempotencyKey, StringComparison.Ordinal));
+        if (job is null)
+        {
+            job = new StorageTransferJob
+            {
+                StorageObject = storageObject,
+                StorageObjectReplica = replica,
+                DestinationId = destinationId,
+                Generation = storageObject.CommittedGeneration,
+                Kind = StorageTransferJobKind.Repair,
+                State = StorageTransferJobState.Ready,
+                IdempotencyKey = idempotencyKey,
+                PolicyRevision = storageObject.PolicyRevision,
+                MaximumAttempts = maximumAttempts,
+                DueAtUtc = now,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+            dbContext.StorageTransferJobs.Add(job);
+        }
+        else if (job.State is StorageTransferJobState.Completed or StorageTransferJobState.Blocked or StorageTransferJobState.DeadLetter)
+        {
+            job.State = StorageTransferJobState.Ready;
+            job.AttemptCount = 0;
+            job.MaximumAttempts = maximumAttempts;
+            job.DueAtUtc = now;
+            job.LeaseOwner = null;
+            job.LeaseExpiresAtUtc = null;
+            job.LastErrorCategory = null;
+            job.LastError = null;
+            job.UpdatedAtUtc = now;
+        }
+        RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<StorageObject?> TombstoneAndScheduleDeleteAsync(
+        string tenantId,
+        StorageDataClass dataClass,
+        string logicalKey,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var normalizedKey = StorageObjectKey.Normalize(logicalKey);
+        var storageObject = await dbContext.StorageObjects
+            .Include(item => item.Replicas)
+            .Include(item => item.Jobs)
+            .SingleOrDefaultAsync(item => item.TenantId == tenantId && item.DataClass == dataClass && item.LogicalKey == normalizedKey, cancellationToken);
+        if (storageObject is null)
+        {
+            return null;
+        }
+        storageObject.BeginDelete(now);
+        foreach (var replica in storageObject.Replicas.Where(item => item.State != StorageReplicaState.Deleted))
+        {
+            if (replica.State is StorageReplicaState.Pending or StorageReplicaState.Missing or
+                StorageReplicaState.Corrupted or StorageReplicaState.Failed or StorageReplicaState.Disabled)
+            {
+                replica.State = StorageReplicaState.Deleted;
+                replica.UpdatedAtUtc = now;
+                continue;
+            }
+            replica.BeginDelete(now);
+            var idempotencyKey = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{replica.DestinationId}:delete";
+            if (storageObject.Jobs.Any(item => string.Equals(item.IdempotencyKey, idempotencyKey, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            dbContext.StorageTransferJobs.Add(new StorageTransferJob
+            {
+                StorageObject = storageObject,
+                StorageObjectReplica = replica,
+                DestinationId = replica.DestinationId,
+                Generation = storageObject.CommittedGeneration,
+                Kind = StorageTransferJobKind.Delete,
+                State = StorageTransferJobState.Ready,
+                IdempotencyKey = idempotencyKey,
+                PolicyRevision = storageObject.PolicyRevision,
+                MaximumAttempts = maximumAttempts,
+                DueAtUtc = now,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
+        if (storageObject.Replicas.All(item => item.State == StorageReplicaState.Deleted))
+        {
+            storageObject.State = StorageObjectState.Deleted;
+            storageObject.UpdatedAtUtc = now;
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return storageObject;
+    }
+
+    public async Task<bool> RetryProtectionAsync(
+        Guid objectId,
+        int requiredCopies,
+        int desiredCopies,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (maximumAttempts < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumAttempts));
+        }
+        var storageObject = await dbContext.StorageObjects
+            .Include(item => item.Replicas)
+            .Include(item => item.Jobs)
+            .SingleOrDefaultAsync(item => item.Id == objectId, cancellationToken)
+            ?? throw new InvalidOperationException("Storage object was not found.");
+        if (storageObject.TombstonedAtUtc is not null || storageObject.State is StorageObjectState.Deleting or StorageObjectState.Deleted)
+        {
+            return false;
+        }
+
+        var scheduled = false;
+        foreach (var replica in storageObject.Replicas.Where(item =>
+                     item.Generation == storageObject.CommittedGeneration &&
+                     item.State is not (StorageReplicaState.Available or StorageReplicaState.Deleting or StorageReplicaState.Deleted or StorageReplicaState.Disabled)))
+        {
+            replica.State = StorageReplicaState.Missing;
+            replica.LastErrorCategory = null;
+            replica.LastError = null;
+            replica.UpdatedAtUtc = now;
+            var key = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{replica.DestinationId}:repair";
+            var job = storageObject.Jobs.SingleOrDefault(item => string.Equals(item.IdempotencyKey, key, StringComparison.Ordinal));
+            if (job is null)
+            {
+                dbContext.StorageTransferJobs.Add(new StorageTransferJob
+                {
+                    StorageObject = storageObject,
+                    StorageObjectReplica = replica,
+                    DestinationId = replica.DestinationId,
+                    Generation = storageObject.CommittedGeneration,
+                    Kind = StorageTransferJobKind.Repair,
+                    State = StorageTransferJobState.Ready,
+                    IdempotencyKey = key,
+                    PolicyRevision = storageObject.PolicyRevision,
+                    MaximumAttempts = maximumAttempts,
+                    DueAtUtc = now,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
+                });
+            }
+            else if (job.State is StorageTransferJobState.Completed or StorageTransferJobState.Blocked or StorageTransferJobState.DeadLetter)
+            {
+                job.State = StorageTransferJobState.Ready;
+                job.AttemptCount = 0;
+                job.MaximumAttempts = maximumAttempts;
+                job.DueAtUtc = now;
+                job.LeaseOwner = null;
+                job.LeaseExpiresAtUtc = null;
+                job.LastErrorCategory = null;
+                job.LastError = null;
+                job.UpdatedAtUtc = now;
+            }
+            scheduled = true;
+        }
+        if (!scheduled)
+        {
+            return false;
+        }
+        RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task CompleteReplicaDeleteAsync(
+        Guid jobId,
+        string leaseOwner,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
+        if (job.Kind != StorageTransferJobKind.Delete)
+        {
+            throw new InvalidOperationException("Storage job is not a delete job.");
+        }
+        var storageObject = job.StorageObject ?? throw new InvalidOperationException("Storage job has no logical object.");
+        var replica = job.StorageObjectReplica ?? throw new InvalidOperationException("Storage job has no target replica.");
+        replica.State = StorageReplicaState.Deleted;
+        replica.UpdatedAtUtc = now;
+        replica.LastError = null;
+        replica.LastErrorCategory = null;
+        job.Complete(now);
+        if (storageObject.Replicas.All(item => item.State == StorageReplicaState.Deleted))
+        {
+            storageObject.State = StorageObjectState.Deleted;
+            storageObject.UpdatedAtUtc = now;
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ScheduleDeleteRetryAsync(
+        Guid jobId,
+        string leaseOwner,
+        DateTimeOffset dueAtUtc,
+        string category,
+        string safeError,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
+        var replica = job.StorageObjectReplica ?? throw new InvalidOperationException("Storage job has no target replica.");
+        replica.LastErrorCategory = StorageObjectReplica.LimitError(category);
+        replica.LastError = StorageObjectReplica.LimitError(safeError);
+        replica.UpdatedAtUtc = now;
+        job.ScheduleRetry(dueAtUtc, category, safeError, now);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task ScheduleJobRetryAsync(
         Guid jobId,
         string leaseOwner,
@@ -394,6 +642,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             item.SizeBytes,
             item.Sha256,
             item.State,
+            item.CreatedAtUtc,
             item.UpdatedAtUtc,
             item.Replicas.OrderBy(replica => replica.DestinationId, StringComparer.Ordinal)
                 .Select(replica => new StorageManifestReplicaEntry(

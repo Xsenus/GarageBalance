@@ -1,5 +1,4 @@
 using GarageBalance.Api.Domain.Storage;
-using GarageBalance.Api.Infrastructure.Storage;
 
 namespace GarageBalance.Api.Application.Storage;
 
@@ -8,6 +7,7 @@ public sealed class StorageReplicationRunner(
     IStorageProviderRegistry providerRegistry,
     StorageConfigurationResolver configurationResolver,
     TimeProvider timeProvider,
+    StorageOperationHealthTracker healthTracker,
     ILogger<StorageReplicationRunner> logger)
 {
     private readonly EffectiveStorageConfiguration configuration = configurationResolver.Resolve();
@@ -82,13 +82,19 @@ public sealed class StorageReplicationRunner(
             return;
         }
 
+        if (context.Job.Kind == StorageTransferJobKind.Delete)
+        {
+            await ProcessDeleteAsync(context, leaseOwner, cancellationToken);
+            return;
+        }
+
         var policy = configuration.Policies.SingleOrDefault(item =>
             string.Equals(item.Id, context.Object.PolicyId, StringComparison.Ordinal));
         if (policy is null || policy.Revision != context.Object.PolicyRevision ||
             context.Job.PolicyRevision != context.Object.PolicyRevision ||
             context.Job.Generation != context.Object.CommittedGeneration ||
             context.Object.TombstonedAtUtc is not null ||
-            context.Job.Kind != StorageTransferJobKind.Replicate)
+            context.Job.Kind is not (StorageTransferJobKind.Replicate or StorageTransferJobKind.Repair))
         {
             await BlockAsync(context, leaseOwner, policy, "StalePolicyOrGeneration", "Storage job no longer matches the committed policy or generation.", cancellationToken);
             return;
@@ -120,6 +126,10 @@ public sealed class StorageReplicationRunner(
         var writeStarted = false;
         try
         {
+            if (!healthTracker.TryBeginAttempt(destination.Id, StorageOperationKind.Write))
+            {
+                throw new StorageProviderException(StorageErrorCategory.TransientNetwork, "Storage write circuit is cooling down.");
+            }
             var existing = await target.StatAsync(locator, cancellationToken);
             if (existing is not null)
             {
@@ -139,6 +149,7 @@ public sealed class StorageReplicationRunner(
                     policy.DesiredCopies,
                     timeProvider.GetUtcNow(),
                     cancellationToken);
+                healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Write);
                 return;
             }
 
@@ -149,6 +160,7 @@ public sealed class StorageReplicationRunner(
                 locator,
                 timeProvider.GetUtcNow(),
                 cancellationToken);
+            healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Write);
             writeStarted = true;
             var result = await target.WriteAsync(request, source, cancellationToken);
             var stat = await target.StatAsync(result.NativeLocator, cancellationToken);
@@ -175,6 +187,7 @@ public sealed class StorageReplicationRunner(
         }
         catch (StorageProviderException exception)
         {
+            healthTracker.RecordFailure(destination.Id, StorageOperationKind.Write, exception.Category);
             if (IsBlocking(exception.Category))
             {
                 await BlockAsync(context, leaseOwner, policy, exception.Category.ToString(), SafeError(exception.Category), cancellationToken);
@@ -201,6 +214,66 @@ public sealed class StorageReplicationRunner(
                 policy,
                 StorageErrorCategory.UnknownOutcome,
                 writeStarted,
+                cancellationToken);
+        }
+    }
+
+    private async Task ProcessDeleteAsync(
+        StorageTransferContext context,
+        string leaseOwner,
+        CancellationToken cancellationToken)
+    {
+        var destination = configuration.Destinations.SingleOrDefault(item =>
+            string.Equals(item.Id, context.Job.DestinationId, StringComparison.Ordinal));
+        var now = timeProvider.GetUtcNow();
+        if (destination is null || destination.State == StorageDestinationState.Disabled ||
+            !destination.Capabilities.HasFlag(StorageCapability.Delete))
+        {
+            await catalog.ScheduleDeleteRetryAsync(
+                context.Job.Id,
+                leaseOwner,
+                now.Add(ComputeRetryDelay(context.Job.Id, context.Job.AttemptCount, StorageErrorCategory.ValidationOrUnsupported)),
+                StorageErrorCategory.ValidationOrUnsupported.ToString(),
+                "Storage destination is not currently eligible for delete.",
+                now,
+                cancellationToken);
+            return;
+        }
+        try
+        {
+            if (!healthTracker.TryBeginAttempt(destination.Id, StorageOperationKind.Delete))
+            {
+                throw new StorageProviderException(StorageErrorCategory.TransientNetwork, "Storage delete circuit is cooling down.");
+            }
+            var provider = providerRegistry.GetRequired(destination.Id);
+            await provider.DeleteAsync(context.TargetReplica.NativeLocator, cancellationToken);
+            if (context.Object.DataClass == StorageDataClass.DatabaseBackup)
+            {
+                await provider.DeleteAsync(context.TargetReplica.NativeLocator + ".manifest.json", cancellationToken);
+            }
+            var remaining = await provider.StatAsync(context.TargetReplica.NativeLocator, cancellationToken);
+            if (remaining is not null)
+            {
+                throw new StorageProviderException(StorageErrorCategory.UnknownOutcome, "Storage delete could not be verified.");
+            }
+            await catalog.CompleteReplicaDeleteAsync(context.Job.Id, leaseOwner, timeProvider.GetUtcNow(), cancellationToken);
+            healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Delete);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (StorageProviderException exception)
+        {
+            healthTracker.RecordFailure(destination.Id, StorageOperationKind.Delete, exception.Category);
+            now = timeProvider.GetUtcNow();
+            await catalog.ScheduleDeleteRetryAsync(
+                context.Job.Id,
+                leaseOwner,
+                now.Add(ComputeRetryDelay(context.Job.Id, context.Job.AttemptCount, exception.Category)),
+                exception.Category.ToString(),
+                SafeError(exception.Category),
+                now,
                 cancellationToken);
         }
     }

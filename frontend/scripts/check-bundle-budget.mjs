@@ -6,7 +6,9 @@ const budget = {
   mainJsGzipBytes: 180 * 1024,
   initialJsGzipBytes: 110 * 1024,
   mainCssGzipBytes: 40 * 1024,
-  totalAssetsGzipBytes: 292 * 1024,
+  // Storage protection status and its explicit verify/retry controls add less
+  // than 1 KiB gzip without changing the initial-load limits or dependencies.
+  totalAssetsGzipBytes: 293 * 1024,
 }
 
 function formatBytes(bytes) {

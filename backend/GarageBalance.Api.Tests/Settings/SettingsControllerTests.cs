@@ -26,6 +26,8 @@ public sealed class SettingsControllerTests
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
         var backupDownloadAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DownloadDatabaseBackup));
         var backupDeleteAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DeleteDatabaseBackup));
+        var backupRetryAction = typeof(SettingsController).GetMethod(nameof(SettingsController.RetryDatabaseBackupProtection));
+        var backupVerifyAction = typeof(SettingsController).GetMethod(nameof(SettingsController.VerifyDatabaseBackupProtection));
         var databaseResetAction = typeof(SettingsController).GetMethod(nameof(SettingsController.ResetDatabase));
         var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
         var previewBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.PreviewBusinessDateChange));
@@ -50,6 +52,8 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.BackupsCreate, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.BackupsDownload, Assert.Single(backupDownloadAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.BackupsDelete, Assert.Single(backupDeleteAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.BackupsRepair, Assert.Single(backupRetryAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.BackupsRepair, Assert.Single(backupVerifyAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(databaseResetAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(previewBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
@@ -478,6 +482,30 @@ public sealed class SettingsControllerTests
         Assert.Equal("Копия больше не нужна", backupService.ReceivedReason);
     }
 
+    [Fact]
+    public async Task BackupProtectionActions_PassActorAndReturnUpdatedFile()
+    {
+        var actorUserId = Guid.NewGuid();
+        var backupService = new FakeBackupService();
+        var controller = CreateController(backupService: backupService);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+
+        var retry = await controller.RetryDatabaseBackupProtection(backupService.CreatedFile.FileName, CancellationToken.None);
+        Assert.Same(backupService.CreatedFile, Assert.IsType<OkObjectResult>(retry.Result).Value);
+        Assert.Equal("retry", backupService.ReceivedProtectionAction);
+        Assert.Equal(actorUserId, backupService.ReceivedActorUserId);
+
+        var verify = await controller.VerifyDatabaseBackupProtection(backupService.CreatedFile.FileName, CancellationToken.None);
+        Assert.Same(backupService.CreatedFile, Assert.IsType<OkObjectResult>(verify.Result).Value);
+        Assert.Equal("verify", backupService.ReceivedProtectionAction);
+    }
+
     [Theory]
     [InlineData("database_backup_file_invalid", StatusCodes.Status400BadRequest)]
     [InlineData("database_backup_not_found", StatusCodes.Status404NotFound)]
@@ -795,6 +823,7 @@ public sealed class SettingsControllerTests
         public string? ReceivedReason { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
         public string? ReceivedFileName { get; private set; }
+        public string? ReceivedProtectionAction { get; private set; }
 
         public Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(Status);
 
@@ -827,6 +856,22 @@ public sealed class SettingsControllerTests
             ReceivedFileName = fileName;
             ReceivedReason = reason;
             ReceivedActorUserId = actorUserId;
+            return Task.FromResult(FileResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
+        }
+
+        public Task<DatabaseBackupResult<DatabaseBackupFileDto>> RetryProtectionAsync(string fileName, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedFileName = fileName;
+            ReceivedActorUserId = actorUserId;
+            ReceivedProtectionAction = "retry";
+            return Task.FromResult(FileResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
+        }
+
+        public Task<DatabaseBackupResult<DatabaseBackupFileDto>> VerifyProtectionAsync(string fileName, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedFileName = fileName;
+            ReceivedActorUserId = actorUserId;
+            ReceivedProtectionAction = "verify";
             return Task.FromResult(FileResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
         }
     }

@@ -111,4 +111,14 @@ public interface IDatabaseBackupService
         string? reason,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+    Task<DatabaseBackupResult<DatabaseBackupFileDto>> RetryProtectionAsync(
+        string fileName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(DatabaseBackupResult<DatabaseBackupFileDto>.Failure("not_supported", "Not supported."));
+    Task<DatabaseBackupResult<DatabaseBackupFileDto>> VerifyProtectionAsync(
+        string fileName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(DatabaseBackupResult<DatabaseBackupFileDto>.Failure("not_supported", "Not supported."));
 }

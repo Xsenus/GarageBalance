@@ -10,6 +10,9 @@ public sealed class TransactionBoundaryGuardTests
         // Creating a garage with its historical annual payments must be atomic and is
         // covered by PostgreSQL commit, rollback, cancellation and conflict tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfGarageOnboardingTransactionRunner.cs: BeginTransactionAsync(",
+        // Registering the logical object, its primary replica and replication jobs is
+        // one short atomic catalog operation covered by storage catalog integration tests.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfStorageCatalog.cs: BeginTransactionAsync(",
         $"Infrastructure{Path.DirectorySeparatorChar}Maintenance{Path.DirectorySeparatorChar}WorkingDataResetExecutor.cs: BeginTransactionAsync("
     ];
 

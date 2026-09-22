@@ -44,6 +44,7 @@ public sealed record StorageManifestEntry(
     long SizeBytes,
     string Sha256,
     StorageObjectState State,
+    DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
     IReadOnlyList<StorageManifestReplicaEntry> Replicas);
 
@@ -111,6 +112,44 @@ public interface IStorageCatalog
         string safeError,
         int requiredCopies,
         int desiredCopies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task<bool> ScheduleRepairAsync(
+        Guid objectId,
+        string destinationId,
+        StorageReplicaState observedState,
+        string category,
+        string safeError,
+        int requiredCopies,
+        int desiredCopies,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task<bool> RetryProtectionAsync(
+        Guid objectId,
+        int requiredCopies,
+        int desiredCopies,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) => Task.FromResult(false);
+    Task<StorageObject?> TombstoneAndScheduleDeleteAsync(
+        string tenantId,
+        StorageDataClass dataClass,
+        string logicalKey,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task CompleteReplicaDeleteAsync(
+        Guid jobId,
+        string leaseOwner,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+    Task ScheduleDeleteRetryAsync(
+        Guid jobId,
+        string leaseOwner,
+        DateTimeOffset dueAtUtc,
+        string category,
+        string safeError,
         DateTimeOffset now,
         CancellationToken cancellationToken);
     Task CompleteJobAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken);

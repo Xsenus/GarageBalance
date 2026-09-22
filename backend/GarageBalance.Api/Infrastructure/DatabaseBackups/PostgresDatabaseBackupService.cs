@@ -25,7 +25,9 @@ public sealed partial class PostgresDatabaseBackupService(
     ILogger<PostgresDatabaseBackupService> logger,
     IStorageProviderRegistry? storageProviderRegistry = null,
     StorageConfigurationResolver? storageConfigurationResolver = null,
-    IStorageCatalog? storageCatalog = null) : IDatabaseBackupService
+    IStorageCatalog? storageCatalog = null,
+    IStorageReadRouter? storageReadRouter = null,
+    StorageReconciliationRunner? storageReconciliationRunner = null) : IDatabaseBackupService
 {
     private const int ManifestSchemaVersion = 2;
     private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
@@ -47,6 +49,7 @@ public sealed partial class PostgresDatabaseBackupService(
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<DatabaseBackupFileDto> backups = EnumerateBackups(20, verifyChecksum: true);
         await ReconcileCatalogAsync(backups, cancellationToken);
+        backups = await MergeCatalogBackupsAsync(backups, cancellationToken);
         backups = await ApplyCatalogProtectionAsync(backups, cancellationToken);
         var lastSuccessful = backups.FirstOrDefault()?.CreatedAtUtc ?? _lastSuccessfulBackupAtUtc;
         var freshnessThresholdHours = _options.IntervalHours + _options.FreshnessGraceHours;
@@ -278,7 +281,7 @@ public sealed partial class PostgresDatabaseBackupService(
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var backup = FindManagedBackup(fileName, requireVerifiedIntegrity: true);
+        var backup = await FindManagedBackupAsync(fileName, requireVerifiedIntegrity: true, cancellationToken);
         if (!backup.Succeeded || backup.Value is null)
         {
             return DatabaseBackupResult<DatabaseBackupDownloadDto>.Failure(
@@ -289,7 +292,13 @@ public sealed partial class PostgresDatabaseBackupService(
         Stream? stream = null;
         try
         {
-            stream = await GetLocalProvider().OpenReadAsync(backup.Value.FileName, cancellationToken);
+            stream = _storageConfiguration?.Mode == StorageMode.AsyncMirror && storageReadRouter is not null
+                ? (await storageReadRouter.OpenByLogicalKeyAsync(
+                    _storageConfiguration.TenantId,
+                    StorageDataClass.DatabaseBackup,
+                    backup.Value.FileName,
+                    cancellationToken)).Content
+                : await GetLocalProvider().OpenReadAsync(backup.Value.FileName, cancellationToken);
 
             auditEventWriter.Add(new AuditEventWriteRequest(
                 actorUserId,
@@ -356,7 +365,7 @@ public sealed partial class PostgresDatabaseBackupService(
                 "Комментарий не должен превышать 500 символов.");
         }
 
-        var backup = FindManagedBackup(fileName);
+        var backup = await FindManagedBackupAsync(fileName, requireVerifiedIntegrity: false, cancellationToken);
         if (!backup.Succeeded || backup.Value is null)
         {
             return backup;
@@ -371,8 +380,26 @@ public sealed partial class PostgresDatabaseBackupService(
 
         try
         {
-            await GetLocalProvider().DeleteAsync(backup.Value.FileName, cancellationToken);
-            await GetLocalProvider().DeleteAsync(GetManifestKey(backup.Value.FileName), cancellationToken);
+            if (_storageConfiguration?.Mode == StorageMode.AsyncMirror)
+            {
+                if (storageCatalog is null || await storageCatalog.TombstoneAndScheduleDeleteAsync(
+                    _storageConfiguration.TenantId,
+                    StorageDataClass.DatabaseBackup,
+                    backup.Value.FileName,
+                    _storageConfiguration.Replication.MaximumAttempts,
+                    timeProvider.GetUtcNow(),
+                    cancellationToken) is null)
+                {
+                    return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                        "database_backup_not_found",
+                        "Резервная копия не найдена или уже удалена.");
+                }
+            }
+            else
+            {
+                await GetLocalProvider().DeleteAsync(backup.Value.FileName, cancellationToken);
+                await GetLocalProvider().DeleteAsync(GetManifestKey(backup.Value.FileName), cancellationToken);
+            }
             auditEventWriter.Add(new AuditEventWriteRequest(
                 actorUserId,
                 "database.backup_deleted",
@@ -390,7 +417,10 @@ public sealed partial class PostgresDatabaseBackupService(
                 }));
             await unitOfWork.SaveChangesAsync(cancellationToken);
             logger.LogInformation("Database backup {BackupFileName} was deleted.", backup.Value.FileName);
-            return DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup.Value);
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Success(
+                _storageConfiguration?.Mode == StorageMode.AsyncMirror
+                    ? backup.Value with { ProtectionState = "deleting" }
+                    : backup.Value);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -410,6 +440,87 @@ public sealed partial class PostgresDatabaseBackupService(
         {
             OperationLock.Release();
         }
+    }
+
+    public async Task<DatabaseBackupResult<DatabaseBackupFileDto>> RetryProtectionAsync(
+        string fileName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var backup = await FindManagedBackupAsync(fileName, false, cancellationToken);
+        if (!backup.Succeeded || backup.Value is null)
+        {
+            return backup;
+        }
+        if (_storageConfiguration?.Mode != StorageMode.AsyncMirror || storageCatalog is null)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_protection_not_configured",
+                "Удалённая защита резервных копий не настроена.");
+        }
+        var storageObject = await storageCatalog.FindByLogicalKeyAsync(
+            _storageConfiguration.TenantId,
+            StorageDataClass.DatabaseBackup,
+            backup.Value.FileName,
+            cancellationToken);
+        if (storageObject is null)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure("database_backup_not_found", "Резервная копия не найдена или уже удалена.");
+        }
+        var policy = _storageConfiguration.Policies.Single(item => item.DataClass == StorageDataClass.DatabaseBackup);
+        var scheduled = await storageCatalog.RetryProtectionAsync(
+            storageObject.Id,
+            policy.RequiredIndependentCopies,
+            policy.DesiredCopies,
+            _storageConfiguration.Replication.MaximumAttempts,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "database.backup_protection_retried",
+            "database_backup",
+            backup.Value.FileName,
+            Summary: "Администратор повторно запустил защиту резервной копии.",
+            Section: "settings",
+            ActionKind: "update",
+            EntityDisplayName: backup.Value.FileName,
+            Metadata: new Dictionary<string, object?> { ["scheduled"] = scheduled }));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DatabaseBackupResult<DatabaseBackupFileDto>.Success(
+            backup.Value with { ProtectionState = scheduled ? "protection_pending" : backup.Value.ProtectionState });
+    }
+
+    public async Task<DatabaseBackupResult<DatabaseBackupFileDto>> VerifyProtectionAsync(
+        string fileName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var backup = await FindManagedBackupAsync(fileName, false, cancellationToken);
+        if (!backup.Succeeded || backup.Value is null)
+        {
+            return backup;
+        }
+        if (_storageConfiguration?.Mode != StorageMode.AsyncMirror || storageReconciliationRunner is null)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_protection_not_configured",
+                "Удалённая защита резервных копий не настроена.");
+        }
+        await storageReconciliationRunner.ReconcileObjectAsync(backup.Value.FileName, cancellationToken);
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "database.backup_protection_verified",
+            "database_backup",
+            backup.Value.FileName,
+            Summary: "Администратор проверил доступность копий резервной копии.",
+            Section: "settings",
+            ActionKind: "view",
+            EntityDisplayName: backup.Value.FileName));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var refreshed = await FindManagedBackupAsync(fileName, false, cancellationToken);
+        return refreshed.Succeeded && refreshed.Value is not null
+            ? DatabaseBackupResult<DatabaseBackupFileDto>.Success((await ApplyCatalogProtectionAsync([refreshed.Value], cancellationToken))[0])
+            : refreshed;
     }
 
     private NpgsqlConnectionStringBuilder BuildConnectionSettings()
@@ -495,12 +606,98 @@ public sealed partial class PostgresDatabaseBackupService(
         return DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup);
     }
 
+    private async Task<DatabaseBackupResult<DatabaseBackupFileDto>> FindManagedBackupAsync(
+        string fileName,
+        bool requireVerifiedIntegrity,
+        CancellationToken cancellationToken)
+    {
+        fileName = fileName?.Trim() ?? string.Empty;
+        if (!ManagedBackupName().IsMatch(fileName) || !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure("database_backup_file_invalid", "Указано недопустимое имя резервной копии.");
+        }
+        if (_storageConfiguration?.Mode != StorageMode.AsyncMirror || storageCatalog is null)
+        {
+            return FindManagedBackup(fileName, requireVerifiedIntegrity);
+        }
+        var storageObject = await storageCatalog.FindByLogicalKeyAsync(
+            _storageConfiguration.TenantId,
+            StorageDataClass.DatabaseBackup,
+            fileName,
+            cancellationToken);
+        if (storageObject is null || storageObject.State is StorageObjectState.Deleting or StorageObjectState.Deleted)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure("database_backup_not_found", "Резервная копия не найдена или уже удалена.");
+        }
+        if (requireVerifiedIntegrity && storageObject.Replicas.All(item => item.State != StorageReplicaState.Available))
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure("database_backup_integrity_failed", "Нет доступной проверенной копии резервной копии.");
+        }
+        var protectionState = storageObject.State switch
+        {
+            StorageObjectState.Protected => "protected",
+            StorageObjectState.ProtectionDegraded => "protection_degraded",
+            StorageObjectState.Failed => "failed",
+            _ => "protection_pending"
+        };
+        return DatabaseBackupResult<DatabaseBackupFileDto>.Success(new DatabaseBackupFileDto(
+            fileName,
+            storageObject.SizeBytes,
+            storageObject.CreatedAtUtc,
+            ParseKind(fileName),
+            storageObject.Sha256,
+            protectionState,
+            storageObject.Replicas.Where(item => item.State == StorageReplicaState.Available).Max(item => item.LastVerifiedAtUtc)));
+    }
+
+    private async Task<IReadOnlyList<DatabaseBackupFileDto>> MergeCatalogBackupsAsync(
+        IReadOnlyList<DatabaseBackupFileDto> localBackups,
+        CancellationToken cancellationToken)
+    {
+        if (_storageConfiguration?.Mode != StorageMode.AsyncMirror || storageCatalog is null)
+        {
+            return localBackups;
+        }
+        var byName = localBackups.ToDictionary(item => item.FileName, StringComparer.Ordinal);
+        var manifest = await storageCatalog.ExportManifestAsync(StorageDataClass.DatabaseBackup, 100, cancellationToken);
+        foreach (var item in manifest.Where(item => item.State is not (StorageObjectState.Deleting or StorageObjectState.Deleted)))
+        {
+            byName.TryAdd(item.LogicalKey, new DatabaseBackupFileDto(
+                item.LogicalKey,
+                item.SizeBytes,
+                item.CreatedAtUtc,
+                ParseKind(item.LogicalKey),
+                item.Sha256));
+        }
+        return byName.Values.OrderByDescending(item => item.CreatedAtUtc).Take(20).ToArray();
+    }
+
     private async Task DeleteExpiredBackupsAsync(CancellationToken cancellationToken)
     {
         if (_storageConfiguration?.Mode == StorageMode.AsyncMirror)
         {
-            // Remote-aware tombstoning and replica deletion are handled by the storage lifecycle stage.
-            // Until then, keeping the verified local source is safer than deleting it behind the catalog.
+            if (storageCatalog is null)
+            {
+                return;
+            }
+            foreach (var backup in EnumerateBackups(int.MaxValue, verifyChecksum: false).Skip(_options.RetentionCount))
+            {
+                var storageObject = await storageCatalog.FindByLogicalKeyAsync(
+                    _storageConfiguration.TenantId,
+                    StorageDataClass.DatabaseBackup,
+                    backup.FileName,
+                    cancellationToken);
+                if (storageObject?.State == StorageObjectState.Protected)
+                {
+                    await storageCatalog.TombstoneAndScheduleDeleteAsync(
+                        _storageConfiguration.TenantId,
+                        StorageDataClass.DatabaseBackup,
+                        backup.FileName,
+                        _storageConfiguration.Replication.MaximumAttempts,
+                        timeProvider.GetUtcNow(),
+                        cancellationToken);
+                }
+            }
             return;
         }
         var expired = EnumerateBackups(int.MaxValue, verifyChecksum: false).Skip(_options.RetentionCount);
@@ -801,7 +998,8 @@ public sealed partial class PostgresDatabaseBackupService(
                 StorageObjectState.Protected => "protected",
                 StorageObjectState.ProtectionDegraded => "protection_degraded",
                 StorageObjectState.Failed => "failed",
-                StorageObjectState.Deleting or StorageObjectState.Deleted => "deleted",
+                StorageObjectState.Deleting => "deleting",
+                StorageObjectState.Deleted => "deleted",
                 _ => "protection_pending"
             };
             var lastVerified = storageObject.Replicas

@@ -398,6 +398,34 @@ public sealed class SettingsController(
             : ToDatabaseBackupProblem(result.ErrorCode, result.ErrorMessage);
     }
 
+    [HttpPost("backups/{fileName}/retry-protection")]
+    [Authorize(Policy = SystemPermissions.BackupsRepair)]
+    [ProducesResponseType<DatabaseBackupFileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<DatabaseBackupFileDto>> RetryDatabaseBackupProtection(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var result = await databaseBackupService.RetryProtectionAsync(fileName, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToDatabaseBackupProblem(result.ErrorCode, result.ErrorMessage);
+    }
+
+    [HttpPost("backups/{fileName}/verify-protection")]
+    [Authorize(Policy = SystemPermissions.BackupsRepair)]
+    [ProducesResponseType<DatabaseBackupFileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<DatabaseBackupFileDto>> VerifyDatabaseBackupProtection(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var result = await databaseBackupService.VerifyProtectionAsync(fileName, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToDatabaseBackupProblem(result.ErrorCode, result.ErrorMessage);
+    }
+
     [HttpPost("database-reset")]
     [Authorize(Roles = SystemRoles.Administrator)]
     [ProducesResponseType<StagingDatabaseResetDto>(StatusCodes.Status200OK)]
@@ -438,7 +466,7 @@ public sealed class SettingsController(
         {
             "database_backup_not_found" => StatusCodes.Status404NotFound,
             "database_backup_in_progress" => StatusCodes.Status409Conflict,
-            "database_backup_download_failed" or "database_backup_delete_failed" => StatusCodes.Status503ServiceUnavailable,
+            "database_backup_download_failed" or "database_backup_delete_failed" or "database_backup_protection_not_configured" => StatusCodes.Status503ServiceUnavailable,
             _ => StatusCodes.Status400BadRequest
         };
         return Problem(statusCode: statusCode, title: errorCode, detail: errorMessage);

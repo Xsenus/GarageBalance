@@ -246,12 +246,6 @@ public sealed class LocalFileStorageProvider : ILocalFileStorageProvider
     }
 }
 
-public interface IStorageProviderRegistry
-{
-    IStorageProvider GetRequired(string destinationId);
-    IReadOnlyList<IStorageProvider> GetAll();
-}
-
 public sealed class StorageProviderRegistry : IStorageProviderRegistry, IDisposable
 {
     private readonly IReadOnlyDictionary<string, IStorageProvider> providers;

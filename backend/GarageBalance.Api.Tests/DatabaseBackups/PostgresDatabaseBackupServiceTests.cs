@@ -114,6 +114,12 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.Equal("offsite-a", Assert.Single(registration.ReplicationTargets).DestinationId);
         Assert.Equal("protection_pending", Assert.Single(status.Backups).ProtectionState);
         Assert.Equal("Локальное и удалённое хранилища", status.StorageLocation);
+
+        var deleted = await service.DeleteAsync(result.Value.FileName, "Удаление тестовой копии", null, CancellationToken.None);
+        Assert.True(deleted.Succeeded);
+        Assert.Equal("deleting", deleted.Value!.ProtectionState);
+        Assert.Equal(StorageObjectState.Deleting, Assert.Single(catalog.Objects).State);
+        Assert.True(File.Exists(Path.Combine(_directory, result.Value.FileName)));
     }
 
     [Fact]
@@ -133,6 +139,54 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.False(result.Succeeded);
         Assert.Equal("database_backup_storage_capacity", result.ErrorCode);
         Assert.Empty(runner.Commands);
+    }
+
+    [Fact]
+    public async Task AsyncMirror_RemoteOnlyBackupRemainsListedAndDownloadableThroughLogicalRouter()
+    {
+        const string fileName = "garagebalance_automatic_20260714_020000_000.pgdump";
+        byte[] bytes = [9, 8, 7, 6];
+        var catalog = new CaptureStorageCatalog();
+        var storageObject = new StorageObject
+        {
+            DataClass = StorageDataClass.DatabaseBackup,
+            LogicalKey = fileName,
+            CommittedGeneration = 1,
+            SizeBytes = bytes.Length,
+            Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            State = StorageObjectState.Protected,
+            CreatedAtUtc = _now.AddDays(-1),
+            UpdatedAtUtc = _now
+        };
+        storageObject.Replicas.Add(new StorageObjectReplica
+        {
+            DestinationId = "offsite-a",
+            FailureDomain = "host-a",
+            NativeLocator = "remote-only",
+            Generation = 1,
+            State = StorageReplicaState.Available,
+            SizeBytes = bytes.Length,
+            Sha256 = storageObject.Sha256,
+            LastVerifiedAtUtc = _now
+        });
+        catalog.Objects.Add(storageObject);
+        var service = CreateService(
+            new FakeCommandRunner(),
+            storageCatalog: catalog,
+            storageConfigurationResolver: CreateAsyncMirrorResolver(),
+            storageProviderRegistry: new LocalOnlyProviderRegistry(new LocalFileStorageProvider("local-hot", _directory)),
+            storageReadRouter: new FixedReadRouter(bytes));
+
+        var status = await service.GetStatusAsync(CancellationToken.None);
+        var download = await service.OpenDownloadAsync(fileName, null, CancellationToken.None);
+
+        var listed = Assert.Single(status.Backups);
+        Assert.Equal("protected", listed.ProtectionState);
+        Assert.True(download.Succeeded);
+        await using var content = download.Value!.Content;
+        using var target = new MemoryStream();
+        await content.CopyToAsync(target);
+        Assert.Equal(bytes, target.ToArray());
     }
 
     [Fact]
@@ -440,7 +494,8 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         IBackupToolLocator? toolLocator = null,
         IStorageCatalog? storageCatalog = null,
         StorageConfigurationResolver? storageConfigurationResolver = null,
-        IStorageProviderRegistry? storageProviderRegistry = null)
+        IStorageProviderRegistry? storageProviderRegistry = null,
+        IStorageReadRouter? storageReadRouter = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -467,7 +522,8 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             NullLogger<PostgresDatabaseBackupService>.Instance,
             storageProviderRegistry: storageProviderRegistry,
             storageConfigurationResolver: storageConfigurationResolver,
-            storageCatalog: storageCatalog);
+            storageCatalog: storageCatalog,
+            storageReadRouter: storageReadRouter);
     }
 
     private StorageConfigurationResolver CreateAsyncMirrorResolver(long maximumPendingBytes = 20L * 1024 * 1024 * 1024)
@@ -641,9 +697,34 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         public Task CompleteReplicationAsync(Guid jobId, string leaseOwner, string nativeLocator, string? providerVersionId, string? providerChecksum, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ScheduleReplicationRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, StorageReplicaState replicaState, string category, string safeError, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task BlockReplicationAsync(Guid jobId, string leaseOwner, string category, string safeError, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> ScheduleRepairAsync(Guid objectId, string destinationId, StorageReplicaState observedState, string category, string safeError, int requiredCopies, int desiredCopies, int maximumAttempts, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StorageObject?> TombstoneAndScheduleDeleteAsync(string tenantId, StorageDataClass dataClass, string logicalKey, int maximumAttempts, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            var storageObject = Objects.SingleOrDefault(item => item.DataClass == dataClass && string.Equals(item.LogicalKey, logicalKey, StringComparison.Ordinal));
+            storageObject?.BeginDelete(now);
+            return Task.FromResult(storageObject);
+        }
+        public Task CompleteReplicaDeleteAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ScheduleDeleteRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, string category, string safeError, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteJobAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ScheduleJobRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, string category, string safeError, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<StorageManifestEntry>> ExportManifestAsync(StorageDataClass dataClass, int take, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<StorageManifestEntry>> ExportManifestAsync(StorageDataClass dataClass, int take, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<StorageManifestEntry>>(Objects
+                .Where(item => item.DataClass == dataClass)
+                .Take(take)
+                .Select(item => new StorageManifestEntry(
+                    item.Id,
+                    item.OperationId,
+                    item.DataClass,
+                    item.LogicalKey,
+                    item.CommittedGeneration,
+                    item.SizeBytes,
+                    item.Sha256,
+                    item.State,
+                    item.CreatedAtUtc,
+                    item.UpdatedAtUtc,
+                    []))
+                .ToArray());
     }
 
     private sealed class LocalOnlyProviderRegistry(IStorageProvider localProvider) : IStorageProviderRegistry
@@ -654,6 +735,12 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
                 : throw new InvalidOperationException("Remote provider is intentionally not needed by the backup creation path.");
 
         public IReadOnlyList<IStorageProvider> GetAll() => [localProvider];
+    }
+
+    private sealed class FixedReadRouter(byte[] bytes) : IStorageReadRouter
+    {
+        public Task<StorageReadResult> OpenByLogicalKeyAsync(string tenantId, StorageDataClass dataClass, string logicalKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new StorageReadResult(Guid.NewGuid(), "offsite-a", "remote-only", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), new MemoryStream(bytes, writable: false)));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

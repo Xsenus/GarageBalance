@@ -1216,7 +1216,7 @@ h1 {
 }
 
 .settings-backup-table {
-  min-width: 760px;
+  min-width: 980px;
   table-layout: fixed;
 }
 
@@ -1233,6 +1233,10 @@ h1 {
 }
 
 .settings-backup-kind {
+  text-align: center;
+}
+
+.settings-backup-protection {
   text-align: center;
 }
 
@@ -8564,6 +8568,18 @@ button.operation-row:focus-visible {
 .report-checkbox-picker {
   display: grid;
   gap: 6px;
+}
+
+.dictionary-status-pill-warning {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.dictionary-status-pill-danger {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .report-checkbox-picker--with-actions {
