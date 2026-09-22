@@ -15,6 +15,7 @@ using GarageBalance.Api.Application.Releases;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Application.Security;
 using GarageBalance.Api.Application.Settings;
+using GarageBalance.Api.Application.Storage;
 using GarageBalance.Api.Application.Maintenance;
 using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Controllers;
@@ -295,6 +296,13 @@ builder.Services
         },
         "DatabaseBackup automatic window time zone must be valid.")
     .ValidateOnStart();
+builder.Services
+    .AddOptions<StorageOptions>()
+    .Bind(builder.Configuration.GetSection(StorageOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<StorageOptions>, StorageOptionsValidator>();
+builder.Services.AddSingleton<StorageConfigurationResolver>();
+builder.Services.AddScoped<IStorageCatalog, EfStorageCatalog>();
 builder.Services
     .AddOptions<DatabaseStartupOptions>()
     .Bind(builder.Configuration.GetSection(DatabaseStartupOptions.SectionName))

@@ -64,8 +64,8 @@ Roadmap принимает `DEC-001..010` из ТЗ. Ключевые значе
 |---|---|---|---|---|---|---|---|---|
 | `STG-00` | Freeze baseline/contracts | P0 | none | `TASK-001..002` | implementation permission | characterization and decisions register | Codex + owner for policy | `DONE` |
 | `STG-01` | Harden current local system | P0 | STG-00 | `TASK-003..005` | baseline green | SHA/manifest, freshness, permissions, orphan cleanup green | Codex | `DONE` |
-| `STG-02` | Add policy/provider/catalog foundations off by default | P0 | STG-01 | `TASK-006..007` | restore point | additive schema/options/feature-off compatibility | Codex | `IN_PROGRESS` |
-| `STG-03` | Preserve current local behavior through new abstraction | P0 | STG-02 | `TASK-008` | schema deployed locally | local contract parity and registered existing files | Codex | `TODO` |
+| `STG-02` | Add policy/provider/catalog foundations off by default | P0 | STG-01 | `TASK-006..007` | restore point | additive schema/options/feature-off compatibility | Codex | `DONE` |
+| `STG-03` | Preserve current local behavior through new abstraction | P0 | STG-02 | `TASK-008` | schema deployed locally | local contract parity and registered existing files | Codex | `IN_PROGRESS` |
 | `STG-04` | Add secure S3-compatible destination | P0 | STG-03 | `TASK-009` | isolated test S3 | adapter contract + security green | Codex/operator for real test | `TODO` |
 | `STG-05` | Durable replication and write/backup fallback | P0 | STG-04 | `TASK-010..011` | adapter green | partial/UNKNOWN/restart/all-failed tested | Codex | `TODO` |
 | `STG-06` | Read failover, repair, delete, UI/API | P0 | STG-05 | `TASK-012..016` | durable copies | current-generation read, recovery/failback/delete/UI tests green | Codex | `TODO` |
@@ -238,7 +238,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-006 — Provider/capability/pool/policy contracts and validation
 
-- Stage/status/priority: `STG-02`, `IN_PROGRESS` after `TASK-001/002`, P0. Links: `REQ-003/010/012`, `RISK-016/017`, `AC-003/015/016`.
+- Stage/status/priority: `STG-02`, `DONE` after `TASK-001/002`, P0. Links: `REQ-003/010/012`, `RISK-016/017`, `AC-003/015/016`.
 - Result: vendor-neutral but capability-aware contracts, explicit destinations/roles/pools/policies, old-config `Single` default.
 - Touchpoints: NEW `Application/Storage/*`; `Program.cs`; safe config examples/tests.
 - Actions: define provider operations `OpenRead/Write/Stat/Delete/GetDownloadLink` only where capability advertises; represent native locator/version; validate IDs, roles, pools, fallback graph, failure-domain labels, endpoint/TLS/limits; reject policy requiring unsupported capability; preserve provider-specific extension seam.
@@ -249,7 +249,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-007 — Additive catalog, replicas, jobs and manifests
 
-- Stage/status/priority: `STG-02`, `TODO` after `TASK-003/006`, P0. Links: `REQ-004/005/007`, `RISK-003/020`, `AC-002/004/014`.
+- Stage/status/priority: `STG-02`, `DONE` after `TASK-003/006`, P0. Links: `REQ-004/005/007`, `RISK-003/020`, `AC-002/004/014`.
 - Result: additive EF schema/entities/repository with atomic object+replica+job registration and optimistic concurrency.
 - Touchpoints: NEW Domain entities and `EfStorageCatalog`; `GarageBalanceDbContext`; migration/model snapshot; PostgreSQL tests.
 - Actions: implement schema from TЗ; state-transition guards; immutable generation; tombstone; idempotency keys; lease claim/release/expiry; manifest export/rebuild; bounded sanitized error fields/indexes.
@@ -261,7 +261,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-008 — Local provider adapter and legacy parity
 
-- Stage/status/priority: `STG-03`, `TODO` after `TASK-006/007`, P0. Links: `REQ-001/012`, `AC-001/015/019`.
+- Stage/status/priority: `STG-03`, `IN_PROGRESS` after `TASK-006/007`, P0. Links: `REQ-001/012`, `AC-001/015/019`.
 - Result: current directory operates through local adapter/catalog without changed user contract.
 - Touchpoints: NEW `LocalFileStorageProvider`; existing backup service/controller; DI; tests.
 - Actions: safe root/path normalization; streaming/stat/delete; register new backups; lazy/inventory registration of old files; keep exact managed names, Range, audit, pre-update and retention behavior (except safer protection gate).
@@ -570,8 +570,8 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 ### Progress summary
 
-- Stages: 2/10 `DONE`; 1 `IN_PROGRESS`; 7 `TODO`; 2 stages contain external `BLOCKED` tasks.
-- Tasks: 5/24 `DONE`; `TASK-006` in progress; `TASK-021/022` externally blocked; remaining tasks dependent TODO.
+- Stages: 3/10 `DONE`; 1 `IN_PROGRESS`; 6 `TODO`; 2 stages contain external `BLOCKED` tasks.
+- Tasks: 7/24 `DONE`; `TASK-008` in progress; `TASK-021/022` externally blocked; remaining tasks dependent TODO.
 - Current implementation baseline is not counted as new roadmap completion.
 
 ### Plan change log
@@ -581,6 +581,7 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 | 22.09.2026 / 1.0 | Initial evidence-linked roadmap created. Realization not started. |
 | 22.09.2026 / 1.1 | Implementation authorized. `STG-00` completed: backend baseline 40/40 and frontend settings API 16/16 passed; proposed policy values retained pending external provisioning approval. `STG-01/TASK-003` started. |
 | 22.09.2026 / 1.2 | `STG-01` completed: atomic SHA-256 manifests and byte verification; damaged-download blocking; stale/catch-up status; five backup permissions and hidden server path; Access orphan quarantine/TTL and bounded work directory. Focused backend 71/71, frontend contracts 21/21 and backup UI 8/8 passed. `STG-02/TASK-006` started. |
+| 22.09.2026 / 1.3 | `STG-02` completed: feature-off `Single` compatibility resolver; capability-aware destination/pool/policy validation; safe endpoint/key rules; additive object/replica/job catalog, idempotent atomic registration, optimistic versions and expiring leases. Unit/SQLite 17/17 and real local PostgreSQL migration/concurrency 1/1 passed; EF pending-model check clean. `STG-03/TASK-008` started. |
 
 ### Execution journal
 
@@ -590,11 +591,13 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 22.09.2026: completed `TASK-003..005`. New dumps receive atomic non-secret manifests with SHA-256; status verifies real bytes and blocks corrupt download. Added bounded catch-up, freshness threshold, separate backup read/create/download/delete/repair permissions, and removed physical backup path from API/UI. Access staging now has bounded capacity, safe managed-file inventory, quarantine age reset and TTL deletion while active runs are retained. Checks: backend focused 71/71, frontend access/API 21/21, App backup workflows 8/8.
 
+22.09.2026: completed `TASK-006..007`. Added vendor-neutral provider contract and capability/error vocabulary, strict `AsyncMirror` policy validation, SSRF-safe endpoint allowlist and legacy `Single/local-hot` synthesis. Added additive EF migration `AddStorageCatalog` with logical objects, per-destination replicas and durable transfer jobs; registration is transactional/idempotent and lease claim is cross-instance safe. Checks: unit/SQLite 17/17, local PostgreSQL upgrade and concurrent lease 1/1, no pending EF model changes. No release note was added because this stage is disabled infrastructure with no user-visible behavior.
+
 ### Continuation checkpoint
 
 - Baseline revision: Roadmap 1.0, commit `e5309e8a`.
-- Last completed implementation stage: `STG-01`.
-- Current task: `TASK-006 — Provider/capability/pool/policy contracts and validation`.
+- Last completed implementation stage: `STG-02`.
+- Current task: `TASK-008 — Local provider adapter and legacy parity`.
 - Preconditions already checked: repo structure, current storage flows, focused test batch, baseline Git state.
 - Before continuing: re-read the active task card and current diff; preserve completed evidence and unrelated user work.
 - Parallel next decision: `TASK-002` can collect policy values without blocking `TASK-001`.

@@ -9,6 +9,7 @@ using GarageBalance.Api.Domain.Integrations;
 using GarageBalance.Api.Domain.Releases;
 using GarageBalance.Api.Domain.Reports;
 using GarageBalance.Api.Domain.Settings;
+using GarageBalance.Api.Domain.Storage;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -65,6 +66,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
     public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
     public DbSet<AppReleaseRecord> AppReleases => Set<AppReleaseRecord>();
+    public DbSet<StorageObject> StorageObjects => Set<StorageObject>();
+    public DbSet<StorageObjectReplica> StorageObjectReplicas => Set<StorageObjectReplica>();
+    public DbSet<StorageTransferJob> StorageTransferJobs => Set<StorageTransferJob>();
 
     void IAuditEventStore.Add(AuditEvent auditEvent)
     {
@@ -220,6 +224,84 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(owner => owner.MeterNotes).HasMaxLength(1000);
             entity.HasIndex(owner => new { owner.LastName, owner.FirstName, owner.MiddleName });
             entity.HasIndex(owner => owner.Phone);
+        });
+
+        modelBuilder.Entity<StorageObject>(entity =>
+        {
+            entity.ToTable("storage_objects");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.TenantId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.DataClass).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(item => item.LogicalKey).HasMaxLength(1024).IsRequired();
+            entity.Property(item => item.PolicyId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.State).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(item => item.Sha256).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.OriginalFileName).HasMaxLength(512).IsRequired();
+            entity.Property(item => item.ContentType).HasMaxLength(160);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
+            entity.HasIndex(item => new { item.TenantId, item.DataClass, item.OperationId }).IsUnique();
+            entity.HasIndex(item => new { item.TenantId, item.DataClass, item.LogicalKey }).IsUnique();
+            entity.HasIndex(item => new { item.State, item.UpdatedAtUtc });
+            entity.HasIndex(item => new { item.PolicyId, item.PolicyRevision });
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_storage_objects_generation", "\"CommittedGeneration\" >= 0");
+                table.HasCheckConstraint("CK_storage_objects_size", "\"SizeBytes\" >= 0");
+            });
+        });
+
+        modelBuilder.Entity<StorageObjectReplica>(entity =>
+        {
+            entity.ToTable("storage_object_replicas");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DestinationId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.FailureDomain).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.NativeLocator).HasMaxLength(2048).IsRequired();
+            entity.Property(item => item.ProviderVersionId).HasMaxLength(512);
+            entity.Property(item => item.State).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(item => item.Sha256).HasMaxLength(64);
+            entity.Property(item => item.ProviderChecksum).HasMaxLength(512);
+            entity.Property(item => item.LastErrorCategory).HasMaxLength(80);
+            entity.Property(item => item.LastError).HasMaxLength(1000);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
+            entity.HasIndex(item => new { item.StorageObjectId, item.DestinationId, item.Generation }).IsUnique();
+            entity.HasIndex(item => new { item.DestinationId, item.State, item.UpdatedAtUtc });
+            entity.HasIndex(item => new { item.State, item.LastVerifiedAtUtc });
+            entity.HasOne(item => item.StorageObject)
+                .WithMany(item => item.Replicas)
+                .HasForeignKey(item => item.StorageObjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(table => table.HasCheckConstraint("CK_storage_object_replicas_generation", "\"Generation\" > 0"));
+        });
+
+        modelBuilder.Entity<StorageTransferJob>(entity =>
+        {
+            entity.ToTable("storage_transfer_jobs");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DestinationId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.Kind).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(item => item.State).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(item => item.IdempotencyKey).HasMaxLength(240).IsRequired();
+            entity.Property(item => item.LeaseOwner).HasMaxLength(160);
+            entity.Property(item => item.LastErrorCategory).HasMaxLength(80);
+            entity.Property(item => item.LastError).HasMaxLength(1000);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
+            entity.HasIndex(item => item.IdempotencyKey).IsUnique();
+            entity.HasIndex(item => new { item.State, item.DueAtUtc, item.LeaseExpiresAtUtc });
+            entity.HasIndex(item => new { item.DestinationId, item.State, item.DueAtUtc });
+            entity.HasOne(item => item.StorageObject)
+                .WithMany(item => item.Jobs)
+                .HasForeignKey(item => item.StorageObjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.StorageObjectReplica)
+                .WithMany(item => item.Jobs)
+                .HasForeignKey(item => item.StorageObjectReplicaId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_storage_transfer_jobs_generation", "\"Generation\" > 0");
+                table.HasCheckConstraint("CK_storage_transfer_jobs_attempts", "\"AttemptCount\" >= 0 AND \"MaximumAttempts\" > 0");
+            });
         });
 
         modelBuilder.Entity<OwnerAdditionalPhone>(entity =>
