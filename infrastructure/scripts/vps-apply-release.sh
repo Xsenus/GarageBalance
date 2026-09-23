@@ -130,6 +130,13 @@ prune_old_directories() {
 prune_operational_backups() {
   local obsolete_path
 
+  # Cloud-catalogued backups must not be removed behind the catalog's back.
+  # Keep them locally until retention is handled by the storage service.
+  if [[ -f /etc/garagebalance-staging-cloud.env ]]; then
+    log 'retentionStatus=preserved; reason=cloud-catalogued-backups'
+    return 0
+  fi
+
   while IFS= read -r obsolete_path; do
     [[ -n "$obsolete_path" ]] || continue
     if [[ "$obsolete_path" != "${BACKUP_DIR}/garagebalance_"*.pgdump ]]; then

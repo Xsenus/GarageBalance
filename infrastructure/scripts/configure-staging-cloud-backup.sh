@@ -9,6 +9,7 @@ DROP_IN_DIR=/etc/systemd/system/garagebalance-staging.service.d
 DROP_IN="$DROP_IN_DIR/50-cloud-backup.conf"
 BACKUP_DIR="$APP_ROOT/backups"
 TOOL_UNIT=/etc/systemd/system/garagebalance-storage-tool@.service
+SYNC_TIMER=/etc/systemd/system/garagebalance-storage-sync.timer
 MIGRATION_DIR=/var/lib/garagebalance-staging/storage-migration
 
 wait_for_api() {
@@ -38,6 +39,7 @@ case "${1:-}" in
       echo 'Storage__Mode=Single'
     fi
     systemctl is-active "$SERVICE"
+    systemctl is-enabled garagebalance-storage-sync.timer 2>/dev/null || true
     exit 0
     ;;
   apply)
@@ -176,14 +178,31 @@ case "${1:-}" in
     esac
     journalctl -u "garagebalance-storage-tool@$2.service" -n 2000 -o cat --no-pager | cut -c 1-4000
     ;;
+  schedule)
+    [[ "$#" == 1 ]] || exit 64
+    [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" && -f "$MIGRATION_DIR/cloudru-backfill.json" ]] || exit 1
+    printf '%s\n' \
+      '[Unit]' \
+      'Description=Synchronize GarageBalance database backups to Cloud.ru hourly' \
+      '[Timer]' \
+      'OnCalendar=hourly' \
+      'Persistent=true' \
+      'Unit=garagebalance-storage-tool@delta-sync.service' \
+      '[Install]' \
+      'WantedBy=timers.target' > "$SYNC_TIMER"
+    chmod 644 "$SYNC_TIMER"
+    systemctl daemon-reload
+    systemctl enable --now garagebalance-storage-sync.timer
+    ;;
   disable)
     [[ "$#" == 1 ]] || exit 64
     [[ -f "$CLOUD_ENV" && -f "$DROP_IN" ]] || exit 1
-    rm -f -- "$DROP_IN" "$TOOL_UNIT" "$CLOUD_ENV"
+    systemctl disable --now garagebalance-storage-sync.timer 2>/dev/null || true
+    rm -f -- "$DROP_IN" "$TOOL_UNIT" "$SYNC_TIMER" "$CLOUD_ENV"
     systemctl daemon-reload
     systemctl restart "$SERVICE"
     wait_for_api
     echo 'Cloud backup configuration disabled; application is healthy'
     ;;
-  *) echo 'usage: inspect | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | disable' >&2; exit 64 ;;
+  *) echo 'usage: inspect | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
 esac

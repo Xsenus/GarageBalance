@@ -42,7 +42,19 @@ public sealed class StagingCloudBackupDeploymentTests
         Assert.Contains("diagnose)", script, StringComparison.Ordinal);
         Assert.Contains("journalctl -u \"garagebalance-storage-tool@$2.service\" -n 2000", script, StringComparison.Ordinal);
         Assert.Contains("ExecStart=/usr/local/bin/garagebalance-storage-tool-run %i", script, StringComparison.Ordinal);
+        Assert.Contains("OnCalendar=hourly", script, StringComparison.Ordinal);
+        Assert.Contains("Unit=garagebalance-storage-tool@delta-sync.service", script, StringComparison.Ordinal);
+        Assert.Contains("systemctl enable --now garagebalance-storage-sync.timer", script, StringComparison.Ordinal);
+        Assert.Contains("$MIGRATION_DIR/cloudru-backfill.json", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Key Secret", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DeploymentKeepsCataloguedBackupsUntilStorageRetentionCanDeleteThemSafely()
+    {
+        var apply = File.ReadAllText(Path.Combine(RepositoryRoot, "infrastructure", "scripts", "vps-apply-release.sh"));
+        Assert.Contains("if [[ -f /etc/garagebalance-staging-cloud.env ]]; then", apply, StringComparison.Ordinal);
+        Assert.Contains("retentionStatus=preserved; reason=cloud-catalogued-backups", apply, StringComparison.Ordinal);
     }
 
     [Fact]

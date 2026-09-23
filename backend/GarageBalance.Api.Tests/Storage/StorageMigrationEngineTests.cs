@@ -15,6 +15,30 @@ namespace GarageBalance.Api.Tests.Storage;
 
 public sealed class StorageMigrationEngineTests
 {
+    [Theory]
+    [InlineData("garagebalance_manual_20260922_120000_001.pgdump", true)]
+    [InlineData("garagebalance_20260624-1130.pgdump", true)]
+    [InlineData("garagebalance_20260624-164006.pgdump", true)]
+    [InlineData("garagebalance_20260923-181024_e049429b56eb9b105ae325253f03878bd39b3cda-342.pgdump", true)]
+    [InlineData("garagebalance_auth_reset_20260624-164543.pgdump", true)]
+    [InlineData("garagebalance_before_access_transfer_v2_20260624-182214.pgdump", true)]
+    [InlineData("garagebalance_before_manual_entry_20260714_141629.pgdump", true)]
+    [InlineData("other_project_20260923.pgdump", false)]
+    [InlineData("garagebalance_20260923-181024_untrusted.pgdump", false)]
+    public void RecognizesOnlyKnownArchiveNameFormats(string name, bool expected) =>
+        Assert.Equal(expected, LocalBackupInspector.IsManagedName(name));
+
+    [Fact]
+    public async Task InventoryBlocksUnknownPgDumpRatherThanSilentlySkippingIt()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        File.WriteAllBytes(Path.Combine(fixture.Root, "other_project_20260923.pgdump"), [1, 2, 3, 4]);
+        var plan = await fixture.Engine.ExecuteAsync(fixture.Command("plan"), CancellationToken.None);
+        var blocked = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<MigrationPlanItem>>(plan.Details));
+        Assert.Equal("blocked", blocked.Action);
+        Assert.Equal("invalid_name_or_link", blocked.Reason);
+    }
+
     [Fact]
     public async Task LegacyInventory_RequiresTocAndSha_AndDryRunWritesNothing()
     {
