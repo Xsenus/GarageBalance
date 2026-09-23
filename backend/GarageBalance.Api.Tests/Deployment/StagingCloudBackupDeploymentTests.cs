@@ -41,6 +41,11 @@ public sealed class StagingCloudBackupDeploymentTests
         Assert.Contains("run)", script, StringComparison.Ordinal);
         Assert.Contains("audit-files)", script, StringComparison.Ordinal);
         Assert.Contains("-printf '%f owner=%u group=%g mode=%m size=%s\\n'", script, StringComparison.Ordinal);
+        Assert.Contains("allow-legacy-read)", script, StringComparison.Ordinal);
+        Assert.Contains("[[ -f \"$file\" && ! -L \"$file\" && ! -e \"$file.manifest.json\" ]]", script, StringComparison.Ordinal);
+        Assert.Contains("pg_restore --list \"$file\" >/dev/null", script, StringComparison.Ordinal);
+        Assert.Contains("chgrp garagebalance -- \"$file\"", script, StringComparison.Ordinal);
+        Assert.Contains("chmod 640 -- \"$file\"", script, StringComparison.Ordinal);
         Assert.Contains("diagnose)", script, StringComparison.Ordinal);
         Assert.Contains("journalctl -u \"garagebalance-storage-tool@$2.service\" -n 2000", script, StringComparison.Ordinal);
         Assert.Contains("ExecStart=/usr/local/bin/garagebalance-storage-tool-run %i", script, StringComparison.Ordinal);

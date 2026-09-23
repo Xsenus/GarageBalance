@@ -49,6 +49,35 @@ case "${1:-}" in
       \( -name '*.pgdump' -o -name '*.pgdump.manifest.json' \) \
       -printf '%f owner=%u group=%g mode=%m size=%s\n' | sort
     ;;
+  allow-legacy-read)
+    [[ "$#" == 1 ]] || exit 64
+    names=(
+      emergency_before_regular_seed_20260715-094520.pgdump
+      garagebalance_20260624-164006.pgdump
+      garagebalance_20260624-164103.pgdump
+      garagebalance_20260624-164138.pgdump
+      garagebalance_20260624-200510.pgdump
+      garagebalance_auth_reset_20260624-164543.pgdump
+      working_data_analysis_20260904-151333.pgdump
+    )
+    for name in "${names[@]}"; do
+      file="$BACKUP_DIR/$name"
+      [[ -f "$file" && ! -L "$file" && ! -e "$file.manifest.json" ]] || exit 1
+      owner_group="$(stat -c '%U:%G' -- "$file")"
+      mode="$(stat -c '%a' -- "$file")"
+      case "$owner_group:$mode" in
+        postgres:postgres:600|root:root:600|postgres:garagebalance:640|root:garagebalance:640) ;;
+        *) echo "unexpected ownership or mode: $name" >&2; exit 1 ;;
+      esac
+      pg_restore --list "$file" >/dev/null
+    done
+    for name in "${names[@]}"; do
+      file="$BACKUP_DIR/$name"
+      chgrp garagebalance -- "$file"
+      chmod 640 -- "$file"
+    done
+    echo 'seven validated legacy archives are readable by the backup service'
+    ;;
   apply)
     [[ "$#" == 4 ]] || { echo 'usage: apply <bucket> <kms-key-id> <tenant-id>' >&2; exit 64; }
     bucket="$2"
@@ -211,5 +240,5 @@ case "${1:-}" in
     wait_for_api
     echo 'Cloud backup configuration disabled; application is healthy'
     ;;
-  *) echo 'usage: inspect | audit-files | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
+  *) echo 'usage: inspect | audit-files | allow-legacy-read | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
 esac
