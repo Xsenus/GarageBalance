@@ -96,12 +96,15 @@ public sealed partial class LocalBackupInspector(IBackupCommandRunner runner, IB
     [GeneratedRegex("^garagebalance_(?:auth_reset|before_access_transfer(?:_v2)?|before_import_acl)_\\d{8}-\\d{6}\\.pgdump$|^garagebalance_before_manual_entry_\\d{8}_\\d{6}\\.pgdump$", RegexOptions.CultureInvariant)]
     private static partial Regex HistoricalOperationName();
 
+    [GeneratedRegex("^(?:emergency_before_regular_seed|showcase_before|working_data_(?:analysis|before))_\\d{8}-\\d{6}\\.pgdump$", RegexOptions.CultureInvariant)]
+    private static partial Regex HistoricalStandaloneName();
+
     private static string? GetBackupKind(string fileName)
     {
         var managed = ManagedName().Match(fileName);
         if (managed.Success) return managed.Groups[1].Value;
         if (DeploymentName().IsMatch(fileName)) return "pre_update";
-        if (LegacyTimestampName().IsMatch(fileName) || HistoricalOperationName().IsMatch(fileName)) return "manual";
+        if (LegacyTimestampName().IsMatch(fileName) || HistoricalOperationName().IsMatch(fileName) || HistoricalStandaloneName().IsMatch(fileName)) return "manual";
         return null;
     }
 }

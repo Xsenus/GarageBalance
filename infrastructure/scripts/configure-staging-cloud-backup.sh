@@ -42,6 +42,13 @@ case "${1:-}" in
     systemctl is-enabled garagebalance-storage-sync.timer 2>/dev/null || true
     exit 0
     ;;
+  audit-files)
+    [[ "$#" == 1 ]] || exit 64
+    [[ -d "$BACKUP_DIR" ]] || exit 1
+    find "$BACKUP_DIR" -maxdepth 1 -type f \
+      \( -name '*.pgdump' -o -name '*.pgdump.manifest.json' \) \
+      -printf '%f owner=%u group=%g mode=%m size=%s\n' | sort
+    ;;
   apply)
     [[ "$#" == 4 ]] || { echo 'usage: apply <bucket> <kms-key-id> <tenant-id>' >&2; exit 64; }
     bucket="$2"
@@ -204,5 +211,5 @@ case "${1:-}" in
     wait_for_api
     echo 'Cloud backup configuration disabled; application is healthy'
     ;;
-  *) echo 'usage: inspect | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
+  *) echo 'usage: inspect | audit-files | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
 esac

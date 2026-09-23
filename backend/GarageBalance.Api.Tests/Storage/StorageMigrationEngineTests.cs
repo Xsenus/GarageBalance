@@ -23,6 +23,10 @@ public sealed class StorageMigrationEngineTests
     [InlineData("garagebalance_auth_reset_20260624-164543.pgdump", true)]
     [InlineData("garagebalance_before_access_transfer_v2_20260624-182214.pgdump", true)]
     [InlineData("garagebalance_before_manual_entry_20260714_141629.pgdump", true)]
+    [InlineData("emergency_before_regular_seed_20260715-094520.pgdump", true)]
+    [InlineData("showcase_before_20260814-072632.pgdump", true)]
+    [InlineData("working_data_analysis_20260904-151333.pgdump", true)]
+    [InlineData("working_data_before_20260909-071729.pgdump", true)]
     [InlineData("other_project_20260923.pgdump", false)]
     [InlineData("garagebalance_20260923-181024_untrusted.pgdump", false)]
     public void RecognizesOnlyKnownArchiveNameFormats(string name, bool expected) =>
