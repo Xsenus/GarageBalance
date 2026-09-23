@@ -26,6 +26,11 @@ public sealed class S3CompatibleStorageProviderTests
 
         await client.PutAsync("bucket", "test-object", content, 3, "AQID", new Dictionary<string, string>(), CancellationToken.None);
         await client.BeginMultipartAsync("bucket", "test-multipart", new Dictionary<string, string>(), CancellationToken.None);
+        await using var partContent = new MemoryStream([1, 2, 3]);
+        var uploadedPart = await client.UploadPartAsync(
+            "bucket", "test-multipart", "upload-1", 1, partContent, 3, "AQID", true, CancellationToken.None);
+        await client.CompleteMultipartAsync(
+            "bucket", "test-multipart", "upload-1", [uploadedPart], CancellationToken.None);
 
         var expectedMethod = encryptionMode == S3EncryptionMode.SseKms
             ? ServerSideEncryptionMethod.AWSKMS
@@ -34,6 +39,9 @@ public sealed class S3CompatibleStorageProviderTests
         Assert.Equal(kmsKeyId, spy.PutRequest?.ServerSideEncryptionKeyManagementServiceKeyId);
         Assert.Equal(expectedMethod, spy.MultipartRequest?.ServerSideEncryptionMethod);
         Assert.Equal(kmsKeyId, spy.MultipartRequest?.ServerSideEncryptionKeyManagementServiceKeyId);
+        Assert.Equal("AQID", uploadedPart.ChecksumSha256);
+        Assert.Equal("AQID", spy.UploadPartRequest?.ChecksumSHA256);
+        Assert.Equal("AQID", Assert.Single(spy.CompleteRequest?.PartETags ?? []).ChecksumSHA256);
     }
 
     [Fact]
@@ -238,11 +246,15 @@ public sealed class S3CompatibleStorageProviderTests
     {
         public PutObjectRequest? PutRequest { get; private set; }
         public InitiateMultipartUploadRequest? MultipartRequest { get; private set; }
+        public UploadPartRequest? UploadPartRequest { get; private set; }
+        public CompleteMultipartUploadRequest? CompleteRequest { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod?.Name switch
         {
             nameof(IAmazonS3.PutObjectAsync) => CapturePut(args),
             nameof(IAmazonS3.InitiateMultipartUploadAsync) => CaptureMultipart(args),
+            nameof(IAmazonS3.UploadPartAsync) => CaptureUploadPart(args),
+            nameof(IAmazonS3.CompleteMultipartUploadAsync) => CaptureComplete(args),
             nameof(IDisposable.Dispose) => null,
             _ => throw new NotSupportedException(targetMethod?.Name)
         };
@@ -257,6 +269,18 @@ public sealed class S3CompatibleStorageProviderTests
         {
             MultipartRequest = Assert.IsType<InitiateMultipartUploadRequest>(args?[0]);
             return Task.FromResult(new InitiateMultipartUploadResponse { UploadId = "upload-1" });
+        }
+
+        private Task<UploadPartResponse> CaptureUploadPart(object?[]? args)
+        {
+            UploadPartRequest = Assert.IsType<UploadPartRequest>(args?[0]);
+            return Task.FromResult(new UploadPartResponse { ETag = "etag-1" });
+        }
+
+        private Task<CompleteMultipartUploadResponse> CaptureComplete(object?[]? args)
+        {
+            CompleteRequest = Assert.IsType<CompleteMultipartUploadRequest>(args?[0]);
+            return Task.FromResult(new CompleteMultipartUploadResponse { ETag = "complete-etag" });
         }
     }
 

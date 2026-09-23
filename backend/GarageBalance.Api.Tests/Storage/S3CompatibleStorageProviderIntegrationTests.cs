@@ -50,62 +50,76 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
             "private",
             region,
             true,
-            64L * 1024 * 1024,
-            16 * 1024 * 1024,
+            5L * 1024 * 1024,
+            5 * 1024 * 1024,
             "EnvironmentOrWorkloadIdentity",
             StorageCapability.Read | StorageCapability.Write | StorageCapability.Stat |
-                StorageCapability.Delete | StorageCapability.DownloadLink | StorageCapability.ServerSideEncryption,
+                StorageCapability.Delete | StorageCapability.DownloadLink | StorageCapability.ServerSideEncryption |
+                StorageCapability.MultipartUpload,
             encryptionMode,
             kmsKeyId);
         using var provider = new S3CompatibleStorageProvider(
             destination,
             new AwsS3ObjectClient(amazonClient, encryptionMode, kmsKeyId),
             TimeProvider.System);
-        byte[] bytes = "garagebalance isolated s3 integration"u8.ToArray();
-        var sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
-        var operationId = Guid.NewGuid();
-        var writeRequest = new StorageWriteRequest(
-            operationId,
-            $"database/integration-{operationId:N}.pgdump",
-            1,
-            bytes.Length,
-            sha256,
-            new Dictionary<string, string> { ["backup-kind"] = "integration" });
-        string? locator = provider.GetWriteLocator(writeRequest);
-
         try
         {
-            await using var input = new MemoryStream(bytes, writable: false);
-            var written = await provider.WriteAsync(writeRequest, input, CancellationToken.None);
-            locator = written.NativeLocator;
-
-            var stat = await provider.StatAsync(locator, CancellationToken.None);
-            Assert.NotNull(stat);
-            Assert.Equal(bytes.Length, stat.SizeBytes);
-            Assert.Equal(sha256, stat.ProviderChecksum, ignoreCase: true);
-
-            await using var stored = await provider.OpenReadAsync(locator, CancellationToken.None);
-            using var output = new MemoryStream();
-            await stored.CopyToAsync(output);
-            Assert.Equal(bytes, output.ToArray());
-
-            var link = await provider.GetDownloadLinkAsync(locator, TimeSpan.FromMinutes(2), CancellationToken.None);
-            Assert.NotNull(link);
-            Assert.Equal(endpoint.TrimEnd('/'), link.Url.GetLeftPart(UriPartial.Authority).TrimEnd('/'));
-
-            await provider.DeleteAsync(locator, CancellationToken.None);
-            locator = null;
-            Assert.Null(await provider.StatAsync(written.NativeLocator, CancellationToken.None));
+            await VerifyRoundTripAsync("garagebalance isolated s3 integration"u8.ToArray());
+            var multipartBytes = new byte[5 * 1024 * 1024 + 1];
+            RandomNumberGenerator.Fill(multipartBytes);
+            await VerifyRoundTripAsync(multipartBytes);
         }
         finally
         {
-            if (locator is not null)
-            {
-                await provider.DeleteAsync(locator, CancellationToken.None);
-            }
             if (createsBucket)
             {
                 await amazonClient.DeleteBucketAsync(new DeleteBucketRequest { BucketName = bucket });
+            }
+        }
+
+        async Task VerifyRoundTripAsync(byte[] bytes)
+        {
+            var sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
+            var operationId = Guid.NewGuid();
+            var writeRequest = new StorageWriteRequest(
+                operationId,
+                $"database/integration-{operationId:N}.pgdump",
+                1,
+                bytes.Length,
+                sha256,
+                new Dictionary<string, string> { ["backup-kind"] = "integration" });
+            string? locator = provider.GetWriteLocator(writeRequest);
+
+            try
+            {
+                await using var input = new MemoryStream(bytes, writable: false);
+                var written = await provider.WriteAsync(writeRequest, input, CancellationToken.None);
+                locator = written.NativeLocator;
+
+                var stat = await provider.StatAsync(locator, CancellationToken.None);
+                Assert.NotNull(stat);
+                Assert.Equal(bytes.Length, stat.SizeBytes);
+                Assert.Equal(sha256, stat.ProviderChecksum, ignoreCase: true);
+
+                await using var stored = await provider.OpenReadAsync(locator, CancellationToken.None);
+                using var output = new MemoryStream();
+                await stored.CopyToAsync(output);
+                Assert.Equal(bytes, output.ToArray());
+
+                var link = await provider.GetDownloadLinkAsync(locator, TimeSpan.FromMinutes(2), CancellationToken.None);
+                Assert.NotNull(link);
+                Assert.Equal(endpoint.TrimEnd('/'), link.Url.GetLeftPart(UriPartial.Authority).TrimEnd('/'));
+
+                await provider.DeleteAsync(locator, CancellationToken.None);
+                locator = null;
+                Assert.Null(await provider.StatAsync(written.NativeLocator, CancellationToken.None));
+            }
+            finally
+            {
+                if (locator is not null)
+                {
+                    await provider.DeleteAsync(locator, CancellationToken.None);
+                }
             }
         }
     }

@@ -176,7 +176,7 @@ public sealed class AwsS3ObjectClient(
             ChecksumAlgorithm = ChecksumAlgorithm.SHA256,
             ChecksumSHA256 = checksumSha256Base64
         }, cancellationToken);
-        return new S3UploadedPart(partNumber, response.ETag, response.ChecksumSHA256);
+        return new S3UploadedPart(partNumber, response.ETag, response.ChecksumSHA256 ?? checksumSha256Base64);
     }
 
     public async Task<S3WriteResponse> CompleteMultipartAsync(
@@ -193,7 +193,10 @@ public sealed class AwsS3ObjectClient(
             UploadId = uploadId,
             IfNoneMatch = "*"
         };
-        request.AddPartETags(parts.Select(part => new PartETag(part.PartNumber, part.EntityTag)));
+        request.AddPartETags(parts.Select(part => new PartETag(part.PartNumber, part.EntityTag)
+        {
+            ChecksumSHA256 = part.ChecksumSha256
+        }));
         var response = await client.CompleteMultipartUploadAsync(request, cancellationToken);
         return new S3WriteResponse(response.VersionId, response.ETag, response.ChecksumSHA256);
     }
