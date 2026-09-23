@@ -1,5 +1,7 @@
 using GarageBalance.Api.Application.Backups;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Infrastructure.Data;
@@ -36,7 +38,9 @@ public sealed class DatabaseStartupHostedService(
             return;
         }
 
-        if (_options.RequirePreMigrationBackup)
+        var hasExistingTables = await dbContext.GetService<IRelationalDatabaseCreator>()
+            .HasTablesAsync(cancellationToken);
+        if (_options.RequirePreMigrationBackup && hasExistingTables)
         {
             var backupService = scope.ServiceProvider.GetRequiredService<IDatabaseBackupService>();
             var backup = await backupService.CreateAsync(
@@ -48,6 +52,10 @@ public sealed class DatabaseStartupHostedService(
             {
                 throw new InvalidOperationException($"Pre-migration backup failed: {backup.ErrorCode}.");
             }
+        }
+        else if (!hasExistingTables)
+        {
+            logger.LogInformation("Skipping pre-migration backup for a database without tables.");
         }
 
         logger.LogInformation("Applying {MigrationCount} pending database migrations.", pendingMigrations.Length);

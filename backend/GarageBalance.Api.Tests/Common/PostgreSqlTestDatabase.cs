@@ -41,6 +41,23 @@ internal sealed class PostgreSqlTestDatabase : IAsyncDisposable
             return await CreateFromMigratedTemplateAsync(cancellationToken);
         }
 
+        var database = await CreateEmptyAsync(cancellationToken);
+        try
+        {
+            await using var context = database.CreateContext();
+            await context.Database.MigrateAsync(targetMigration, cancellationToken);
+            return database;
+        }
+        catch
+        {
+            await database.DisposeAsync();
+            throw;
+        }
+    }
+
+    public static async Task<PostgreSqlTestDatabase> CreateEmptyAsync(
+        CancellationToken cancellationToken = default)
+    {
         var baseConnectionString = GetBaseConnectionString();
         var adminBuilder = new NpgsqlConnectionStringBuilder(baseConnectionString)
         {
@@ -60,18 +77,7 @@ internal sealed class PostgreSqlTestDatabase : IAsyncDisposable
             databaseName,
             testBuilder.ConnectionString,
             isTemplateClone: false);
-
-        try
-        {
-            await using var context = database.CreateContext();
-            await context.Database.MigrateAsync(targetMigration, cancellationToken);
-            return database;
-        }
-        catch
-        {
-            await database.DisposeAsync();
-            throw;
-        }
+        return database;
     }
 
     public GarageBalanceDbContext CreateContext()
