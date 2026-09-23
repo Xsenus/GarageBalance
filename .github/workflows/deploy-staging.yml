@@ -88,10 +88,17 @@ jobs:
             --self-contained true \
             --output artifacts/api
           test -x artifacts/api/GarageBalance.Api
+          dotnet publish backend/GarageBalance.StorageTool/GarageBalance.StorageTool.csproj \
+            --configuration Release \
+            --runtime linux-x64 \
+            --self-contained true \
+            --output artifacts/storage-tool
+          test -x artifacts/storage-tool/GarageBalance.StorageTool
 
       - name: Package backend release
         run: |
           tar -czf artifacts/api.tar.gz -C artifacts/api .
+          tar -czf artifacts/storage-tool.tar.gz -C artifacts/storage-tool .
           tar -czf artifacts/operations.tar.gz \
             infrastructure/deployment \
             infrastructure/scripts/garagebalance-healthcheck.sh \
@@ -100,9 +107,12 @@ jobs:
             infrastructure/scripts/reset-staging-working-data.sh \
             infrastructure/scripts/cleanup-staging-codex-records.sh \
             infrastructure/scripts/audit-staging-database.sh \
+            infrastructure/scripts/configure-staging-cloud-backup.sh \
+            infrastructure/scripts/run-staging-storage-tool.sh \
             infrastructure/scripts/install-vps-performance-configuration.sh \
             infrastructure/scripts/vps-apply-release.sh
           test -s artifacts/api.tar.gz
+          test -s artifacts/storage-tool.tar.gz
           test -s artifacts/operations.tar.gz
 
       - name: Upload backend release
@@ -111,6 +121,7 @@ jobs:
           name: garagebalance-staging-backend-${{ github.sha }}
           path: |
             artifacts/api.tar.gz
+            artifacts/storage-tool.tar.gz
             artifacts/deploy-migrations.sql
             artifacts/operations.tar.gz
           retention-days: 1
@@ -252,6 +263,7 @@ jobs:
       - name: Verify release artifacts
         run: |
           test -s artifacts/api.tar.gz
+          test -s artifacts/storage-tool.tar.gz
           test -s artifacts/frontend.tar.gz
           test -s artifacts/deploy-migrations.sql
           test -s artifacts/operations.tar.gz
@@ -262,6 +274,7 @@ jobs:
           name: garagebalance-staging-${{ github.sha }}
           path: |
             artifacts/api.tar.gz
+            artifacts/storage-tool.tar.gz
             artifacts/frontend.tar.gz
             artifacts/deploy-migrations.sql
             artifacts/operations.tar.gz
@@ -295,6 +308,8 @@ jobs:
           ssh garagebalance-staging "mkdir -p ~/uploads/${RELEASE_ID}"
           scp artifacts/api.tar.gz \
             "garagebalance-staging:~/uploads/${RELEASE_ID}/api.tar.gz"
+          scp artifacts/storage-tool.tar.gz \
+            "garagebalance-staging:~/uploads/${RELEASE_ID}/storage-tool.tar.gz"
           scp artifacts/frontend.tar.gz \
             "garagebalance-staging:~/uploads/${RELEASE_ID}/frontend.tar.gz"
           scp artifacts/deploy-migrations.sql \

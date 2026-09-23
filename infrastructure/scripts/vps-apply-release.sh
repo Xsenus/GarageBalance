@@ -45,6 +45,11 @@ if [[ "${1:-}" == "audit-database" ]]; then
   exec /usr/local/bin/garagebalance-audit-database "$2"
 fi
 
+if [[ "${1:-}" == "cloud-backup" ]]; then
+  shift
+  exec /usr/local/bin/garagebalance-configure-cloud-backup "$@"
+fi
+
 release_id="${1:-}"
 
 if [[ -z "$release_id" || ! "$release_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -55,6 +60,7 @@ fi
 
 UPLOAD_DIR="/home/${DEPLOY_USER}/uploads/${release_id}"
 API_ARCHIVE="${UPLOAD_DIR}/api.tar.gz"
+STORAGE_TOOL_ARCHIVE="${UPLOAD_DIR}/storage-tool.tar.gz"
 FRONTEND_ARCHIVE="${UPLOAD_DIR}/frontend.tar.gz"
 MIGRATION_SQL="${UPLOAD_DIR}/deploy-migrations.sql"
 OPERATIONS_ARCHIVE="${UPLOAD_DIR}/operations.tar.gz"
@@ -212,6 +218,7 @@ trap 'on_error "$LINENO"' ERR
 [[ -d "$APP_ROOT" ]] || fail "application root was not found: $APP_ROOT"
 [[ -f "$ENV_FILE" ]] || fail "environment file was not found: $ENV_FILE"
 [[ -s "$API_ARCHIVE" ]] || fail "API archive was not found or empty: $API_ARCHIVE"
+[[ -s "$STORAGE_TOOL_ARCHIVE" ]] || fail "storage tool archive was not found or empty: $STORAGE_TOOL_ARCHIVE"
 [[ -s "$FRONTEND_ARCHIVE" ]] || fail "frontend archive was not found or empty: $FRONTEND_ARCHIVE"
 [[ -s "$MIGRATION_SQL" ]] || fail "migration SQL was not found or empty: $MIGRATION_SQL"
 [[ -s "$OPERATIONS_ARCHIVE" ]] || fail "operations archive was not found or empty: $OPERATIONS_ARCHIVE"
@@ -254,15 +261,19 @@ if [[ -z "$backend_base_url" ]]; then
 fi
 
 mkdir -p "$RELEASE_DIR"
+mkdir -p "${RELEASE_DIR}/storage-tool"
 rm -rf "$NEXT_API" "$NEXT_FRONTEND" "$OPERATIONS_DIR"
 mkdir -p "$NEXT_API" "$NEXT_FRONTEND" "$OPERATIONS_DIR"
 
 log "releasePrepare=extracting; releaseId=${release_id}"
 tar -xzf "$API_ARCHIVE" -C "$NEXT_API"
+tar -xzf "$STORAGE_TOOL_ARCHIVE" -C "${RELEASE_DIR}/storage-tool"
 tar -xzf "$FRONTEND_ARCHIVE" -C "$NEXT_FRONTEND"
 tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
 
 [[ -f "${NEXT_API}/GarageBalance.Api" ]] || fail "published API executable was not found"
+[[ -f "${RELEASE_DIR}/storage-tool/GarageBalance.StorageTool" ]] ||
+  fail "published storage tool executable was not found"
 [[ -f "${NEXT_FRONTEND}/index.html" ]] || fail "frontend index.html was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" ]] ||
   fail "VPS performance installer was not found"
@@ -276,6 +287,10 @@ tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
   fail "staging Codex cleanup script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" ]] ||
   fail "staging database audit script was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" ]] ||
+  fail "Cloud backup configuration script was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/run-staging-storage-tool.sh" ]] ||
+  fail "storage tool runner script was not found"
 bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-healthcheck.sh" \
@@ -284,7 +299,9 @@ bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/reset-staging-working-data.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" \
-  "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh"
+  "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/run-staging-storage-tool.sh"
 
 packaged_apply_script="${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
 if [[ "${GARAGEBALANCE_DEPLOY_REEXECUTED:-0}" != "1" ]] &&
@@ -313,6 +330,8 @@ if [[ -d "${APP_ROOT}/frontend/assets" ]]; then
 fi
 
 chmod +x "${NEXT_API}/GarageBalance.Api"
+chmod +x "${RELEASE_DIR}/storage-tool/GarageBalance.StorageTool"
+chown -R "${APP_USER}:${APP_GROUP}" "${RELEASE_DIR}/storage-tool"
 find "$NEXT_API" "$NEXT_FRONTEND" -type d -exec chmod 755 {} +
 find "$NEXT_API" "$NEXT_FRONTEND" -type f -exec chmod 644 {} +
 chmod +x "${NEXT_API}/GarageBalance.Api"
@@ -385,6 +404,7 @@ for asset_path in "${frontend_entry_assets[@]}"; do
 done
 
 bash "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" "$OPERATIONS_DIR"
+ln -sfn "${RELEASE_DIR}/storage-tool" "${APP_ROOT}/storage-tool"
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" \
   /usr/local/bin/garagebalance-deploy-apply
@@ -400,6 +420,12 @@ install -o root -g root -m 0750 \
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" \
   /usr/local/bin/garagebalance-audit-database
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" \
+  /usr/local/bin/garagebalance-configure-cloud-backup
+install -o root -g root -m 0755 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/run-staging-storage-tool.sh" \
+  /usr/local/bin/garagebalance-storage-tool-run
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 prune_old_directories "$APP_ROOT" "api.prev-" "$PREVIOUS_RELEASE_RETENTION_COUNT" ||
