@@ -40,7 +40,7 @@ public sealed class StagingCloudBackupDeploymentTests
         Assert.Contains("garagebalance-storage-tool@.service", script, StringComparison.Ordinal);
         Assert.Contains("run)", script, StringComparison.Ordinal);
         Assert.Contains("diagnose)", script, StringComparison.Ordinal);
-        Assert.Contains("journalctl -u \"garagebalance-storage-tool@$2.service\" -n 5", script, StringComparison.Ordinal);
+        Assert.Contains("journalctl -u \"garagebalance-storage-tool@$2.service\" -n 2000", script, StringComparison.Ordinal);
         Assert.Contains("ExecStart=/usr/local/bin/garagebalance-storage-tool-run %i", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Key Secret", script, StringComparison.Ordinal);
     }

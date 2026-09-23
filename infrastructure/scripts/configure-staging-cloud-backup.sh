@@ -162,7 +162,7 @@ case "${1:-}" in
     esac
     [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" ]] || exit 1
     if ! systemctl start "garagebalance-storage-tool@$2.service"; then
-      journalctl -u "garagebalance-storage-tool@$2.service" -n 5 -o cat --no-pager | cut -c 1-4000
+      journalctl -u "garagebalance-storage-tool@$2.service" -n 2000 -o cat --no-pager | cut -c 1-4000
       exit 1
     fi
     systemctl show "garagebalance-storage-tool@$2.service" \
@@ -174,7 +174,7 @@ case "${1:-}" in
       inventory|plan|copy|resume|delta-sync|verify|cutover-check|status) ;;
       *) exit 64 ;;
     esac
-    journalctl -u "garagebalance-storage-tool@$2.service" -n 5 -o cat --no-pager | cut -c 1-4000
+    journalctl -u "garagebalance-storage-tool@$2.service" -n 2000 -o cat --no-pager | cut -c 1-4000
     ;;
   disable)
     [[ "$#" == 1 ]] || exit 64
