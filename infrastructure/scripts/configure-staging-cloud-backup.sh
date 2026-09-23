@@ -161,9 +161,20 @@ case "${1:-}" in
       *) echo 'unsupported migration command' >&2; exit 64 ;;
     esac
     [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" ]] || exit 1
-    systemctl start "garagebalance-storage-tool@$2.service"
+    if ! systemctl start "garagebalance-storage-tool@$2.service"; then
+      journalctl -u "garagebalance-storage-tool@$2.service" -n 5 -o cat --no-pager | cut -c 1-4000
+      exit 1
+    fi
     systemctl show "garagebalance-storage-tool@$2.service" \
       --property=Result --property=ExecMainStatus --no-pager
+    ;;
+  diagnose)
+    [[ "$#" == 2 ]] || exit 64
+    case "$2" in
+      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status) ;;
+      *) exit 64 ;;
+    esac
+    journalctl -u "garagebalance-storage-tool@$2.service" -n 5 -o cat --no-pager | cut -c 1-4000
     ;;
   disable)
     [[ "$#" == 1 ]] || exit 64
@@ -174,5 +185,5 @@ case "${1:-}" in
     wait_for_api
     echo 'Cloud backup configuration disabled; application is healthy'
     ;;
-  *) echo 'usage: inspect | apply <bucket> <kms-key-id> <tenant-id> | run <command> | disable' >&2; exit 64 ;;
+  *) echo 'usage: inspect | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | disable' >&2; exit 64 ;;
 esac
