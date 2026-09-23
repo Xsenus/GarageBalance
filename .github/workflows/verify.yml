@@ -153,6 +153,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # git show --check HEAD needs the parent commit, including in workflow_dispatch.
+          fetch-depth: 2
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
