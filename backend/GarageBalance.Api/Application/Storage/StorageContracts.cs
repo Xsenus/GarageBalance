@@ -17,6 +17,12 @@ public enum StorageProviderType
     S3Compatible
 }
 
+public enum S3EncryptionMode
+{
+    SseS3,
+    SseKms
+}
+
 public enum StorageDestinationState
 {
     Enabled,
@@ -67,6 +73,8 @@ public sealed class StorageDestinationOptions
     public long MultipartThresholdBytes { get; init; } = 64L * 1024 * 1024;
     public int MultipartPartSizeBytes { get; init; } = 16 * 1024 * 1024;
     public string CredentialSource { get; init; } = "DefaultChain";
+    public S3EncryptionMode EncryptionMode { get; init; } = S3EncryptionMode.SseS3;
+    public string? KmsKeyId { get; init; }
     public bool PrivateAccess { get; init; } = true;
     public bool EncryptionAtRest { get; init; } = true;
     public bool AllowInsecureLoopbackEndpoint { get; init; }
@@ -125,7 +133,9 @@ public sealed record EffectiveStorageDestination(
     long MultipartThresholdBytes,
     int MultipartPartSizeBytes,
     string CredentialSource,
-    StorageCapability Capabilities);
+    StorageCapability Capabilities,
+    S3EncryptionMode EncryptionMode = S3EncryptionMode.SseS3,
+    string? KmsKeyId = null);
 
 public static partial class StorageObjectKey
 {
@@ -288,6 +298,13 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
         {
             errors.Add($"Storage destination '{destination.Id}' has an unsupported non-secret CredentialSource.");
         }
+        if (!Enum.IsDefined(destination.EncryptionMode) ||
+            destination.EncryptionMode == S3EncryptionMode.SseKms &&
+            (string.IsNullOrWhiteSpace(destination.KmsKeyId) || destination.KmsKeyId.Length > 255 ||
+             destination.KmsKeyId.Any(char.IsWhiteSpace) || destination.KmsKeyId.Any(char.IsControl)))
+        {
+            errors.Add($"S3 destination '{destination.Id}' requires a valid KMS key id for its encryption mode.");
+        }
         if (string.IsNullOrWhiteSpace(destination.Bucket) || destination.Bucket.Length > 255)
         {
             errors.Add($"S3 destination '{destination.Id}' requires a bucket.");
@@ -332,6 +349,11 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
             !destination.AllowedEndpointHosts.Contains(endpoint.Host, StringComparer.OrdinalIgnoreCase))
         {
             errors.Add($"S3 destination '{destination.Id}' endpoint host is not explicitly allowlisted.");
+        }
+        if (string.Equals(endpoint.Host, "s3.cloud.ru", StringComparison.OrdinalIgnoreCase) &&
+            destination.EncryptionMode != S3EncryptionMode.SseKms)
+        {
+            errors.Add($"S3 destination '{destination.Id}' must use SSE-KMS with Cloud.ru Object Storage.");
         }
     }
 
@@ -446,7 +468,9 @@ public sealed class StorageConfigurationResolver(
             item.MultipartThresholdBytes,
             item.MultipartPartSizeBytes,
             item.CredentialSource,
-            StorageOptionsValidator.ParseCapabilities(item.Capabilities, $"destination '{item.Id}'", errors))).ToArray();
+            StorageOptionsValidator.ParseCapabilities(item.Capabilities, $"destination '{item.Id}'", errors),
+            item.EncryptionMode,
+            item.KmsKeyId)).ToArray();
         if (errors.Count > 0)
         {
             throw new OptionsValidationException(StorageOptions.SectionName, typeof(StorageOptions), errors);

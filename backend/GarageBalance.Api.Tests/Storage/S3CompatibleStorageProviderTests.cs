@@ -1,6 +1,8 @@
 using System.Net;
+using System.Reflection;
 using System.Security.Cryptography;
 using Amazon.S3;
+using Amazon.S3.Model;
 using GarageBalance.Api.Application.Storage;
 using GarageBalance.Api.Infrastructure.Storage;
 
@@ -9,6 +11,30 @@ namespace GarageBalance.Api.Tests.Storage;
 public sealed class S3CompatibleStorageProviderTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 22, 6, 0, 0, TimeSpan.Zero);
+
+    [Theory]
+    [InlineData(S3EncryptionMode.SseS3, null)]
+    [InlineData(S3EncryptionMode.SseKms, "kms-key-123")]
+    public async Task AwsClient_UsesConfiguredEncryptionForSingleAndMultipartWrites(
+        S3EncryptionMode encryptionMode,
+        string? kmsKeyId)
+    {
+        var sdk = DispatchProxy.Create<IAmazonS3, S3RequestSpy>();
+        var spy = (S3RequestSpy)sdk;
+        using var client = new AwsS3ObjectClient(sdk, encryptionMode, kmsKeyId);
+        await using var content = new MemoryStream([1, 2, 3]);
+
+        await client.PutAsync("bucket", "test-object", content, 3, "AQID", new Dictionary<string, string>(), CancellationToken.None);
+        await client.BeginMultipartAsync("bucket", "test-multipart", new Dictionary<string, string>(), CancellationToken.None);
+
+        var expectedMethod = encryptionMode == S3EncryptionMode.SseKms
+            ? ServerSideEncryptionMethod.AWSKMS
+            : ServerSideEncryptionMethod.AES256;
+        Assert.Equal(expectedMethod, spy.PutRequest?.ServerSideEncryptionMethod);
+        Assert.Equal(kmsKeyId, spy.PutRequest?.ServerSideEncryptionKeyManagementServiceKeyId);
+        Assert.Equal(expectedMethod, spy.MultipartRequest?.ServerSideEncryptionMethod);
+        Assert.Equal(kmsKeyId, spy.MultipartRequest?.ServerSideEncryptionKeyManagementServiceKeyId);
+    }
 
     [Fact]
     public async Task Write_UsesImmutableGenerationKeyChecksumAndSanitizedMetadata()
@@ -207,6 +233,32 @@ public sealed class S3CompatibleStorageProviderTests
 
     private static S3CompatibleStorageProvider CreateProvider(FakeS3Client client) =>
         new(CreateDestination(), client, new FixedTimeProvider(Now));
+
+    public class S3RequestSpy : DispatchProxy
+    {
+        public PutObjectRequest? PutRequest { get; private set; }
+        public InitiateMultipartUploadRequest? MultipartRequest { get; private set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod?.Name switch
+        {
+            nameof(IAmazonS3.PutObjectAsync) => CapturePut(args),
+            nameof(IAmazonS3.InitiateMultipartUploadAsync) => CaptureMultipart(args),
+            nameof(IDisposable.Dispose) => null,
+            _ => throw new NotSupportedException(targetMethod?.Name)
+        };
+
+        private Task<PutObjectResponse> CapturePut(object?[]? args)
+        {
+            PutRequest = Assert.IsType<PutObjectRequest>(args?[0]);
+            return Task.FromResult(new PutObjectResponse());
+        }
+
+        private Task<InitiateMultipartUploadResponse> CaptureMultipart(object?[]? args)
+        {
+            MultipartRequest = Assert.IsType<InitiateMultipartUploadRequest>(args?[0]);
+            return Task.FromResult(new InitiateMultipartUploadResponse { UploadId = "upload-1" });
+        }
+    }
 
     private static EffectiveStorageDestination CreateDestination() => new(
         "offsite-a",

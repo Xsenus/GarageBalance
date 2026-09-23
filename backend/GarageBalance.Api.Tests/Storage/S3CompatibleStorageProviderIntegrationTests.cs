@@ -14,6 +14,10 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
     public async Task RealEndpoint_WriteStatReadLinkAndDelete_PreserveImmutableObject()
     {
         var endpoint = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.EndpointVariable)!;
+        var existingBucket = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.ExistingBucketVariable);
+        var region = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.RegionVariable) ?? "us-east-1";
+        var kmsKeyId = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.KmsKeyIdVariable);
+        var encryptionMode = string.IsNullOrWhiteSpace(kmsKeyId) ? S3EncryptionMode.SseS3 : S3EncryptionMode.SseKms;
         var credentials = new BasicAWSCredentials(
             Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.AccessKeyVariable)!,
             Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.SecretKeyVariable)!);
@@ -22,13 +26,17 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
             ServiceURL = endpoint,
             UseHttp = endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase),
             ForcePathStyle = true,
-            AuthenticationRegion = "us-east-1",
+            AuthenticationRegion = region,
             MaxErrorRetry = 0,
             Timeout = TimeSpan.FromSeconds(30)
         };
         using var amazonClient = new AmazonS3Client(credentials, configuration);
-        var bucket = $"garagebalance-test-{Guid.NewGuid():N}";
-        await amazonClient.PutBucketAsync(new PutBucketRequest { BucketName = bucket });
+        var createsBucket = string.IsNullOrWhiteSpace(existingBucket);
+        var bucket = createsBucket ? $"garagebalance-test-{Guid.NewGuid():N}" : existingBucket!;
+        if (createsBucket)
+        {
+            await amazonClient.PutBucketAsync(new PutBucketRequest { BucketName = bucket });
+        }
 
         var destination = new EffectiveStorageDestination(
             "integration-s3",
@@ -40,35 +48,35 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
             new Uri(endpoint),
             bucket,
             "private",
-            "us-east-1",
+            region,
             true,
             64L * 1024 * 1024,
             16 * 1024 * 1024,
             "EnvironmentOrWorkloadIdentity",
             StorageCapability.Read | StorageCapability.Write | StorageCapability.Stat |
-                StorageCapability.Delete | StorageCapability.DownloadLink | StorageCapability.ServerSideEncryption);
+                StorageCapability.Delete | StorageCapability.DownloadLink | StorageCapability.ServerSideEncryption,
+            encryptionMode,
+            kmsKeyId);
         using var provider = new S3CompatibleStorageProvider(
             destination,
-            new AwsS3ObjectClient(amazonClient),
+            new AwsS3ObjectClient(amazonClient, encryptionMode, kmsKeyId),
             TimeProvider.System);
         byte[] bytes = "garagebalance isolated s3 integration"u8.ToArray();
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
         var operationId = Guid.NewGuid();
-        string? locator = null;
+        var writeRequest = new StorageWriteRequest(
+            operationId,
+            $"database/integration-{operationId:N}.pgdump",
+            1,
+            bytes.Length,
+            sha256,
+            new Dictionary<string, string> { ["backup-kind"] = "integration" });
+        string? locator = provider.GetWriteLocator(writeRequest);
 
         try
         {
             await using var input = new MemoryStream(bytes, writable: false);
-            var written = await provider.WriteAsync(
-                new StorageWriteRequest(
-                    operationId,
-                    "database/integration.pgdump",
-                    1,
-                    bytes.Length,
-                    sha256,
-                    new Dictionary<string, string> { ["backup-kind"] = "integration" }),
-                input,
-                CancellationToken.None);
+            var written = await provider.WriteAsync(writeRequest, input, CancellationToken.None);
             locator = written.NativeLocator;
 
             var stat = await provider.StatAsync(locator, CancellationToken.None);
@@ -95,7 +103,10 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
             {
                 await provider.DeleteAsync(locator, CancellationToken.None);
             }
-            await amazonClient.DeleteBucketAsync(new DeleteBucketRequest { BucketName = bucket });
+            if (createsBucket)
+            {
+                await amazonClient.DeleteBucketAsync(new DeleteBucketRequest { BucketName = bucket });
+            }
         }
     }
 }

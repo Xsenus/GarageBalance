@@ -77,12 +77,20 @@ public sealed class AwsS3ObjectClientFactory : IS3ObjectClientFactory
             MaxErrorRetry = 0,
             Timeout = TimeSpan.FromMinutes(5)
         };
-        return new AwsS3ObjectClient(new AmazonS3Client(configuration));
+        return new AwsS3ObjectClient(new AmazonS3Client(configuration), destination.EncryptionMode, destination.KmsKeyId);
     }
 }
 
-public sealed class AwsS3ObjectClient(IAmazonS3 client) : IS3ObjectClient
+public sealed class AwsS3ObjectClient(
+    IAmazonS3 client,
+    S3EncryptionMode encryptionMode = S3EncryptionMode.SseS3,
+    string? kmsKeyId = null) : IS3ObjectClient
 {
+    private ServerSideEncryptionMethod ServerSideEncryptionMethod =>
+        encryptionMode == S3EncryptionMode.SseKms
+            ? Amazon.S3.ServerSideEncryptionMethod.AWSKMS
+            : Amazon.S3.ServerSideEncryptionMethod.AES256;
+
     public async Task<S3WriteResponse> PutAsync(
         string bucket,
         string key,
@@ -102,7 +110,8 @@ public sealed class AwsS3ObjectClient(IAmazonS3 client) : IS3ObjectClient
             ChecksumAlgorithm = ChecksumAlgorithm.SHA256,
             ChecksumSHA256 = checksumSha256Base64,
             IfNoneMatch = "*",
-            ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
+            ServerSideEncryptionMethod = ServerSideEncryptionMethod,
+            ServerSideEncryptionKeyManagementServiceKeyId = encryptionMode == S3EncryptionMode.SseKms ? kmsKeyId : null
         };
         request.Headers.ContentLength = contentLength;
         foreach (var item in metadata)
@@ -133,7 +142,8 @@ public sealed class AwsS3ObjectClient(IAmazonS3 client) : IS3ObjectClient
             Key = key,
             ContentType = "application/octet-stream",
             ChecksumAlgorithm = ChecksumAlgorithm.SHA256,
-            ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
+            ServerSideEncryptionMethod = ServerSideEncryptionMethod,
+            ServerSideEncryptionKeyManagementServiceKeyId = encryptionMode == S3EncryptionMode.SseKms ? kmsKeyId : null
         };
         foreach (var item in metadata)
         {

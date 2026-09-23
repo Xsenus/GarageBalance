@@ -113,6 +113,69 @@ public sealed class StorageOptionsTests
     }
 
     [Theory]
+    [InlineData(null, false)]
+    [InlineData(" ", false)]
+    [InlineData("kms key", false)]
+    [InlineData("kms-key-123", true)]
+    public void Validator_RequiresKmsKeyIdForSseKmsDestination(string? kmsKeyId, bool valid)
+    {
+        var options = CreateValidAsyncMirror(includeSecondOffsite: false);
+        options.Destinations[1] = new StorageDestinationOptions
+        {
+            Id = "offsite-a",
+            Type = StorageProviderType.S3Compatible,
+            FailureDomain = "host-a",
+            Endpoint = "https://s3.cloud.ru",
+            Bucket = "private-backups",
+            Prefix = "garagebalance",
+            SigningRegion = "ru-central-1",
+            AllowedEndpointHosts = ["s3.cloud.ru"],
+            Capabilities = ["Read", "Write", "Stat", "ServerSideEncryption"],
+            EncryptionMode = S3EncryptionMode.SseKms,
+            KmsKeyId = kmsKeyId
+        };
+
+        var result = new StorageOptionsValidator().Validate(null, options);
+
+        Assert.Equal(valid, result.Succeeded);
+        if (valid)
+        {
+            var resolved = new StorageConfigurationResolver(
+                Options.Create(options),
+                Options.Create(new DatabaseBackupOptions { Directory = "D:/garage-backups" })).Resolve();
+            Assert.Equal(S3EncryptionMode.SseKms, resolved.Destinations[1].EncryptionMode);
+            Assert.Equal(kmsKeyId, resolved.Destinations[1].KmsKeyId);
+        }
+        else
+        {
+            Assert.Contains(result.Failures ?? [], failure => failure.Contains("KMS key id", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void Validator_RejectsUnsupportedSseS3ForCloudRu()
+    {
+        var options = CreateValidAsyncMirror(includeSecondOffsite: false);
+        options.Destinations[1] = new StorageDestinationOptions
+        {
+            Id = "offsite-a",
+            Type = StorageProviderType.S3Compatible,
+            FailureDomain = "host-a",
+            Endpoint = "https://s3.cloud.ru",
+            Bucket = "private-backups",
+            Prefix = "garagebalance",
+            SigningRegion = "ru-central-1",
+            AllowedEndpointHosts = ["s3.cloud.ru"],
+            Capabilities = ["Read", "Write", "Stat", "ServerSideEncryption"]
+        };
+
+        var result = new StorageOptionsValidator().Validate(null, options);
+
+        Assert.True(result.Failed);
+        Assert.Contains(result.Failures ?? [], failure => failure.Contains("SSE-KMS", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData("../backup.pgdump")]
     [InlineData("backups//copy.pgdump")]
     [InlineData("/backups/copy.pgdump")]
