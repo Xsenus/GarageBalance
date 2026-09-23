@@ -34,6 +34,7 @@ public sealed class StorageReadRouter(
         string logicalKey,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var storageObject = await catalog.FindByLogicalKeyAsync(
             tenantId,
             dataClass,
@@ -47,7 +48,11 @@ public sealed class StorageReadRouter(
             throw new StorageProviderException(StorageErrorCategory.ObjectMissing, "Storage object is deleted.");
         }
 
+        var policy = configuration.Policies.SingleOrDefault(item => item.DataClass == dataClass);
+        var pool = configuration.Pools.SingleOrDefault(item => item.Id == policy?.PoolId);
         var destinationOrder = configuration.Destinations
+            .Where(destination => configuration.TenantId == tenantId && destination.TenantId == tenantId &&
+                pool?.DestinationIds.Contains(destination.Id, StringComparer.Ordinal) == true)
             .Select((destination, index) => (destination, index))
             .ToDictionary(item => item.destination.Id, item => (item.destination, item.index), StringComparer.Ordinal);
         var replicas = storageObject.Replicas
@@ -57,6 +62,7 @@ public sealed class StorageReadRouter(
                 string.Equals(replica.Sha256, storageObject.Sha256, StringComparison.OrdinalIgnoreCase))
             .Where(replica => destinationOrder.TryGetValue(replica.DestinationId, out var item) &&
                 item.destination.State != StorageDestinationState.Disabled &&
+                item.destination.FailureDomain == replica.FailureDomain &&
                 item.destination.Capabilities.HasFlag(StorageCapability.Read) &&
                 item.destination.Capabilities.HasFlag(StorageCapability.Stat))
             .OrderBy(replica => destinationOrder[replica.DestinationId].index)
@@ -65,25 +71,29 @@ public sealed class StorageReadRouter(
         StorageProviderException? lastError = null;
         foreach (var replica in replicas)
         {
-            if (!healthTracker.TryBeginAttempt(replica.DestinationId, StorageOperationKind.Read))
+            if (!healthTracker.TryBeginAttempt(replica.DestinationId, StorageOperationKind.Read, out var attemptEpoch))
             {
                 lastError = new StorageProviderException(StorageErrorCategory.TransientNetwork, "Storage read circuit is cooling down.");
                 continue;
             }
-            var provider = providerRegistry.GetRequired(replica.DestinationId);
             try
             {
-                var stat = await provider.StatAsync(replica.NativeLocator, cancellationToken);
+                var provider = providerRegistry.GetRequired(replica.DestinationId);
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                deadline.CancelAfter(TimeSpan.FromSeconds(
+                    Math.Max(1, configuration.Replication.OperationDeadlineSeconds / Math.Max(1, replicas.Length))));
+                var stat = await provider.StatAsync(replica.NativeLocator, deadline.Token);
                 if (stat is null || stat.SizeBytes != storageObject.SizeBytes ||
                     !string.Equals(stat.ProviderChecksum, storageObject.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
                     lastError = new StorageProviderException(
                         stat is null ? StorageErrorCategory.ObjectMissing : StorageErrorCategory.ChecksumOrStale,
                         "Storage replica is missing or does not match the committed object.");
+                    healthTracker.RecordFailure(replica.DestinationId, StorageOperationKind.Read, lastError.Category, attemptEpoch);
                     continue;
                 }
-                var content = await provider.OpenReadAsync(replica.NativeLocator, cancellationToken);
-                healthTracker.RecordSuccess(replica.DestinationId, StorageOperationKind.Read);
+                var content = await provider.OpenReadAsync(replica.NativeLocator, deadline.Token);
+                healthTracker.RecordSuccess(replica.DestinationId, StorageOperationKind.Read, attemptEpoch);
                 return new StorageReadResult(
                     storageObject.Id,
                     replica.DestinationId,
@@ -96,15 +106,25 @@ public sealed class StorageReadRouter(
             {
                 throw;
             }
+            catch (OperationCanceledException exception)
+            {
+                lastError = new StorageProviderException(StorageErrorCategory.TransientNetwork,
+                    "Storage read preparation exceeded its deadline.", exception);
+                healthTracker.RecordFailure(replica.DestinationId, StorageOperationKind.Read, lastError.Category, attemptEpoch);
+            }
             catch (StorageProviderException exception)
             {
                 lastError = exception;
-                healthTracker.RecordFailure(replica.DestinationId, StorageOperationKind.Read, exception.Category);
+                healthTracker.RecordFailure(replica.DestinationId, StorageOperationKind.Read, exception.Category, attemptEpoch);
                 logger.LogWarning(
                     "Storage read replica failed; another verified replica will be attempted. ObjectId={ObjectId} DestinationId={DestinationId} Category={Category}",
                     storageObject.Id,
                     replica.DestinationId,
                     exception.Category);
+            }
+            finally
+            {
+                healthTracker.AbandonAttempt(replica.DestinationId, StorageOperationKind.Read, attemptEpoch);
             }
         }
 

@@ -1,30 +1,25 @@
+using GarageBalance.StorageTool;
+
 namespace GarageBalance.Api.Tests.Deployment;
 
 public sealed class StorageToolTests
 {
     [Fact]
-    public void MigrationToolIsDryRunGuardedResumableAndHasNoSourceDeleteCommand()
+    public void MigrationCommands_DefaultToDryRun_AndDeletionIsNotPublicSurface()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.StorageTool", "Program.cs"));
-
         foreach (var command in new[] { "inventory", "plan", "copy", "verify", "diff", "delta-sync", "resume", "repair", "status", "report", "cutover-check", "rollback-check" })
         {
-            Assert.Contains($"\"{command}\"", source, StringComparison.Ordinal);
+            var options = MigrationCommandOptions.Parse([command, "--checkpoint", "private-checkpoint.json"]);
+            Assert.Equal(command, options.Command);
+            Assert.False(options.Execute);
         }
-        Assert.Contains("--execute", source, StringComparison.Ordinal);
-        Assert.Contains("dry-run by default", source, StringComparison.Ordinal);
-        Assert.Contains("RegisterVerifiedLocalFilesAsync", source, StringComparison.Ordinal);
-        Assert.Contains("ProcessNextAsync", source, StringComparison.Ordinal);
-        Assert.Contains("insufficient > 0 ? 10 : 0", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("DeleteAsync(", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Remove-Item", source, StringComparison.Ordinal);
+        Assert.Throws<MigrationToolException>(() => MigrationCommandOptions.Parse(["delete", "--execute"]));
     }
 
     [Fact]
     public void OperationsGuideDocumentsMigrationRestoreRecoveryAndRollback()
     {
         var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "storage-operations.md"));
-
         Assert.Contains("inventory` → `plan` → `copy` → `verify`", document, StringComparison.Ordinal);
         Assert.Contains("cutover-check", document, StringComparison.Ordinal);
         Assert.Contains("rollback-check", document, StringComparison.Ordinal);
@@ -39,10 +34,7 @@ public sealed class StorageToolTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")))
-            {
-                return directory.FullName;
-            }
+            if (File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx"))) return directory.FullName;
             directory = directory.Parent;
         }
         throw new InvalidOperationException("Repository root was not found.");

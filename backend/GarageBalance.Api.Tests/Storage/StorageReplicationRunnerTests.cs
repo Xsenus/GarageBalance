@@ -132,6 +132,25 @@ public sealed class StorageReplicationRunnerTests
     }
 
     [Fact]
+    public async Task DeleteBeforeFirstDeliveryBlocksPendingUploadAndNeverPublishesRemoteBytes()
+    {
+        await using var fixture = await ReplicationFixture.CreateAsync(includeSecondOffsite: false);
+        await using (var context = fixture.CreateContext())
+        {
+            await new EfStorageCatalog(context).TombstoneAndScheduleDeleteAsync("garagebalance",
+                StorageDataClass.DatabaseBackup, "database/2026/replication.pgdump", 4, fixture.Clock.GetUtcNow(), CancellationToken.None);
+        }
+        Assert.True(await fixture.Runner.ProcessNextAsync("deleter", CancellationToken.None));
+        Assert.True(await fixture.Runner.ProcessNextAsync("deleter", CancellationToken.None));
+        Assert.False(await fixture.Runner.ProcessNextAsync("deleter", CancellationToken.None));
+        Assert.Equal(0, fixture.OffsiteA.WriteCalls);
+        await using var verification = fixture.CreateContext();
+        Assert.Equal(StorageObjectState.Deleted, (await verification.StorageObjects.SingleAsync()).State);
+        Assert.Equal(StorageTransferJobState.Blocked,
+            (await verification.StorageTransferJobs.SingleAsync(job => job.Kind == StorageTransferJobKind.Replicate)).State);
+    }
+
+    [Fact]
     public async Task Reconciliation_SchedulesMissingReplicaAndRepairRestoresProtection()
     {
         await using var fixture = await ReplicationFixture.CreateAsync(includeSecondOffsite: false);
@@ -156,6 +175,76 @@ public sealed class StorageReplicationRunnerTests
         Assert.Equal(StorageObjectState.Protected, storageObject.State);
         Assert.Equal(StorageReplicaState.Available, storageObject.Replicas.Single(item => item.DestinationId == "offsite-a").State);
         Assert.Equal(2, fixture.OffsiteA.WriteCalls);
+    }
+
+    [Fact]
+    public async Task CorruptedRemoteReplicaUsesNewImmutableRepairKeyAndPreservesOldBytes()
+    {
+        await using var fixture = await ReplicationFixture.CreateAsync(includeSecondOffsite: false);
+        Assert.True(await fixture.Runner.ProcessNextAsync("replicator", CancellationToken.None));
+        var oldLocator = fixture.ExpectedRemoteLocator("offsite-a");
+        for (var incident = 0; incident < 2; incident++)
+        {
+            fixture.OffsiteA.Seed(oldLocator, "corrupt bytes"u8.ToArray());
+            fixture.Clock.Advance(TimeSpan.FromMinutes(1));
+            await using (var reconcileContext = fixture.CreateContext())
+            {
+                var reconciliation = new StorageReconciliationRunner(new EfStorageCatalog(reconcileContext), fixture.Registry,
+                    fixture.Resolver, new StorageOperationHealthTracker(fixture.Clock), fixture.Clock,
+                    NullLogger<StorageReconciliationRunner>.Instance);
+                Assert.Equal(1, await reconciliation.ReconcileOnceAsync(CancellationToken.None));
+            }
+            Assert.True(await fixture.Runner.ProcessNextAsync("repairer", CancellationToken.None));
+            await using var context = fixture.CreateContext();
+            var replica = await context.StorageObjectReplicas.SingleAsync(item => item.DestinationId == "offsite-a");
+            Assert.NotEqual(oldLocator, replica.NativeLocator);
+            Assert.Equal(StorageReplicaState.Available, replica.State);
+            await using var evidence = await fixture.OffsiteA.OpenReadAsync(oldLocator, CancellationToken.None);
+            using var copied = new MemoryStream();
+            await evidence.CopyToAsync(copied);
+            Assert.Equal("corrupt bytes"u8.ToArray(), copied.ToArray());
+            oldLocator = replica.NativeLocator;
+        }
+        Assert.Equal(3, fixture.OffsiteA.WriteCalls);
+    }
+
+    [Fact]
+    public async Task LocalRepairWaitsForMaintenanceLockThenRestoresTheExistingLocator()
+    {
+        var root = Directory.CreateTempSubdirectory("garagebalance-runtime-local-repair-").FullName;
+        var tenantId = "repair-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await using var fixture = await ReplicationFixture.CreateAsync(includeSecondOffsite: false, tenantId: tenantId);
+            Assert.True(await fixture.Runner.ProcessNextAsync("replicator", CancellationToken.None));
+            byte[] damaged = "damaged local"u8.ToArray();
+            await File.WriteAllBytesAsync(Path.Combine(root, "replication.pgdump"), damaged);
+            var local = new LocalFileStorageProvider("local-hot", root);
+            var registry = new FakeProviderRegistry(local, fixture.OffsiteA, fixture.OffsiteB);
+            await using var context = fixture.CreateContext();
+            var catalog = new EfStorageCatalog(context);
+            var reconciliation = new StorageReconciliationRunner(catalog, registry, fixture.Resolver,
+                new StorageOperationHealthTracker(fixture.Clock), fixture.Clock, NullLogger<StorageReconciliationRunner>.Instance);
+            Assert.Equal(1, await reconciliation.ReconcileOnceAsync(CancellationToken.None));
+            var maintenance = new StorageMaintenanceLock(context);
+            var runner = new StorageReplicationRunner(catalog, registry, fixture.Resolver, fixture.Clock,
+                new StorageOperationHealthTracker(fixture.Clock), NullLogger<StorageReplicationRunner>.Instance,
+                maintenanceLock: maintenance);
+            await using (var held = await maintenance.TryAcquireAsync("database-backups:" + tenantId, CancellationToken.None))
+            {
+                Assert.NotNull(held);
+                Assert.True(await runner.ProcessNextAsync("repairer", CancellationToken.None));
+                Assert.Equal(damaged, await File.ReadAllBytesAsync(Path.Combine(root, "replication.pgdump")));
+            }
+            fixture.Clock.Advance(TimeSpan.FromMinutes(20));
+            Assert.True(await runner.ProcessNextAsync("repairer", CancellationToken.None));
+            Assert.Equal("verified database backup bytes"u8.ToArray(), await File.ReadAllBytesAsync(Path.Combine(root, "replication.pgdump")));
+            Assert.Single(Directory.GetFiles(root, "*.corrupted.*"));
+            var localReplica = await context.StorageObjectReplicas.AsNoTracking().SingleAsync(item => item.DestinationId == "local-hot");
+            Assert.Equal("replication.pgdump", localReplica.NativeLocator);
+            Assert.Equal(StorageReplicaState.Available, localReplica.State);
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     private sealed class ReplicationFixture : IAsyncDisposable
@@ -202,7 +291,7 @@ public sealed class StorageReplicationRunnerTests
         public IStorageProviderRegistry Registry { get; }
         public StorageReplicationRunner Runner { get; }
 
-        public static async Task<ReplicationFixture> CreateAsync(bool includeSecondOffsite = true)
+        public static async Task<ReplicationFixture> CreateAsync(bool includeSecondOffsite = true, string tenantId = "garagebalance")
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -225,7 +314,7 @@ public sealed class StorageReplicationRunnerTests
                 await catalog.RegisterCommittedObjectAsync(
                     new RegisterCommittedStorageObjectRequest(
                         operationId,
-                        "garagebalance",
+                        tenantId,
                         StorageDataClass.DatabaseBackup,
                         logicalKey,
                         "database-backups",
@@ -249,7 +338,7 @@ public sealed class StorageReplicationRunnerTests
             var offsiteA = new FakeStorageProvider("offsite-a");
             var offsiteB = new FakeStorageProvider("offsite-b");
             var registry = new FakeProviderRegistry(local, offsiteA, offsiteB);
-            var options = CreateStorageOptions(includeSecondOffsite);
+            var options = CreateStorageOptions(includeSecondOffsite, tenantId);
             var resolver = new StorageConfigurationResolver(
                 Options.Create(options),
                 Options.Create(new DatabaseBackupOptions { Directory = "unused" }));
@@ -276,19 +365,20 @@ public sealed class StorageReplicationRunnerTests
             await connection.DisposeAsync();
         }
 
-        private static StorageOptions CreateStorageOptions(bool includeSecondOffsite)
+        private static StorageOptions CreateStorageOptions(bool includeSecondOffsite, string tenantId)
         {
             var destinations = new List<StorageDestinationOptions>
             {
-                Destination("local-hot", "local-host"),
-                Destination("offsite-a", "host-a")
+                Destination("local-hot", "local-host", tenantId),
+                Destination("offsite-a", "host-a", tenantId)
             };
             if (includeSecondOffsite)
             {
-                destinations.Add(Destination("offsite-b", "host-b"));
+                destinations.Add(Destination("offsite-b", "host-b", tenantId));
             }
             return new StorageOptions
             {
+                TenantId = tenantId,
                 Mode = StorageMode.AsyncMirror,
                 Destinations = destinations,
                 Pools = [new StoragePoolOptions { Id = "database-backups", DestinationIds = destinations.Select(item => item.Id).ToList() }],
@@ -308,9 +398,10 @@ public sealed class StorageReplicationRunnerTests
             };
         }
 
-        private static StorageDestinationOptions Destination(string id, string failureDomain) => new()
+        private static StorageDestinationOptions Destination(string id, string failureDomain, string tenantId) => new()
         {
             Id = id,
+            TenantId = tenantId,
             Type = StorageProviderType.LocalFileSystem,
             FailureDomain = failureDomain,
             RootPath = "unused",
@@ -318,7 +409,7 @@ public sealed class StorageReplicationRunnerTests
         };
     }
 
-    private sealed class FakeProviderRegistry(params FakeStorageProvider[] providers) : IStorageProviderRegistry
+    private sealed class FakeProviderRegistry(params IStorageProvider[] providers) : IStorageProviderRegistry
     {
         private readonly IReadOnlyDictionary<string, IStorageProvider> items = providers
             .ToDictionary(item => item.DestinationId, item => (IStorageProvider)item, StringComparer.Ordinal);

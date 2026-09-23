@@ -8,11 +8,15 @@ public sealed class StorageReplicationRunner(
     StorageConfigurationResolver configurationResolver,
     TimeProvider timeProvider,
     StorageOperationHealthTracker healthTracker,
-    ILogger<StorageReplicationRunner> logger)
+    ILogger<StorageReplicationRunner> logger,
+    IStorageReconciliationGuard? safetyGuard = null,
+    IStorageMaintenanceLock? maintenanceLock = null)
 {
     private readonly EffectiveStorageConfiguration configuration = configurationResolver.Resolve();
 
-    public async Task<bool> ProcessNextAsync(string leaseOwner, CancellationToken cancellationToken)
+    public async Task<bool> ProcessNextAsync(string leaseOwner, CancellationToken cancellationToken,
+        IReadOnlyCollection<StorageTransferJobKind>? allowedKinds = null,
+        IReadOnlyCollection<Guid>? objectIds = null)
     {
         if (configuration.Mode != StorageMode.AsyncMirror)
         {
@@ -20,11 +24,18 @@ public sealed class StorageReplicationRunner(
         }
 
         var now = timeProvider.GetUtcNow();
+        var eligibleKinds = allowedKinds ?? Enum.GetValues<StorageTransferJobKind>();
+        if (safetyGuard is not null && (await safetyGuard.GetStateAsync(cancellationToken)).Paused)
+        {
+            eligibleKinds = eligibleKinds.Where(kind => kind != StorageTransferJobKind.Repair).ToArray();
+        }
         var job = await catalog.ClaimNextJobAsync(
             leaseOwner,
-            TimeSpan.FromSeconds(configuration.Replication.LeaseSeconds),
+            TimeSpan.FromSeconds(Math.Max(configuration.Replication.LeaseSeconds, configuration.Replication.OperationDeadlineSeconds + 30)),
             now,
-            cancellationToken);
+            eligibleKinds,
+            cancellationToken,
+            objectIds);
         if (job is null)
         {
             return false;
@@ -111,9 +122,27 @@ public sealed class StorageReplicationRunner(
         }
 
         var target = providerRegistry.GetRequired(destination.Id);
+        var localRepair = context.Job.Kind == StorageTransferJobKind.Repair && target is IStorageRepairProvider;
+        await using var localRepairLease = localRepair && maintenanceLock is not null
+            ? await maintenanceLock.TryAcquireAsync("database-backups:" + context.Object.TenantId, cancellationToken)
+            : null;
+        if (localRepair && maintenanceLock is not null && localRepairLease is null)
+        {
+            await RetryAsync(context, leaseOwner, policy, StorageErrorCategory.TransientNetwork, false, cancellationToken);
+            return;
+        }
+        if (localRepair)
+        {
+            var current = await catalog.FindObjectAsync(context.Object.Id, cancellationToken);
+            if (current is null || current.TombstonedAtUtc is not null || current.CommittedGeneration != context.Object.CommittedGeneration)
+            {
+                await catalog.CompleteJobAsync(context.Job.Id, leaseOwner, timeProvider.GetUtcNow(), cancellationToken);
+                return;
+            }
+        }
         var request = new StorageWriteRequest(
-            context.Object.OperationId,
-            context.Object.LogicalKey,
+            context.Job.Kind == StorageTransferJobKind.Repair && !localRepair ? context.Job.Id : context.Object.OperationId,
+            localRepair ? context.TargetReplica.NativeLocator : context.Object.LogicalKey,
             context.Object.CommittedGeneration,
             context.Object.SizeBytes,
             context.Object.Sha256,
@@ -124,14 +153,15 @@ public sealed class StorageReplicationRunner(
             });
         var locator = target.GetWriteLocator(request);
         var writeStarted = false;
+        long attemptEpoch = -1;
         try
         {
-            if (!healthTracker.TryBeginAttempt(destination.Id, StorageOperationKind.Write))
+            if (!healthTracker.TryBeginAttempt(destination.Id, StorageOperationKind.Write, out attemptEpoch))
             {
                 throw new StorageProviderException(StorageErrorCategory.TransientNetwork, "Storage write circuit is cooling down.");
             }
             var existing = await target.StatAsync(locator, cancellationToken);
-            if (existing is not null)
+            if (existing is not null && !(localRepair && !MatchesCommittedObject(existing, context.Object)))
             {
                 if (!MatchesCommittedObject(existing, context.Object))
                 {
@@ -149,7 +179,7 @@ public sealed class StorageReplicationRunner(
                     policy.DesiredCopies,
                     timeProvider.GetUtcNow(),
                     cancellationToken);
-                healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Write);
+                healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Write, attemptEpoch);
                 return;
             }
 
@@ -160,9 +190,16 @@ public sealed class StorageReplicationRunner(
                 locator,
                 timeProvider.GetUtcNow(),
                 cancellationToken);
-            healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Write);
             writeStarted = true;
-            var result = await target.WriteAsync(request, source, cancellationToken);
+            if (context.Job.Kind == StorageTransferJobKind.Repair && safetyGuard is not null &&
+                (await safetyGuard.GetStateAsync(cancellationToken)).Paused)
+            {
+                await RetryAsync(context, leaseOwner, policy, StorageErrorCategory.TransientNetwork, false, cancellationToken);
+                return;
+            }
+            var result = localRepair
+                ? await ((IStorageRepairProvider)target).RepairAsync(request, source, context.Job.Id, cancellationToken)
+                : await target.WriteAsync(request, source, cancellationToken);
             var stat = await target.StatAsync(result.NativeLocator, cancellationToken);
             if (stat is null || !MatchesCommittedObject(stat, context.Object))
             {
@@ -180,6 +217,7 @@ public sealed class StorageReplicationRunner(
                 policy.DesiredCopies,
                 timeProvider.GetUtcNow(),
                 cancellationToken);
+            healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Write, attemptEpoch);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -187,7 +225,7 @@ public sealed class StorageReplicationRunner(
         }
         catch (StorageProviderException exception)
         {
-            healthTracker.RecordFailure(destination.Id, StorageOperationKind.Write, exception.Category);
+            healthTracker.RecordFailure(destination.Id, StorageOperationKind.Write, exception.Category, attemptEpoch);
             if (IsBlocking(exception.Category))
             {
                 await BlockAsync(context, leaseOwner, policy, exception.Category.ToString(), SafeError(exception.Category), cancellationToken);
@@ -216,6 +254,10 @@ public sealed class StorageReplicationRunner(
                 writeStarted,
                 cancellationToken);
         }
+        finally
+        {
+            healthTracker.AbandonAttempt(destination.Id, StorageOperationKind.Write, attemptEpoch);
+        }
     }
 
     private async Task ProcessDeleteAsync(
@@ -239,9 +281,10 @@ public sealed class StorageReplicationRunner(
                 cancellationToken);
             return;
         }
+        long attemptEpoch = -1;
         try
         {
-            if (!healthTracker.TryBeginAttempt(destination.Id, StorageOperationKind.Delete))
+            if (!healthTracker.TryBeginAttempt(destination.Id, StorageOperationKind.Delete, out attemptEpoch))
             {
                 throw new StorageProviderException(StorageErrorCategory.TransientNetwork, "Storage delete circuit is cooling down.");
             }
@@ -257,7 +300,7 @@ public sealed class StorageReplicationRunner(
                 throw new StorageProviderException(StorageErrorCategory.UnknownOutcome, "Storage delete could not be verified.");
             }
             await catalog.CompleteReplicaDeleteAsync(context.Job.Id, leaseOwner, timeProvider.GetUtcNow(), cancellationToken);
-            healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Delete);
+            healthTracker.RecordSuccess(destination.Id, StorageOperationKind.Delete, attemptEpoch);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -265,7 +308,7 @@ public sealed class StorageReplicationRunner(
         }
         catch (StorageProviderException exception)
         {
-            healthTracker.RecordFailure(destination.Id, StorageOperationKind.Delete, exception.Category);
+            healthTracker.RecordFailure(destination.Id, StorageOperationKind.Delete, exception.Category, attemptEpoch);
             now = timeProvider.GetUtcNow();
             await catalog.ScheduleDeleteRetryAsync(
                 context.Job.Id,
@@ -275,6 +318,10 @@ public sealed class StorageReplicationRunner(
                 SafeError(exception.Category),
                 now,
                 cancellationToken);
+        }
+        finally
+        {
+            healthTracker.AbandonAttempt(destination.Id, StorageOperationKind.Delete, attemptEpoch);
         }
     }
 

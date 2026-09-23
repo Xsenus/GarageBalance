@@ -89,18 +89,20 @@ public sealed class StorageObject : IOptimisticConcurrencyEntity
         UpdatedAtUtc = now;
     }
 
-    public void SetProtection(int availableIndependentCopies, int requiredCopies, int desiredCopies, DateTimeOffset now)
+    public void SetProtection(int availableIndependentCopies, int requiredCopies, int desiredCopies, DateTimeOffset now,
+        int availableOffsiteCopies = 0, int minimumOffsiteCopies = 0)
     {
-        if (State is StorageObjectState.Deleting or StorageObjectState.Deleted or StorageObjectState.Failed)
+        if (State is StorageObjectState.Deleting or StorageObjectState.Deleted)
         {
             throw new InvalidOperationException("Protection state cannot be changed for a terminal storage object.");
         }
-        if (requiredCopies < 1 || desiredCopies < requiredCopies || availableIndependentCopies < 0)
+        if (requiredCopies < 1 || desiredCopies < requiredCopies || availableIndependentCopies < 0 ||
+            availableOffsiteCopies < 0 || minimumOffsiteCopies < 0 || minimumOffsiteCopies > requiredCopies)
         {
             throw new ArgumentOutOfRangeException(nameof(availableIndependentCopies));
         }
 
-        State = availableIndependentCopies >= requiredCopies
+        State = availableIndependentCopies >= requiredCopies && availableOffsiteCopies >= minimumOffsiteCopies
             ? StorageObjectState.Protected
             : availableIndependentCopies > 0
                 ? StorageObjectState.ProtectionDegraded

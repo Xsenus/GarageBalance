@@ -106,7 +106,25 @@ export type DatabaseBackupFileDto = {
   kind: 'manual' | 'automatic' | 'pre_update'
   sha256: string | null
   protectionState: 'local_only' | 'local_verified' | 'manifest_missing' | 'protection_pending' | 'protection_degraded' | 'protected' | 'failed' | 'deleting' | 'deleted'
+  protectionLabel?: string
+  protectionTone?: 'active' | 'warning' | 'danger' | 'archived'
   lastVerifiedAtUtc: string | null
+  requiredCopies?: number
+  availableCopies?: number
+  desiredCopies?: number
+  requiredOffsiteCopies?: number
+  availableOffsiteCopies?: number
+  protectionLagSeconds?: number
+  replicas?: DatabaseBackupReplicaDto[] | null
+}
+
+export type DatabaseBackupReplicaDto = {
+  destinationId: string
+  location: 'local' | 'remote'
+  state: string
+  stateLabel?: string
+  lastVerifiedAtUtc: string | null
+  error: string | null
 }
 
 export type DatabaseBackupStatusDto = {
@@ -122,6 +140,15 @@ export type DatabaseBackupStatusDto = {
   isStale: boolean
   freshnessThresholdHours: number
   storageLocation: string
+  reconciliationPaused?: boolean
+  restoreVerification?: {
+    message: string
+    state: 'not_configured' | 'not_run' | 'invalid' | 'running' | 'stale' | 'failed' | 'verified'
+    completedAtUtc: string | null
+    backupCreatedAtUtc: string | null
+    rtoSeconds: number | null
+    maximumAgeHours: number
+  } | null
 }
 
 export type StagingDatabaseResetDto = {

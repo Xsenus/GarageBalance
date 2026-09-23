@@ -1,0 +1,23 @@
+[Unit]
+Description=GarageBalance encrypted recovery catalog and keys replication
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=garagebalance-recovery-publisher
+Group=garagebalance-recovery
+WorkingDirectory=/var/lib/garagebalance-recovery
+EnvironmentFile=/etc/garagebalance/recovery-publisher.env
+ExecStart=/usr/bin/dotnet /opt/garagebalance-recovery/GarageBalance.StorageTool.dll recovery-publish --execute --key-ring /var/lib/garagebalance/keys --canary /var/lib/garagebalance-recovery/canary.json --bootstrap /var/lib/garagebalance-recovery/bootstrap.json --key-file /run/credentials/garagebalance-recovery.key
+TimeoutStartSec=15min
+TimeoutStopSec=45s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/garagebalance-recovery
+
+[Install]
+WantedBy=multi-user.target

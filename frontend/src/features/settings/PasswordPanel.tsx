@@ -4,6 +4,8 @@ import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
+import { BackupProtectionDetails } from './BackupProtectionDetails'
+import { BackupRestoreStatus } from './BackupRestoreStatus'
 import type { AccrualReasonDisplayMode, ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage } from '../../shared/AsyncState'
@@ -73,19 +75,23 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const canDownloadBackups = hasPermission(auth, permissions.backupsDownload)
   const canDeleteBackups = hasPermission(auth, permissions.backupsDelete)
   const canRepairBackups = hasPermission(auth, permissions.backupsRepair)
+  const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
+  const canManageBusinessDate = isAdministrator(auth)
   const defaultSettingsTab: SettingsTab = integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
     ? 'integrations'
     : 'security'
-  const availableSettingsTabs: SettingsTab[] = [
-    'security',
-    ...(isAdministrator(auth) ? ['business-date', 'cash-bank'] as const : []),
-    ...(hasPermission(auth, permissions.usersManage) ? ['display', 'diagnostics'] as const : []),
-    ...(canReadBackups ? ['backups'] as const : []),
-    ...(integrationTabVisible ? ['integrations'] as const : []),
-  ]
+  const settingsTabs = [
+    ['security', 'Безопасность', KeyRound, true],
+    ['business-date', 'Рабочая дата', CalendarClock, canManageBusinessDate],
+    ['cash-bank', 'Касса и счёт', Landmark, canManageBusinessDate],
+    ['display', 'Отображение', Eye, canManageApplicationSettings],
+    ['backups', 'Резервные копии', DatabaseBackup, canReadBackups],
+    ['diagnostics', 'Диагностика', FileWarning, canManageApplicationSettings],
+    ['integrations', 'Интеграции', PlugZap, integrationTabVisible],
+  ] as const
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => loadStoredWorkspaceView(
     workspaceViewStorageKeys.settingsTab,
-    availableSettingsTabs,
+    settingsTabs.filter(([, , , visible]) => visible).map(([tab]) => tab),
     defaultSettingsTab,
   ))
   useEffect(() => {
@@ -176,8 +182,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     amount: string
     reason: string
   } | null>(null)
-  const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
-  const canManageBusinessDate = isAdministrator(auth)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
@@ -556,7 +560,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           : current.backups.filter((backup) => backup.fileName !== deleted.fileName),
       } : current)
       setBackupDeleteConfirmation(null)
-      setBackupMessage(`Резервная копия ${deleted.fileName} удалена. Действие записано в историю изменений.`)
+      setBackupMessage(`Удаление копии ${deleted.fileName} ${deleted.protectionState === 'deleting' ? 'поставлено в очередь' : 'выполнено'}. Действие записано в историю изменений.`)
     } catch (caught) {
       setBackupDeleteConfirmation((current) => current ? {
         ...current,
@@ -931,6 +935,26 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
   }
 
+  const backupActionsBusy = backupDeleting || backupDownloadingFileName !== null || backupProtectingFileName !== null
+  function renderBackupActions(backup: DatabaseBackupFileDto) {
+    const deleting = backup.protectionState === 'deleting' || backup.protectionState === 'deleted'
+    const actions = [
+      [canRepairBackups && !deleting, 'Проверить защиту резервной копии', ShieldCheck, () => void changeDatabaseBackupProtection(backup, 'verify')],
+      [canRepairBackups && ['protection_pending', 'protection_degraded', 'failed', 'manifest_missing'].includes(backup.protectionState), 'Повторить защиту резервной копии', RefreshCw, () => void changeDatabaseBackupProtection(backup, 'retry')],
+      [canDownloadBackups, 'Скачать резервную копию', ArrowDownCircle, () => void downloadDatabaseBackup(backup)],
+      [canDeleteBackups, 'Удалить резервную копию', X, () => { setBackupMessage(null); setBackupDeleteConfirmation({ backup, reason: '', error: null }) }],
+    ] as const
+    return actions.map(([visible, label, Icon, onClick]) => visible ? <button
+      key={label}
+      className={`icon-button dictionary-row-action${Icon === X ? ' danger-icon-button' : ''}`}
+      type="button"
+      aria-label={`${label} ${backup.fileName}`}
+      title={label}
+      disabled={backupActionsBusy || deleting}
+      onClick={onClick}
+    ><Icon size={16} aria-hidden="true" /></button> : null)
+  }
+
   return (
     <>
       <section className="settings-layout" aria-label="Настройки">
@@ -941,102 +965,21 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <p>Выберите раздел для управления параметрами системы и своей учетной записи.</p>
           </div>
           <div className="settings-tab-list" role="tablist" aria-label="Разделы настроек" aria-orientation="vertical">
-            <button
-              id="settings-security-tab"
-              className={activeSettingsTab === 'security' ? 'settings-tab is-active' : 'settings-tab'}
-              type="button"
-              role="tab"
-              aria-controls="settings-security-panel"
-              aria-selected={activeSettingsTab === 'security'}
-              onClick={() => setActiveSettingsTab('security')}
-            >
-              <KeyRound size={17} aria-hidden="true" />
-              <span>Безопасность</span>
-            </button>
-            {canManageBusinessDate ? (
+            {settingsTabs.map(([tab, label, Icon, visible]) => visible ? (
               <button
-                id="settings-business-date-tab"
-                className={activeSettingsTab === 'business-date' ? 'settings-tab is-active' : 'settings-tab'}
+                key={tab}
+                id={`settings-${tab}-tab`}
+                className={activeSettingsTab === tab ? 'settings-tab is-active' : 'settings-tab'}
                 type="button"
                 role="tab"
-                aria-controls="settings-business-date-panel"
-                aria-selected={activeSettingsTab === 'business-date'}
-                onClick={() => setActiveSettingsTab('business-date')}
+                aria-controls={`settings-${tab}-panel`}
+                aria-selected={activeSettingsTab === tab}
+                onClick={() => setActiveSettingsTab(tab)}
               >
-                <CalendarClock size={17} aria-hidden="true" />
-                <span>Рабочая дата</span>
+                <Icon size={17} aria-hidden="true" />
+                <span>{label}</span>
               </button>
-            ) : null}
-            {canManageBusinessDate ? (
-              <button
-                id="settings-cash-bank-tab"
-                className={activeSettingsTab === 'cash-bank' ? 'settings-tab is-active' : 'settings-tab'}
-                type="button"
-                role="tab"
-                aria-controls="settings-cash-bank-panel"
-                aria-selected={activeSettingsTab === 'cash-bank'}
-                onClick={() => setActiveSettingsTab('cash-bank')}
-              >
-                <Landmark size={17} aria-hidden="true" />
-                <span>Касса и счёт</span>
-              </button>
-            ) : null}
-            {canManageApplicationSettings ? (
-              <button
-                id="settings-display-tab"
-                className={activeSettingsTab === 'display' ? 'settings-tab is-active' : 'settings-tab'}
-                type="button"
-                role="tab"
-                aria-controls="settings-display-panel"
-                aria-selected={activeSettingsTab === 'display'}
-                onClick={() => setActiveSettingsTab('display')}
-              >
-                <Eye size={17} aria-hidden="true" />
-                <span>Отображение</span>
-              </button>
-            ) : null}
-            {canReadBackups ? (
-              <button
-                id="settings-backups-tab"
-                className={activeSettingsTab === 'backups' ? 'settings-tab is-active' : 'settings-tab'}
-                type="button"
-                role="tab"
-                aria-controls="settings-backups-panel"
-                aria-selected={activeSettingsTab === 'backups'}
-                onClick={() => setActiveSettingsTab('backups')}
-              >
-                <DatabaseBackup size={17} aria-hidden="true" />
-                <span>Резервные копии</span>
-              </button>
-            ) : null}
-            {canManageApplicationSettings ? (
-              <button
-                id="settings-diagnostics-tab"
-                className={activeSettingsTab === 'diagnostics' ? 'settings-tab is-active' : 'settings-tab'}
-                type="button"
-                role="tab"
-                aria-controls="settings-diagnostics-panel"
-                aria-selected={activeSettingsTab === 'diagnostics'}
-                onClick={() => setActiveSettingsTab('diagnostics')}
-              >
-                <FileWarning size={17} aria-hidden="true" />
-                <span>Диагностика</span>
-              </button>
-            ) : null}
-            {integrationTabVisible ? (
-              <button
-                id="settings-integrations-tab"
-                className={activeSettingsTab === 'integrations' ? 'settings-tab is-active' : 'settings-tab'}
-                type="button"
-                role="tab"
-                aria-controls="settings-integrations-panel"
-                aria-selected={activeSettingsTab === 'integrations'}
-                onClick={() => setActiveSettingsTab('integrations')}
-              >
-                <PlugZap size={17} aria-hidden="true" />
-                <span>Интеграции</span>
-              </button>
-            ) : null}
+            ) : null)}
           </div>
         </aside>
         <div
@@ -1377,8 +1320,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       <section className="password-panel settings-card settings-card--backups" aria-label="Резервное копирование базы данных">
         <div className="settings-card-intro">
           <p className="eyebrow">Резервные копии</p>
-          <h2>Защита данных PostgreSQL</h2>
-          <p>Резервные копии работают как при обычном запуске, так и в Docker. Файлы сохраняются в постоянной папке компьютера и не зависят от обновления приложения.</p>
+          <h2>Защита данных</h2>
         </div>
         <div className="settings-card-body">
         {backupLoading && !backupStatus ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
@@ -1413,7 +1355,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <strong>{backupStatus.lastSuccessfulBackupAtUtc ? formatDateTime(backupStatus.lastSuccessfulBackupAtUtc) : 'еще не создавалась'}</strong>
               </div>
             </div>
-            <p className="form-hint">Место хранения: {backupStatus.storageLocation}. Технический путь остаётся скрытым и задаётся на сервере параметром DatabaseBackup__Directory или BACKUP_HOST_PATH.</p>
+            <p className="form-hint">Место хранения: {backupStatus.storageLocation}. Подробности — в статусе копии.</p>
+            <BackupRestoreStatus verification={backupStatus.restoreVerification} />
             {backupStatus.isStale ? <FormError>Последняя резервная копия старше допустимого интервала {backupStatus.freshnessThresholdHours} ч.</FormError> : null}
             {backupStatus.lastError ? <FormError>{backupStatus.lastError}</FormError> : null}
             {canCreateBackups ? <button
@@ -1428,7 +1371,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <DatabaseBackup size={17} aria-hidden="true" />
               <span>{backupStatus.isRunning ? 'Копия создается...' : 'Создать резервную копию'}</span>
             </button> : null}
-            <div className="dictionary-table-scroll settings-backup-table-shell" aria-busy={backupDeleting || backupDownloadingFileName !== null || backupProtectingFileName !== null}>
+            <div className="dictionary-table-scroll settings-backup-table-shell" aria-busy={backupActionsBusy}>
               <table className="dictionary-data-table settings-backup-table" aria-label="Резервные копии базы данных">
                 <thead>
                   <tr>
@@ -1450,53 +1393,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                       <td className="settings-backup-file" title={backup.fileName}>{backup.fileName}</td>
                       <td className="settings-backup-size">{formatFileSize(backup.sizeBytes)}</td>
                       <td className="settings-backup-protection">
-                        <BackupProtectionState state={backup.protectionState} lastVerifiedAtUtc={backup.lastVerifiedAtUtc} />
+                        <BackupProtectionDetails backup={backup} />
                       </td>
                       <td className="table-actions-column">
                         <div className="dictionary-row-actions">
-                          {canRepairBackups && backup.protectionState !== 'deleting' && backup.protectionState !== 'deleted' ? <button
-                            className="icon-button dictionary-row-action"
-                            type="button"
-                            aria-label={`Проверить защиту резервной копии ${backup.fileName}`}
-                            title="Проверить доступность копий"
-                            disabled={backupProtectingFileName !== null}
-                            onClick={() => void changeDatabaseBackupProtection(backup, 'verify')}
-                          >
-                            <ShieldCheck size={16} aria-hidden="true" />
-                          </button> : null}
-                          {canRepairBackups && ['protection_pending', 'protection_degraded', 'failed', 'manifest_missing'].includes(backup.protectionState) ? <button
-                            className="icon-button dictionary-row-action"
-                            type="button"
-                            aria-label={`Повторить защиту резервной копии ${backup.fileName}`}
-                            title="Повторить доставку копий"
-                            disabled={backupProtectingFileName !== null}
-                            onClick={() => void changeDatabaseBackupProtection(backup, 'retry')}
-                          >
-                            <RefreshCw size={16} aria-hidden="true" />
-                          </button> : null}
-                          {canDownloadBackups ? <button
-                            className="icon-button dictionary-row-action"
-                            type="button"
-                            aria-label={`Скачать резервную копию ${backup.fileName}`}
-                            title="Скачать резервную копию"
-                            disabled={backupDeleting || backupDownloadingFileName !== null}
-                            onClick={() => void downloadDatabaseBackup(backup)}
-                          >
-                            <ArrowDownCircle size={16} aria-hidden="true" />
-                          </button> : null}
-                          {canDeleteBackups ? <button
-                            className="icon-button dictionary-row-action danger-icon-button"
-                            type="button"
-                            aria-label={`Удалить резервную копию ${backup.fileName}`}
-                            title="Удалить резервную копию"
-                            disabled={backupDeleting || backupDownloadingFileName !== null}
-                            onClick={() => {
-                              setBackupMessage(null)
-                              setBackupDeleteConfirmation({ backup, reason: '', error: null })
-                            }}
-                          >
-                            <X size={16} aria-hidden="true" />
-                          </button> : null}
+                          {renderBackupActions(backup)}
                         </div>
                       </td>
                     </tr>
@@ -1603,11 +1504,11 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <span>Защищенные настройки</span>
                 <strong>{oneCFreshStatus.configuredSettings.length} / {oneCFreshStatus.requiredSettings.length}</strong>
               </div>
-          <div>
-            <span>Обновлено</span>
-            <strong>{oneCFreshStatus.lastProtectedSettingUpdatedAtUtc ? formatDateTime(oneCFreshStatus.lastProtectedSettingUpdatedAtUtc) : 'нет данных'}</strong>
-          </div>
-        </div>
+              <div>
+                <span>Обновлено</span>
+                <strong>{oneCFreshStatus.lastProtectedSettingUpdatedAtUtc ? formatDateTime(oneCFreshStatus.lastProtectedSettingUpdatedAtUtc) : 'нет данных'}</strong>
+              </div>
+            </div>
           ) : null}
           {oneCFreshStatus ? (
             <EmptyState>{oneCFreshStatus.statusMessage}</EmptyState>
@@ -1963,48 +1864,11 @@ function BackupReasonDialog({ fileName, reason, error, busy, databaseReset = fal
     </div>
   )
 }
-
 function formatBackupKind(kind: string) {
   if (kind === 'manual') return 'Ручная'
   if (kind === 'automatic') return 'Автоматическая'
   if (kind === 'pre_update') return 'Перед обновлением'
   return kind
-}
-
-function BackupProtectionState({ state, lastVerifiedAtUtc }: {
-  state: DatabaseBackupFileDto['protectionState']
-  lastVerifiedAtUtc: DatabaseBackupFileDto['lastVerifiedAtUtc']
-}) {
-  let presentation: [string, string]
-  switch (state) {
-    case 'protected':
-      presentation = ['Защищена', 'dictionary-status-pill-active']
-      break
-    case 'protection_degraded':
-      presentation = ['Защита ослаблена', 'dictionary-status-pill-warning']
-      break
-    case 'protection_pending':
-      presentation = ['Ожидает копирования', 'dictionary-status-pill-archived']
-      break
-    case 'failed':
-      presentation = ['Требует внимания', 'dictionary-status-pill-danger']
-      break
-    case 'manifest_missing':
-      presentation = ['Нет манифеста', 'dictionary-status-pill-warning']
-      break
-    case 'local_verified':
-      presentation = ['Проверена локально', 'dictionary-status-pill-active']
-      break
-    case 'deleting':
-      presentation = ['Удаляется', 'dictionary-status-pill-archived']
-      break
-    case 'deleted':
-      presentation = ['Удалена', 'dictionary-status-pill-archived']
-      break
-    default:
-      presentation = ['Только локально', 'dictionary-status-pill-archived']
-  }
-  return <span className={`dictionary-status-pill ${presentation[1]}`} title={lastVerifiedAtUtc ? formatDateTime(lastVerifiedAtUtc) : undefined}>{presentation[0]}</span>
 }
 
 function formatBusinessDate(value: string) {

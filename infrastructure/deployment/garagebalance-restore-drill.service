@@ -1,0 +1,24 @@
+[Unit]
+Description=GarageBalance isolated restore verification (never production restore)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=garagebalance-recovery
+Group=garagebalance-recovery
+WorkingDirectory=/var/lib/garagebalance-recovery
+EnvironmentFile=/etc/garagebalance/recovery.env
+ExecStart=/usr/bin/dotnet /opt/garagebalance-recovery/GarageBalance.StorageTool.dll restore-drill --execute --api-dll /opt/garagebalance-recovery/api/GarageBalance.Api.dll --bootstrap /var/lib/garagebalance-recovery/bootstrap.json --key-file /run/credentials/garagebalance-recovery.key --exclude-failure-domain primary-host
+TimeoutStartSec=35min
+TimeoutStopSec=45s
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/garagebalance-recovery
+
+[Install]
+WantedBy=multi-user.target

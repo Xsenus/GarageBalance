@@ -9,6 +9,70 @@ public sealed class LocalFileStorageProviderTests : IDisposable
     private readonly string root = Path.Combine(Path.GetTempPath(), $"garagebalance-local-provider-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task RepairAtomicallyRestoresOriginalKeyAndRetainsCorruptEvidence()
+    {
+        Directory.CreateDirectory(root);
+        byte[] good = [1, 2, 3, 4];
+        byte[] corrupt = [8, 8, 8, 8];
+        await File.WriteAllBytesAsync(Path.Combine(root, "copy.pgdump"), corrupt);
+        var provider = new LocalFileStorageProvider("local-hot", root);
+        var request = new StorageWriteRequest(Guid.NewGuid(), "copy.pgdump", 1, good.Length,
+            Convert.ToHexStringLower(SHA256.HashData(good)), new Dictionary<string, string>());
+        var repairId = Guid.NewGuid();
+        await using var source = new MemoryStream(good);
+        var result = await provider.RepairAsync(request, source, repairId, CancellationToken.None);
+        Assert.Equal("copy.pgdump", result.NativeLocator);
+        Assert.Equal(good, await File.ReadAllBytesAsync(Path.Combine(root, "copy.pgdump")));
+        Assert.Equal(corrupt, await File.ReadAllBytesAsync(Path.Combine(root, $"copy.pgdump.corrupted.{repairId:N}")));
+        Assert.Empty(Directory.GetFiles(root, "*.tmp"));
+        await using var retriedSource = new MemoryStream(good);
+        await provider.RepairAsync(request, retriedSource, repairId, CancellationToken.None);
+        Assert.Equal(2, Directory.GetFiles(root).Length);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BadOrCancelledRepairDoesNotOverwriteOriginal(bool cancel)
+    {
+        Directory.CreateDirectory(root);
+        byte[] original = [9, 9, 9, 9];
+        await File.WriteAllBytesAsync(Path.Combine(root, "copy.pgdump"), original);
+        var provider = new LocalFileStorageProvider("local-hot", root);
+        var request = new StorageWriteRequest(Guid.NewGuid(), "copy.pgdump", 1, 4, new string('a', 64), new Dictionary<string, string>());
+        await using var source = new MemoryStream([1, 2, 3, 4]);
+        if (cancel)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.RepairAsync(request, source, Guid.NewGuid(), new CancellationToken(true)));
+        }
+        else
+        {
+            await Assert.ThrowsAsync<StorageProviderException>(() => provider.RepairAsync(request, source, Guid.NewGuid(), CancellationToken.None));
+        }
+        Assert.Equal(original, await File.ReadAllBytesAsync(Path.Combine(root, "copy.pgdump")));
+        Assert.Single(Directory.GetFiles(root));
+    }
+
+    [Fact]
+    public async Task RepairRefusesToOverwritePreviouslyQuarantinedEvidence()
+    {
+        Directory.CreateDirectory(root);
+        byte[] good = [1, 2, 3, 4];
+        byte[] old = [9, 9, 9, 9];
+        var repairId = Guid.NewGuid();
+        await File.WriteAllBytesAsync(Path.Combine(root, "copy.pgdump"), old);
+        await File.WriteAllBytesAsync(Path.Combine(root, $"copy.pgdump.corrupted.{repairId:N}"), old);
+        var request = new StorageWriteRequest(Guid.NewGuid(), "copy.pgdump", 1, 4,
+            Convert.ToHexStringLower(SHA256.HashData(good)), new Dictionary<string, string>());
+        await using var source = new MemoryStream(good);
+        var provider = new LocalFileStorageProvider("local-hot", root);
+        await Assert.ThrowsAsync<StorageProviderException>(() => provider.RepairAsync(request, source, repairId, CancellationToken.None));
+        Assert.Equal(old, await File.ReadAllBytesAsync(Path.Combine(root, "copy.pgdump")));
+        Assert.Equal(old, await File.ReadAllBytesAsync(Path.Combine(root, $"copy.pgdump.corrupted.{repairId:N}")));
+        Assert.Empty(Directory.GetFiles(root, "*.tmp"));
+    }
+
+    [Fact]
     public async Task ProviderContract_WritesStatsReadsAndDeletesExactVerifiedBytes()
     {
         var provider = new LocalFileStorageProvider("local-hot", root);

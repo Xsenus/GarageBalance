@@ -29,6 +29,7 @@ using GarageBalance.Api.Infrastructure.Integrations;
 using GarageBalance.Api.Infrastructure.Maintenance;
 using GarageBalance.Api.Infrastructure.Security;
 using GarageBalance.Api.Infrastructure.Storage;
+using GarageBalance.Api.Infrastructure.Recovery;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
@@ -307,6 +308,8 @@ builder.Services.AddSingleton<StorageOperationHealthTracker>();
 builder.Services.AddSingleton<IS3ObjectClientFactory, AwsS3ObjectClientFactory>();
 builder.Services.AddSingleton<IStorageProviderRegistry, StorageProviderRegistry>();
 builder.Services.AddScoped<IStorageCatalog, EfStorageCatalog>();
+builder.Services.AddScoped<IStorageMaintenanceLock, StorageMaintenanceLock>();
+builder.Services.AddSingleton<IStorageReconciliationGuard, FileStorageReconciliationGuard>();
 builder.Services.AddScoped<IStorageReadRouter, StorageReadRouter>();
 builder.Services.AddScoped<StorageReplicationRunner>();
 builder.Services.AddScoped<StorageReconciliationRunner>();
@@ -455,7 +458,12 @@ builder.Services.AddGarageBalanceResponseCompression();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+var isRecoveryDrill = RecoveryDrillSafety.Configure(builder);
 var app = builder.Build();
+if (isRecoveryDrill)
+{
+    RecoveryDrillSafety.UseReadOnlyBoundary(app);
+}
 var httpsRedirectionEnabled = builder.Configuration.GetValue("HttpsRedirection:Enabled", true);
 
 // Configure the HTTP request pipeline.

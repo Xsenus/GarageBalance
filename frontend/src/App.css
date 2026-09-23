@@ -1216,13 +1216,13 @@ h1 {
 }
 
 .settings-backup-table {
-  min-width: 980px;
+  min-width: 860px;
   table-layout: fixed;
 }
 
 .settings-backup-table th:nth-child(1),
 .settings-backup-table td:nth-child(1) {
-  width: 180px;
+  width: 136px;
 }
 
 .settings-backup-date,
@@ -1237,7 +1237,8 @@ h1 {
 }
 
 .settings-backup-protection {
-  text-align: center;
+  width: 190px;
+  text-align: left;
 }
 
 .settings-backup-file {

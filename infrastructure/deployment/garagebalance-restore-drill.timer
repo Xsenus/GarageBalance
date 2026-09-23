@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly GarageBalance independent-copy restore drill
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=garagebalance-restore-drill.service
+
+[Install]
+WantedBy=timers.target

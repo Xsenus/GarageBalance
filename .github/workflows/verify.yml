@@ -49,6 +49,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Prepare PostgreSQL 17 client tools
+        shell: bash
+        run: bash infrastructure/scripts/setup-postgresql-client-ci.sh
+
       - name: Restore backend and tools
         run: |
           dotnet restore GarageBalance.slnx --locked-mode

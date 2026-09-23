@@ -10,6 +10,98 @@ namespace GarageBalance.Api.Tests.Storage;
 
 public sealed class StorageReadRouterTests
 {
+    [Theory]
+    [InlineData("pool")]
+    [InlineData("failure-domain")]
+    [InlineData("capability")]
+    public async Task ReconfiguredOrDisallowedReplicaIsNotRead(string restriction)
+    {
+        byte[] bytes = "backup"u8.ToArray();
+        var item = CreateObject(bytes);
+        if (restriction == "failure-domain")
+        {
+            item.Replicas[0].FailureDomain = "retired-host";
+        }
+        var local = new MemoryProvider("local-hot");
+        local.Seed("local/current", bytes);
+        var remote = new MemoryProvider("offsite-a");
+        remote.Seed("remote/current", bytes);
+        var router = CreateRouter(item, new StorageOperationHealthTracker(TimeProvider.System), options =>
+        {
+            if (restriction == "pool")
+            {
+                options.Pools[0].DestinationIds.Remove("local-hot");
+            }
+            if (restriction == "capability")
+            {
+                options.Destinations[0].Capabilities.Remove("Read");
+            }
+        }, local, remote);
+        var result = await router.OpenByLogicalKeyAsync("garagebalance", StorageDataClass.DatabaseBackup,
+            item.LogicalKey, CancellationToken.None);
+        await result.Content.DisposeAsync();
+        Assert.Equal("offsite-a", result.DestinationId);
+        Assert.Equal(0, local.StatCalls);
+    }
+
+    [Fact]
+    public async Task MissingHalfOpenReplicaDoesNotStrandReadCircuit()
+    {
+        byte[] bytes = "backup"u8.ToArray();
+        var storageObject = CreateObject(bytes);
+        var preferred = new MemoryProvider("local-hot");
+        var fallback = new MemoryProvider("offsite-a");
+        fallback.Seed("remote/current", bytes);
+        var clock = new Clock(DateTimeOffset.UtcNow);
+        var tracker = new StorageOperationHealthTracker(clock);
+        tracker.RecordFailure("local-hot", StorageOperationKind.Read, StorageErrorCategory.ProviderForbidden);
+        clock.Now = clock.Now.AddSeconds(31);
+        var router = CreateRouter(storageObject, tracker, preferred, fallback);
+        var first = await router.OpenByLogicalKeyAsync("garagebalance", StorageDataClass.DatabaseBackup, storageObject.LogicalKey, CancellationToken.None);
+        await first.Content.DisposeAsync();
+        var second = await router.OpenByLogicalKeyAsync("garagebalance", StorageDataClass.DatabaseBackup, storageObject.LogicalKey, CancellationToken.None);
+        await second.Content.DisposeAsync();
+        Assert.Equal(2, preferred.StatCalls);
+        Assert.Equal(StorageOperationHealthState.Healthy, tracker.Snapshot().Single(item => item.DestinationId == "local-hot").State);
+    }
+
+    [Fact]
+    public async Task CancelledReadReleasesHalfOpenProbeAndDoesNotTryAnotherDestination()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var storageObject = CreateObject("backup"u8.ToArray());
+        var preferred = new MemoryProvider("local-hot") { BeforeStat = cancellation.Cancel };
+        var fallback = new MemoryProvider("offsite-a");
+        var clock = new Clock(DateTimeOffset.UtcNow);
+        var tracker = new StorageOperationHealthTracker(clock);
+        tracker.RecordFailure("local-hot", StorageOperationKind.Read, StorageErrorCategory.ProviderForbidden);
+        clock.Now = clock.Now.AddSeconds(31);
+        var router = CreateRouter(storageObject, tracker, preferred, fallback);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => router.OpenByLogicalKeyAsync(
+            "garagebalance", StorageDataClass.DatabaseBackup, storageObject.LogicalKey, cancellation.Token));
+        Assert.Equal(0, fallback.StatCalls);
+        clock.Now = clock.Now.AddSeconds(31);
+        Assert.True(tracker.TryBeginAttempt("local-hot", StorageOperationKind.Read));
+    }
+
+    [Fact]
+    public async Task ProviderPreparationTimeoutFallsBackWithoutCancellingCaller()
+    {
+        byte[] bytes = "backup"u8.ToArray();
+        var storageObject = CreateObject(bytes);
+        var preferred = new MemoryProvider("local-hot")
+        {
+            BeforeStat = () => throw new OperationCanceledException("provider deadline", new CancellationToken(true))
+        };
+        var fallback = new MemoryProvider("offsite-a");
+        fallback.Seed("remote/current", bytes);
+        var router = CreateRouter(storageObject, preferred, fallback);
+        var result = await router.OpenByLogicalKeyAsync("garagebalance", StorageDataClass.DatabaseBackup,
+            storageObject.LogicalKey, CancellationToken.None);
+        Assert.Equal("offsite-a", result.DestinationId);
+        await result.Content.DisposeAsync();
+    }
+
     [Fact]
     public async Task MissingPreferredReplica_FallsBackToVerifiedCurrentReplica()
     {
@@ -109,6 +201,13 @@ public sealed class StorageReadRouterTests
     }
 
     private static StorageReadRouter CreateRouter(StorageObject storageObject, params MemoryProvider[] providers)
+        => CreateRouter(storageObject, new StorageOperationHealthTracker(TimeProvider.System), providers);
+
+    private static StorageReadRouter CreateRouter(StorageObject storageObject, StorageOperationHealthTracker health, params MemoryProvider[] providers)
+        => CreateRouter(storageObject, health, null, providers);
+
+    private static StorageReadRouter CreateRouter(StorageObject storageObject, StorageOperationHealthTracker health,
+        Action<StorageOptions>? configure, params MemoryProvider[] providers)
     {
         var options = new StorageOptions
         {
@@ -117,11 +216,14 @@ public sealed class StorageReadRouterTests
             {
                 Id = provider.DestinationId,
                 Type = StorageProviderType.LocalFileSystem,
-                FailureDomain = provider.DestinationId,
+                FailureDomain = provider.DestinationId == "local-hot" ? "local-host" : "host-a",
                 RootPath = "unused",
                 Capabilities = ["Read", "Write", "Stat", "Delete"]
-            }).ToList()
+            }).ToList(),
+            Pools = [new() { Id = "database-backups", DestinationIds = providers.Select(provider => provider.DestinationId).ToList() }],
+            Policies = [new() { Id = "database-backups", PoolId = "database-backups", DataClass = StorageDataClass.DatabaseBackup }]
         };
+        configure?.Invoke(options);
         var resolver = new StorageConfigurationResolver(
             Options.Create(options),
             Options.Create(new DatabaseBackupOptions { Directory = "unused" }));
@@ -129,7 +231,7 @@ public sealed class StorageReadRouterTests
             new ReadCatalog(storageObject),
             new ReadRegistry(providers),
             resolver,
-            new StorageOperationHealthTracker(TimeProvider.System),
+            health,
             NullLogger<StorageReadRouter>.Instance);
     }
 
@@ -166,6 +268,7 @@ public sealed class StorageReadRouterTests
         public string DestinationId { get; } = destinationId;
         public StorageCapability Capabilities => StorageCapability.Read | StorageCapability.Write | StorageCapability.Stat;
         public int StatCalls { get; private set; }
+        public Action? BeforeStat { get; init; }
         public void Seed(string locator, byte[] bytes) => objects[locator] = bytes;
         public string GetWriteLocator(StorageWriteRequest request) => request.ObjectKey;
         public Task<StorageWriteResult> WriteAsync(StorageWriteRequest request, Stream content, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -174,11 +277,19 @@ public sealed class StorageReadRouterTests
         public Task<StorageObjectStat?> StatAsync(string nativeLocator, CancellationToken cancellationToken)
         {
             StatCalls++;
+            BeforeStat?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(objects.TryGetValue(nativeLocator, out var bytes)
                 ? new StorageObjectStat(bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), null, new Dictionary<string, string>())
                 : null);
         }
         public Task DeleteAsync(string nativeLocator, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StorageDownloadLink?> GetDownloadLinkAsync(string nativeLocator, TimeSpan lifetime, CancellationToken cancellationToken) => Task.FromResult<StorageDownloadLink?>(null);
+    }
+
+    private sealed class Clock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 }

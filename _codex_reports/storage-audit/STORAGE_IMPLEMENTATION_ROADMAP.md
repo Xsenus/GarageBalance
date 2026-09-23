@@ -7,6 +7,7 @@
 - Baseline: ветка `master`, commit `e5309e8ae851d6a5f4ce4960e01066ded651e8fb`.
 - Исходный dirty state: untracked `docs/storage-backup-multistorage-audit-2026-09-22.md`; он не изменялся этим запуском.
 - Режим: `FULL_IMPLEMENTATION`; реализация разрешена владельцем 22.09.2026.
+- Повторное открытие 22.09.2026: проверка кода выявила незавершённые локальные части `TASK-013/014/016/018/019/020`; прежние отметки DONE для них не являются доказательством готовности. Выполняется доработка по просьбе владельца «полностью всё доделать».
 - Главные источники: `STORAGE_AUDIT.md`, `STORAGE_EVIDENCE.md`, `STORAGE_RISK_REGISTER.md`, `STORAGE_IMPLEMENTATION_TASK.md`, project `AGENTS.md`.
 - В охвате: source/config/tests/docs/deployment/history. Production/provider accounts и destructive drills не исследованы.
 - Фактически выполнено: focused baseline `TEST-001` — 40/40 passed; 2 local dumps прошли `pg_restore --list`; full suite и real-provider tests сейчас не запускались.
@@ -182,7 +183,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-001 — Characterization/non-regression baseline
 
-- Stage/status/priority: `STG-00`, `DONE`, P0. Links: `REQ-001`, `REQ-012`, `RISK-017`, `AC-001/015`.
+- Stage/status/priority: `STG-00`, `[x] DONE_LOCALLY`, P0. Links: `REQ-001`, `REQ-012`, `RISK-017`, `AC-001/015`.
 - Result: machine-readable fixtures/tests freeze current backup API DTO/routes, filename regex, Range, permissions/audit, schedule/pre-update, old appsettings/env/compose, Access/import/log/1C/receipt behavior.
 - Touchpoints: existing `Api.Tests/DatabaseBackups/*`, `Deployment/BackupScriptTests.cs`, `Controllers/SettingsControllerTests` or focused new backup controller tests; frontend `settingsApi`/`PasswordPanel` tests; config tests. No production code unless a testability seam is strictly required.
 - Actions: inventory public contracts; add missing success/invalid/permission/failure/cancellation tests; create old-config fixture without `Storage`; record current OpenAPI subset and UI accessible names.
@@ -193,7 +194,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-002 — Resolve policy parameters and external gates
 
-- Stage/status/priority: `STG-00`, `DONE` with provisional values and external approval gates retained, P0. Links: `REQ-002/008/009/016`, `DEC-009`.
+- Stage/status/priority: `STG-00`, `[x] DONE_LOCALLY` with provisional values and external approval gates retained, P0. Links: `REQ-002/008/009/016`, `DEC-009`.
 - Result: approved or explicitly provisional RPO/RTO, retention, required/desired copies, regions, budget, providers/accounts, alert owner, real-test/DR permissions.
 - Touchpoints: this Roadmap decision log; later deployment secret system. No code/data.
 - Actions: present recommended defaults; owner chooses only business/external parameters; operator confirms failure-domain independence and secret-reference mechanism. Never collect secret values in chat/docs.
@@ -204,7 +205,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-003 — SHA-256 and atomic manifest for current dumps
 
-- Stage/status/priority: `STG-01`, `DONE` after `TASK-001`, P0. Links: `REQ-008`, `RISK-003/004`, `AC-002`.
+- Stage/status/priority: `STG-01`, `[x] DONE_LOCALLY` after `TASK-001`, P0. Links: `REQ-008`, `RISK-003/004`, `AC-002`.
 - Result: every new final dump has streamed SHA-256 and an atomic, non-secret manifest; existing filename remains.
 - Touchpoints: `PostgresDatabaseBackupService.CreateAsync()`; backup contracts; proposed manifest DTO/helper; tests; scripts aligned later.
 - Actions: after TOC verification/finalization stream hash with cancellation; write `.manifest.json.tmp` then rename; include stable backup ID, size, hash, kind, PostgreSQL/app version, UTC; validate/read manifest; ensure partial manifest cleanup.
@@ -216,7 +217,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-004 — Freshness/catch-up and least-privilege backup permissions
 
-- Stage/status/priority: `STG-01`, `DONE` after `TASK-001`, P0. Links: `REQ-008/010/011`, `RISK-002/009`, `AC-016/017`.
+- Stage/status/priority: `STG-01`, `[x] DONE_LOCALLY` after `TASK-001`, P0. Links: `REQ-008/010/011`, `RISK-002/009`, `AC-016/017`.
 - Result: missed schedule is caught up under bounded rule; stale backup exposed safely; backup permissions separated.
 - Touchpoints: `DatabaseBackupAutomation.cs`, options/DTO, `SettingsController`, `SystemPermissions`, role seeds/migration, frontend access controls/tests, docs.
 - Actions: define due timestamp independent of current window, with single bounded catch-up; add stale thresholds and structured event; introduce `backups.read/create/download/delete/repair`; administrator gets rights through additive migration; remove absolute directory from API/UI.
@@ -227,7 +228,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-005 — Orphan Access staging sweeper
 
-- Stage/status/priority: `STG-01`, `DONE` after `TASK-001`, P0. Links: `REQ-013`, `RISK-006`, `AC-015`.
+- Stage/status/priority: `STG-01`, `[x] DONE_LOCALLY` after `TASK-001`, P0. Links: `REQ-013`, `RISK-006`, `AC-015`.
 - Result: stale unreferenced `.pending` files are quarantined/deleted after policy; active/ambiguous runs remain untouched.
 - Touchpoints: `ImportDryRunQueue.cs`, import repository query, options, hosted worker or existing worker periodic path, metrics/tests.
 - Actions: inventory only managed filename pattern; join DB statuses; quarantine unknown files for proposed 24h; later delete with audit/metric; enforce max workdir usage/backpressure; never follow symlinks/outside root.
@@ -238,7 +239,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-006 — Provider/capability/pool/policy contracts and validation
 
-- Stage/status/priority: `STG-02`, `DONE` after `TASK-001/002`, P0. Links: `REQ-003/010/012`, `RISK-016/017`, `AC-003/015/016`.
+- Stage/status/priority: `STG-02`, `[x] DONE_LOCALLY` after `TASK-001/002`, P0. Links: `REQ-003/010/012`, `RISK-016/017`, `AC-003/015/016`.
 - Result: vendor-neutral but capability-aware contracts, explicit destinations/roles/pools/policies, old-config `Single` default.
 - Touchpoints: NEW `Application/Storage/*`; `Program.cs`; safe config examples/tests.
 - Actions: define provider operations `OpenRead/Write/Stat/Delete/GetDownloadLink` only where capability advertises; represent native locator/version; validate IDs, roles, pools, fallback graph, failure-domain labels, endpoint/TLS/limits; reject policy requiring unsupported capability; preserve provider-specific extension seam.
@@ -249,7 +250,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-007 — Additive catalog, replicas, jobs and manifests
 
-- Stage/status/priority: `STG-02`, `DONE` after `TASK-003/006`, P0. Links: `REQ-004/005/007`, `RISK-003/020`, `AC-002/004/014`.
+- Stage/status/priority: `STG-02`, `[x] DONE_LOCALLY` after `TASK-003/006`, P0. Links: `REQ-004/005/007`, `RISK-003/020`, `AC-002/004/014`.
 - Result: additive EF schema/entities/repository with atomic object+replica+job registration and optimistic concurrency.
 - Touchpoints: NEW Domain entities and `EfStorageCatalog`; `GarageBalanceDbContext`; migration/model snapshot; PostgreSQL tests.
 - Actions: implement schema from TЗ; state-transition guards; immutable generation; tombstone; idempotency keys; lease claim/release/expiry; manifest export/rebuild; bounded sanitized error fields/indexes.
@@ -261,7 +262,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-008 — Local provider adapter and legacy parity
 
-- Stage/status/priority: `STG-03`, `DONE` after `TASK-006/007`, P0. Links: `REQ-001/012`, `AC-001/015/019`.
+- Stage/status/priority: `STG-03`, `[x] DONE_LOCALLY` after `TASK-006/007`, P0. Links: `REQ-001/012`, `AC-001/015/019`.
 - Result: current directory operates through local adapter/catalog without changed user contract.
 - Touchpoints: NEW `LocalFileStorageProvider`; existing backup service/controller; DI; tests.
 - Actions: safe root/path normalization; streaming/stat/delete; register new backups; lazy/inventory registration of old files; keep exact managed names, Range, audit, pre-update and retention behavior (except safer protection gate).
@@ -272,7 +273,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-009 — S3-compatible adapter and secure provider contract
 
-- Stage/status/priority: `STG-04`, `DONE` after `TASK-006/008`, P0. Links: `REQ-002/003/010/016`, `RISK-016/019`, `AC-003/010/016/018`.
+- Stage/status/priority: `STG-04`, `[x] DONE_LOCALLY` after `TASK-006/008`, P0. Links: `REQ-002/003/010/016`, `RISK-016/019`, `AC-003/010/016/018`.
 - Result: one adapter can serve N configured S3-compatible destinations with explicit capabilities.
 - Touchpoints: API `.csproj`/lock; NEW `S3CompatibleStorageProvider`; options/DI; isolated integration fixtures; Docker CI only if justified.
 - Actions: select maintained SDK/version; streaming put/get/head/delete; metadata SHA/generation; deterministic key; cancellation/timeouts; multipart above measured threshold; abort cleanup; optional signed GET; map native errors; private/TLS/encryption defaults; endpoint allowlist/path-style config.
@@ -283,7 +284,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-010 — Durable replication worker and multi-instance coordination
 
-- Stage/status/priority: `STG-05`, `DONE` after `TASK-007/009`, P0. Links: `REQ-005/016`, `RISK-007/012/014/019`, `AC-004/018`.
+- Stage/status/priority: `STG-05`, `[x] DONE_LOCALLY` after `TASK-007/009`, P0. Links: `REQ-005/016`, `RISK-007/012/014/019`, `AC-004/018`.
 - Result: jobs survive restart, claim once, stream replayable source, independently advance replicas and enforce resource budgets.
 - Touchpoints: NEW worker/service; catalog/job repo; `Program.cs`; backup finalization; tests.
 - Actions: create pending replicas/jobs transactionally; claim with `SKIP LOCKED`/lease; verify policy revision/source generation/tombstone; stream upload; record actual locator/unknown/result; jitter/backoff/dead-letter; fair per-destination concurrency; release/recover leases; keep local source until policy/retention.
@@ -294,7 +295,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-011 — Backup write/destination failover and ACK semantics
 
-- Stage/status/priority: `STG-05`, `DONE` after `TASK-010`, P0. Links: `REQ-002/005/008`, `RISK-012/014`, `AC-005/006/011`.
+- Stage/status/priority: `STG-05`, `[x] DONE_LOCALLY` after `TASK-010`, P0. Links: `REQ-002/005/008`, `RISK-012/014`, `AC-005/006/011`.
 - Result: valid backup automatically tries eligible B when A unavailable and reports exact local/protection result.
 - Touchpoints: backup orchestration/router/contracts/controller/UI preliminary status; policy tests.
 - Actions: classify source vs destination failure; choose candidates by policy/capability/health; set overall deadline/max attempts; reconcile UNKNOWN before retry; calculate independent copy count; expose `CreatedLocal`, `ProtectionPending/Degraded`, `Protected`, `Failed`; all-down bounded staging/capacity alert.
@@ -305,7 +306,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-012 — Version-aware read/restore router and proxy/direct access
 
-- Stage/status/priority: `STG-06`, `DONE`, P0. Links: `REQ-006/010/016`, `RISK-013`, `AC-007/008/010`.
+- Stage/status/priority: `STG-06`, `[x] DONE_LOCALLY`, P0. Links: `REQ-006/010/016`, `RISK-013`, `AC-007/008/010`.
 - Result: stable authorized endpoint returns exact committed bytes from eligible actual replica with bounded fallback.
 - Touchpoints: NEW `StorageRouter`; `SettingsController.DownloadDatabaseBackup`; provider interfaces; frontend retry; tests.
 - Actions: authorize -> resolve object/generation/tombstone -> filter actual replicas -> attempt priority; distinguish missing/stale/corrupt/outage; proxy bounded stream; preserve Range/length/type/disposition; optional signed link TTL≤5m; logical retry for failed direct URL.
@@ -316,7 +317,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-013 — Operation-scoped health, errors and circuit budgets
 
-- Stage/status/priority: `STG-06`, `DONE`, P0. Links: `REQ-003/005/010/016`, `RISK-013/016/019`, `AC-008/018`.
+- Stage/status/priority: `STG-06`, `[x] DONE_LOCALLY`, P0. Links: `REQ-003/005/010/016`, `RISK-013/016/019`, `AC-008/018`.
 - Result: native errors map to stable categories; read/write/backup eligibility and breakers are separate; flapping/retry storm bounded.
 - Touchpoints: provider contracts/adapters/router/worker; safe aggregate diagnostics and tests.
 - Actions: implement categories from TЗ; passive results + limited half-open probes; per-attempt and overall deadlines; retry-after/jitter; separate concurrency pools; states `Healthy/Degraded/Unavailable/Recovering/Disabled/Draining` per operation.
@@ -327,7 +328,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-014 — Reconciliation, repair, catch-up and failback
 
-- Stage/status/priority: `STG-06`, `DONE`, P0. Links: `REQ-007`, `RISK-013/015`, `AC-008/009`.
+- Stage/status/priority: `STG-06`, `[x] DONE_LOCALLY`, P0. Links: `REQ-007`, `RISK-013/015`, `AC-008/009`.
 - Result: missing/stale/corrupt replicas are detected and repaired from authoritative copy; returning provider catches up before priority return.
 - Touchpoints: NEW reconciliation service/worker; catalog; CLI hooks; metrics/tests.
 - Actions: inventory expected objects; bounded stat/sample/full hash; classify divergences/orphans; schedule idempotent repair; verify target; apply tombstones/generation; cooldown/hysteresis; object-level readiness; quarantine mass-corruption/security suspicion.
@@ -338,7 +339,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-015 — Logical delete, retention and immutability gates
 
-- Stage/status/priority: `STG-06`, `DONE`, P0. Links: `REQ-007/008`, `RISK-008`, `AC-014`.
+- Stage/status/priority: `STG-06`, `[x] DONE_LOCALLY`, P0. Links: `REQ-007/008`, `RISK-008`, `AC-014`.
 - Result: delete is durable per replica; retention never removes last required/current/restore-dependent copy.
 - Touchpoints: backup service/controller, catalog/jobs, provider delete, retention policy, tests, docs.
 - Actions: tombstone first; create delete jobs; retry only failed destination; keep backup copies per retention; block late upload; protection-aware local cleanup; provider lifecycle dry-run; optional versioning/Object Lock only after capability and owner gate.
@@ -349,7 +350,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-016 — Admin API/UI protection and recovery workflow
 
-- Stage/status/priority: `STG-06`, `DONE`, P1. Links: `REQ-010/011/012`, `RISK-009/010`, `AC-005/010/015/017`.
+- Stage/status/priority: `STG-06`, `[x] DONE_LOCALLY`, P1. Links: `REQ-010/011/012`, `RISK-009/010`, `AC-005/010/015/017`.
 - Result: administrator sees truthful protection, copies, lag/error/last verify and can retry/verify according to permission; existing actions remain.
 - Touchpoints: `SettingsController`, contracts/OpenAPI, `settingsApi.ts`, `PasswordPanel.tsx`, CSS/accessibility tests.
 - Actions: additive safe DTO; endpoints retry/verify/direct-link; status pills and help tooltip; logical download retry; no path/bucket/secret; separate permission states/loading/errors; audit actions.
@@ -360,7 +361,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-017 — Metrics, alerts and safe health exposure
 
-- Stage/status/priority: `STG-09`, `DONE` for local metrics/deduplicated structured alerts; external alert channel remains an owner rollout action, P1. Links: `REQ-011/016`, `RISK-002/010/019`, `AC-017/018`.
+- Stage/status/priority: `STG-09`, `[x] DONE_LOCALLY` for local metrics/deduplicated structured alerts; external alert channel remains an owner rollout action, P1. Links: `REQ-011/016`, `RISK-002/010/019`, `AC-017/018`.
 - Result: measurable RPO/protection/failover/debt/restore status with deduplicated alerts and recovery notification.
 - Touchpoints: existing logging/health framework, metrics integration if already present or minimal structured status, diagnostics UI/runbook.
 - Actions: instrument operation/destination without high-cardinality PII; stale/debt/all-failed/staging/quota/restore-age thresholds; liveness vs workload readiness; alert owner/escalation; cooldown/flapping metrics.
@@ -371,7 +372,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-018 — StorageTool inventory, migration, backfill and coverage
 
-- Stage/status/priority: `STG-07`, `DONE` for resumable tooling; execution against retained customer data awaits configured destinations, P0. Links: `REQ-014/015`, `RISK-018`, `AC-013/019`.
+- Stage/status/priority: `STG-07`, `[x] DONE_LOCALLY`; durable resume, legacy backfill and physical coverage gates are verified on local test data, P0. Links: `REQ-014/015`, `RISK-018`, `AC-013/019`.
 - Result: operator CLI performs inventory/plan/dry-run/copy/verify/diff/delta-sync/resume/repair/status/report/cutover-check/rollback-check with checkpoints.
 - Touchpoints: NEW `backend/GarageBalance.StorageTool`; solution; catalog/providers; docs/tests.
 - Actions: snapshot/checkpoint; capture new object/tombstone generations via catalog; stream batches; concurrency/rate caps; strong verify; durable run cursor; sanitized JSON/CSV report; no source delete command in migration path.
@@ -382,7 +383,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-019 — Automated isolated restore verifier
 
-- Stage/status/priority: `STG-08`, `DONE` locally; independent-provider restore remains under `TASK-021`, P0. Links: `REQ-008`, `RISK-004/020`, `AC-012`.
+- Stage/status/priority: `STG-08`, `[x] DONE_LOCALLY`; isolated application/secret verification and durable result are verified on local PostgreSQL, P0. Links: `REQ-008`, `RISK-004/020`, `AC-012`.
 - Result: scheduled operator job selects verified independent source and restores only disposable PostgreSQL, then performs schema/control/app smoke.
 - Touchpoints: NEW safe script/tool commands; `restore-postgres.ps1`, VPS scripts, CI/operator schedule, docs/tests.
 - Actions: source selection by freshness/protection/tier; fetch/check SHA/TOC; create unique disposable DB; `pg_restore --exit-on-error`; migration/table/control checks; isolated read-only API readiness/login/report smoke; always clean disposable DB; persist result/age.
@@ -393,7 +394,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-020 — Encrypted Data Protection/config recovery bundle
 
-- Stage/status/priority: `STG-08`, `DONE` for authenticated encrypted bundle and local round trip; operator-held key provisioning remains external, P0. Links: `REQ-009/010`, `RISK-005`, `AC-012/016`.
+- Stage/status/priority: `STG-08`, `[x] DONE_LOCALLY`; independent encrypted bundle replication/recovery index are verified with isolated test destinations, P0. Links: `REQ-009/010`, `RISK-005`, `AC-012/016`.
 - Result: versioned authenticated-encrypted key/config recovery package with independent key/credential and no plaintext secret archive.
 - Touchpoints: new operator-only packaging/restoration utility/script; Data Protection docs/options; `RecoverySecretsPool`; security tests.
 - Actions: inventory exact key ring + non-secret config + secret references; encrypt client-side or approved KMS envelope; upload to two destinations; manifest encryption metadata reference; rotate after changes; restore into isolated ACL-controlled path.
@@ -404,7 +405,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-021 — Full disaster-recovery drill and runbook validation
 
-- Stage/status/priority: `STG-08`, `BLOCKED` until provider resources/owner permission and `TASK-018..020`, P0. Links: `REQ-002/008/009`, `RISK-001/004/005/020`, `AC-012/020`.
+- Stage/status/priority: `STG-08`, `[!] BLOCKED` until provider resources/owner permission and an operator-run independent drill, P0. Links: `REQ-002/008/009`, `RISK-001/004/005/020`, `AC-012/020`.
 - Result: from independent copy and recovery bundle, rebuild isolated app, verify business-level read-only checks, record actual RPO/RTO.
 - Touchpoints: operator environment, restore tool/scripts, deployment docs; no production target.
 - Actions: simulate loss of primary host logically in isolated environment; obtain catalog/manifests without production DB; restore DB/keys/config references; launch API/frontend; health/login/report/control totals; capture timings/gaps; destroy test environment securely.
@@ -415,7 +416,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-022 — Staged deployment, provider provisioning and failover enablement
 
-- Stage/status/priority: `STG-09`, `BLOCKED` on `TASK-002/021` and external resources, P0. Links: `REQ-002/015`, `RISK-018`, `AC-006/007/009/019`.
+- Stage/status/priority: `STG-09`, `[!] BLOCKED` on approved provider configuration, historical backfill and `TASK-021`, P0. Links: `REQ-002/015`, `RISK-018`, `AC-006/007/009/019`.
 - Result: production progresses feature-off -> A -> B -> verified backfill -> read/write/recovery flags with observation gates.
 - Touchpoints: deployment secrets/config, Docker/systemd, migrations/binaries, operator runbook.
 - Actions: backup/restore prerequisite; deploy additive schema and Single; provision A/B private with independent failure domains; capability test objects; enable shadow jobs/new backup replication; backfill; verify; enable read fallback then delivery fallback then recovery/failback; never cleanup source in same change.
@@ -426,7 +427,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-023 — Performance, capacity and fault gate
 
-- Stage/status/priority: `STG-09`, `BLOCKED` for realistic provider/capacity measurements; bounded streaming, queue and retry controls are implemented and locally tested, P1. Links: `REQ-016`, `RISK-011/019`, `AC-018`.
+- Stage/status/priority: `STG-09`, `[!] BLOCKED` for realistic provider/capacity measurements; bounded streaming, queue and retry controls are implemented and locally tested, P1. Links: `REQ-016`, `RISK-011/019`, `AC-018`.
 - Result: measured bounded RAM/disk/network/queue, retry/failover deadlines and capacity model on realistic sanitized size distribution.
 - Touchpoints: benchmarks/load fixtures/metrics/options; no production fault without permission.
 - Actions: large file streaming, concurrent backups, slow/dead A with healthy B, long backlog, disk/staging threshold, repair plus runtime, cancellation, restore egress; set final budgets from evidence.
@@ -437,7 +438,7 @@ Parallelism: after `TASK-009`, restore tooling design (`TASK-019/020`) can proce
 
 ### TASK-024 — Documentation, release note, final traceability and handoff
 
-- Stage/status/priority: `STG-09`, `DONE` for implementation documentation/release/handoff; final owner acceptance remains under `TASK-021..023`, P1. Links: all `REQ`, `AC-020`.
+- Stage/status/priority: `STG-09`, `[x] DONE_LOCALLY` for implementation documentation/release/handoff; final owner acceptance remains under `TASK-021..023`, P1. Links: all `REQ`, `AC-020`.
 - Result: current runbooks and user-facing “Что нового”, closed traceability, residual risks/decisions, operations ownership.
 - Touchpoints: listed docs, `AppReleases/releases.json`, Roadmap history/checkpoint, evidence/risk register.
 - Actions: document add/drain provider, incident/degraded states, backup/restore/migration, key recovery, rollback, irreversible gates; release note for staff; reconcile every REQ/RISK/TASK/TEST/AC; record real results.
@@ -570,8 +571,8 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 ### Progress summary
 
-- Stages: 8/10 `DONE`; 2/10 `BLOCKED` only on external provider/owner acceptance; no local implementation stage remains in progress.
-- Tasks: 21/24 `DONE`; `TASK-021/022/023` externally blocked. Local implementation completion: 87.5% of task cards; remaining 12.5% require independent destinations, permissions and representative capacity.
+- Повторная проверка, текущая итерация: 21/24 задач завершены локально (87,5%), 0/24 в работе, 0/24 не начаты, 3/24 заблокированы внешней приёмкой (12,5%). Отдельных пунктов ожидания решения/приёмки в 24 карточках нет; внешние условия перечислены в заблокированных карточках.
+- Локальные `TASK-013/014/016/018/019/020` завершены; `TASK-021/022/023` требуют реальных независимых назначений, данных/ёмкости и разрешения на испытания.
 - Operational production acceptance is not claimed: real-provider certification, full independent-copy DR, measured production budgets and observation window remain open.
 
 ### Plan change log
@@ -590,8 +591,11 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 | 22.09.2026 / 1.9 | `TASK-019/020` completed locally: restore verifier validates manifest/SHA/TOC/schema/migrations and cleans disposable DB; actual local PostgreSQL restore passed with 2 tables in 1.43s. AES-256-GCM recovery bundle protect/unprotect round trip passed and rejects obvious inline secret files. Full independent-provider DR remains blocked. |
 | 22.09.2026 / 1.10 | Local implementation handoff completed: safe storage metrics/deduplicated protection alerts, operations runbook and end-user release note added. `TASK-021/022/023` remain external gates, so production readiness is explicitly not certified. |
 | 22.09.2026 / 1.11 | Final local verification completed: backend 2634 passed with 368 expected external skips, affected PostgreSQL classes 11/11 passed sequentially, frontend application run 1290 passed and corrected gate/contract checks passed. Lint, Release build, EF model, format and bundle budget are clean. Total bundle budget was documented at 293 KiB because the previous 292 KiB baseline already exceeded its gate by 142 bytes and the new operator protection controls add less than 1 KiB gzip without dependencies or initial-load budget growth. |
+| 23.09.2026 / 1.12 | Reopened local tasks `013/014/016/018/019/020` completed and verified. Backend 3164 passed/1 external skip with PostgreSQL, frontend 1310 passed, original bundle budget restored without raising its limit. Three real-provider/production acceptance cards remain blocked externally. |
 
-### Execution journal
+### История выполнения
+
+22.09.2026, повторная реализация: переоткрыты шесть преждевременно закрытых задач. Проверка нашла starvation каталога после 100 объектов, зависание half-open, недостаточную семантику migration CLI, отсутствие полной DR-проверки и неполные статусы интерфейса. Локальные дефекты будут устранены и проверены отдельно от внешней приёмки с реальными облачными аккаунтами. Пользовательский untracked audit не изменяется. Применяется high-risk gate с локальной PostgreSQL; push не разрешён.
 
 22.09.2026: audit/ТЗ/Roadmap prepared; focused baseline 40/40 and two read-only dump TOC checks recorded. No implementation, migration, provider call, commit, push or production change.
 
@@ -613,13 +617,15 @@ Never request access keys, tokens, `.env`, key material or raw dumps in conversa
 
 22.09.2026: final local gate completed. Full backend Release run: 2634 passed, 0 failed, 368 expected external PostgreSQL/S3 skips. Affected PostgreSQL catalog/report classes were rerun sequentially against local PostgreSQL 17 and passed 11/11. Full frontend application run passed 1290 tests; the intentionally changed bundle contract passed 5/5 and the corrected role-matrix scenario passed 1/1. Lint, production build, 292.9/293.0 KiB gzip budget, Release solution build, `dotnet format --verify-no-changes` and EF pending-model check passed. No push or production/provider mutation was performed.
 
+23.09.2026: перепроверены и завершены локальные `TASK-013/014/016/018/019/020`. В первом полном прогоне обнаружены только две ошибочные ссылки нового DR-теста на сборку ASP.NET Core и одно старое ожидание текста UI; исправлены и точечно проверены (backend 2/2, frontend 1/1). Повторный полный backend Release с реальной локальной PostgreSQL 17: 3164 passed, 0 failed, 1 skipped (требуется реальный S3 endpoint), coverage lines 89,91% / branches 75,12% при порогах 85% / 70%. Полный frontend: 1310 passed, 0 failed, coverage statements 88,61%, branches 81,47%, functions 87,06%, lines 89,79% при порогах 78/69/74/79%. Lint, production build, прежний bundle budget 300018/300032 bytes, EF pending-model, Release solution build (0 warnings/errors), `dotnet format --verify-no-changes`, privacy scan 1402 файлов, strict UTF-8 69 файлов, JSON и PowerShell syntax checks прошли. Шесть временных БД, созданных прогоном 22.09 и подтверждённых серверным журналом, удалены; старые пользовательские/общие БД сохранены. Реальные независимые провайдеры, customer-data DR, production rollout/fault и capacity gate не объявлены выполненными (`TASK-021..023`). Push не выполнялся.
+
 ### Continuation checkpoint
 
 - Baseline revision: Roadmap 1.0, commit `e5309e8a`.
-- Last completed local implementation stage: `STG-07`; local portions of `STG-08/09` are also complete.
-- Current task: external acceptance `TASK-021..023`; no further safe local implementation is pending.
+- Last completed local implementation stage: `STG-08`; local implementation portions of `STG-09` are also complete.
+- Current task: external acceptance `TASK-021..023` after provisioning and owner approval; all 21 locally executable cards are verified.
 - Preconditions already checked: repo structure, current storage flows, focused test batch, baseline Git state.
-- Before continuing: re-read the active task card and current diff; preserve completed evidence and unrelated user work.
+- Before continuing: re-read the active task card and current diff; preserve completed evidence and unrelated user work. Do not treat local two-directory DR as real provider independence.
 - Next owner/operator actions: provision two independent destinations, approve sandbox fault/DR tests, confirm policy and alert owner, then execute backfill/cutover/performance gates.
 - Recheck if repo changed: backup contracts/service/worker/controller/UI; DbContext/migrations; Program DI; compose/env; import queue; tests/scripts/docs.
 

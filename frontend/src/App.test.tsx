@@ -17459,7 +17459,7 @@ describe('App', () => {
     expect(backupSummary).toHaveTextContent('каждые 24 ч.')
     expect(backupSummary.parentElement).toHaveClass('settings-card-body')
     expect(backupTable.closest('.settings-card-body')).toBe(backupSummary.parentElement)
-    expect(within(backupsPanel).getByText(/Место хранения: Локальное хранилище/)).toHaveTextContent('Технический путь остаётся скрытым')
+    expect(within(backupsPanel).getByText(/Место хранения: Локальное хранилище/)).toHaveTextContent('Подробности — в статусе копии.')
     expect(backupTable).toHaveTextContent(existingBackup.fileName)
     const createButton = within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' })
     await user.click(createButton)
@@ -17490,6 +17490,7 @@ describe('App', () => {
       createdAtUtc: '2026-07-14T02:00:00Z',
       kind: 'automatic' as const,
       protectionState: 'protection_degraded' as const,
+      protectionLabel: 'Защита ослаблена', protectionTone: 'warning' as const,
       lastVerifiedAtUtc: '2026-07-14T02:05:00Z',
     }
     const auth = createAuthResponse({
@@ -17713,7 +17714,7 @@ describe('App', () => {
     expect(within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })).toHaveTextContent(createdBackup.fileName)
   })
 
-  it('downloads and deletes a selected backup from the backup table with an audited reason', async () => {
+  it.each([false, true])('downloads and deletes a selected backup with audited reason (background deletion: %s)', async (backgroundDeletion) => {
     const user = userEvent.setup()
     const backup = {
       fileName: 'garagebalance_automatic_20260714_020000_000.pgdump',
@@ -17721,6 +17722,7 @@ describe('App', () => {
       createdAtUtc: '2026-07-14T02:00:00Z',
       kind: 'automatic' as const,
       protectionState: 'protection_degraded' as const,
+      protectionLabel: 'Защита ослаблена', protectionTone: 'warning' as const,
       lastVerifiedAtUtc: '2026-07-14T02:05:00Z',
     }
     let deleted = false
@@ -17737,11 +17739,11 @@ describe('App', () => {
     }))
     const downloadDatabaseBackup = vi.fn(async () => new Blob(['backup'], { type: 'application/octet-stream' }))
     const deleteDatabaseBackup = vi.fn(async () => {
-      deleted = true
-      return backup
+      deleted = !backgroundDeletion
+      return backgroundDeletion ? { ...backup, protectionState: 'deleting' as const, protectionLabel: 'Удаляется', protectionTone: 'archived' as const } : backup
     })
-    const retryDatabaseBackupProtection = vi.fn(async () => ({ ...backup, protectionState: 'protection_pending' as const }))
-    const verifyDatabaseBackupProtection = vi.fn(async () => ({ ...backup, protectionState: 'protected' as const }))
+    const retryDatabaseBackupProtection = vi.fn(async () => ({ ...backup, protectionState: 'protection_pending' as const, protectionLabel: 'Ожидает копирования', protectionTone: 'archived' as const }))
+    const verifyDatabaseBackupProtection = vi.fn(async () => ({ ...backup, protectionState: 'protected' as const, protectionLabel: 'Защищена', protectionTone: 'active' as const }))
     const createObjectUrl = vi.fn(() => 'blob:database-backup')
     const revokeObjectUrl = vi.fn()
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
@@ -17785,8 +17787,16 @@ describe('App', () => {
     await user.click(within(confirmation).getByRole('button', { name: 'Удалить копию' }))
     await waitFor(() => expect(deleteDatabaseBackup).toHaveBeenCalledWith('token', backup.fileName, { reason: 'Удаление устаревшей тестовой копии' }))
     expect(screen.queryByRole('dialog', { name: 'Удалить выбранную копию?' })).not.toBeInTheDocument()
-    expect(await within(backupsPanel).findByText('Резервные копии еще не создавались.')).toBeInTheDocument()
-    expect(within(backupsPanel).queryByText(backup.fileName)).not.toBeInTheDocument()
+    if (backgroundDeletion) {
+      expect(await within(backupsPanel).findByText(`Удаление копии ${backup.fileName} поставлено в очередь. Действие записано в историю изменений.`)).toBeInTheDocument()
+      expect(within(backupTable).getByText('Удаляется')).toBeInTheDocument()
+      expect(within(backupTable).getByRole('button', { name: `Скачать резервную копию ${backup.fileName}` })).toBeDisabled()
+      expect(within(backupTable).getByRole('button', { name: `Удалить резервную копию ${backup.fileName}` })).toBeDisabled()
+      expect(within(backupTable).queryByRole('button', { name: `Проверить защиту резервной копии ${backup.fileName}` })).not.toBeInTheDocument()
+    } else {
+      expect(await within(backupsPanel).findByText('Резервные копии еще не создавались.')).toBeInTheDocument()
+      expect(within(backupsPanel).queryByText(backup.fileName)).not.toBeInTheDocument()
+    }
     linkClick.mockRestore()
   })
 
@@ -28833,6 +28843,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',
       protectionState: 'local_verified',
+      protectionLabel: 'Проверена локально', protectionTone: 'active',
     }),
     retryDatabaseBackupProtection: async (_accessToken, fileName) => ({
       fileName,
@@ -28840,6 +28851,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',
       protectionState: 'protection_pending',
+      protectionLabel: 'Ожидает копирования', protectionTone: 'archived',
     }),
     verifyDatabaseBackupProtection: async (_accessToken, fileName) => ({
       fileName,
@@ -28847,6 +28859,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',
       protectionState: 'protected',
+      protectionLabel: 'Защищена', protectionTone: 'active',
     }),
     resetDatabase: async () => ({
       backupFileName: 'garagebalance_pre_update_20260904_120000_000.pgdump',

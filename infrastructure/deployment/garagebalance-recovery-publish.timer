@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh GarageBalance independent recovery catalog hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Persistent=true
+Unit=garagebalance-recovery-publish.service
+
+[Install]
+WantedBy=timers.target

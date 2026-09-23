@@ -53,7 +53,62 @@ public sealed record DatabaseBackupFileDto(
     string Kind,
     string? Sha256 = null,
     string ProtectionState = "local_only",
-    DateTimeOffset? LastVerifiedAtUtc = null);
+    DateTimeOffset? LastVerifiedAtUtc = null,
+    int RequiredCopies = 1,
+    int AvailableCopies = 0,
+    int DesiredCopies = 1,
+    int RequiredOffsiteCopies = 0,
+    int AvailableOffsiteCopies = 0,
+    long ProtectionLagSeconds = 0,
+    IReadOnlyList<DatabaseBackupReplicaDto>? Replicas = null)
+{
+    public string ProtectionLabel => ProtectionState switch
+    {
+        "protected" => "Защищена",
+        "protection_degraded" => "Защита ослаблена",
+        "protection_pending" => "Ожидает копирования",
+        "failed" => "Требует внимания",
+        "manifest_missing" => "Нет манифеста",
+        "local_verified" => "Проверена локально",
+        "deleting" => "Удаляется",
+        "deleted" => "Удалена",
+        "local_only" => "Только локально",
+        _ => "Требует проверки"
+    };
+
+    public string ProtectionTone => ProtectionState switch
+    {
+        "protected" or "local_verified" => "active",
+        "protection_degraded" or "manifest_missing" => "warning",
+        "failed" => "danger",
+        _ => "archived"
+    };
+}
+
+public sealed record DatabaseBackupReplicaDto(
+    string DestinationId,
+    string Location,
+    string State,
+    DateTimeOffset? LastVerifiedAtUtc,
+    string? Error)
+{
+    public string StateLabel => State switch
+    {
+        "available" => "Проверена",
+        "pending" => "В очереди",
+        "uploading" => "Копируется",
+        "unknown" => "Уточняется",
+        "verificationpending" => "Ожидает проверки",
+        "missing" => "Не найдена",
+        "corrupted" => "Повреждена",
+        "stale" => "Устарела",
+        "failed" => "Ошибка",
+        "deleting" => "Удаляется",
+        "deleted" => "Удалена",
+        "disabled" => "Отключена",
+        _ => "Требует проверки"
+    };
+}
 
 public sealed record DatabaseBackupManifest(
     int SchemaVersion,
@@ -85,7 +140,28 @@ public sealed record DatabaseBackupStatusDto(
     IReadOnlyList<DatabaseBackupFileDto> Backups,
     bool IsStale = false,
     int FreshnessThresholdHours = 48,
-    string StorageLocation = "Локальное хранилище");
+    string StorageLocation = "Локальное хранилище",
+    DatabaseRestoreVerificationDto? RestoreVerification = null,
+    bool ReconciliationPaused = false);
+
+public sealed record DatabaseRestoreVerificationDto(
+    string State,
+    DateTimeOffset? CompletedAtUtc,
+    DateTimeOffset? BackupCreatedAtUtc,
+    double? RtoSeconds,
+    int MaximumAgeHours)
+{
+    public string Message => State switch
+    {
+        "not_configured" => "Проверка восстановления не настроена",
+        "not_run" => "Проверка восстановления ещё не запускалась",
+        "running" => "Выполняется проверка восстановления",
+        "stale" => "Проверку восстановления пора повторить",
+        "failed" => "Проверка восстановления завершилась ошибкой",
+        "verified" => "Восстановление проверено",
+        _ => "Результат проверки восстановления недоступен"
+    };
+}
 
 public sealed record DatabaseBackupResult<T>(bool Succeeded, T? Value, string? ErrorCode, string? ErrorMessage)
 {

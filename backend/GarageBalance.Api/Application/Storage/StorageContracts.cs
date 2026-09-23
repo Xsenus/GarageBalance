@@ -467,6 +467,11 @@ public sealed record StorageWriteResult(string NativeLocator, string? ProviderVe
 public sealed record StorageObjectStat(long SizeBytes, string? ProviderChecksum, string? ProviderVersionId, IReadOnlyDictionary<string, string> Metadata);
 public sealed record StorageDownloadLink(Uri Url, DateTimeOffset ExpiresAtUtc);
 
+public interface IStorageRepairProvider : IStorageProvider
+{
+    Task<StorageWriteResult> RepairAsync(StorageWriteRequest request, Stream content, Guid repairId, CancellationToken cancellationToken);
+}
+
 public interface IStorageProvider
 {
     string DestinationId { get; }

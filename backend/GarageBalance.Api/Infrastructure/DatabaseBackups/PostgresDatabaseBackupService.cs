@@ -27,7 +27,9 @@ public sealed partial class PostgresDatabaseBackupService(
     StorageConfigurationResolver? storageConfigurationResolver = null,
     IStorageCatalog? storageCatalog = null,
     IStorageReadRouter? storageReadRouter = null,
-    StorageReconciliationRunner? storageReconciliationRunner = null) : IDatabaseBackupService
+    StorageReconciliationRunner? storageReconciliationRunner = null,
+    IStorageMaintenanceLock? storageMaintenanceLock = null,
+    IStorageReconciliationGuard? storageReconciliationGuard = null) : IDatabaseBackupService
 {
     private const int ManifestSchemaVersion = 2;
     private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
@@ -35,7 +37,6 @@ public sealed partial class PostgresDatabaseBackupService(
         WriteIndented = true
     };
     private static readonly SemaphoreSlim OperationLock = new(1, 1);
-    private static DateTimeOffset? _lastSuccessfulBackupAtUtc;
     private static string? _lastError;
     private readonly DatabaseBackupOptions _options = options.Value;
     private readonly EffectiveStorageConfiguration? _storageConfiguration = storageConfigurationResolver?.Resolve();
@@ -48,14 +49,22 @@ public sealed partial class PostgresDatabaseBackupService(
     {
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<DatabaseBackupFileDto> backups = EnumerateBackups(20, verifyChecksum: true);
+        if (_storageConfiguration?.Mode == StorageMode.AsyncMirror && storageReconciliationGuard is not null &&
+            backups.Count(item => item.ProtectionState == "failed") > 10)
+        {
+            await storageReconciliationGuard.PauseAsync(backups.Count(item => item.ProtectionState == "failed"), cancellationToken);
+        }
         await ReconcileCatalogAsync(backups, cancellationToken);
         backups = await MergeCatalogBackupsAsync(backups, cancellationToken);
         backups = await ApplyCatalogProtectionAsync(backups, cancellationToken);
-        var lastSuccessful = backups.FirstOrDefault()?.CreatedAtUtc ?? _lastSuccessfulBackupAtUtc;
+        var lastSuccessful = backups.FirstOrDefault(backup => backup.AvailableCopies > 0 &&
+            backup.ProtectionState is "local_verified" or "protected" or "protection_pending" or "protection_degraded")?.CreatedAtUtc;
         var freshnessThresholdHours = _options.IntervalHours + _options.FreshnessGraceHours;
         var isStale = _options.Enabled &&
             (lastSuccessful is null || timeProvider.GetUtcNow() - lastSuccessful.Value > TimeSpan.FromHours(freshnessThresholdHours));
         var toolError = _options.Enabled ? GetToolAvailabilityError() : null;
+        var reconciliationPaused = _storageConfiguration?.Mode == StorageMode.AsyncMirror && storageReconciliationGuard is not null &&
+            (await storageReconciliationGuard.PeekStateAsync(cancellationToken)).Paused;
         return new DatabaseBackupStatusDto(
             _options.Enabled,
             _options.AutomaticEnabled,
@@ -64,13 +73,16 @@ public sealed partial class PostgresDatabaseBackupService(
             string.Empty,
             OperationLock.CurrentCount == 0,
             lastSuccessful,
-            toolError ?? GetStorageCapacityWarning() ?? _lastError,
+            reconciliationPaused ? "Автоматический ремонт копий приостановлен. Актуальность защиты должен проверить специалист."
+                : toolError ?? GetStorageCapacityWarning() ?? _lastError,
             backups,
             isStale,
             freshnessThresholdHours,
             _storageConfiguration?.Mode == StorageMode.AsyncMirror
                 ? "Локальное и удалённое хранилища"
-                : "Локальное хранилище");
+                : "Локальное хранилище",
+            DatabaseRestoreVerificationStatus.Read(configuration, timeProvider.GetUtcNow()),
+            reconciliationPaused);
     }
 
     public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken)
@@ -141,6 +153,13 @@ public sealed partial class PostgresDatabaseBackupService(
         string? temporaryPath = null;
         try
         {
+            await using var maintenanceLease = storageMaintenanceLock is null ? null
+                : await storageMaintenanceLock.TryAcquireAsync($"database-backups:{_storageConfiguration?.TenantId ?? "garagebalance"}", cancellationToken);
+            if (storageMaintenanceLock is not null && maintenanceLease is null)
+            {
+                return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                    "database_backup_in_progress", "Другая операция с резервными копиями уже выполняется. Дождитесь её завершения.");
+            }
             Directory.CreateDirectory(_directory);
             var now = timeProvider.GetUtcNow();
             var kindName = FormatKind(kind);
@@ -222,7 +241,6 @@ public sealed partial class PostgresDatabaseBackupService(
             {
                 dto = dto with { ProtectionState = "protection_pending" };
             }
-            _lastSuccessfulBackupAtUtc = now;
             _lastError = null;
             await DeleteExpiredBackupsAsync(cancellationToken);
 
@@ -250,7 +268,7 @@ public sealed partial class PostgresDatabaseBackupService(
             }
 
             logger.LogInformation("Database backup {BackupFileName} was created and verified.", file.Name);
-            return DatabaseBackupResult<DatabaseBackupFileDto>.Success(dto);
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Success((await ApplyCatalogProtectionAsync([dto], cancellationToken))[0]);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -380,6 +398,13 @@ public sealed partial class PostgresDatabaseBackupService(
 
         try
         {
+            await using var maintenanceLease = storageMaintenanceLock is null ? null
+                : await storageMaintenanceLock.TryAcquireAsync($"database-backups:{_storageConfiguration?.TenantId ?? "garagebalance"}", cancellationToken);
+            if (storageMaintenanceLock is not null && maintenanceLease is null)
+            {
+                return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                    "database_backup_in_progress", "Другая операция с резервными копиями уже выполняется. Дождитесь её завершения.");
+            }
             if (_storageConfiguration?.Mode == StorageMode.AsyncMirror)
             {
                 if (storageCatalog is null || await storageCatalog.TombstoneAndScheduleDeleteAsync(
@@ -486,8 +511,8 @@ public sealed partial class PostgresDatabaseBackupService(
             EntityDisplayName: backup.Value.FileName,
             Metadata: new Dictionary<string, object?> { ["scheduled"] = scheduled }));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DatabaseBackupResult<DatabaseBackupFileDto>.Success(
-            backup.Value with { ProtectionState = scheduled ? "protection_pending" : backup.Value.ProtectionState });
+        var refreshed = await FindManagedBackupAsync(fileName, false, cancellationToken);
+        return refreshed;
     }
 
     public async Task<DatabaseBackupResult<DatabaseBackupFileDto>> VerifyProtectionAsync(
@@ -640,14 +665,16 @@ public sealed partial class PostgresDatabaseBackupService(
             StorageObjectState.Failed => "failed",
             _ => "protection_pending"
         };
-        return DatabaseBackupResult<DatabaseBackupFileDto>.Success(new DatabaseBackupFileDto(
+        var dto = new DatabaseBackupFileDto(
             fileName,
             storageObject.SizeBytes,
             storageObject.CreatedAtUtc,
             ParseKind(fileName),
             storageObject.Sha256,
             protectionState,
-            storageObject.Replicas.Where(item => item.State == StorageReplicaState.Available).Max(item => item.LastVerifiedAtUtc)));
+            storageObject.Replicas.Where(item => item.State == StorageReplicaState.Available).Max(item => item.LastVerifiedAtUtc));
+        return DatabaseBackupResult<DatabaseBackupFileDto>.Success(
+            DatabaseBackupProtection.Describe(dto, storageObject, _storageConfiguration, timeProvider.GetUtcNow()));
     }
 
     private async Task<IReadOnlyList<DatabaseBackupFileDto>> MergeCatalogBackupsAsync(
@@ -659,16 +686,22 @@ public sealed partial class PostgresDatabaseBackupService(
             return localBackups;
         }
         var byName = localBackups.ToDictionary(item => item.FileName, StringComparer.Ordinal);
-        var manifest = await storageCatalog.ExportManifestAsync(StorageDataClass.DatabaseBackup, 100, cancellationToken);
-        foreach (var item in manifest.Where(item => item.State is not (StorageObjectState.Deleting or StorageObjectState.Deleted)))
+        string? cursor = null;
+        do
         {
-            byName.TryAdd(item.LogicalKey, new DatabaseBackupFileDto(
-                item.LogicalKey,
-                item.SizeBytes,
-                item.CreatedAtUtc,
-                ParseKind(item.LogicalKey),
-                item.Sha256));
+            var page = await storageCatalog.ExportManifestPageAsync(
+                _storageConfiguration.TenantId, StorageDataClass.DatabaseBackup, 100, cursor, cancellationToken);
+            foreach (var item in page.Items.Where(item => item.State is not (StorageObjectState.Deleting or StorageObjectState.Deleted)))
+            {
+                byName.TryAdd(item.LogicalKey, new DatabaseBackupFileDto(
+                    item.LogicalKey, item.SizeBytes, item.CreatedAtUtc, ParseKind(item.LogicalKey), item.Sha256));
+            }
+            // Keep only the visible latest rows in memory while traversing the tenant-scoped catalog.
+            byName = byName.Values.OrderByDescending(item => item.CreatedAtUtc).ThenBy(item => item.FileName, StringComparer.Ordinal)
+                .Take(20).ToDictionary(item => item.FileName, StringComparer.Ordinal);
+            cursor = page.NextCursor;
         }
+        while (cursor is not null);
         return byName.Values.OrderByDescending(item => item.CreatedAtUtc).Take(20).ToArray();
     }
 
@@ -680,14 +713,32 @@ public sealed partial class PostgresDatabaseBackupService(
             {
                 return;
             }
-            foreach (var backup in EnumerateBackups(int.MaxValue, verifyChecksum: false).Skip(_options.RetentionCount))
+            var backups = EnumerateBackups(int.MaxValue, verifyChecksum: false);
+            var retainedProtectedCopyExists = false;
+            foreach (var retained in backups.Take(_options.RetentionCount))
+            {
+                var retainedObject = await storageCatalog.FindByLogicalKeyAsync(
+                    _storageConfiguration.TenantId, StorageDataClass.DatabaseBackup, retained.FileName, cancellationToken);
+                if (retainedObject is not null &&
+                    DatabaseBackupProtection.Describe(retained, retainedObject, _storageConfiguration, timeProvider.GetUtcNow()).ProtectionState == "protected")
+                {
+                    retainedProtectedCopyExists = true;
+                    break;
+                }
+            }
+            if (!retainedProtectedCopyExists)
+            {
+                return;
+            }
+            foreach (var backup in backups.Skip(_options.RetentionCount))
             {
                 var storageObject = await storageCatalog.FindByLogicalKeyAsync(
                     _storageConfiguration.TenantId,
                     StorageDataClass.DatabaseBackup,
                     backup.FileName,
                     cancellationToken);
-                if (storageObject?.State == StorageObjectState.Protected)
+                if (storageObject is not null &&
+                    DatabaseBackupProtection.Describe(backup, storageObject, _storageConfiguration, timeProvider.GetUtcNow()).ProtectionState == "protected")
                 {
                     await storageCatalog.TombstoneAndScheduleDeleteAsync(
                         _storageConfiguration.TenantId,
@@ -783,7 +834,8 @@ public sealed partial class PostgresDatabaseBackupService(
             protectionState,
             checksumMatches && (verifyChecksum || manifestAlreadyVerified)
                 ? (manifestAlreadyVerified ? manifest!.CreatedAtUtc : timeProvider.GetUtcNow())
-                : null);
+                : null,
+            AvailableCopies: checksumMatches && (verifyChecksum || manifestAlreadyVerified) ? 1 : 0);
     }
 
     private static bool IsSha256(string value) =>
@@ -866,9 +918,10 @@ public sealed partial class PostgresDatabaseBackupService(
         }
         try
         {
-            return Directory.EnumerateFiles(_directory, "garagebalance_*.pgdump", SearchOption.TopDirectoryOnly)
+            return Directory.EnumerateFiles(_directory, "garagebalance_*", SearchOption.TopDirectoryOnly)
                 .Select(path => new FileInfo(path))
-                .Where(file => ManagedBackupName().IsMatch(file.Name))
+                .Where(file => file.Name.IndexOf(".pgdump", StringComparison.Ordinal) is var extension && extension >= 0 &&
+                    ManagedBackupName().IsMatch(file.Name[..(extension + ".pgdump".Length)]))
                 .Sum(file => file.Length);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -927,6 +980,7 @@ public sealed partial class PostgresDatabaseBackupService(
         var targets = pool?.DestinationIds
             .Where(destinationId => !string.Equals(destinationId, localDestinationId, StringComparison.Ordinal))
             .Select(destinationId => _storageConfiguration!.Destinations.Single(destination => destination.Id == destinationId))
+            .Where(destination => destination.State is StorageDestinationState.Enabled or StorageDestinationState.Recovering)
             .Select(destination => new StorageReplicationTarget(destination.Id, destination.FailureDomain))
             .ToArray() ?? [];
         await storageCatalog.RegisterCommittedObjectAsync(
@@ -969,6 +1023,7 @@ public sealed partial class PostgresDatabaseBackupService(
                 await RegisterCatalogAsync(file, manifest, cancellationToken);
             }
         }
+
     }
 
     private async Task<IReadOnlyList<DatabaseBackupFileDto>> ApplyCatalogProtectionAsync(
@@ -990,27 +1045,15 @@ public sealed partial class PostgresDatabaseBackupService(
                 cancellationToken);
             if (storageObject is null)
             {
-                result.Add(backup with { ProtectionState = "protection_pending" });
+                result.Add(backup with
+                {
+                    ProtectionState = backup.ProtectionState is "failed" or "manifest_missing"
+                    ? backup.ProtectionState : "protection_pending"
+                });
                 continue;
             }
-            var protectionState = storageObject.State switch
-            {
-                StorageObjectState.Protected => "protected",
-                StorageObjectState.ProtectionDegraded => "protection_degraded",
-                StorageObjectState.Failed => "failed",
-                StorageObjectState.Deleting => "deleting",
-                StorageObjectState.Deleted => "deleted",
-                _ => "protection_pending"
-            };
-            var lastVerified = storageObject.Replicas
-                .Where(replica => replica.State == StorageReplicaState.Available)
-                .Select(replica => replica.LastVerifiedAtUtc)
-                .Max();
-            result.Add(backup with
-            {
-                ProtectionState = protectionState,
-                LastVerifiedAtUtc = lastVerified ?? backup.LastVerifiedAtUtc
-            });
+            result.Add(DatabaseBackupProtection.Describe(backup, storageObject, _storageConfiguration, timeProvider.GetUtcNow(),
+                backup.ProtectionState == "failed" ? GetLocalProvider().DestinationId : null));
         }
         return result;
     }

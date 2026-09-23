@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Storage;
 using GarageBalance.Api.Domain.Storage;
 using GarageBalance.Api.Infrastructure.Data;
+using GarageBalance.Api.Infrastructure.Storage;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,6 +10,61 @@ namespace GarageBalance.Api.Tests.Storage;
 public sealed class PostgreSqlStorageCatalogIntegrationTests
 {
     private const string PreviousMigration = "20260921033539_AddOwnerAdditionalPhones";
+
+    [PostgreSqlFact]
+    public async Task MaintenanceLockExcludesIndependentPostgresSessionsAndReleasesWithoutTransaction()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var firstContext = database.CreateContext();
+        await using var secondContext = database.CreateContext();
+        var first = new StorageMaintenanceLock(firstContext);
+        var second = new StorageMaintenanceLock(secondContext);
+        await using (var lease = await first.TryAcquireAsync("database-backups:garagebalance", CancellationToken.None))
+        {
+            Assert.NotNull(lease);
+            Assert.Null(await second.TryAcquireAsync("database-backups:garagebalance", CancellationToken.None));
+            Assert.Null(firstContext.Database.CurrentTransaction);
+        }
+        await using var reacquired = await second.TryAcquireAsync("database-backups:garagebalance", CancellationToken.None);
+        Assert.NotNull(reacquired);
+    }
+
+    [PostgreSqlFact]
+    public async Task ManifestKeysetPaginationIsTranslatedAndStableOnPostgres()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        for (var index = 0; index < 205; index++)
+        {
+            context.StorageObjects.Add(new StorageObject
+            {
+                OperationId = Guid.NewGuid(),
+                LogicalKey = $"backups/{index:D4}.pgdump",
+                PolicyId = "database-backups",
+                CommittedGeneration = 1,
+                State = StorageObjectState.CreatedLocal,
+                SizeBytes = 4,
+                Sha256 = new string('a', 64),
+                OriginalFileName = $"{index:D4}.pgdump",
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+        }
+        await context.SaveChangesAsync();
+        var catalog = new EfStorageCatalog(context);
+        var keys = new List<string>();
+        string? cursor = null;
+        do
+        {
+            var page = await catalog.ExportManifestPageAsync("garagebalance", StorageDataClass.DatabaseBackup, 100, cursor, CancellationToken.None);
+            keys.AddRange(page.Items.Select(item => item.LogicalKey));
+            cursor = page.NextCursor;
+        } while (cursor is not null);
+        Assert.Equal(205, keys.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("backups/0000.pgdump", keys[0]);
+        Assert.Equal("backups/0204.pgdump", keys[^1]);
+    }
 
     [PostgreSqlFact]
     public async Task AdditiveMigration_UpgradesExistingSchemaAndCatalogSupportsExclusiveLease()

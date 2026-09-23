@@ -12,7 +12,7 @@ public interface ILocalFileStorageProvider : IStorageProvider
         CancellationToken cancellationToken);
 }
 
-public sealed class LocalFileStorageProvider : ILocalFileStorageProvider
+public sealed class LocalFileStorageProvider : ILocalFileStorageProvider, IStorageRepairProvider
 {
     private readonly string rootPath;
 
@@ -170,6 +170,82 @@ public sealed class LocalFileStorageProvider : ILocalFileStorageProvider
         catch (UnauthorizedAccessException exception)
         {
             throw new StorageProviderException(StorageErrorCategory.ProviderForbidden, "Local storage access was denied.", exception);
+        }
+    }
+
+    public async Task<StorageWriteResult> RepairAsync(StorageWriteRequest request, Stream content, Guid repairId,
+        CancellationToken cancellationToken)
+    {
+        ValidateWriteRequest(request);
+        if (repairId == Guid.Empty)
+        {
+            throw new ArgumentException("An immutable repair operation id is required.", nameof(repairId));
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var key = StorageObjectKey.Normalize(request.ObjectKey);
+        var finalPath = ResolvePath(key);
+        Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+        var temporaryPath = finalPath + $".repair.{repairId:N}.tmp";
+        var quarantinePath = finalPath + $".corrupted.{repairId:N}";
+        try
+        {
+            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            long written = 0;
+            await using (var destination = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                             64 * 1024, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                var buffer = new byte[64 * 1024];
+                int read;
+                while ((read = await content.ReadAsync(buffer, cancellationToken)) > 0)
+                {
+                    written += read;
+                    if (written > request.SizeBytes)
+                    {
+                        throw new StorageProviderException(StorageErrorCategory.ChecksumOrStale, "Repair source is larger than its committed size.");
+                    }
+                    hasher.AppendData(buffer, 0, read);
+                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                }
+                await destination.FlushAsync(cancellationToken);
+                destination.Flush(flushToDisk: true);
+            }
+            var actualHash = Convert.ToHexStringLower(hasher.GetHashAndReset());
+            if (written != request.SizeBytes || !string.Equals(actualHash, request.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new StorageProviderException(StorageErrorCategory.ChecksumOrStale, "Repair source does not match its committed checksum.");
+            }
+            var current = await StatAsync(key, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (current?.SizeBytes == request.SizeBytes && string.Equals(current.ProviderChecksum, request.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return new StorageWriteResult(key, null, actualHash);
+            }
+            if (current is not null)
+            {
+                if (File.Exists(quarantinePath))
+                {
+                    throw new StorageProviderException(StorageErrorCategory.Conflict, "Repair evidence already exists and cannot be overwritten.");
+                }
+                // Atomic same-filesystem replacement retains the original as non-managed quarantine evidence.
+                File.Replace(temporaryPath, finalPath, quarantinePath, ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(temporaryPath, finalPath, overwrite: false);
+            }
+            return new StorageWriteResult(key, null, actualHash);
+        }
+        catch (IOException exception)
+        {
+            throw new StorageProviderException(StorageErrorCategory.Conflict, "Local repair could not atomically replace the object; original evidence is retained.", exception);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            throw new StorageProviderException(StorageErrorCategory.ProviderForbidden, "Local repair access was denied.", exception);
+        }
+        finally
+        {
+            File.Delete(temporaryPath);
         }
     }
 

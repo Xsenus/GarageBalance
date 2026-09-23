@@ -58,6 +58,29 @@ public sealed record StorageManifestReplicaEntry(
     string? Sha256,
     DateTimeOffset? LastVerifiedAtUtc);
 
+public sealed record StorageManifestPage(IReadOnlyList<StorageManifestEntry> Items, string? NextCursor);
+
+public interface IStorageMaintenanceLock
+{
+    Task<IAsyncDisposable?> TryAcquireAsync(string scope, CancellationToken cancellationToken);
+}
+
+public sealed record StorageReconciliationSafetyState(
+    bool Paused,
+    bool PersistenceAvailable,
+    int AnomalyCount,
+    DateTimeOffset? PausedAtUtc,
+    DateTimeOffset? ResumedAtUtc,
+    string? Category);
+
+public interface IStorageReconciliationGuard
+{
+    Task<StorageReconciliationSafetyState> PeekStateAsync(CancellationToken cancellationToken) => GetStateAsync(cancellationToken);
+    Task<StorageReconciliationSafetyState> GetStateAsync(CancellationToken cancellationToken);
+    Task<StorageReconciliationSafetyState> PauseAsync(int anomalyCount, CancellationToken cancellationToken);
+    Task<StorageReconciliationSafetyState> ResumeAsync(string reason, CancellationToken cancellationToken);
+}
+
 public interface IStorageCatalog
 {
     Task<StorageCatalogRegistration> RegisterCommittedObjectAsync(
@@ -74,6 +97,13 @@ public interface IStorageCatalog
         TimeSpan leaseDuration,
         DateTimeOffset now,
         CancellationToken cancellationToken);
+    Task<StorageTransferJob?> ClaimNextJobAsync(
+        string leaseOwner,
+        TimeSpan leaseDuration,
+        DateTimeOffset now,
+        IReadOnlyCollection<StorageTransferJobKind> allowedKinds,
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? objectIds = null) => throw new NotSupportedException();
     Task<StorageTransferContext> GetLeasedJobContextAsync(
         Guid jobId,
         string leaseOwner,
@@ -165,4 +195,26 @@ public interface IStorageCatalog
         StorageDataClass dataClass,
         int take,
         CancellationToken cancellationToken);
+    Task<StorageManifestPage> ExportManifestPageAsync(
+        string tenantId,
+        StorageDataClass dataClass,
+        int take,
+        string? afterLogicalKey,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
+    Task<bool> RecordReplicaVerifiedAsync(
+        Guid objectId,
+        string destinationId,
+        long generation,
+        string sha256,
+        long sizeBytes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) => Task.FromResult(false);
+    Task<bool> EnsureTargetsAsync(
+        Guid objectId,
+        string policyId,
+        int policyRevision,
+        IReadOnlyList<StorageReplicationTarget> targets,
+        int maximumAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
 }

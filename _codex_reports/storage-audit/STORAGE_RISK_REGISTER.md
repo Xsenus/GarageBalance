@@ -43,9 +43,11 @@ Baseline-таблица выше сохранена как исходная оц
 |---|---|---|
 | `RISK-003/006/007/008/009/012/013/014/015/017/020` | `MITIGATED_LOCALLY` | Manifest/catalog/leases, quarantine, durable replication/delete, least privilege, version-aware read and recovery covered by `EVID-035..044`. Production rollout and observation ещё не выполнялись. |
 | `RISK-002/010` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Catch-up/stale status, metrics and deduplicated protection events implemented; external alert channel, owner and sustained observation remain open. |
-| `RISK-004` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Full local PostgreSQL restore check passed (`EVID-041`); restore from independent provider plus application smoke and measured business RPO/RTO remain open. |
-| `RISK-005` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Encrypted recovery-bundle round trip passed (`EVID-042`); independent operator key custody and production protected-secret decrypt drill remain open. |
+| `RISK-004` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Полная локальная цепочка recovery fetch → PostgreSQL restore → исходный защищённый секрет → настоящий API login/report проверена; source-БД/ключи/дамп при восстановлении недоступны. Реальные независимые providers, данные заказчика и бизнес-RPO/RTO требуют внешней приёмки. |
+| `RISK-005` | `MITIGATED_LOCALLY / OPEN_EXTERNAL` | Аутентифицированный AES-GCM архив ключей/конфигурации/каталога и подписанный bootstrap восстанавливаются без основной БД с fallback при повреждении первой копии. Неполная публикация сохраняет прежний успешный bootstrap. Независимое хранение операторского ключа и доступов на инфраструктуре заказчика ещё не принято. |
 | `RISK-001/016/018/019` | `OPEN_EXTERNAL` | Generic secure adapter, migration tool, budgets and rollback gates exist, but independent accounts/regions, native provider tests, historical coverage and representative capacity measurements require owner/operator resources. |
 | `RISK-011` | `OPEN / DEFERRED` | Report/diagnostic export memory behavior is outside the storage-backup implementation and still requires production-volume evidence. |
 
 No `CRITICAL` risk is declared closed solely by code or emulator tests. Production certification remains blocked by `TASK-021..023`.
+
+Проверка 23.09.2026 (`EVID-051`, `TEST-013..015`) подтвердила локальные меры полными backend/frontend наборами и реальной локальной PostgreSQL. Статусы `OPEN_EXTERNAL` и `OPEN / DEFERRED` не меняются: две папки на одном компьютере не дают независимости от отказа хоста, а реальные RPO/RTO, поведение выбранных провайдеров и ёмкость ещё не измерялись.

@@ -142,6 +142,105 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AsyncMirror_LocalCorruptionDoesNotInheritPersistedProtectedState()
+    {
+        var catalog = new CaptureStorageCatalog();
+        var service = CreateService(new FakeCommandRunner(), storageCatalog: catalog,
+            storageConfigurationResolver: CreateAsyncMirrorResolver());
+        var created = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        await File.WriteAllBytesAsync(Path.Combine(_directory, created.Value!.FileName), [4, 3, 2, 1]);
+        catalog.Objects[0].State = StorageObjectState.Protected;
+        var status = await service.GetStatusAsync(CancellationToken.None);
+        var backup = Assert.Single(status.Backups);
+        Assert.Equal("failed", backup.ProtectionState);
+        Assert.Equal(0, backup.AvailableCopies);
+        Assert.Null(backup.LastVerifiedAtUtc);
+        Assert.Equal("corrupted", Assert.Single(backup.Replicas!).State);
+        Assert.True(status.IsStale);
+        Assert.Null(status.LastSuccessfulBackupAtUtc);
+        Assert.Equal(StorageReplicaState.Available, Assert.Single(catalog.Objects[0].Replicas).State);
+    }
+
+    [Fact]
+    public async Task StatusReadsLatestTwentyAcrossAllPagesWithoutExposingAnotherTenant()
+    {
+        var catalog = new CaptureStorageCatalog();
+        for (var index = 0; index < 205; index++)
+        {
+            catalog.Objects.Add(new StorageObject
+            {
+                LogicalKey = $"garagebalance_manual_20260715_093000_{index:D3}.pgdump",
+                CreatedAtUtc = _now.AddMinutes(index),
+                State = StorageObjectState.ProtectionPending
+            });
+        }
+        catalog.Objects.Add(new StorageObject
+        {
+            TenantId = "another-tenant",
+            LogicalKey = "private-other-tenant.pgdump",
+            CreatedAtUtc = _now.AddYears(1),
+            State = StorageObjectState.Protected
+        });
+        var status = await CreateService(new FakeCommandRunner(), storageCatalog: catalog,
+            storageConfigurationResolver: CreateAsyncMirrorResolver()).GetStatusAsync(CancellationToken.None);
+        Assert.Equal(20, status.Backups.Count);
+        Assert.Equal("garagebalance_manual_20260715_093000_204.pgdump", status.Backups[0].FileName);
+        Assert.DoesNotContain(status.Backups, item => item.FileName.Contains("private", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task QuarantinedBackupBytesRemainSubjectToTheLocalCapacityLimit()
+    {
+        Directory.CreateDirectory(_directory);
+        await File.WriteAllBytesAsync(Path.Combine(_directory, "garagebalance_automatic_20260701_020000_000.pgdump.corrupted.test"), new byte[1024 * 1024]);
+        var runner = new FakeCommandRunner();
+        var result = await CreateService(runner, storageConfigurationResolver: CreateAsyncMirrorResolver(1024 * 1024))
+            .CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        Assert.Equal("database_backup_storage_capacity", result.ErrorCode);
+        Assert.Empty(runner.Commands);
+    }
+
+    [Fact]
+    public async Task StatusPausesMassCorruptionWithoutEnqueuingRepairs()
+    {
+        Directory.CreateDirectory(_directory);
+        var hash = new string('a', 64);
+        for (var index = 0; index < 11; index++)
+        {
+            var name = $"garagebalance_manual_20260715_093000_{index:D3}.pgdump";
+            await File.WriteAllBytesAsync(Path.Combine(_directory, name), [1, 2, 3]);
+            await File.WriteAllTextAsync(Path.Combine(_directory, name + ".manifest.json"), JsonSerializer.Serialize(
+                new DatabaseBackupManifest(2, Guid.NewGuid(), 1, name, 3, hash, "manual", _now, "test", "database-backups", 1),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        }
+        var guard = new FileStorageReconciliationGuard(CreateAsyncMirrorResolver(), new FixedTimeProvider(_now));
+        var status = await CreateService(new FakeCommandRunner(), storageCatalog: new CaptureStorageCatalog(),
+            storageConfigurationResolver: CreateAsyncMirrorResolver(), storageReconciliationGuard: guard).GetStatusAsync(CancellationToken.None);
+        Assert.True(status.ReconciliationPaused);
+        Assert.True(status.IsStale);
+        Assert.True((await guard.PeekStateAsync(CancellationToken.None)).Paused);
+        Assert.All(status.Backups, backup => Assert.Equal("failed", backup.ProtectionState));
+    }
+
+    [Fact]
+    public async Task AsyncMirror_RetentionKeepsOlderProtectedBackupUntilNewOneIsProtected()
+    {
+        var catalog = new CaptureStorageCatalog();
+        var service = CreateService(new FakeCommandRunner(), retentionCount: 1, storageCatalog: catalog,
+            storageConfigurationResolver: CreateAsyncMirrorResolver());
+        Directory.CreateDirectory(_directory);
+        const string older = "garagebalance_automatic_20260701_020000_000.pgdump";
+        var path = Path.Combine(_directory, older);
+        await File.WriteAllBytesAsync(path, [1, 2, 3, 4]);
+        File.SetLastWriteTimeUtc(path, _now.AddDays(-2).UtcDateTime);
+        catalog.Objects.Add(new StorageObject { LogicalKey = older, State = StorageObjectState.Protected });
+        var created = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        Assert.True(created.Succeeded);
+        Assert.Equal(StorageObjectState.Protected, catalog.Objects.Single(item => item.LogicalKey == older).State);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
     public async Task AsyncMirror_RemoteOnlyBackupRemainsListedAndDownloadableThroughLogicalRouter()
     {
         const string fileName = "garagebalance_automatic_20260714_020000_000.pgdump";
@@ -181,7 +280,9 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         var download = await service.OpenDownloadAsync(fileName, null, CancellationToken.None);
 
         var listed = Assert.Single(status.Backups);
-        Assert.Equal("protected", listed.ProtectionState);
+        Assert.Equal("protection_degraded", listed.ProtectionState);
+        Assert.Equal(1, listed.AvailableCopies);
+        Assert.Equal(2, listed.RequiredCopies);
         Assert.True(download.Succeeded);
         await using var content = download.Value!.Content;
         using var target = new MemoryStream();
@@ -484,6 +585,53 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             cancellation.Token));
     }
 
+    [Fact]
+    public async Task CrossInstanceLockPreventsCreationAndDeleteWithoutTouchingFiles()
+    {
+        var runner = new FakeCommandRunner();
+        var maintenanceLock = new FakeMaintenanceLock { Available = false };
+        var service = CreateService(runner, storageMaintenanceLock: maintenanceLock);
+        var blocked = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        Assert.Equal("database_backup_in_progress", blocked.ErrorCode);
+        Assert.Empty(runner.Commands);
+        maintenanceLock.Available = true;
+        var created = await service.CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        Assert.True(created.Succeeded);
+        Assert.Equal(1, maintenanceLock.Releases);
+        maintenanceLock.Available = false;
+        var deleted = await service.DeleteAsync(created.Value!.FileName, "Проверка блокировки", null, CancellationToken.None);
+        Assert.Equal("database_backup_in_progress", deleted.ErrorCode);
+        Assert.True(File.Exists(Path.Combine(_directory, created.Value.FileName)));
+        Assert.Equal("database-backups:garagebalance", maintenanceLock.Scope);
+    }
+
+    [Fact]
+    public async Task CrossInstanceLeaseIsReleasedAfterDumpFailure()
+    {
+        var maintenanceLock = new FakeMaintenanceLock();
+        var result = await CreateService(new FakeCommandRunner { FailDump = true }, storageMaintenanceLock: maintenanceLock)
+            .CreateAsync(DatabaseBackupKind.Automatic, null, null, CancellationToken.None);
+        Assert.False(result.Succeeded);
+        Assert.Equal(1, maintenanceLock.Releases);
+    }
+
+    private sealed class FakeMaintenanceLock : IStorageMaintenanceLock
+    {
+        public bool Available { get; set; } = true;
+        public int Releases { get; private set; }
+        public string? Scope { get; private set; }
+        public Task<IAsyncDisposable?> TryAcquireAsync(string scope, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Scope = scope;
+            return Task.FromResult<IAsyncDisposable?>(Available ? new Lease(this) : null);
+        }
+        private sealed class Lease(FakeMaintenanceLock owner) : IAsyncDisposable
+        {
+            public ValueTask DisposeAsync() { owner.Releases++; return ValueTask.CompletedTask; }
+        }
+    }
+
     private PostgresDatabaseBackupService CreateService(
         FakeCommandRunner runner,
         CaptureAuditWriter? audit = null,
@@ -495,7 +643,9 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         IStorageCatalog? storageCatalog = null,
         StorageConfigurationResolver? storageConfigurationResolver = null,
         IStorageProviderRegistry? storageProviderRegistry = null,
-        IStorageReadRouter? storageReadRouter = null)
+        IStorageReadRouter? storageReadRouter = null,
+        IStorageMaintenanceLock? storageMaintenanceLock = null,
+        IStorageReconciliationGuard? storageReconciliationGuard = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -523,7 +673,9 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             storageProviderRegistry: storageProviderRegistry,
             storageConfigurationResolver: storageConfigurationResolver,
             storageCatalog: storageCatalog,
-            storageReadRouter: storageReadRouter);
+            storageReadRouter: storageReadRouter,
+            storageMaintenanceLock: storageMaintenanceLock,
+            storageReconciliationGuard: storageReconciliationGuard);
     }
 
     private StorageConfigurationResolver CreateAsyncMirrorResolver(long maximumPendingBytes = 20L * 1024 * 1024 * 1024)
@@ -690,14 +842,14 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
 
         public Task<StorageObject?> FindObjectAsync(Guid objectId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StorageObject?> FindByLogicalKeyAsync(string tenantId, StorageDataClass dataClass, string logicalKey, CancellationToken cancellationToken) =>
-            Task.FromResult(Objects.SingleOrDefault(item => item.DataClass == dataClass && string.Equals(item.LogicalKey, logicalKey, StringComparison.Ordinal)));
+            Task.FromResult(Objects.SingleOrDefault(item => item.TenantId == tenantId && item.DataClass == dataClass && string.Equals(item.LogicalKey, logicalKey, StringComparison.Ordinal)));
         public Task<StorageTransferJob?> ClaimNextJobAsync(string leaseOwner, TimeSpan leaseDuration, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StorageTransferContext> GetLeasedJobContextAsync(Guid jobId, string leaseOwner, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task MarkReplicationUploadingAsync(Guid jobId, string leaseOwner, string nativeLocator, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteReplicationAsync(Guid jobId, string leaseOwner, string nativeLocator, string? providerVersionId, string? providerChecksum, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ScheduleReplicationRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, StorageReplicaState replicaState, string category, string safeError, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task BlockReplicationAsync(Guid jobId, string leaseOwner, string category, string safeError, int requiredCopies, int desiredCopies, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> ScheduleRepairAsync(Guid objectId, string destinationId, StorageReplicaState observedState, string category, string safeError, int requiredCopies, int desiredCopies, int maximumAttempts, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> ScheduleRepairAsync(Guid objectId, string destinationId, StorageReplicaState observedState, string category, string safeError, int requiredCopies, int desiredCopies, int maximumAttempts, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException("Status reads must not schedule repair jobs.");
         public Task<StorageObject?> TombstoneAndScheduleDeleteAsync(string tenantId, StorageDataClass dataClass, string logicalKey, int maximumAttempts, DateTimeOffset now, CancellationToken cancellationToken)
         {
             var storageObject = Objects.SingleOrDefault(item => item.DataClass == dataClass && string.Equals(item.LogicalKey, logicalKey, StringComparison.Ordinal));
@@ -708,6 +860,16 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         public Task ScheduleDeleteRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, string category, string safeError, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteJobAsync(Guid jobId, string leaseOwner, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ScheduleJobRetryAsync(Guid jobId, string leaseOwner, DateTimeOffset dueAtUtc, string category, string safeError, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StorageManifestPage> ExportManifestPageAsync(string tenantId, StorageDataClass dataClass, int take, string? afterLogicalKey, CancellationToken cancellationToken)
+        {
+            var rows = Objects.Where(item => item.TenantId == tenantId && item.DataClass == dataClass &&
+                    (afterLogicalKey is null || string.CompareOrdinal(item.LogicalKey, afterLogicalKey) > 0))
+                .OrderBy(item => item.LogicalKey, StringComparer.Ordinal).Take(take + 1).ToArray();
+            return Task.FromResult(new StorageManifestPage(rows.Take(take).Select(item => new StorageManifestEntry(
+                item.Id, item.OperationId, item.DataClass, item.LogicalKey, item.CommittedGeneration, item.SizeBytes,
+                item.Sha256, item.State, item.CreatedAtUtc, item.UpdatedAtUtc, [])).ToArray(),
+                rows.Length > take ? rows[take - 1].LogicalKey : null));
+        }
         public Task<IReadOnlyList<StorageManifestEntry>> ExportManifestAsync(StorageDataClass dataClass, int take, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<StorageManifestEntry>>(Objects
                 .Where(item => item.DataClass == dataClass)

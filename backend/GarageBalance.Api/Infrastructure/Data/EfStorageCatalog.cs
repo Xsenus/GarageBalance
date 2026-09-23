@@ -4,8 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
-public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorageCatalog
+public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext, StorageConfigurationResolver? configurationResolver = null) : IStorageCatalog
 {
+    private readonly EffectiveStorageConfiguration? configuration = configurationResolver?.Resolve();
     public async Task<StorageCatalogRegistration> RegisterCommittedObjectAsync(
         RegisterCommittedStorageObjectRequest request,
         CancellationToken cancellationToken)
@@ -24,6 +25,11 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
         if (existing is not null)
         {
             EnsureIdempotent(existing, request, normalizedKey);
+            if (existing.TombstonedAtUtc is null && existing.State is not (StorageObjectState.Deleting or StorageObjectState.Deleted))
+            {
+                AddMissingTargets(existing, request.ReplicationTargets, request.MaximumAttempts, request.CreatedAtUtc);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
             await transaction.CommitAsync(cancellationToken);
             return new StorageCatalogRegistration(
                 existing,
@@ -130,23 +136,44 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                 cancellationToken);
     }
 
+    public Task<StorageTransferJob?> ClaimNextJobAsync(
+        string leaseOwner,
+        TimeSpan leaseDuration,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        ClaimNextJobAsync(leaseOwner, leaseDuration, now, Enum.GetValues<StorageTransferJobKind>(), cancellationToken);
+
     public async Task<StorageTransferJob?> ClaimNextJobAsync(
         string leaseOwner,
         TimeSpan leaseDuration,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        IReadOnlyCollection<StorageTransferJobKind> allowedKinds,
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? objectIds = null)
     {
         if (string.IsNullOrWhiteSpace(leaseOwner) || leaseOwner.Length > 160 ||
-            leaseDuration <= TimeSpan.Zero || leaseDuration > TimeSpan.FromHours(1))
+            leaseDuration <= TimeSpan.Zero || leaseDuration > TimeSpan.FromDays(1).Add(TimeSpan.FromMinutes(1)))
         {
             throw new ArgumentException("A bounded lease owner and duration are required.", nameof(leaseOwner));
+        }
+        if (allowedKinds.Count == 0)
+        {
+            return null;
+        }
+        var eligibleKinds = allowedKinds.Distinct().ToArray();
+        var eligibleObjects = objectIds?.Distinct().ToArray();
+        var eligibleJobs = dbContext.StorageTransferJobs.AsNoTracking().Where(job => eligibleKinds.Contains(job.Kind));
+        if (eligibleObjects is not null)
+        {
+            eligibleJobs = eligibleJobs.Where(job => eligibleObjects.Contains(job.StorageObjectId));
         }
 
         Guid[] candidateIds;
         if (IsPostgreSql())
         {
-            candidateIds = await dbContext.StorageTransferJobs.AsNoTracking()
+            candidateIds = await eligibleJobs
                 .Where(job =>
+                    eligibleKinds.Contains(job.Kind) &&
                     job.DueAtUtc <= now &&
                     job.AttemptCount < job.MaximumAttempts &&
                     (job.State == StorageTransferJobState.Ready ||
@@ -160,8 +187,9 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
         }
         else
         {
-            var boundedCandidates = await dbContext.StorageTransferJobs.AsNoTracking()
+            var boundedCandidates = await eligibleJobs
                 .Where(job =>
+                    eligibleKinds.Contains(job.Kind) &&
                     job.AttemptCount < job.MaximumAttempts &&
                     (job.State == StorageTransferJobState.Ready ||
                      job.State == StorageTransferJobState.RetryScheduled ||
@@ -184,6 +212,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             var version = Guid.NewGuid();
             var claimable = dbContext.StorageTransferJobs.Where(job =>
                 job.Id == candidateId &&
+                eligibleKinds.Contains(job.Kind) &&
                 job.AttemptCount < job.MaximumAttempts &&
                 (job.State == StorageTransferJobState.Ready ||
                  job.State == StorageTransferJobState.RetryScheduled ||
@@ -258,6 +287,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
         var job = await GetOwnedLeasedJobWithGraphAsync(jobId, leaseOwner, cancellationToken);
         var replica = job.StorageObjectReplica
             ?? throw new InvalidOperationException("Storage job has no target replica.");
+        EnsureCurrentGeneration(job, job.StorageObject ?? throw new InvalidOperationException("Storage job has no logical object."), replica);
         replica.MarkUploading(nativeLocator, now);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -304,6 +334,12 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             ?? throw new InvalidOperationException("Storage job has no logical object.");
         var replica = job.StorageObjectReplica
             ?? throw new InvalidOperationException("Storage job has no target replica.");
+        if (storageObject.TombstonedAtUtc is not null || storageObject.State is StorageObjectState.Deleting or StorageObjectState.Deleted)
+        {
+            job.Block("Tombstoned", "Storage object was deleted while replication was in progress.", now);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
         if (replicaState == StorageReplicaState.Unknown)
         {
             replica.MarkUnknown(safeError, now);
@@ -336,9 +372,12 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             ?? throw new InvalidOperationException("Storage job has no logical object.");
         var replica = job.StorageObjectReplica
             ?? throw new InvalidOperationException("Storage job has no target replica.");
-        replica.MarkFailed(category, safeError, now);
         job.Block(category, safeError, now);
-        RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
+        if (storageObject.TombstonedAtUtc is null && storageObject.State is not (StorageObjectState.Deleting or StorageObjectState.Deleted))
+        {
+            replica.MarkFailed(category, safeError, now);
+            RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
+        }
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -372,12 +411,20 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             string.Equals(item.DestinationId, destinationId, StringComparison.Ordinal) &&
             item.Generation == storageObject.CommittedGeneration)
             ?? throw new InvalidOperationException("Storage replica was not found.");
+        if (storageObject.Jobs.Any(item => item.DestinationId == destinationId && item.Generation == storageObject.CommittedGeneration &&
+                item.State == StorageTransferJobState.Leased && item.LeaseExpiresAtUtc > now))
+        {
+            return false;
+        }
         replica.State = observedState;
         replica.LastErrorCategory = StorageObjectReplica.LimitError(category);
         replica.LastError = StorageObjectReplica.LimitError(safeError);
         replica.UpdatedAtUtc = now;
         var idempotencyKey = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{destinationId}:repair";
-        var job = storageObject.Jobs.SingleOrDefault(item => string.Equals(item.IdempotencyKey, idempotencyKey, StringComparison.Ordinal));
+        var job = storageObject.Jobs.Where(item => item.Kind == StorageTransferJobKind.Repair &&
+                item.DestinationId == destinationId && item.Generation == storageObject.CommittedGeneration &&
+                item.State is not (StorageTransferJobState.Completed or StorageTransferJobState.Blocked or StorageTransferJobState.DeadLetter))
+            .OrderByDescending(item => item.CreatedAtUtc).FirstOrDefault();
         if (job is null)
         {
             job = new StorageTransferJob
@@ -388,7 +435,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                 Generation = storageObject.CommittedGeneration,
                 Kind = StorageTransferJobKind.Repair,
                 State = StorageTransferJobState.Ready,
-                IdempotencyKey = idempotencyKey,
+                IdempotencyKey = idempotencyKey + ":" + Guid.NewGuid().ToString("N"),
                 PolicyRevision = storageObject.PolicyRevision,
                 MaximumAttempts = maximumAttempts,
                 DueAtUtc = now,
@@ -396,18 +443,6 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                 UpdatedAtUtc = now
             };
             dbContext.StorageTransferJobs.Add(job);
-        }
-        else if (job.State is StorageTransferJobState.Completed or StorageTransferJobState.Blocked or StorageTransferJobState.DeadLetter)
-        {
-            job.State = StorageTransferJobState.Ready;
-            job.AttemptCount = 0;
-            job.MaximumAttempts = maximumAttempts;
-            job.DueAtUtc = now;
-            job.LeaseOwner = null;
-            job.LeaseExpiresAtUtc = null;
-            job.LastErrorCategory = null;
-            job.LastError = null;
-            job.UpdatedAtUtc = now;
         }
         RefreshProtection(storageObject, requiredCopies, desiredCopies, now);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -432,15 +467,22 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
             return null;
         }
         storageObject.BeginDelete(now);
+        // An already-running immutable upload may still be finishing; delete only after its bounded lease.
+        var deleteNotBefore = storageObject.Jobs
+            .Where(job => job.State == StorageTransferJobState.Leased && job.Kind != StorageTransferJobKind.Delete)
+            .Select(job => job.LeaseExpiresAtUtc ?? now)
+            .Append(now)
+            .Max();
+        foreach (var obsolete in storageObject.Jobs.Where(job => job.Kind != StorageTransferJobKind.Delete &&
+                     job.State is StorageTransferJobState.Ready or StorageTransferJobState.RetryScheduled))
+        {
+            obsolete.State = StorageTransferJobState.Blocked;
+            obsolete.LastErrorCategory = "Tombstoned";
+            obsolete.LastError = "Storage object was deleted before delivery completed.";
+            obsolete.UpdatedAtUtc = now;
+        }
         foreach (var replica in storageObject.Replicas.Where(item => item.State != StorageReplicaState.Deleted))
         {
-            if (replica.State is StorageReplicaState.Pending or StorageReplicaState.Missing or
-                StorageReplicaState.Corrupted or StorageReplicaState.Failed or StorageReplicaState.Disabled)
-            {
-                replica.State = StorageReplicaState.Deleted;
-                replica.UpdatedAtUtc = now;
-                continue;
-            }
             replica.BeginDelete(now);
             var idempotencyKey = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{replica.DestinationId}:delete";
             if (storageObject.Jobs.Any(item => string.Equals(item.IdempotencyKey, idempotencyKey, StringComparison.Ordinal)))
@@ -458,7 +500,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                 IdempotencyKey = idempotencyKey,
                 PolicyRevision = storageObject.PolicyRevision,
                 MaximumAttempts = maximumAttempts,
-                DueAtUtc = now,
+                DueAtUtc = deleteNotBefore,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
             });
@@ -499,12 +541,20 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                      item.Generation == storageObject.CommittedGeneration &&
                      item.State is not (StorageReplicaState.Available or StorageReplicaState.Deleting or StorageReplicaState.Deleted or StorageReplicaState.Disabled)))
         {
+            if (storageObject.Jobs.Any(item => item.DestinationId == replica.DestinationId && item.Generation == storageObject.CommittedGeneration &&
+                    item.State == StorageTransferJobState.Leased && item.LeaseExpiresAtUtc > now))
+            {
+                continue;
+            }
             replica.State = StorageReplicaState.Missing;
             replica.LastErrorCategory = null;
             replica.LastError = null;
             replica.UpdatedAtUtc = now;
             var key = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{replica.DestinationId}:repair";
-            var job = storageObject.Jobs.SingleOrDefault(item => string.Equals(item.IdempotencyKey, key, StringComparison.Ordinal));
+            var job = storageObject.Jobs.Where(item => item.Kind is StorageTransferJobKind.Replicate or StorageTransferJobKind.Repair &&
+                    item.DestinationId == replica.DestinationId && item.Generation == storageObject.CommittedGeneration &&
+                    item.State is not (StorageTransferJobState.Completed or StorageTransferJobState.Blocked or StorageTransferJobState.DeadLetter))
+                .OrderByDescending(item => item.CreatedAtUtc).FirstOrDefault();
             if (job is null)
             {
                 dbContext.StorageTransferJobs.Add(new StorageTransferJob
@@ -515,7 +565,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                     Generation = storageObject.CommittedGeneration,
                     Kind = StorageTransferJobKind.Repair,
                     State = StorageTransferJobState.Ready,
-                    IdempotencyKey = key,
+                    IdempotencyKey = key + ":" + Guid.NewGuid().ToString("N"),
                     PolicyRevision = storageObject.PolicyRevision,
                     MaximumAttempts = maximumAttempts,
                     DueAtUtc = now,
@@ -523,7 +573,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                     UpdatedAtUtc = now
                 });
             }
-            else if (job.State is StorageTransferJobState.Completed or StorageTransferJobState.Blocked or StorageTransferJobState.DeadLetter)
+            else
             {
                 job.State = StorageTransferJobState.Ready;
                 job.AttemptCount = 0;
@@ -633,7 +683,173 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                 .ToArrayAsync(cancellationToken);
             objects = boundedObjects.OrderByDescending(item => item.UpdatedAtUtc).ToArray();
         }
-        return objects.Select(item => new StorageManifestEntry(
+        return objects.Select(ToManifestEntry).ToArray();
+    }
+
+    public async Task<StorageManifestPage> ExportManifestPageAsync(
+        string tenantId,
+        StorageDataClass dataClass,
+        int take,
+        string? afterLogicalKey,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || take is < 1 or > 10000)
+        {
+            throw new ArgumentException("A tenant and a page size between 1 and 10000 are required.");
+        }
+        var query = dbContext.StorageObjects.AsNoTracking()
+            .Where(item => item.TenantId == tenantId && item.DataClass == dataClass);
+        if (afterLogicalKey is not null)
+        {
+            query = query.Where(item => string.Compare(item.LogicalKey, afterLogicalKey) > 0);
+        }
+        // Immutable logical keys keep pages stable while verification updates timestamps.
+        var objects = await query.OrderBy(item => item.LogicalKey)
+            .Take(take + 1)
+            .Include(item => item.Replicas)
+            .ToArrayAsync(cancellationToken);
+        var items = objects.Take(take).Select(ToManifestEntry).ToArray();
+        return new StorageManifestPage(items, objects.Length > take ? items[^1].LogicalKey : null);
+    }
+
+    public async Task<bool> RecordReplicaVerifiedAsync(
+        Guid objectId,
+        string destinationId,
+        long generation,
+        string sha256,
+        long sizeBytes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var storageObject = await dbContext.StorageObjects.Include(item => item.Replicas)
+            .SingleOrDefaultAsync(item => item.Id == objectId, cancellationToken);
+        if (storageObject is null || storageObject.TombstonedAtUtc is not null ||
+            storageObject.State is StorageObjectState.Deleting or StorageObjectState.Deleted ||
+            storageObject.CommittedGeneration != generation || storageObject.SizeBytes != sizeBytes ||
+            !string.Equals(storageObject.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        var replica = storageObject.Replicas.SingleOrDefault(item => item.DestinationId == destinationId && item.Generation == generation);
+        if (replica is null || replica.State is StorageReplicaState.Deleting or StorageReplicaState.Deleted or StorageReplicaState.Disabled)
+        {
+            return false;
+        }
+        replica.MarkAvailable(sizeBytes, sha256, sha256, now);
+        var policy = configuration?.Policies.SingleOrDefault(item => item.Id == storageObject.PolicyId);
+        if (policy is not null)
+        {
+            RefreshProtection(storageObject, policy.RequiredIndependentCopies, policy.DesiredCopies, now);
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> EnsureTargetsAsync(Guid objectId, string policyId, int policyRevision,
+        IReadOnlyList<StorageReplicationTarget> targets, int maximumAttempts, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!StorageObjectKey.IsValidId(policyId) || policyRevision < 1 || maximumAttempts < 1 ||
+            targets.Any(target => !StorageObjectKey.IsValidId(target.DestinationId) || !StorageObjectKey.IsValidId(target.FailureDomain)))
+        {
+            throw new ArgumentException("A valid policy and replication targets are required.");
+        }
+        var storageObject = await dbContext.StorageObjects.Include(item => item.Replicas).Include(item => item.Jobs)
+            .SingleOrDefaultAsync(item => item.Id == objectId, cancellationToken)
+            ?? throw new InvalidOperationException("Storage object was not found.");
+        if (storageObject.TombstonedAtUtc is not null || storageObject.State is StorageObjectState.Deleting or StorageObjectState.Deleted)
+        {
+            return false;
+        }
+        if (storageObject.PolicyId != policyId || policyRevision < storageObject.PolicyRevision)
+        {
+            throw new InvalidOperationException("A storage policy cannot be replaced or rolled back during target reconciliation.");
+        }
+        storageObject.PolicyRevision = policyRevision;
+        var changed = AddMissingTargets(storageObject, targets, maximumAttempts, now);
+        foreach (var job in storageObject.Jobs.Where(job => job.Kind is StorageTransferJobKind.Replicate or StorageTransferJobKind.Repair &&
+                     job.State is not (StorageTransferJobState.Leased or StorageTransferJobState.Completed) &&
+                     targets.Any(target => target.DestinationId == job.DestinationId)))
+        {
+            if (job.PolicyRevision != policyRevision)
+            {
+                job.PolicyRevision = policyRevision;
+                job.State = StorageTransferJobState.Ready;
+                job.AttemptCount = 0;
+                job.DueAtUtc = now;
+                job.LastErrorCategory = null;
+                job.LastError = null;
+                changed = true;
+            }
+        }
+        var policy = configuration?.Policies.SingleOrDefault(item => item.Id == policyId);
+        if (policy is not null)
+        {
+            RefreshProtection(storageObject, policy.RequiredIndependentCopies, policy.DesiredCopies, now);
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return changed;
+    }
+
+    private bool AddMissingTargets(StorageObject storageObject, IReadOnlyList<StorageReplicationTarget> targets,
+        int maximumAttempts, DateTimeOffset now)
+    {
+        var changed = false;
+        foreach (var target in targets.DistinctBy(target => target.DestinationId))
+        {
+            if (configuration is not null && !configuration.Destinations.Any(destination => destination.Id == target.DestinationId &&
+                    destination.State is StorageDestinationState.Enabled or StorageDestinationState.Recovering &&
+                    destination.Capabilities.HasFlag(StorageCapability.Write)))
+            {
+                continue;
+            }
+            var existing = storageObject.Replicas.SingleOrDefault(replica => replica.DestinationId == target.DestinationId &&
+                replica.Generation == storageObject.CommittedGeneration);
+            if (existing is not null)
+            {
+                if (existing.FailureDomain != target.FailureDomain)
+                {
+                    throw new InvalidOperationException("Existing replica failure domain cannot be reassigned without re-verification.");
+                }
+                continue;
+            }
+            var replica = new StorageObjectReplica
+            {
+                StorageObject = storageObject,
+                DestinationId = target.DestinationId,
+                FailureDomain = target.FailureDomain,
+                NativeLocator = storageObject.LogicalKey,
+                Generation = storageObject.CommittedGeneration,
+                State = StorageReplicaState.Pending,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+            dbContext.StorageObjectReplicas.Add(replica);
+            dbContext.StorageTransferJobs.Add(new StorageTransferJob
+            {
+                StorageObject = storageObject,
+                StorageObjectReplica = replica,
+                DestinationId = target.DestinationId,
+                Generation = storageObject.CommittedGeneration,
+                Kind = StorageTransferJobKind.Replicate,
+                State = StorageTransferJobState.Ready,
+                IdempotencyKey = $"{storageObject.OperationId:N}:{storageObject.CommittedGeneration}:{target.DestinationId}:replicate",
+                PolicyRevision = storageObject.PolicyRevision,
+                MaximumAttempts = maximumAttempts,
+                DueAtUtc = now,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            });
+            changed = true;
+        }
+        if (changed && storageObject.State == StorageObjectState.CreatedLocal)
+        {
+            storageObject.State = StorageObjectState.ProtectionPending;
+        }
+        return changed;
+    }
+
+    private static StorageManifestEntry ToManifestEntry(StorageObject item) => new(
             item.Id,
             item.OperationId,
             item.DataClass,
@@ -654,8 +870,7 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
                     replica.SizeBytes,
                     replica.Sha256,
                     replica.LastVerifiedAtUtc))
-                .ToArray())).ToArray();
-    }
+                .ToArray());
 
     private async Task<StorageTransferJob> GetOwnedLeasedJobAsync(
         Guid jobId,
@@ -709,21 +924,35 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext) : IStorag
         }
     }
 
-    private static void RefreshProtection(
+    private void RefreshProtection(
         StorageObject storageObject,
         int requiredCopies,
         int desiredCopies,
         DateTimeOffset now)
     {
-        var availableFailureDomains = storageObject.Replicas
+        var policy = configuration?.Policies.SingleOrDefault(item => item.DataClass == storageObject.DataClass);
+        var pool = configuration?.Pools.SingleOrDefault(item => item.Id == policy?.PoolId);
+        var available = storageObject.Replicas
             .Where(replica => replica.State == StorageReplicaState.Available &&
                 replica.Generation == storageObject.CommittedGeneration &&
                 replica.SizeBytes == storageObject.SizeBytes &&
                 string.Equals(replica.Sha256, storageObject.Sha256, StringComparison.OrdinalIgnoreCase))
-            .Select(replica => replica.FailureDomain)
+            .Where(replica => configuration is null || configuration.Destinations.Any(destination =>
+                destination.Id == replica.DestinationId && destination.State != StorageDestinationState.Disabled &&
+                destination.TenantId == storageObject.TenantId && configuration.TenantId == storageObject.TenantId &&
+                destination.FailureDomain == replica.FailureDomain &&
+                destination.Capabilities.HasFlag(StorageCapability.Read | StorageCapability.Stat) &&
+                pool?.DestinationIds.Contains(destination.Id, StringComparer.Ordinal) == true))
+            .ToArray();
+        var availableFailureDomains = available.Select(replica => replica.FailureDomain)
             .Distinct(StringComparer.Ordinal)
             .Count();
-        storageObject.SetProtection(availableFailureDomains, requiredCopies, desiredCopies, now);
+        var offsiteCopies = available.Where(replica => configuration?.Destinations.Any(destination =>
+                destination.Id == replica.DestinationId && destination.Type != StorageProviderType.LocalFileSystem) == true)
+            .Select(replica => replica.FailureDomain).Distinct(StringComparer.Ordinal).Count();
+        storageObject.SetProtection(availableFailureDomains, policy?.RequiredIndependentCopies ?? requiredCopies,
+            policy?.DesiredCopies ?? desiredCopies, now,
+            offsiteCopies, policy?.MinimumOffsiteCopies ?? 0);
     }
 
     private static void ValidateRegistration(RegisterCommittedStorageObjectRequest request)
