@@ -31,7 +31,8 @@ public sealed class StagingCloudBackupDeploymentTests
         Assert.Contains("umask 077", script, StringComparison.Ordinal);
         Assert.Contains("chmod 600 \"$temporary_env\"", script, StringComparison.Ordinal);
         Assert.Contains("EnvironmentFile=%s", script, StringComparison.Ordinal);
-        Assert.Contains("trap rollback ERR", script, StringComparison.Ordinal);
+        Assert.Contains("trap on_error ERR", script, StringComparison.Ordinal);
+        Assert.Contains("wait_for_api", script, StringComparison.Ordinal);
         Assert.Contains("Storage__Mode=AsyncMirror", script, StringComparison.Ordinal);
         Assert.Contains("Storage__Policies__0__RequiredIndependentCopies=2", script, StringComparison.Ordinal);
         Assert.Contains("Storage__Policies__0__MinimumOffsiteCopies=1", script, StringComparison.Ordinal);

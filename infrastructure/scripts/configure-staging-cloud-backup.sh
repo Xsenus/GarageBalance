@@ -11,6 +11,19 @@ BACKUP_DIR="$APP_ROOT/backups"
 TOOL_UNIT=/etc/systemd/system/garagebalance-storage-tool@.service
 MIGRATION_DIR=/var/lib/garagebalance-staging/storage-migration
 
+wait_for_api() {
+  local attempt
+  for attempt in {1..15}; do
+    if curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+      https://sgk.blagodaty.ru/health/ready >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo 'API did not become healthy after restart' >&2
+  return 1
+}
+
 [[ "$(id -u)" == 0 ]] || { echo 'root is required' >&2; exit 77; }
 
 case "${1:-}" in
@@ -54,7 +67,12 @@ case "${1:-}" in
       systemctl daemon-reload || true
       systemctl restart "$SERVICE" || true
     }
-    trap rollback ERR
+    on_error() {
+      trap - ERR
+      rollback
+      exit 1
+    }
+    trap on_error ERR
 
     {
       printf 'AWS_ACCESS_KEY_ID=%s:%s\n' "$tenant_id" "$key_id"
@@ -132,8 +150,7 @@ case "${1:-}" in
     chmod 644 "$TOOL_UNIT"
     systemctl daemon-reload
     systemctl restart "$SERVICE"
-    curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
-      https://sgk.blagodaty.ru/health/ready >/dev/null
+    wait_for_api
     trap - ERR
     echo 'cloud backup configuration installed; application is healthy'
     ;;
@@ -154,8 +171,7 @@ case "${1:-}" in
     rm -f -- "$DROP_IN" "$TOOL_UNIT" "$CLOUD_ENV"
     systemctl daemon-reload
     systemctl restart "$SERVICE"
-    curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
-      https://sgk.blagodaty.ru/health/ready >/dev/null
+    wait_for_api
     echo 'Cloud backup configuration disabled; application is healthy'
     ;;
   *) echo 'usage: inspect | apply <bucket> <kms-key-id> <tenant-id> | run <command> | disable' >&2; exit 64 ;;
