@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 tool=/opt/garagebalance-staging/storage-tool/GarageBalance.StorageTool
 checkpoint=/var/lib/garagebalance-staging/storage-migration/cloudru-backfill.json
+if [[ -f /etc/garagebalance-staging-hostkey.env ]]; then
+  checkpoint=/var/lib/garagebalance-staging/storage-migration/multi-s3-backfill.json
+fi
 [[ -x "$tool" ]] || { echo 'Storage tool is unavailable' >&2; exit 1; }
 [[ "$#" == 1 ]] || exit 64
 

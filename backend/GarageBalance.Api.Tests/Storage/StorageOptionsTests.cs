@@ -176,6 +176,56 @@ public sealed class StorageOptionsTests
     }
 
     [Theory]
+    [InlineData("EnvironmentVariables:HOSTKEY", true)]
+    [InlineData("EnvironmentVariables:HOSTKEY_2", true)]
+    [InlineData("EnvironmentVariables:", false)]
+    [InlineData("EnvironmentVariables:hostkey", false)]
+    [InlineData("EnvironmentVariables:HOSTKEY-SECOND", false)]
+    public void NamedEnvironmentCredentialSource_HasBoundedNonSecretIdentifier(string source, bool valid) =>
+        Assert.Equal(valid, S3CredentialSource.IsValid(source));
+
+    [Fact]
+    public void Validator_RequiresExplicitAcknowledgementForUnencryptedS3()
+    {
+        var options = CreateValidAsyncMirror(includeSecondOffsite: false);
+        options.Destinations[1] = new StorageDestinationOptions
+        {
+            Id = "offsite-a",
+            Type = StorageProviderType.S3Compatible,
+            FailureDomain = "hostkey-nl",
+            Endpoint = "https://s3-nl.hostkey.com",
+            Bucket = "private-backups",
+            Prefix = "garagebalance/staging/backups",
+            SigningRegion = "nl",
+            AllowedEndpointHosts = ["s3-nl.hostkey.com"],
+            CredentialSource = "EnvironmentVariables:HOSTKEY",
+            EncryptionMode = S3EncryptionMode.None,
+            EncryptionAtRest = false,
+            PrivateAccess = true,
+            Capabilities = ["Read", "Write", "Stat", "Delete"]
+        };
+        Assert.True(new StorageOptionsValidator().Validate(null, options).Failed);
+        options.Destinations[1] = new StorageDestinationOptions
+        {
+            Id = "offsite-a",
+            Type = StorageProviderType.S3Compatible,
+            FailureDomain = "hostkey-nl",
+            Endpoint = "https://s3-nl.hostkey.com",
+            Bucket = "private-backups",
+            Prefix = "garagebalance/staging/backups",
+            SigningRegion = "nl",
+            AllowedEndpointHosts = ["s3-nl.hostkey.com"],
+            CredentialSource = "EnvironmentVariables:HOSTKEY",
+            EncryptionMode = S3EncryptionMode.None,
+            EncryptionAtRest = false,
+            UnencryptedAtRestAcknowledged = true,
+            PrivateAccess = true,
+            Capabilities = ["Read", "Write", "Stat", "Delete"]
+        };
+        Assert.True(new StorageOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Theory]
     [InlineData("../backup.pgdump")]
     [InlineData("backups//copy.pgdump")]
     [InlineData("/backups/copy.pgdump")]

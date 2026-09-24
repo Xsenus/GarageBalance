@@ -5,6 +5,7 @@ APP_ROOT=/opt/garagebalance-staging
 SERVICE=garagebalance-staging.service
 ENV_FILE=/etc/garagebalance-staging.env
 CLOUD_ENV=/etc/garagebalance-staging-cloud.env
+HOSTKEY_ENV=/etc/garagebalance-staging-hostkey.env
 DROP_IN_DIR=/etc/systemd/system/garagebalance-staging.service.d
 DROP_IN="$DROP_IN_DIR/50-cloud-backup.conf"
 BACKUP_DIR="$APP_ROOT/backups"
@@ -38,6 +39,7 @@ case "${1:-}" in
     else
       echo 'Storage__Mode=Single'
     fi
+    if [[ -f "$HOSTKEY_ENV" ]]; then echo 'hostkey=enabled'; else echo 'hostkey=disabled'; fi
     systemctl is-active "$SERVICE"
     systemctl is-enabled garagebalance-storage-sync.timer 2>/dev/null || true
     exit 0
@@ -192,6 +194,79 @@ case "${1:-}" in
     trap - ERR
     echo 'cloud backup configuration installed; application is healthy'
     ;;
+  add-hostkey)
+    [[ "$#" == 2 ]] || exit 64
+    bucket="$2"
+    [[ "$bucket" =~ ^[a-z0-9][a-z0-9.-]{2,62}$ ]] || exit 64
+    [[ -f "$CLOUD_ENV" && -f "$DROP_IN" && -f "$TOOL_UNIT" && ! -e "$HOSTKEY_ENV" ]] || exit 1
+    IFS= read -r access_key || exit 64
+    IFS= read -r secret_key || exit 64
+    [[ "$access_key" =~ ^[A-Za-z0-9._-]{16,128}$ ]] || exit 64
+    [[ "$secret_key" =~ ^[A-Za-z0-9/+=._-]{16,256}$ ]] || exit 64
+
+    umask 077
+    temporary_env="$(mktemp /etc/garagebalance-staging-hostkey.env.XXXXXXXX)"
+    previous_drop_in="$(mktemp /etc/garagebalance-hostkey-drop-in.XXXXXXXX)"
+    previous_tool_unit="$(mktemp /etc/garagebalance-hostkey-tool-unit.XXXXXXXX)"
+    cp -- "$DROP_IN" "$previous_drop_in"
+    cp -- "$TOOL_UNIT" "$previous_tool_unit"
+    timer_was_enabled=0
+    if systemctl is-enabled --quiet garagebalance-storage-sync.timer; then timer_was_enabled=1; fi
+    rollback_hostkey() {
+      cp -- "$previous_drop_in" "$DROP_IN"
+      cp -- "$previous_tool_unit" "$TOOL_UNIT"
+      rm -f -- "$temporary_env" "$HOSTKEY_ENV" "$previous_drop_in" "$previous_tool_unit"
+      systemctl daemon-reload || true
+      systemctl restart "$SERVICE" || true
+      if [[ "$timer_was_enabled" == 1 ]]; then systemctl enable --now garagebalance-storage-sync.timer || true; fi
+    }
+    on_hostkey_error() {
+      trap - ERR
+      rollback_hostkey
+      exit 1
+    }
+    trap on_hostkey_error ERR
+    if [[ "$timer_was_enabled" == 1 ]]; then systemctl disable --now garagebalance-storage-sync.timer; fi
+    {
+      printf 'GB_S3_HOSTKEY_ACCESS_KEY_ID=%s\n' "$access_key"
+      printf 'GB_S3_HOSTKEY_SECRET_ACCESS_KEY=%s\n' "$secret_key"
+      printf '%s\n' \
+        'Storage__Destinations__2__Id=hostkey-nl' \
+        'Storage__Destinations__2__Type=S3Compatible' \
+        'Storage__Destinations__2__State=Enabled' \
+        'Storage__Destinations__2__FailureDomain=hostkey-netherlands' \
+        'Storage__Destinations__2__TenantId=garagebalance' \
+        'Storage__Destinations__2__Endpoint=https://s3-nl.hostkey.com' \
+        'Storage__Destinations__2__AllowedEndpointHosts__0=s3-nl.hostkey.com' \
+        "Storage__Destinations__2__Bucket=$bucket" \
+        'Storage__Destinations__2__Prefix=garagebalance/staging/backups' \
+        'Storage__Destinations__2__SigningRegion=nl' \
+        'Storage__Destinations__2__ForcePathStyle=true' \
+        'Storage__Destinations__2__CredentialSource=EnvironmentVariables:HOSTKEY' \
+        'Storage__Destinations__2__EncryptionMode=None' \
+        'Storage__Destinations__2__PrivateAccess=true' \
+        'Storage__Destinations__2__EncryptionAtRest=false' \
+        'Storage__Destinations__2__UnencryptedAtRestAcknowledged=true' \
+        'Storage__Destinations__2__Capabilities__0=Read' \
+        'Storage__Destinations__2__Capabilities__1=Write' \
+        'Storage__Destinations__2__Capabilities__2=Stat' \
+        'Storage__Destinations__2__Capabilities__3=Delete' \
+        'Storage__Pools__0__DestinationIds__2=hostkey-nl' \
+        'Storage__Policies__0__RequiredIndependentCopies=3' \
+        'Storage__Policies__0__MinimumOffsiteCopies=2' \
+        'Storage__Policies__0__DesiredCopies=3'
+    } > "$temporary_env"
+    chmod 600 "$temporary_env"
+    mv -- "$temporary_env" "$HOSTKEY_ENV"
+    printf 'EnvironmentFile=%s\n' "$HOSTKEY_ENV" >> "$DROP_IN"
+    printf 'EnvironmentFile=%s\n' "$HOSTKEY_ENV" >> "$TOOL_UNIT"
+    systemctl daemon-reload
+    systemctl restart "$SERVICE"
+    wait_for_api
+    rm -f -- "$previous_drop_in" "$previous_tool_unit"
+    trap - ERR
+    echo 'Hostkey destination installed; application is healthy; hourly sync is paused until backfill is verified'
+    ;;
   run)
     [[ "$#" == 2 ]] || exit 64
     case "$2" in
@@ -216,10 +291,12 @@ case "${1:-}" in
     ;;
   schedule)
     [[ "$#" == 1 ]] || exit 64
-    [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" && -f "$MIGRATION_DIR/cloudru-backfill.json" ]] || exit 1
+    checkpoint="$MIGRATION_DIR/cloudru-backfill.json"
+    if [[ -f "$HOSTKEY_ENV" ]]; then checkpoint="$MIGRATION_DIR/multi-s3-backfill.json"; fi
+    [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" && -f "$checkpoint" ]] || exit 1
     printf '%s\n' \
       '[Unit]' \
-      'Description=Synchronize GarageBalance database backups to Cloud.ru hourly' \
+      'Description=Synchronize GarageBalance database backups to offsite storage hourly' \
       '[Timer]' \
       'OnCalendar=hourly' \
       'Persistent=true' \
@@ -234,11 +311,11 @@ case "${1:-}" in
     [[ "$#" == 1 ]] || exit 64
     [[ -f "$CLOUD_ENV" && -f "$DROP_IN" ]] || exit 1
     systemctl disable --now garagebalance-storage-sync.timer 2>/dev/null || true
-    rm -f -- "$DROP_IN" "$TOOL_UNIT" "$SYNC_TIMER" "$CLOUD_ENV"
+    rm -f -- "$DROP_IN" "$TOOL_UNIT" "$SYNC_TIMER" "$HOSTKEY_ENV" "$CLOUD_ENV"
     systemctl daemon-reload
     systemctl restart "$SERVICE"
     wait_for_api
     echo 'Cloud backup configuration disabled; application is healthy'
     ;;
-  *) echo 'usage: inspect | audit-files | allow-legacy-read | apply <bucket> <kms-key-id> <tenant-id> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
+  *) echo 'usage: inspect | audit-files | allow-legacy-read | apply <bucket> <kms-key-id> <tenant-id> | add-hostkey <bucket> | run <command> | diagnose <command> | schedule | disable' >&2; exit 64 ;;
 esac

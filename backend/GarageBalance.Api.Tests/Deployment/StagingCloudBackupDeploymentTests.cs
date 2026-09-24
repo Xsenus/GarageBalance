@@ -70,10 +70,28 @@ public sealed class StagingCloudBackupDeploymentTests
         var runner = File.ReadAllText(Path.Combine(RepositoryRoot, "infrastructure", "scripts", "run-staging-storage-tool.sh"));
 
         Assert.Contains("copy|resume|delta-sync)", runner, StringComparison.Ordinal);
+        Assert.Contains("multi-s3-backfill.json", runner, StringComparison.Ordinal);
         Assert.Contains("--execute --checkpoint \"$checkpoint\"", runner, StringComparison.Ordinal);
         Assert.Contains("inventory|plan|cutover-check|status)", runner, StringComparison.Ordinal);
         Assert.Contains("exec \"$tool\" \"$1\"", runner, StringComparison.Ordinal);
         Assert.DoesNotContain("eval ", runner, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostkeyAdditionIsExplicitlyUnencryptedAndPreservesCloudOnStartupFailure()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot, "infrastructure", "scripts", "configure-staging-cloud-backup.sh"));
+        Assert.Contains("add-hostkey)", script, StringComparison.Ordinal);
+        Assert.Contains("IFS= read -r access_key", script, StringComparison.Ordinal);
+        Assert.Contains("IFS= read -r secret_key", script, StringComparison.Ordinal);
+        Assert.Contains("chmod 600 \"$temporary_env\"", script, StringComparison.Ordinal);
+        Assert.Contains("rollback_hostkey()", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Destinations__2__CredentialSource=EnvironmentVariables:HOSTKEY", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Destinations__2__EncryptionMode=None", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Destinations__2__UnencryptedAtRestAcknowledged=true", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Policies__0__RequiredIndependentCopies=3", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Policies__0__MinimumOffsiteCopies=2", script, StringComparison.Ordinal);
+        Assert.Contains("multi-s3-backfill.json", script, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

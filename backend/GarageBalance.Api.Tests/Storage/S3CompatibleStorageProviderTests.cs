@@ -15,6 +15,7 @@ public sealed class S3CompatibleStorageProviderTests
     [Theory]
     [InlineData(S3EncryptionMode.SseS3, null)]
     [InlineData(S3EncryptionMode.SseKms, "kms-key-123")]
+    [InlineData(S3EncryptionMode.None, null)]
     public async Task AwsClient_UsesConfiguredEncryptionForSingleAndMultipartWrites(
         S3EncryptionMode encryptionMode,
         string? kmsKeyId)
@@ -32,9 +33,9 @@ public sealed class S3CompatibleStorageProviderTests
         await client.CompleteMultipartAsync(
             "bucket", "test-multipart", "upload-1", [uploadedPart], CancellationToken.None);
 
-        var expectedMethod = encryptionMode == S3EncryptionMode.SseKms
+        ServerSideEncryptionMethod? expectedMethod = encryptionMode == S3EncryptionMode.SseKms
             ? ServerSideEncryptionMethod.AWSKMS
-            : ServerSideEncryptionMethod.AES256;
+            : encryptionMode == S3EncryptionMode.SseS3 ? ServerSideEncryptionMethod.AES256 : null;
         Assert.Equal(expectedMethod, spy.PutRequest?.ServerSideEncryptionMethod);
         Assert.Equal(kmsKeyId, spy.PutRequest?.ServerSideEncryptionKeyManagementServiceKeyId);
         Assert.Equal(expectedMethod, spy.MultipartRequest?.ServerSideEncryptionMethod);
@@ -42,6 +43,24 @@ public sealed class S3CompatibleStorageProviderTests
         Assert.Equal("AQID", uploadedPart.ChecksumSha256);
         Assert.Equal("AQID", spy.UploadPartRequest?.ChecksumSHA256);
         Assert.Equal("AQID", Assert.Single(spy.CompleteRequest?.PartETags ?? []).ChecksumSHA256);
+    }
+
+    [Fact]
+    public void NamedS3Credentials_AreDistinctAndFailClosedWithoutEnvironmentPair()
+    {
+        var cloud = AwsS3ObjectClientFactory.ResolveCredentials("DefaultChain", _ => null);
+        var hostkey = AwsS3ObjectClientFactory.ResolveCredentials("EnvironmentVariables:HOSTKEY", name => name switch
+        {
+            "GB_S3_HOSTKEY_ACCESS_KEY_ID" => "synthetic-access",
+            "GB_S3_HOSTKEY_SECRET_ACCESS_KEY" => "synthetic-secret",
+            _ => null
+        });
+
+        Assert.Null(cloud);
+        Assert.NotNull(hostkey);
+        Assert.Equal("synthetic-access", hostkey.GetCredentials().AccessKey);
+        Assert.Equal("synthetic-secret", hostkey.GetCredentials().SecretKey);
+        Assert.Throws<InvalidOperationException>(() => AwsS3ObjectClientFactory.ResolveCredentials("EnvironmentVariables:HOSTKEY", _ => null));
     }
 
     [Fact]

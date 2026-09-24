@@ -20,7 +20,8 @@ public enum StorageProviderType
 public enum S3EncryptionMode
 {
     SseS3,
-    SseKms
+    SseKms,
+    None
 }
 
 public enum StorageDestinationState
@@ -43,6 +44,26 @@ public enum StorageCapability
     DownloadLink = 16,
     MultipartUpload = 32,
     ServerSideEncryption = 64
+}
+
+public static class S3CredentialSource
+{
+    private const string EnvironmentPrefix = "EnvironmentVariables:";
+
+    public static bool IsValid(string? source) =>
+        source is "DefaultChain" or "EnvironmentOrWorkloadIdentity" || TryGetEnvironmentPrefix(source, out _);
+
+    public static bool TryGetEnvironmentPrefix(string? source, out string prefix)
+    {
+        prefix = string.Empty;
+        if (source is null || !source.StartsWith(EnvironmentPrefix, StringComparison.Ordinal)) return false;
+        var candidate = source[EnvironmentPrefix.Length..];
+        if (candidate.Length is < 1 or > 32 || candidate[0] is < 'A' or > 'Z' ||
+            candidate.Any(character => character is not (>= 'A' and <= 'Z' or >= '0' and <= '9' or '_')))
+            return false;
+        prefix = candidate;
+        return true;
+    }
 }
 
 public sealed class StorageOptions
@@ -77,6 +98,7 @@ public sealed class StorageDestinationOptions
     public string? KmsKeyId { get; init; }
     public bool PrivateAccess { get; init; } = true;
     public bool EncryptionAtRest { get; init; } = true;
+    public bool UnencryptedAtRestAcknowledged { get; init; }
     public bool AllowInsecureLoopbackEndpoint { get; init; }
     public List<string> AllowedEndpointHosts { get; init; } = [];
     public List<string> Capabilities { get; init; } = [];
@@ -274,7 +296,10 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
         {
             errors.Add($"Storage destination '{destination.Id}' requires a stable failure domain.");
         }
-        if (!destination.PrivateAccess || !destination.EncryptionAtRest)
+        if (!destination.PrivateAccess ||
+            !destination.EncryptionAtRest &&
+            !(destination.Type == StorageProviderType.S3Compatible && destination.EncryptionMode == S3EncryptionMode.None &&
+              destination.UnencryptedAtRestAcknowledged))
         {
             errors.Add($"Storage destination '{destination.Id}' must be private and encrypted at rest.");
         }
@@ -293,8 +318,7 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
             return;
         }
 
-        if (!string.Equals(destination.CredentialSource, "DefaultChain", StringComparison.Ordinal) &&
-            !string.Equals(destination.CredentialSource, "EnvironmentOrWorkloadIdentity", StringComparison.Ordinal))
+        if (!S3CredentialSource.IsValid(destination.CredentialSource))
         {
             errors.Add($"Storage destination '{destination.Id}' has an unsupported non-secret CredentialSource.");
         }
@@ -309,7 +333,13 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
         {
             errors.Add($"S3 destination '{destination.Id}' requires a bucket.");
         }
+        if (destination.EncryptionMode == S3EncryptionMode.None &&
+            (destination.EncryptionAtRest || !destination.UnencryptedAtRestAcknowledged))
+        {
+            errors.Add($"S3 destination '{destination.Id}' requires explicit unencrypted-at-rest acknowledgement.");
+        }
         if (destination.State is StorageDestinationState.Enabled or StorageDestinationState.Recovering &&
+            destination.EncryptionMode != S3EncryptionMode.None &&
             !capabilities.HasFlag(StorageCapability.ServerSideEncryption))
         {
             errors.Add($"S3 destination '{destination.Id}' must support server-side encryption.");

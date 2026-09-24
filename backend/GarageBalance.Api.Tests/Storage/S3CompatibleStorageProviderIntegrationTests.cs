@@ -17,7 +17,9 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
         var existingBucket = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.ExistingBucketVariable);
         var region = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.RegionVariable) ?? "us-east-1";
         var kmsKeyId = Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.KmsKeyIdVariable);
-        var encryptionMode = string.IsNullOrWhiteSpace(kmsKeyId) ? S3EncryptionMode.SseS3 : S3EncryptionMode.SseKms;
+        var encryptionMode = Environment.GetEnvironmentVariable("GARAGEBALANCE_S3_TEST_UNENCRYPTED") == "true"
+            ? S3EncryptionMode.None
+            : string.IsNullOrWhiteSpace(kmsKeyId) ? S3EncryptionMode.SseS3 : S3EncryptionMode.SseKms;
         var credentials = new BasicAWSCredentials(
             Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.AccessKeyVariable)!,
             Environment.GetEnvironmentVariable(S3CompatibleFactAttribute.SecretKeyVariable)!);
@@ -68,6 +70,10 @@ public sealed class S3CompatibleStorageProviderIntegrationTests
             var multipartBytes = new byte[5 * 1024 * 1024 + 1];
             RandomNumberGenerator.Fill(multipartBytes);
             await VerifyRoundTripAsync(multipartBytes);
+        }
+        catch (StorageProviderException exception) when (exception.InnerException is AmazonS3Exception s3)
+        {
+            throw new Xunit.Sdk.XunitException($"S3 operation failed: category={exception.Category}, status={(int)s3.StatusCode}, code={s3.ErrorCode}.");
         }
         finally
         {

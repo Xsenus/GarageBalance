@@ -3,6 +3,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Amazon.Runtime;
 using GarageBalance.Api.Application.Storage;
 
 namespace GarageBalance.Api.Infrastructure.Storage;
@@ -77,7 +78,19 @@ public sealed class AwsS3ObjectClientFactory : IS3ObjectClientFactory
             MaxErrorRetry = 0,
             Timeout = TimeSpan.FromMinutes(5)
         };
-        return new AwsS3ObjectClient(new AmazonS3Client(configuration), destination.EncryptionMode, destination.KmsKeyId);
+        var credentials = ResolveCredentials(destination.CredentialSource, Environment.GetEnvironmentVariable);
+        var amazonClient = credentials is null ? new AmazonS3Client(configuration) : new AmazonS3Client(credentials, configuration);
+        return new AwsS3ObjectClient(amazonClient, destination.EncryptionMode, destination.KmsKeyId);
+    }
+
+    internal static AWSCredentials? ResolveCredentials(string source, Func<string, string?> environment)
+    {
+        if (!S3CredentialSource.TryGetEnvironmentPrefix(source, out var prefix)) return null;
+        var access = environment($"GB_S3_{prefix}_ACCESS_KEY_ID");
+        var secret = environment($"GB_S3_{prefix}_SECRET_ACCESS_KEY");
+        if (string.IsNullOrWhiteSpace(access) || string.IsNullOrWhiteSpace(secret))
+            throw new InvalidOperationException("A named S3 destination is missing its environment credentials.");
+        return new BasicAWSCredentials(access, secret);
     }
 }
 
@@ -86,10 +99,10 @@ public sealed class AwsS3ObjectClient(
     S3EncryptionMode encryptionMode = S3EncryptionMode.SseS3,
     string? kmsKeyId = null) : IS3ObjectClient
 {
-    private ServerSideEncryptionMethod ServerSideEncryptionMethod =>
+    private ServerSideEncryptionMethod? ServerSideEncryptionMethod =>
         encryptionMode == S3EncryptionMode.SseKms
             ? Amazon.S3.ServerSideEncryptionMethod.AWSKMS
-            : Amazon.S3.ServerSideEncryptionMethod.AES256;
+            : encryptionMode == S3EncryptionMode.SseS3 ? Amazon.S3.ServerSideEncryptionMethod.AES256 : null;
 
     public async Task<S3WriteResponse> PutAsync(
         string bucket,
