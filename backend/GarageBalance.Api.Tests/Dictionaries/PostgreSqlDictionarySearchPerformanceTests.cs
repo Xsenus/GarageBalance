@@ -13,6 +13,30 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlDictionarySearchPerformanceTests
 {
     [PostgreSqlFact]
+    public async Task GaragePagesSortNumericNumbersBeforeLimitAndOffset()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.Garages.AddRange(
+                new[] { "199", "10", "2", "100", "1", "20", "11" }.Select(number => new Garage { Number = number }));
+            await setupContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var repository = new EfGarageRepository(context);
+        var filters = new GarageColumnFilters(null, null, null, null, null);
+        var first = await repository.GetPageAsync(null, filters, false, false, 0, 3, "number", false, CancellationToken.None);
+        var second = await repository.GetPageAsync(null, filters, false, false, 3, 3, "number", false, CancellationToken.None);
+        var descending = await repository.GetPageAsync(null, filters, false, false, 0, 7, "number", true, CancellationToken.None);
+
+        Assert.Equal(7, first.TotalCount);
+        Assert.Equal(["1", "2", "10"], first.Items.Select(item => item.Number));
+        Assert.Equal(["11", "20", "100"], second.Items.Select(item => item.Number));
+        Assert.Equal(["199", "100", "20", "11", "10", "2", "1"], descending.Items.Select(item => item.Number));
+    }
+
+    [PostgreSqlFact]
     public async Task SmallDictionarySearchUsesRawIlikeAndTreatsWildcardsLiterally()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

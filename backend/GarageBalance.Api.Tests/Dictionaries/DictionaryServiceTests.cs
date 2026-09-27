@@ -1157,6 +1157,27 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetGaragesPageAsync_SortsNumericNumbersBeforePaginationInBothDirections()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.Garages.AddRange(
+            new[] { "199", "10", "2", "100", "1", "20", "11" }.Select(number => new Garage { Number = number }));
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var first = await service.GetGaragesPageAsync(null, 0, 3, "number", "asc", CancellationToken.None);
+        var second = await service.GetGaragesPageAsync(null, 3, 3, "number", "asc", CancellationToken.None);
+        var last = await service.GetGaragesPageAsync(null, 6, 3, "number", "asc", CancellationToken.None);
+        var descending = await service.GetGaragesPageAsync(null, 0, 7, "number", "desc", CancellationToken.None);
+
+        Assert.Equal(7, first.TotalCount);
+        Assert.Equal(["1", "2", "10"], first.Items.Select(item => item.Number));
+        Assert.Equal(["11", "20", "100"], second.Items.Select(item => item.Number));
+        Assert.Equal(["199"], last.Items.Select(item => item.Number));
+        Assert.Equal(["199", "100", "20", "11", "10", "2", "1"], descending.Items.Select(item => item.Number));
+    }
+
+    [Fact]
     public async Task GetGaragesPageAsync_FiltersOverdueDebtorsBeforePagination()
     {
         await using var database = await TestDatabase.CreateAsync();

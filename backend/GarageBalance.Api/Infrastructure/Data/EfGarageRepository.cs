@@ -495,8 +495,8 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
                 (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.Accrual.DueDateNeedsReview && allocation.Accrual.OverdueFromDate <= today && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
                 0m)),
-            (_, true) => query.OrderByDescending(garage => garage.Number),
-            _ => query.OrderBy(garage => garage.Number)
+            (_, true) => query.OrderByDescending(garage => garage.Number.Length).ThenByDescending(garage => garage.Number),
+            _ => query.OrderBy(garage => garage.Number.Length).ThenBy(garage => garage.Number)
         };
     }
 
@@ -541,8 +541,8 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             ("phone", false) => query.OrderBy(row => row.OwnerPhone).ThenBy(row => row.Id),
             ("overdueDebt", true) => query.OrderByDescending(row => row.OverdueDebtSort).ThenBy(row => row.Id),
             ("overdueDebt", false) => query.OrderBy(row => row.OverdueDebtSort).ThenBy(row => row.Id),
-            (_, true) => query.OrderByDescending(row => row.Number).ThenBy(row => row.Id),
-            _ => query.OrderBy(row => row.Number).ThenBy(row => row.Id)
+            (_, true) => query.OrderByDescending(row => row.Number!.Length).ThenByDescending(row => row.Number).ThenBy(row => row.Id),
+            _ => query.OrderBy(row => row.Number!.Length).ThenBy(row => row.Number).ThenBy(row => row.Id)
         };
     }
 
@@ -581,8 +581,8 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             ("phone", false) => query.ThenBy(row => row.OwnerPhone).ThenBy(row => row.Id),
             ("overdueDebt", true) => query.ThenByDescending(row => row.OverdueDebtSort).ThenBy(row => row.Id),
             ("overdueDebt", false) => query.ThenBy(row => row.OverdueDebtSort).ThenBy(row => row.Id),
-            (_, true) => query.ThenByDescending(row => row.Number).ThenBy(row => row.Id),
-            _ => query.ThenBy(row => row.Number).ThenBy(row => row.Id)
+            (_, true) => query.ThenByDescending(row => row.Number == null ? 0 : row.Number.Length).ThenByDescending(row => row.Number).ThenBy(row => row.Id),
+            _ => query.ThenBy(row => row.Number == null ? 0 : row.Number.Length).ThenBy(row => row.Number).ThenBy(row => row.Id)
         };
     }
 
@@ -666,8 +666,8 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             ("phone", false) => garages.OrderBy(garage => garage.OwnerPhone),
             ("overdueDebt", true) => garages.OrderByDescending(overdueDebt),
             ("overdueDebt", false) => garages.OrderBy(overdueDebt),
-            (_, true) => garages.OrderByDescending(garage => garage.Number),
-            _ => garages.OrderBy(garage => garage.Number)
+            (_, true) => garages.OrderByDescending(garage => garage.Number.Length).ThenByDescending(garage => garage.Number),
+            _ => garages.OrderBy(garage => garage.Number.Length).ThenBy(garage => garage.Number)
         };
         return ordered.ThenBy(garage => garage.Id);
     }
