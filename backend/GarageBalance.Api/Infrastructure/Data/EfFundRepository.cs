@@ -128,7 +128,10 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .Where(incomeType =>
                 !incomeType.IsArchived &&
                 incomeType.DestinationFundId.HasValue &&
-                fundIds.Contains(incomeType.DestinationFundId.Value))
+                fundIds.Contains(incomeType.DestinationFundId.Value) &&
+                (incomeType.IsSystem ||
+                 !dbContext.ChargeServiceSettings.Any(service => service.IncomeTypeId == incomeType.Id) ||
+                 dbContext.ChargeServiceSettings.Any(service => service.IncomeTypeId == incomeType.Id && !service.IsArchived)))
             .OrderBy(incomeType => incomeType.Name)
             .ThenBy(incomeType => incomeType.Id)
             .Select(incomeType => new FundReplenishingServiceData(

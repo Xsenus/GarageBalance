@@ -15,6 +15,39 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
     private const long FundAllocationLockKey = 0x474246554E44;
 
     [PostgreSqlFact]
+    public async Task ArchivedChargeService_IsNotShownAsFundIncomeSource()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid fundId;
+        Guid incomeTypeId;
+        Guid serviceId;
+        await using (var context = database.CreateContext())
+        {
+            fundId = (await CreateService(context).GetFundsAsync(CancellationToken.None)).First().Id;
+            var incomeType = new IncomeType { Name = "Источник архивной услуги", DestinationFundId = fundId };
+            var chargeService = new ChargeServiceSetting { Name = "Архивная услуга", IncomeType = incomeType, IsArchived = true };
+            context.Add(chargeService);
+            await context.SaveChangesAsync();
+            incomeTypeId = incomeType.Id;
+            serviceId = chargeService.Id;
+        }
+
+        await using (var context = database.CreateContext())
+        {
+            Assert.DoesNotContain((await CreateService(context).GetFundsAsync(CancellationToken.None))
+                .Single(item => item.Id == fundId).ReplenishingServices,
+                item => item.Id == incomeTypeId);
+            (await context.ChargeServiceSettings.SingleAsync(item => item.Id == serviceId)).IsArchived = false;
+            await context.SaveChangesAsync();
+        }
+
+        await using var verify = database.CreateContext();
+        Assert.Contains((await CreateService(verify).GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Id == fundId).ReplenishingServices,
+            item => item.Id == incomeTypeId);
+    }
+
+    [PostgreSqlFact]
     public async Task ConcurrentDepositsToDifferentFunds_CannotDistributeSameIncomeTwice()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

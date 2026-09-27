@@ -90,6 +90,44 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task GetFundsAsync_HidesIncomeSourceWhenAllLinkedServicesAreArchived()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None)).First();
+        var archivedOnly = new IncomeType { Name = "Удалённая услуга", DestinationFundId = fund.Id };
+        var mixed = new IncomeType { Name = "Действующая услуга", DestinationFundId = fund.Id };
+        var standalone = new IncomeType { Name = "Разовый вид поступления", DestinationFundId = fund.Id };
+        var system = new IncomeType { Name = "Системный вид поступления", DestinationFundId = fund.Id, IsSystem = true };
+        var archivedSetting = new ChargeServiceSetting { Name = "Удалённая услуга", IncomeType = archivedOnly, IsArchived = true };
+        var activeSetting = new ChargeServiceSetting { Name = "Действующая услуга", IncomeType = mixed };
+        database.Context.AddRange(archivedOnly, mixed, standalone, system, archivedSetting, activeSetting,
+            new ChargeServiceSetting { Name = "Старая настройка действующей услуги", IncomeType = mixed, IsArchived = true },
+            new ChargeServiceSetting { Name = "Старая настройка системного вида", IncomeType = system, IsArchived = true });
+        await database.Context.SaveChangesAsync();
+
+        var sources = (await service.GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Id == fund.Id).ReplenishingServices;
+        Assert.DoesNotContain(sources, item => item.Id == archivedOnly.Id);
+        Assert.Contains(sources, item => item.Id == mixed.Id);
+        Assert.Contains(sources, item => item.Id == standalone.Id);
+        Assert.Contains(sources, item => item.Id == system.Id);
+
+        archivedSetting.IsArchived = false;
+        await database.Context.SaveChangesAsync();
+        Assert.Contains((await service.GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Id == fund.Id).ReplenishingServices,
+            item => item.Id == archivedOnly.Id);
+
+        archivedSetting.IsArchived = true;
+        activeSetting.IsArchived = true;
+        await database.Context.SaveChangesAsync();
+        sources = (await service.GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Id == fund.Id).ReplenishingServices;
+        Assert.DoesNotContain(sources, item => item.Id == archivedOnly.Id || item.Id == mixed.Id);
+    }
+
+    [Fact]
     public async Task GetFundsAsync_DoesNotSeedOrWriteWhenCatalogIsEmpty()
     {
         await using var database = await TestDatabase.CreateAsync();
