@@ -4291,6 +4291,10 @@ public sealed class FinanceService(
     public async Task<FinanceResult<FinancialOperationDto>> CancelOperationAsync(Guid operationId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var reason = NormalizeOptional(request.Reason) ?? string.Empty;
+        if (request.AllowNegativeFundBalance && reason.Length == 0)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_cancel_reason_required", "Для отмены с отрицательным остатком фонда укажите причину.");
+        }
         if (ActionCommentRequirementContext.IsRequired && reason.Length == 0)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_cancel_reason_required", "Для отмены операции нужна причина.");
@@ -4381,6 +4385,7 @@ public sealed class FinanceService(
                 operation,
                 reason,
                 actorUserId,
+                request.AllowNegativeFundBalance,
                 cancellationToken);
             if (!assignmentResult.Succeeded)
             {

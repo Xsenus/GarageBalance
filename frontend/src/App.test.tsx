@@ -13532,12 +13532,17 @@ describe('App', () => {
       documentNumber: request.documentNumber ?? null,
       comment: request.comment ?? null,
     }))
-    const cancelOperation = vi.fn(async (_token: string, operationId: string, request: { reason: string }) => ({
-      ...serverOperation,
-      id: operationId,
-      isCanceled: true,
-      comment: `Отменено: ${request.reason}`,
-    }))
+    const cancelOperation = vi.fn(async (_token: string, operationId: string, request: { reason: string; allowNegativeFundBalance?: boolean }) => {
+      if (!request.allowNegativeFundBalance) {
+        throw new FinanceApiError('fund_balance_insufficient', 'После пересчета остаток фонда станет отрицательным.', 409)
+      }
+      return {
+        ...serverOperation,
+        id: operationId,
+        isCanceled: true,
+        comment: `Отменено: ${request.reason}`,
+      }
+    })
     const worksheet = createGarageIncomeWorksheet({
       garageId: garageFromDictionary.id,
       garageNumber: garageFromDictionary.number,
@@ -13707,6 +13712,20 @@ describe('App', () => {
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', {
       reason: 'Ошибочный платеж',
       expectedVersion: serverOperation.version,
+      allowNegativeFundBalance: false,
+    }))
+    expect(await within(cancelDialog).findByText('После пересчета остаток фонда станет отрицательным.')).toBeInTheDocument()
+    const negativeFundConfirmation = within(cancelDialog).getByRole('checkbox', { name: 'Подтвердить отрицательный остаток фонда при отмене платежа' })
+    expect(negativeFundConfirmation).not.toBeChecked()
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
+    expect(within(cancelDialog).getByText('Подтвердите отрицательный остаток фонда для отмены платежа.')).toBeInTheDocument()
+    expect(cancelOperation).toHaveBeenCalledTimes(1)
+    await user.click(negativeFundConfirmation)
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
+    await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', {
+      reason: 'Ошибочный платеж',
+      expectedVersion: serverOperation.version,
+      allowNegativeFundBalance: true,
     }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить платеж?' })).not.toBeInTheDocument())
     await user.click(within(historyTable).getByRole('button', { name: 'Отменить платеж Серверная оплата' }))

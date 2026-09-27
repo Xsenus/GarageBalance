@@ -685,6 +685,7 @@ export type UpdateStaffPaymentRequest = CreateStaffPaymentRequest & {
 export type CancelFinanceEntryRequest = {
   reason: string
   expectedVersion?: string
+  allowNegativeFundBalance?: boolean
 }
 
 export type CreateAccrualRequest = {

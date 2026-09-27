@@ -12,6 +12,57 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlNegativeFundPaymentTests
 {
     [PostgreSqlFact]
+    public async Task CancelIncomeWithSpentFund_RequiresConsentAndPersistsRecalculatedBalance()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var fund = new Fund { Name = "Фонд исправления платежа", NormalizedName = "ФОНД ИСПРАВЛЕНИЯ ПЛАТЕЖА", AllowOperations = true };
+        var incomeType = new IncomeType { Name = "Проверочный взнос", DestinationFund = fund };
+        var garage = new Garage { Number = "PG-CANCEL-1", PeopleCount = 1, FloorCount = 1 };
+        Guid paymentId;
+        await using (var context = database.CreateContext())
+        {
+            context.AddRange(fund, incomeType, garage);
+            await context.SaveChangesAsync();
+            var service = FinanceServiceTestFactory.Create(context);
+            var created = await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(garage.Id, incomeType.Id, new DateOnly(2026, 9, 20),
+                    new DateOnly(2026, 9, 1), 400m, "PG-CANCEL-PAYMENT", null),
+                null, CancellationToken.None);
+            Assert.True(created.Succeeded, created.ErrorMessage);
+            paymentId = created.Value!.Id;
+            var withdrawal = await new FundService(new EfFundRepository(context), new AuditEventWriter(context))
+                .CreateOperationAsync(fund.Id,
+                    new CreateFundOperationRequest(FundOperationKinds.Withdraw, 300m, "Уже использованные средства"),
+                    null, CancellationToken.None);
+            Assert.True(withdrawal.Succeeded, withdrawal.ErrorMessage);
+            var refused = await service.CancelOperationAsync(paymentId,
+                new CancelFinanceEntryRequest("Исправление платежа"), null, CancellationToken.None);
+            Assert.Equal("fund_balance_insufficient", refused.ErrorCode);
+            Assert.Equal(100m, fund.Balance);
+        }
+
+        await using (var context = database.CreateContext())
+        {
+            var confirmed = await FinanceServiceTestFactory.Create(context).CancelOperationAsync(paymentId,
+                new CancelFinanceEntryRequest("Исправление платежа", AllowNegativeFundBalance: true),
+                Guid.NewGuid(), CancellationToken.None);
+            Assert.True(confirmed.Succeeded, confirmed.ErrorMessage);
+        }
+
+        await using var verify = database.CreateContext();
+        Assert.True((await verify.FinancialOperations.SingleAsync(item => item.Id == paymentId)).IsCanceled);
+        Assert.Equal(-300m, (await verify.Funds.SingleAsync(item => item.Id == fund.Id)).Balance);
+        var assignment = await verify.FundOperations.SingleAsync(item => item.SourceFinancialOperationId == paymentId);
+        Assert.True(assignment.IsCanceled);
+        Assert.Equal(0m, assignment.BalanceAfter);
+        var withdrawalAfter = await verify.FundOperations.SingleAsync(item => item.FundId == fund.Id && item.OperationKind == FundOperationKinds.Withdraw);
+        Assert.Equal(-300m, withdrawalAfter.BalanceAfter);
+        var audit = await verify.AuditEvents.SingleAsync(item => item.Action == "fund.income_assignment_canceled");
+        Assert.Contains("negativeBalanceConfirmed", audit.MetadataJson);
+        Assert.Contains("true", audit.MetadataJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [PostgreSqlFact]
     public async Task NegativeFundConsent_DoesNotBypassBankOrCashAndPreservesReconciliation()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

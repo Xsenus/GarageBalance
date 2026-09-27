@@ -486,6 +486,11 @@ describe('financeApi', () => {
       reason: 'Ошибочно введённая выплата',
       expectedVersion: 'payment-version-2',
     })
+    await financeApi.cancelOperation('token', 'payment-2', {
+      reason: 'Исправление ошибочного взноса',
+      expectedVersion: 'payment-version-3',
+      allowNegativeFundBalance: true,
+    })
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/staff-payments/payment-1', expect.objectContaining({
       method: 'PUT',
@@ -494,6 +499,10 @@ describe('financeApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/operations/payment-1/cancel', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ reason: 'Ошибочно введённая выплата', expectedVersion: 'payment-version-2' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/finance/operations/payment-2/cancel', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Исправление ошибочного взноса', expectedVersion: 'payment-version-3', allowNegativeFundBalance: true }),
     }))
   })
 

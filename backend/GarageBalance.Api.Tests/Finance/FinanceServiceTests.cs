@@ -14823,6 +14823,33 @@ public sealed class FinanceServiceTests
         Assert.False((await database.Context.FundOperations.SingleAsync(item => item.SourceFinancialOperationId == created.Value.Id)).IsCanceled);
         Assert.Equal(100m, incomeType.DestinationFund.Balance);
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_canceled");
+
+        var withoutReason = await financeService.CancelOperationAsync(
+            created.Value.Id,
+            new CancelFinanceEntryRequest("", AllowNegativeFundBalance: true),
+            null,
+            CancellationToken.None);
+        Assert.False(withoutReason.Succeeded);
+        Assert.Equal("operation_cancel_reason_required", withoutReason.ErrorCode);
+
+        var confirmed = await financeService.CancelOperationAsync(
+            created.Value.Id,
+            new CancelFinanceEntryRequest("Исправление ошибочного платежа", AllowNegativeFundBalance: true),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        Assert.True(confirmed.Succeeded, confirmed.ErrorMessage);
+        Assert.True((await database.Context.FinancialOperations.SingleAsync(item => item.Id == created.Value.Id)).IsCanceled);
+        var canceledAssignment = await database.Context.FundOperations
+            .SingleAsync(item => item.SourceFinancialOperationId == created.Value.Id);
+        Assert.True(canceledAssignment.IsCanceled);
+        Assert.Equal(-300m, incomeType.DestinationFund.Balance);
+        var fundAudit = Assert.Single(database.Context.AuditEvents,
+            item => item.Action == "fund.income_assignment_canceled");
+        Assert.Contains("negativeBalanceConfirmed", fundAudit.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("true", fundAudit.MetadataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Исправление ошибочного платежа",
+            (await database.Context.FinancialOperations.SingleAsync(item => item.Id == created.Value.Id)).Comment);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled");
     }
 
     [Fact]

@@ -193,6 +193,7 @@ public sealed class IncomeFundAssignmentService(
         FinancialOperation sourceOperation,
         string reason,
         Guid? actorUserId,
+        bool allowNegativeBalance,
         CancellationToken cancellationToken)
     {
         var assignment = await repository.FindIncomeAssignmentForUpdateAsync(sourceOperation.Id, cancellationToken);
@@ -207,7 +208,8 @@ public sealed class IncomeFundAssignmentService(
             assignment.CreatedAtUtc,
             cancellationToken)).ToList();
         assignment.IsCanceled = true;
-        if (!CanRecalculateTail(operations, assignment.BalanceBefore))
+        var wouldBecomeNegative = !CanRecalculateTail(operations, assignment.BalanceBefore);
+        if (wouldBecomeNegative && !allowNegativeBalance)
         {
             assignment.IsCanceled = false;
             return IncomeFundAssignmentResult.Failure(
@@ -217,7 +219,8 @@ public sealed class IncomeFundAssignmentService(
 
         assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
         RecalculateTail(assignment.Fund, operations, assignment.BalanceBefore);
-        AddAudit("fund.income_assignment_canceled", "cancel", assignment, actorUserId, reason);
+        AddAudit("fund.income_assignment_canceled", "cancel", assignment, actorUserId, reason,
+            negativeBalanceConfirmed: wouldBecomeNegative);
         return IncomeFundAssignmentResult.Success();
     }
 
@@ -300,7 +303,8 @@ public sealed class IncomeFundAssignmentService(
         FundOperation assignment,
         Guid? actorUserId,
         string? reason,
-        IReadOnlyDictionary<string, object?>? oldValues = null)
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        bool negativeBalanceConfirmed = false)
     {
         auditEventWriter.Add(new AuditEventWriteRequest(
             ActorUserId: actorUserId,
@@ -324,7 +328,8 @@ public sealed class IncomeFundAssignmentService(
             {
                 ["fundId"] = assignment.FundId,
                 ["sourceFinancialOperationId"] = assignment.SourceFinancialOperationId,
-                ["automatic"] = true
+                ["automatic"] = true,
+                ["negativeBalanceConfirmed"] = negativeBalanceConfirmed
             },
             RelatedDocumentId: assignment.SourceFinancialOperationId?.ToString()));
     }

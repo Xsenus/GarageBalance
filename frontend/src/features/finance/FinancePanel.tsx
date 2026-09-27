@@ -311,6 +311,8 @@ type GaragePaymentHistoryCancelState = {
   row: GaragePaymentHistoryPrototypeRow
   reason: string
   error: string | null
+  negativeFundBalanceRequired: boolean
+  negativeFundBalanceConfirmed: boolean
 }
 
 type EarlyElectricityPaymentConfirmationState = {
@@ -4579,7 +4581,7 @@ function PaymentsPrototypePanel({
 
     historyCancelTriggerRef.current = trigger ?? null
     setPaymentError(null)
-    setHistoryCancel({ row, reason: '', error: null })
+    setHistoryCancel({ row, reason: '', error: null, negativeFundBalanceRequired: false, negativeFundBalanceConfirmed: false })
   }
 
   function closeHistoryCancelDialog() {
@@ -4636,8 +4638,12 @@ function PaymentsPrototypePanel({
     }
 
     const reason = historyCancel.reason.trim()
-    if (actionCommentsRequired && !reason) {
+    if ((actionCommentsRequired || historyCancel.negativeFundBalanceConfirmed) && !reason) {
       setHistoryCancel((state) => state ? { ...state, error: 'Укажите причину отмены платежа.' } : state)
+      return
+    }
+    if (historyCancel.negativeFundBalanceRequired && !historyCancel.negativeFundBalanceConfirmed) {
+      setHistoryCancel((state) => state ? { ...state, error: 'Подтвердите отрицательный остаток фонда для отмены платежа.' } : state)
       return
     }
 
@@ -4648,6 +4654,7 @@ function PaymentsPrototypePanel({
       await financeClient.cancelOperation(auth.accessToken, historyCancel.row.operation.id, {
         reason,
         expectedVersion: historyCancel.row.operation.version,
+        allowNegativeFundBalance: historyCancel.negativeFundBalanceConfirmed,
       })
       setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
         ? { ...currentGarage, balance: roundPaymentMoney(currentGarage.balance + canceledAmount) }
@@ -4655,7 +4662,11 @@ function PaymentsPrototypePanel({
       closeHistoryCancelDialog()
       refreshGarageAfterIncomeSave(selectedGarage)
     } catch (error) {
-      setHistoryCancel((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Ошибка отмены.' } : state)
+      setHistoryCancel((state) => state ? {
+        ...state,
+        negativeFundBalanceRequired: state.negativeFundBalanceRequired || (error instanceof FinanceApiError && error.code === 'fund_balance_insufficient'),
+        error: error instanceof Error ? error.message : 'Ошибка отмены.',
+      } : state)
     } finally {
       setHistoryActionSaving(false)
     }
@@ -6841,8 +6852,17 @@ function GaragePaymentHistoryCancelDialog({
         </div>
         <div className="dictionary-modal-form payments-prototype-modal-form">
           <FormField label="Причина отмены">
-            <textarea aria-label="Причина отмены платежа" rows={4} required={required} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
+            <textarea aria-label="Причина отмены платежа" rows={4} required={required || state.negativeFundBalanceRequired} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
           </FormField>
+          {state.negativeFundBalanceRequired ? (
+            <label className="payments-negative-fund-confirmation">
+              <input type="checkbox" aria-label="Подтвердить отрицательный остаток фонда при отмене платежа" checked={state.negativeFundBalanceConfirmed} disabled={saving} onChange={(event) => onChange({ negativeFundBalanceConfirmed: event.target.checked })} />
+              <span>
+                <strong>После отмены платежа остаток фонда станет отрицательным.</strong>
+                <small>Уже проведённые расходы останутся в учёте. Укажите причину и подтвердите исправление; оно сохранится в истории изменений.</small>
+              </span>
+            </label>
+          ) : null}
           {state.error ? <FormError>{state.error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>

@@ -23,6 +23,7 @@ public interface IIncomeFundAssignmentService
         FinancialOperation sourceOperation,
         string reason,
         Guid? actorUserId,
+        bool allowNegativeBalance,
         CancellationToken cancellationToken);
 
     Task<IncomeFundAssignmentResult> RestoreAsync(

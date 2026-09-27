@@ -246,7 +246,8 @@ public sealed record CashBankTransferDto(
 
 public sealed record CancelFinanceEntryRequest(
     [ActionComment, MaxLength(1000)] string Reason,
-    Guid? ExpectedVersion = null);
+    Guid? ExpectedVersion = null,
+    bool AllowNegativeFundBalance = false);
 
 public sealed record FinancialOperationListRequest(
     DateOnly? DateFrom,
