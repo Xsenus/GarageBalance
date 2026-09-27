@@ -3917,8 +3917,16 @@ export function AddServicePrototypeDialog({
   const [tariffTiers, setTariffTiers] = useState(() => getElectricityTariffTiers(initialTariff))
   const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(initialTariff?.effectiveFrom ?? getLocalDateInputValue())
   const [error, setError] = useState<string | null>(null)
-  const [scheduleDraft, setScheduleDraft] = useState<Array<ChargeServiceTariffPeriodDto & { key: string; rateText: string }>>(() =>
-    (tariffSchedule ?? []).map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
+  const [scheduleDraft, setScheduleDraft] = useState<Array<ChargeServiceTariffPeriodDto & { key: string; rateText: string }>>(() => {
+    const periods = tariffSchedule?.length ? tariffSchedule : initialSetting && initialTariff ? [{
+      tariffId: initialTariff.id,
+      tariffVersion: initialTariff.version,
+      effectiveFrom: initialTariff.effectiveFrom,
+      effectiveTo: null,
+      rate: initialTariff.rate,
+    }] : []
+    return periods.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` }))
+  })
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const scheduleSaveInFlightRef = useRef(false)

@@ -40,7 +40,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { ApiNetworkError } from './services/apiFetch'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceTariffScheduleRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageColumnFilters, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import { expenseBatchesApi } from './services/expenseBatchesApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageAnnualPaymentsDto, GarageBalanceHistoryDto, GarageFullPaymentQuoteDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
@@ -17499,6 +17499,65 @@ describe('App', () => {
     expect(await within(backupsPanel).findByText(`Резервная копия ${createdBackup.fileName} создана и проверена.`)).toHaveAttribute('role', 'status')
     expect(within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })).toHaveTextContent(createdBackup.fileName)
     expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
+  })
+
+  it('shows inline tariff and payment-rule edits in the service card', async () => {
+    const user = userEvent.setup()
+    let tariff = createTariff({ id: 'tariff-inline-card', name: 'Тариф охраны', calculationBase: 'fixed', rate: 100 })
+    let service = createChargeServiceSetting({
+      id: 'service-inline-card', name: 'Охрана', isRegular: true, periodicityMonths: 1,
+      paymentDueDay: 20, overdueGraceDays: 30, tariffId: tariff.id, unitName: 'руб.',
+    })
+    const updateRate = vi.fn(async (_token: string, _id: string, request: UpdateChargeServiceWithTariffRequest) => {
+      tariff = { ...tariff, rate: request.rate, version: 'tariff-inline-card-v2' }
+      service = { ...service, version: 'service-inline-card-v2' }
+      return { service, tariff }
+    })
+    const updateSetting = vi.fn(async (_token: string, _id: string, request: UpsertChargeServiceSettingRequest) => {
+      service = { ...service, paymentDueDay: request.paymentDueDay, overdueGraceDays: request.overdueGraceDays, version: 'service-inline-card-v3' }
+      return service
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [service],
+      getChargeServiceTariffSchedule: async () => [],
+      updateChargeServiceWithTariff: updateRate,
+      updateChargeServiceSetting: updateSetting,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const rateInput = await within(panel).findByLabelText('Охрана: Тариф охраны: значение')
+
+    await user.clear(rateInput)
+    await user.type(rateInput, '125{Enter}')
+    const rateConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(rateConfirmation).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateRate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(within(panel).getByLabelText('Охрана: Тариф охраны: значение')).toHaveValue('125.00'))
+
+    const overdueInput = within(panel).getByLabelText('Охрана: Перенос долга в просроченный: значение')
+    await user.clear(overdueInput)
+    await user.type(overdueInput, '15{Enter}')
+    const overdueConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(overdueConfirmation).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(1))
+
+    const dueDayInput = within(panel).getByLabelText('Охрана: оплата до: день')
+    await user.clear(dueDayInput)
+    await user.type(dueDayInput, '25{Enter}')
+    const dueDayConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(dueDayConfirmation).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(2))
+
+    await user.click(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' }))
+    const card = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    await waitFor(() => expect(within(card).getByLabelText('Тариф регулярной услуги')).toHaveValue('125.00'))
+    expect(within(card).getByLabelText('Перенос долга в просроченный')).toHaveValue('15')
+    expect(within(card).getByLabelText('День оплаты')).toHaveValue('25')
   })
 
   it('allows backup read-only access without exposing create, download, or delete actions', async () => {
