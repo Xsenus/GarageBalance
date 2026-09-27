@@ -187,9 +187,10 @@
 
 .workspace--reports {
   display: flex;
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -8319,8 +8320,12 @@ button.operation-row:focus-visible {
 
 .workspace--reports > .reports-workbook-panel {
   display: flex;
-  flex: 0 0 auto;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .report-workbook-sheet {
@@ -8443,15 +8448,12 @@ button.operation-row:focus-visible {
 }
 
 .report-garage-filter-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
+  position: relative;
   display: grid;
   align-content: start;
   width: min(var(--report-garage-filter-panel-width, 760px), calc(100vw - 48px));
   height: min(var(--report-garage-filter-panel-height, 480px), 78vh);
-  max-width: calc(100vw - 48px);
-  max-height: 78vh;
+  margin-top: 8px;
   gap: 14px;
   overflow: auto;
   resize: both;
@@ -10295,10 +10297,7 @@ button.operation-row:focus-visible {
   }
 
   .report-garage-filter-panel {
-    top: auto;
-    bottom: calc(100% + 8px);
     height: min(var(--report-garage-filter-panel-height, 480px), calc(100dvh - 48px));
-    max-height: calc(100dvh - 48px);
   }
 
   .workspace--audit > .dictionary-panel {

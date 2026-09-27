@@ -238,7 +238,7 @@ describe('responsive layout styles', () => {
 
   it('anchors report filters to their disclosure instead of inheriting the fixed calendar position', () => {
     expect(normalizedAppCss).toContain('.report-garage-filter-disclosure {\n  position: relative;\n  z-index: 2;')
-    expect(normalizedAppCss).toContain('.report-garage-filter-panel {\n  position: absolute;\n  top: calc(100% + 8px);\n  left: 0;')
+    expect(normalizedAppCss).toContain('.report-garage-filter-panel {\n  position: relative;\n  display: grid;')
     expect(normalizedAppCss).toContain('.report-garage-filter-panel {\n    position: static;\n    width: 100%;')
   })
 
@@ -446,9 +446,9 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {\n  flex: 0 0 auto;')
   })
 
-  it('lets report tables extend down the page while keeping report choices in one fitted row', () => {
-    expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  min-height: 100dvh;\n  flex-direction: column;\n  overflow: visible;\n  box-sizing: border-box;')
-    expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  flex: 0 0 auto;\n  flex-direction: column;')
+  it('scrolls long reports inside the viewport while keeping report choices in one fitted row', () => {
+    expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
+    expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;\n  overflow-x: hidden;\n  overflow-y: auto;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: grid;\n  grid-template-columns: 1.18fr 1fr 1fr 1fr 0.94fr 1.06fr 0.8fr 1.08fr;\n  overflow: visible;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 0;\n  min-height: 48px;')
     expect(normalizedAppCss).toContain(".report-tabs--workbook button[data-report-tab='consolidated'] span {\n  display: block;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;")

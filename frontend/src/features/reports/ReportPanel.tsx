@@ -44,6 +44,19 @@ const reportDictionarySearchLimit = 20
 const reportGarageBrowseLimit = 100
 const reportGarageFilterPanelDefaultSize = { width: 760, height: 480 }
 
+function normalizeGarageFilterPanelSize(value: unknown): ReportGarageFilterPanelSize {
+  const saved = value && typeof value === 'object' ? value as Partial<ReportGarageFilterPanelSize> : {}
+  const dimension = (candidate: unknown, fallback: number, minimum: number) =>
+    typeof candidate === 'number' && Number.isFinite(candidate)
+      ? Math.max(minimum, candidate)
+      : fallback
+
+  return {
+    width: dimension(saved.width, reportGarageFilterPanelDefaultSize.width, 320),
+    height: dimension(saved.height, reportGarageFilterPanelDefaultSize.height, 240),
+  }
+}
+
 function getReportExportSuccessMessage(extension: 'xlsx' | 'pdf') {
   return `Отчет ${extension.toUpperCase()} готов.`
 }
@@ -342,7 +355,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   const garageFilterPanelStorageKey = `garagebalance.reports.garageFilterPanelSize.${auth.user.id}`
   const [garageFilterPanelSize] = useState<ReportGarageFilterPanelSize>(() => {
     try {
-      return { ...reportGarageFilterPanelDefaultSize, ...JSON.parse(window.localStorage.getItem(garageFilterPanelStorageKey) ?? '{}') }
+      return normalizeGarageFilterPanelSize(JSON.parse(window.localStorage.getItem(garageFilterPanelStorageKey) ?? '{}'))
     } catch {
       return reportGarageFilterPanelDefaultSize
     }
@@ -1217,7 +1230,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
                   aria-label="Гаражи и личные фильтры отчёта"
                   onPointerUp={({ currentTarget }) => {
                     try {
-                      window.localStorage.setItem(garageFilterPanelStorageKey, JSON.stringify({ width: currentTarget.offsetWidth, height: currentTarget.offsetHeight }))
+                      if (currentTarget.offsetWidth > 0 && currentTarget.offsetHeight > 0) {
+                        window.localStorage.setItem(garageFilterPanelStorageKey, JSON.stringify(normalizeGarageFilterPanelSize({ width: currentTarget.offsetWidth, height: currentTarget.offsetHeight })))
+                      }
                     } catch { /* Локальная настройка не влияет на отчёт. */ }
                   }}
                   style={{

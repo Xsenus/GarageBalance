@@ -26421,6 +26421,31 @@ describe('App', () => {
     expect(garageResults).toHaveClass('payments-prototype-search-results')
   })
 
+  it('keeps garage filters visible when a saved panel size is invalid', async () => {
+    const user = userEvent.setup()
+    const userId = createAuthResponse().user.id
+    const storageKey = `garagebalance.reports.garageFilterPanelSize.${userId}`
+    window.localStorage.setItem(storageKey, JSON.stringify({ width: 0, height: -5 }))
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+
+    const filters = within(reportsPanel).getByRole('region', { name: 'Гаражи и личные фильтры отчёта' })
+    expect(filters.style.getPropertyValue('--report-garage-filter-panel-width')).toBe('320px')
+    expect(filters.style.getPropertyValue('--report-garage-filter-panel-height')).toBe('240px')
+    expect(within(filters).getByRole('combobox', { name: 'Гаражи' })).toBeInTheDocument()
+    expect(within(filters).getByRole('combobox', { name: 'Быстрый список гаражей' })).toBeInTheDocument()
+
+    fireEvent.pointerUp(filters)
+    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}')).toEqual({ width: 0, height: -5 })
+  })
+
   it('loads only the active report and does not repeat the consolidated request after tab switches', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()

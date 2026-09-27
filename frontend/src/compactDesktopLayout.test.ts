@@ -69,9 +69,9 @@ describe('compact desktop layout contract', () => {
     expect(contractorsSource).toContain('contractors-sort-label--compact')
   })
 
-  it('keeps report filter popovers inside the compact viewport', () => {
-    expect(appCss).toContain('.report-garage-filter-panel {\n    top: auto;\n    bottom: calc(100% + 8px);')
-    expect(appCss).toContain('max-height: calc(100dvh - 48px);')
+  it('keeps report filters in the scrollable report on a compact viewport', () => {
+    expect(appCss).toContain('.report-garage-filter-panel {\n    height: min(var(--report-garage-filter-panel-height, 480px), calc(100dvh - 48px));')
+    expect(appCss).toContain('height: min(var(--report-garage-filter-panel-height, 480px), calc(100dvh - 48px));')
     expect(appCss).toContain('.report-quick-list-garages .payments-prototype-search-results {\n  position: static;\n  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));\n  width: 100%;')
     expect(appCss).toContain('overflow-x: hidden;\n  overflow-y: auto;')
   })
