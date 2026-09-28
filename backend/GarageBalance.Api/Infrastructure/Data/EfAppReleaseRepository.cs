@@ -106,17 +106,24 @@ public sealed class EfAppReleaseRepository(GarageBalanceDbContext dbContext) : I
     public async Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
     {
         var releaseIds = releases.Select(release => release.ReleaseId).ToArray();
-        var existingReleaseIds = releaseIds.Length == 0
-            ? new HashSet<string>(StringComparer.Ordinal)
+        var normalizedVersions = releases.Select(release => release.Version.ToLowerInvariant()).ToArray();
+        var existingReleases = releaseIds.Length == 0
+            ? []
             : await dbContext.AppReleases
-                .Where(record => releaseIds.Contains(record.ReleaseId))
-                .Select(record => record.ReleaseId)
-                .ToHashSetAsync(StringComparer.Ordinal, cancellationToken);
+                .AsNoTracking()
+                .Where(record => releaseIds.Contains(record.ReleaseId) || normalizedVersions.Contains(record.Version.ToLower()))
+                .Select(record => new { record.ReleaseId, record.Version })
+                .ToArrayAsync(cancellationToken);
+        var existingReleaseIds = existingReleases.Select(record => record.ReleaseId).ToHashSet(StringComparer.Ordinal);
+        var existingVersions = existingReleases.Select(record => record.Version).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var release in releases)
         {
-            if (existingReleaseIds.Add(release.ReleaseId))
+            // Database-managed records remain authoritative even when their ID
+            // differs from the source. A version collision must not block newer notes.
+            if (!existingReleaseIds.Contains(release.ReleaseId) && existingVersions.Add(release.Version))
             {
+                existingReleaseIds.Add(release.ReleaseId);
                 ApplyRelease(release, null);
             }
         }

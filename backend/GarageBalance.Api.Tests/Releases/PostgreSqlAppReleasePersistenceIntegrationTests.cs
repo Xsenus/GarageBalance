@@ -245,6 +245,44 @@ public sealed class PostgreSqlAppReleasePersistenceIntegrationTests
         }
     }
 
+    [PostgreSqlFact]
+    public async Task SynchronizeAsync_SkipsExistingVersionsWithoutBlockingNewNotes()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var repository = new EfAppReleaseRepository(context);
+        var publishedAt = DateTimeOffset.Parse("2026-09-28T10:00:00Z");
+        var managed = new AppReleaseDto("managed-exact", "0.941.1", publishedAt, "Запись администратора", "Сохранённый текст.", [new AppReleaseItemDto("fixed", "Сохранённый пункт.")], false);
+        var managedCase = managed with { ReleaseId = "managed-case", Version = "Preview-0.941" };
+        await repository.SynchronizeAsync([managed, managedCase], CancellationToken.None);
+        context.ChangeTracker.Clear();
+        var fresh = managed with { ReleaseId = "source-new", Version = "0.941.2", Title = "Новое обновление", IsPublished = true };
+        var source = new[]
+        {
+            managed with { ReleaseId = "different-source-id", Title = "Не должен перезаписать запись", IsPublished = true },
+            managedCase with { ReleaseId = "different-case-id", Version = "PREVIEW-0.941" },
+            fresh,
+            fresh with { ReleaseId = "duplicate-source-version" }
+        };
+
+        await repository.SynchronizeAsync(source, CancellationToken.None);
+        await repository.SynchronizeAsync(source, CancellationToken.None);
+        await repository.SynchronizeAsync([], CancellationToken.None);
+
+        Assert.Equal(3, await context.AppReleases.CountAsync());
+        var stored = await repository.FindAsync(managed.ReleaseId, CancellationToken.None);
+        Assert.NotNull(stored);
+        Assert.Equal(managed.Title, stored.Title);
+        Assert.Equal(managed.Summary, stored.Summary);
+        Assert.Equal(managed.Items, stored.Items);
+        Assert.False(stored.IsPublished);
+        Assert.Equal(managedCase.Version, (await repository.FindAsync(managedCase.ReleaseId, CancellationToken.None))!.Version);
+        Assert.Equal(fresh.Title, (await repository.FindAsync(fresh.ReleaseId, CancellationToken.None))!.Title);
+        Assert.Null(await repository.FindAsync("different-source-id", CancellationToken.None));
+        Assert.Null(await repository.FindAsync("different-case-id", CancellationToken.None));
+        Assert.Null(await repository.FindAsync("duplicate-source-version", CancellationToken.None));
+    }
+
     private sealed class FakeWebHostEnvironment(string contentRootPath) : IWebHostEnvironment
     {
         public string ApplicationName { get; set; } = "GarageBalance.Api.Tests";

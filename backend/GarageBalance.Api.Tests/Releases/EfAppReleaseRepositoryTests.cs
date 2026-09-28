@@ -118,6 +118,85 @@ public sealed class EfAppReleaseRepositoryTests
         Assert.Equal("release-2", records[1].ReleaseId);
     }
 
+    [Theory]
+    [InlineData("0.1.0", "0.1.0")]
+    [InlineData("Preview-1", "PREVIEW-1")]
+    public async Task SynchronizeAsync_PreservesExistingVersionWithDifferentIdAndImportsOtherNotes(string storedVersion, string sourceVersion)
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        await using var context = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>().UseSqlite(connection).Options);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfAppReleaseRepository(context);
+        var managed = CreateRelease("managed", storedVersion, "Запись администратора") with { IsPublished = false };
+        await repository.SynchronizeAsync([managed], CancellationToken.None);
+        var source = new[]
+        {
+            CreateRelease("source-collision", sourceVersion, "Не должен заменить запись"),
+            CreateRelease("source-new", "0.2.0", "Новое обновление")
+        };
+
+        await repository.SynchronizeAsync(source, CancellationToken.None);
+        await repository.SynchronizeAsync(source, CancellationToken.None);
+        await repository.SynchronizeAsync([], CancellationToken.None);
+
+        var records = await context.AppReleases.AsNoTracking().OrderBy(record => record.ReleaseId).ToArrayAsync();
+        Assert.Equal(2, records.Length);
+        AssertReleaseMatches(managed, await repository.FindAsync("managed", CancellationToken.None));
+        AssertReleaseMatches(source[1], await repository.FindAsync("source-new", CancellationToken.None));
+        Assert.Null(await repository.FindAsync("source-collision", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_DeduplicatesSourceVersionsAndIdsWithoutReservingSkippedVersions()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        await using var context = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>().UseSqlite(connection).Options);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfAppReleaseRepository(context);
+        var first = CreateRelease("first", "Preview-1", "Первое описание");
+        var second = CreateRelease("second", "0.2.0", "Второе описание");
+
+        await repository.SynchronizeAsync(
+            [first, CreateRelease("duplicate-version", "PREVIEW-1", "Дубликат версии"),
+                CreateRelease("first", "0.2.0", "Дубликат ID"), second], CancellationToken.None);
+
+        Assert.Equal(2, await context.AppReleases.CountAsync());
+        AssertReleaseMatches(first, await repository.FindAsync("first", CancellationToken.None));
+        AssertReleaseMatches(second, await repository.FindAsync("second", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_CancelledLookupDoesNotInsertNotes()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        await using var context = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>().UseSqlite(connection).Options);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfAppReleaseRepository(context);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => repository.SynchronizeAsync(
+            [CreateRelease("cancelled", "0.3.0", "Не сохранится")], cancellation.Token));
+
+        Assert.Equal(0, await context.AppReleases.CountAsync());
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    private static void AssertReleaseMatches(AppReleaseDto expected, AppReleaseDto? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.Equal(expected.ReleaseId, actual.ReleaseId);
+        Assert.Equal(expected.Version, actual.Version);
+        Assert.Equal(expected.PublishedAt, actual.PublishedAt);
+        Assert.Equal(expected.Title, actual.Title);
+        Assert.Equal(expected.Summary, actual.Summary);
+        Assert.Equal(expected.IsPublished, actual.IsPublished);
+        Assert.Equal(expected.Items, actual.Items);
+    }
+
     private static AppReleaseDto CreateRelease(string releaseId, string version, string title) =>
         new(
             releaseId,
