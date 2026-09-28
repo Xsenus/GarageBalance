@@ -35,10 +35,12 @@ describe('compact desktop layout contract', () => {
     expect(appCss).toContain('bottom: calc(-1 * var(--app-dialog-padding, 18px));')
   })
 
-  it('gives the users matrix the remaining viewport height instead of growing the document', () => {
+  it('keeps the users matrix reachable inside the scrollable viewport without shrinking its content', () => {
     expect(appCss).toContain('.workspace--users {\n  display: flex;\n  height: 100dvh;')
-    expect(appCss).toContain('.workspace--users > .users-panel-v2 {\n    min-height: 0;\n    flex: 1 1 auto;\n    overflow: hidden;')
-    expect(appCss).toContain('.users-panel-v2 .role-matrix {\n    min-height: 0;\n    flex: 1 1 auto;\n    grid-template-rows: auto minmax(0, 1fr);')
+    expect(appCss).toContain('.users-panel-v2 {\n  min-height: 0;\n  max-height: none;\n  flex: 1 1 auto;\n  overflow-x: hidden;\n  overflow-y: auto;')
+    expect(appCss).toContain('.users-workbench {\n  display: flex;\n  flex: 0 0 auto;')
+    expect(appCss).toContain('.users-panel-v2 .role-matrix {\n    min-height: 0;\n    flex: 0 0 auto;\n    grid-template-rows: auto minmax(0, 1fr);')
+    expect(appCss).not.toMatch(/\.workspace--users > \.users-panel-v2\s*\{[^}]*overflow:\s*hidden;/)
   })
 
   it('marks every large workspace so compact height rules apply consistently', () => {
