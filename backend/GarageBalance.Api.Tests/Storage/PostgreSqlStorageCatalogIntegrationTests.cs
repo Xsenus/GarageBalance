@@ -9,6 +9,47 @@ namespace GarageBalance.Api.Tests.Storage;
 
 public sealed class PostgreSqlStorageCatalogIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task ReplicaRelocationPersistsOnPostgresAndRejectsStaleLocatorAndTombstone()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var item = new StorageObject
+        {
+            OperationId = Guid.NewGuid(),
+            LogicalKey = "copy.pgdump",
+            OriginalFileName = "copy.pgdump",
+            PolicyId = "backups-policy",
+            CommittedGeneration = 1,
+            State = StorageObjectState.Protected,
+            SizeBytes = 4,
+            Sha256 = new string('a', 64)
+        };
+        item.Replicas.Add(new StorageObjectReplica
+        {
+            DestinationId = "remote-a",
+            FailureDomain = "remote-host",
+            NativeLocator = "legacy/copy.pgdump",
+            Generation = 1,
+            State = StorageReplicaState.Available,
+            SizeBytes = 4,
+            Sha256 = item.Sha256
+        });
+        context.StorageObjects.Add(item);
+        await context.SaveChangesAsync();
+        var catalog = new EfStorageCatalog(context);
+        var replacement = new StorageWriteResult("backups/09_2026/sgk_copy.pgdump", "version-2", item.Sha256);
+        Assert.True(await catalog.RelocateReplicaAsync(item.Id, "remote-a", 1, item.Sha256, 4, "legacy/copy.pgdump", replacement, DateTimeOffset.UtcNow, CancellationToken.None));
+        await using var independent = database.CreateContext();
+        var persisted = await independent.StorageObjectReplicas.AsNoTracking().SingleAsync();
+        Assert.Equal(replacement.NativeLocator, persisted.NativeLocator);
+        Assert.Equal("version-2", persisted.ProviderVersionId);
+        Assert.NotNull(persisted.LastVerifiedAtUtc);
+        Assert.False(await catalog.RelocateReplicaAsync(item.Id, "remote-a", 1, item.Sha256, 4, "legacy/copy.pgdump", replacement, DateTimeOffset.UtcNow, CancellationToken.None));
+        await catalog.TombstoneAndScheduleDeleteAsync("garagebalance", StorageDataClass.DatabaseBackup, item.LogicalKey, 12, DateTimeOffset.UtcNow, CancellationToken.None);
+        Assert.False(await catalog.RelocateReplicaAsync(item.Id, "remote-a", 1, item.Sha256, 4, replacement.NativeLocator, replacement, DateTimeOffset.UtcNow, CancellationToken.None));
+    }
+
     private const string PreviousMigration = "20260921033539_AddOwnerAdditionalPhones";
 
     [PostgreSqlFact]

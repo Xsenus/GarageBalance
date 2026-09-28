@@ -149,7 +149,8 @@ public sealed class StorageReplicationRunner(
             new Dictionary<string, string>
             {
                 ["garagebalance-object-id"] = context.Object.Id.ToString("N"),
-                ["garagebalance-data-class"] = context.Object.DataClass.ToString()
+                ["garagebalance-data-class"] = context.Object.DataClass.ToString(),
+                [ReadableBackupLayout.CreatedAtMetadataKey] = context.Object.CreatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture)
             });
         var locator = target.GetWriteLocator(request);
         var writeStarted = false;

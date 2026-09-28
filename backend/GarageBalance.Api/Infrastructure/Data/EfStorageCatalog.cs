@@ -712,6 +712,31 @@ public sealed class EfStorageCatalog(GarageBalanceDbContext dbContext, StorageCo
         return new StorageManifestPage(items, objects.Length > take ? items[^1].LogicalKey : null);
     }
 
+    public async Task<bool> RelocateReplicaAsync(Guid objectId, string destinationId, long generation, string sha256,
+        long sizeBytes, string expectedLocator, StorageWriteResult replacement, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        _ = StorageObjectKey.Normalize(replacement.NativeLocator);
+        // A fresh snapshot is essential when this long-running operator process resumes a move.
+        dbContext.ChangeTracker.Clear();
+        var item = await dbContext.StorageObjects.Include(item => item.Replicas)
+            .SingleOrDefaultAsync(item => item.Id == objectId, cancellationToken);
+        if (item is null || item.TombstonedAtUtc is not null || item.DataClass != StorageDataClass.DatabaseBackup ||
+            item.State is StorageObjectState.Deleting or StorageObjectState.Deleted || item.CommittedGeneration != generation ||
+            item.SizeBytes != sizeBytes || !string.Equals(item.Sha256, sha256, StringComparison.OrdinalIgnoreCase)) return false;
+        var replica = item.Replicas.SingleOrDefault(replica => replica.DestinationId == destinationId && replica.Generation == generation);
+        if (replica is null || replica.State != StorageReplicaState.Available || replica.NativeLocator != expectedLocator) return false;
+        replica.NativeLocator = replacement.NativeLocator;
+        replica.ProviderVersionId = replacement.ProviderVersionId;
+        replica.MarkAvailable(sizeBytes, sha256, replacement.ProviderChecksum, now);
+        // Updating the parent concurrency token also detects a concurrent tombstone.
+        item.UpdatedAtUtc = now;
+        item.Version = Guid.NewGuid();
+        try { await dbContext.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { dbContext.ChangeTracker.Clear(); return false; }
+        return true;
+    }
+
     public async Task<bool> RecordReplicaVerifiedAsync(
         Guid objectId,
         string destinationId,

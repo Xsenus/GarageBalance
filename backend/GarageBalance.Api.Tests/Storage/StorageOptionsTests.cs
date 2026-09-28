@@ -7,6 +7,36 @@ namespace GarageBalance.Api.Tests.Storage;
 
 public sealed class StorageOptionsTests
 {
+    [Theory]
+    [InlineData("backups", "Asia/Novosibirsk", true)]
+    [InlineData("../backups", "UTC", false)]
+    [InlineData("backups", "not-a-real-zone", false)]
+    public void ValidatorAndResolverSupportExplicitReadableLayout(string prefix, string zone, bool valid)
+    {
+        var options = CreateValidAsyncMirror(false);
+        options.Destinations[1] = new StorageDestinationOptions
+        {
+            Id = "offsite-a",
+            Type = StorageProviderType.S3Compatible,
+            FailureDomain = "host-a",
+            Endpoint = "https://s3-a.example.test",
+            Bucket = "private-backups",
+            Prefix = "legacy",
+            BackupPrefix = prefix,
+            BackupTimeZoneId = zone,
+            AllowedEndpointHosts = ["s3-a.example.test"],
+            Capabilities = ["Read", "Write", "Stat", "Delete", "ServerSideEncryption"]
+        };
+        Assert.Equal(valid, new StorageOptionsValidator().Validate(null, options).Succeeded);
+        if (valid)
+        {
+            var effective = new StorageConfigurationResolver(Options.Create(options), Options.Create(new DatabaseBackupOptions())).Resolve().Destinations[1];
+            Assert.Equal("legacy", effective.Prefix);
+            Assert.Equal(prefix, effective.BackupPrefix);
+            Assert.Equal(zone, effective.BackupTimeZoneId);
+        }
+    }
+
     [Fact]
     public void LegacyConfiguration_UsesSingleLocalDestinationWithoutCloudCredentials()
     {

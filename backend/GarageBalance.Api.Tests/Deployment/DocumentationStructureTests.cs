@@ -42,6 +42,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/garage-annual-payment-fields-2026-09-16-roadmap.md",
         "roadmaps/garage-annual-payments-search-payouts-2026-09-16-roadmap.md",
         "roadmaps/income-accrual-integrity-2026-09-04-roadmap.md",
+        "roadmaps/readable-backup-layout-2026-09-28-roadmap.md",
         "roadmaps/sgk-compact-ui-2026-09-14-roadmap.md",
         "roadmaps/tariffs-and-income-full-audit-2026-09-11-roadmap.md",
         "roadmaps/ui-forms-and-dictionaries-audit-2026-08-01-roadmap.md",

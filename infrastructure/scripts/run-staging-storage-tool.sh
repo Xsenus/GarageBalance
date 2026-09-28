@@ -16,6 +16,9 @@ case "$1" in
   verify)
     exec "$tool" verify --execute
     ;;
+  backup-layout|backup-layout-prune)
+    exec "$tool" "$1" --execute --checkpoint /var/lib/garagebalance-staging/storage-migration/readable-backup-layout.json
+    ;;
   inventory|plan|cutover-check|status)
     exec "$tool" "$1"
     ;;

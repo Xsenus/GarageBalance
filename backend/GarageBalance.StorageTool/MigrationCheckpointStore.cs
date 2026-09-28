@@ -11,7 +11,7 @@ public sealed record MigrationCommandOptions(string Command, bool Execute, strin
 {
     public static MigrationCommandOptions Parse(string[] args)
     {
-        string[] commands = ["inventory", "plan", "copy", "verify", "diff", "delta-sync", "resume", "repair", "status", "report", "cutover-check", "rollback-check", "resume-reconciliation"];
+        string[] commands = ["inventory", "plan", "copy", "verify", "diff", "delta-sync", "resume", "repair", "status", "report", "cutover-check", "rollback-check", "resume-reconciliation", "backup-layout", "backup-layout-prune"];
         var command = args.FirstOrDefault()?.ToLowerInvariant();
         if (command is null || !commands.Contains(command, StringComparer.Ordinal))
             throw new MigrationToolException("Unknown command; use --help.");
@@ -35,7 +35,7 @@ public sealed record MigrationCommandOptions(string Command, bool Execute, strin
             throw new MigrationToolException("Resuming reconciliation requires --execute --reason with a safe operator explanation (3–500 characters).");
         if (new[] { checkpoint, output }.Any(path => path is not null && path.EndsWith(".pgdump.manifest.json", StringComparison.OrdinalIgnoreCase)))
             throw new MigrationToolException("Checkpoint and report output may not overwrite backup manifests.");
-        if ((command is "resume" or "delta-sync" || execute && command == "copy") && string.IsNullOrWhiteSpace(checkpoint))
+        if ((command is "resume" or "delta-sync" or "backup-layout-prune" || execute && command is "copy" or "backup-layout") && string.IsNullOrWhiteSpace(checkpoint))
             throw new MigrationToolException("This command requires --checkpoint <private-json-path>.");
         if (checkpoint is not null && output is not null && string.Equals(Path.GetFullPath(checkpoint), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
             throw new MigrationToolException("Report output must not overwrite its checkpoint.");

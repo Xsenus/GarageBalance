@@ -2,6 +2,23 @@ namespace GarageBalance.Api.Tests.Deployment;
 
 public sealed class StagingCloudBackupDeploymentTests
 {
+    [Fact]
+    public void ReadableLayoutPreservesCredentialsLegacyPrefixesAndRequiresSeparatePruneCommand()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot, "infrastructure", "scripts", "configure-staging-cloud-backup.sh"));
+        var runner = File.ReadAllText(Path.Combine(RepositoryRoot, "infrastructure", "scripts", "run-staging-storage-tool.sh"));
+        Assert.Contains("readable-layout)", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Destinations__1__BackupPrefix=backups", script, StringComparison.Ordinal);
+        Assert.Contains("Storage__Destinations__2__BackupPrefix=backups", script, StringComparison.Ordinal);
+        Assert.Contains("BackupTimeZoneId=Asia/Novosibirsk", script, StringComparison.Ordinal);
+        Assert.Contains("60-backup-layout.conf", script, StringComparison.Ordinal);
+        Assert.Contains("backup-layout|backup-layout-prune)", runner, StringComparison.Ordinal);
+        Assert.Contains("readable-backup-layout.json", runner, StringComparison.Ordinal);
+        foreach (var command in new[] { "backup-layout", "backup-layout-prune" })
+            Assert.False(GarageBalance.StorageTool.MigrationCommandOptions.Parse([command, "--checkpoint", "layout.json"]).Execute);
+        Assert.Throws<GarageBalance.StorageTool.MigrationToolException>(() => GarageBalance.StorageTool.MigrationCommandOptions.Parse(["backup-layout", "--execute"]));
+    }
+
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     [Fact]

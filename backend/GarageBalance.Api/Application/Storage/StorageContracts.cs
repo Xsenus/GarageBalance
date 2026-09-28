@@ -89,6 +89,8 @@ public sealed class StorageDestinationOptions
     public string? Endpoint { get; init; }
     public string? Bucket { get; init; }
     public string Prefix { get; init; } = "garagebalance";
+    public string? BackupPrefix { get; init; }
+    public string BackupTimeZoneId { get; init; } = "Asia/Novosibirsk";
     public string SigningRegion { get; init; } = "us-east-1";
     public bool ForcePathStyle { get; init; } = true;
     public long MultipartThresholdBytes { get; init; } = 64L * 1024 * 1024;
@@ -157,7 +159,9 @@ public sealed record EffectiveStorageDestination(
     string CredentialSource,
     StorageCapability Capabilities,
     S3EncryptionMode EncryptionMode = S3EncryptionMode.SseS3,
-    string? KmsKeyId = null);
+    string? KmsKeyId = null,
+    string? BackupPrefix = null,
+    string BackupTimeZoneId = "Asia/Novosibirsk");
 
 public static partial class StorageObjectKey
 {
@@ -358,10 +362,19 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
         try
         {
             _ = StorageObjectKey.Normalize(destination.Prefix);
+            if (destination.BackupPrefix is not null)
+            {
+                _ = StorageObjectKey.Normalize(destination.BackupPrefix);
+                _ = TimeZoneInfo.FindSystemTimeZoneById(destination.BackupTimeZoneId);
+            }
         }
         catch (ArgumentException)
         {
             errors.Add($"S3 destination '{destination.Id}' has an invalid prefix.");
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            errors.Add($"S3 destination '{destination.Id}' has an invalid backup time zone.");
         }
         if (!Uri.TryCreate(destination.Endpoint, UriKind.Absolute, out var endpoint) ||
             !string.IsNullOrEmpty(endpoint.UserInfo) || !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment))
@@ -500,7 +513,9 @@ public sealed class StorageConfigurationResolver(
             item.CredentialSource,
             StorageOptionsValidator.ParseCapabilities(item.Capabilities, $"destination '{item.Id}'", errors),
             item.EncryptionMode,
-            item.KmsKeyId)).ToArray();
+            item.KmsKeyId,
+            item.BackupPrefix,
+            item.BackupTimeZoneId)).ToArray();
         if (errors.Count > 0)
         {
             throw new OptionsValidationException(StorageOptions.SectionName, typeof(StorageOptions), errors);

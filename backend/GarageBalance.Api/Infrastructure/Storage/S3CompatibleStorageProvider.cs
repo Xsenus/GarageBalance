@@ -554,6 +554,8 @@ public sealed class S3CompatibleStorageProvider(
     private string BuildKey(StorageWriteRequest request)
     {
         var logicalKey = StorageObjectKey.Normalize(request.ObjectKey);
+        var readable = ReadableBackupLayout.TryBuildKey(destination, request);
+        if (readable is not null) return readable;
         return StorageObjectKey.Normalize(
             $"{destination.Prefix}/{request.OperationId:N}/g{request.Generation:D20}/{logicalKey}");
     }
@@ -562,7 +564,8 @@ public sealed class S3CompatibleStorageProvider(
     {
         var key = StorageObjectKey.Normalize(nativeLocator);
         var prefix = destination.Prefix.TrimEnd('/') + "/";
-        if (!key.StartsWith(prefix, StringComparison.Ordinal))
+        if (!key.StartsWith(prefix, StringComparison.Ordinal) &&
+            !(destination.BackupPrefix is not null && key.StartsWith(StorageObjectKey.Normalize(destination.BackupPrefix) + "/", StringComparison.Ordinal)))
         {
             throw new StorageProviderException(StorageErrorCategory.ValidationOrUnsupported, "S3 locator is outside the configured prefix.");
         }

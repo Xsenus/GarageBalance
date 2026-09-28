@@ -34,9 +34,11 @@ GarageBalance.StorageTool commands:
   copy | verify | delta-sync | resume | repair [--execute]
   resume-reconciliation --execute --reason <operator-explanation>
   recovery-canary | recovery-publish | recovery-fetch | restore-drill [--execute]
+  backup-layout | backup-layout-prune [--execute --checkpoint <private-json-path>]
 Options: --checkpoint <private-json-path> --page-size N --max-jobs N --output <private-json-path>
 Mutating commands are dry-run by default. copy creates a checkpoint; resume continues it;
-delta-sync extends it with new files. No command deletes source objects or changes live configuration.
+delta-sync extends it with new files. Only backup-layout-prune removes old cloud paths after verification.
+No command changes live configuration. Keep recovery manifests current before layout pruning.
 See docs/storage-migration-cli.md for migration gates and docs/disaster-recovery.md for recovery commands.
 """);
                 return 0;
@@ -75,6 +77,13 @@ See docs/storage-migration-cli.md for migration gates and docs/disaster-recovery
                     .UseNpgsql(connection).Options);
                 var catalog = new EfStorageCatalog(db, resolver);
                 using var registry = new StorageProviderRegistry(resolver, new AwsS3ObjectClientFactory(), TimeProvider.System);
+                if (command is "backup-layout" or "backup-layout-prune")
+                {
+                    var layoutResult = await new BackupLayoutMigration(catalog, registry, resolver.Resolve(), new StorageMaintenanceLock(db))
+                        .ExecuteAsync(options, cancellationToken);
+                    Console.WriteLine(JsonSerializer.Serialize(layoutResult, MigrationCheckpointStore.JsonOptions));
+                    return 0;
+                }
                 var runner = new StorageReplicationRunner(catalog, registry, resolver, TimeProvider.System,
                     new StorageOperationHealthTracker(TimeProvider.System), NullLogger<StorageReplicationRunner>.Instance,
                     safetyGuard: reconciliationGuard);

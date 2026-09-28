@@ -29,6 +29,29 @@ wait_for_api() {
 [[ "$(id -u)" == 0 ]] || { echo 'root is required' >&2; exit 77; }
 
 case "${1:-}" in
+  readable-layout)
+    [[ "$#" == 1 && -f "$CLOUD_ENV" && -f "$HOSTKEY_ENV" && -f "$TOOL_UNIT" ]] || exit 64
+    systemctl stop garagebalance-storage-sync.timer
+    # A separate non-secret file preserves both legacy prefixes and all credential/encryption settings.
+    layout_env=/etc/garagebalance-staging-backup-layout.env
+    [[ ! -e "$layout_env" ]] || { echo 'Readable layout is already configured'; exit 0; }
+    trap 'rm -f -- "$layout_env" /etc/systemd/system/garagebalance-staging.service.d/60-backup-layout.conf /etc/systemd/system/garagebalance-storage-tool@.service.d/60-backup-layout.conf; systemctl daemon-reload; systemctl restart "$SERVICE"' ERR
+    umask 077
+    printf '%s\n' \
+      'Storage__Destinations__1__BackupPrefix=backups' \
+      'Storage__Destinations__1__BackupTimeZoneId=Asia/Novosibirsk' \
+      'Storage__Destinations__2__BackupPrefix=backups' \
+      'Storage__Destinations__2__BackupTimeZoneId=Asia/Novosibirsk' > "$layout_env"
+    chmod 600 "$layout_env"
+    install -d -m 755 /etc/systemd/system/garagebalance-storage-tool@.service.d
+    printf '[Service]\nEnvironmentFile=%s\n' "$layout_env" > /etc/systemd/system/garagebalance-staging.service.d/60-backup-layout.conf
+    printf '[Service]\nEnvironmentFile=%s\n' "$layout_env" > /etc/systemd/system/garagebalance-storage-tool@.service.d/60-backup-layout.conf
+    systemctl daemon-reload
+    systemctl restart "$SERVICE"
+    wait_for_api
+    trap - ERR
+    echo 'Readable layout configured; sync paused until relocation is verified'
+    ;;
   inspect)
     [[ "$#" == 1 ]] || exit 64
     [[ -d "$BACKUP_DIR" ]] || { echo 'backup directory missing' >&2; exit 1; }
@@ -270,7 +293,7 @@ case "${1:-}" in
   run)
     [[ "$#" == 2 ]] || exit 64
     case "$2" in
-      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status) ;;
+      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status|backup-layout|backup-layout-prune) ;;
       *) echo 'unsupported migration command' >&2; exit 64 ;;
     esac
     [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" ]] || exit 1
@@ -284,7 +307,7 @@ case "${1:-}" in
   diagnose)
     [[ "$#" == 2 ]] || exit 64
     case "$2" in
-      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status) ;;
+      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status|backup-layout|backup-layout-prune) ;;
       *) exit 64 ;;
     esac
     journalctl -u "garagebalance-storage-tool@$2.service" -n 2000 -o cat --no-pager | cut -c 1-4000
@@ -311,7 +334,10 @@ case "${1:-}" in
     [[ "$#" == 1 ]] || exit 64
     [[ -f "$CLOUD_ENV" && -f "$DROP_IN" ]] || exit 1
     systemctl disable --now garagebalance-storage-sync.timer 2>/dev/null || true
-    rm -f -- "$DROP_IN" "$TOOL_UNIT" "$SYNC_TIMER" "$HOSTKEY_ENV" "$CLOUD_ENV"
+    rm -f -- "$DROP_IN" "$TOOL_UNIT" "$SYNC_TIMER" "$HOSTKEY_ENV" "$CLOUD_ENV" \
+      /etc/garagebalance-staging-backup-layout.env \
+      /etc/systemd/system/garagebalance-staging.service.d/60-backup-layout.conf \
+      /etc/systemd/system/garagebalance-storage-tool@.service.d/60-backup-layout.conf
     systemctl daemon-reload
     systemctl restart "$SERVICE"
     wait_for_api

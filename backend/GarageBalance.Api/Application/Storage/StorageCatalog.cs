@@ -83,6 +83,9 @@ public interface IStorageReconciliationGuard
 
 public interface IStorageCatalog
 {
+    Task<bool> RelocateReplicaAsync(Guid objectId, string destinationId, long generation, string sha256,
+        long sizeBytes, string expectedLocator, StorageWriteResult replacement, DateTimeOffset now,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
     Task<StorageCatalogRegistration> RegisterCommittedObjectAsync(
         RegisterCommittedStorageObjectRequest request,
         CancellationToken cancellationToken);
