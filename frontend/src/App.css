@@ -589,13 +589,6 @@ h1 {
   line-height: 1.14;
 }
 
-.lead {
-  max-width: 760px;
-  margin-top: 12px;
-  color: #475467;
-  font-size: 16px;
-}
-
 .dashboard-home {
   display: grid;
   min-height: calc(100vh - 118px);
@@ -5267,12 +5260,6 @@ input.meter-readings-control {
     animation: none;
     transition: none;
   }
-}
-
-.payments-prototype-month-total td {
-  background: #f2f4f7 !important;
-  color: #101828;
-  font-weight: 800;
 }
 
 .payments-prototype-required-cell {

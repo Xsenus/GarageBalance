@@ -36,8 +36,8 @@ describe('frontend bundle budget gate', () => {
     expect(viteConfig).toContain('modulePreload: false')
     expect(viteConfig).toContain("return 'workspace-finance'")
     expect(viteConfig).toContain("return 'workspace-operations'")
-    expect(viteConfig).toContain('(finance|funds|import|dictionaries)')
-    expect(viteConfig).toContain('(meterReadings|contractors|tariffs)')
+    expect(viteConfig).toContain('(finance|funds|import|tariffs)')
+    expect(viteConfig).toContain('(meterReadings|contractors|dictionaries)')
   })
 
   it('loads the authenticated workspace only after authentication', () => {
