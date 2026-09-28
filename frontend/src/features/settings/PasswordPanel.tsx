@@ -7,7 +7,7 @@ import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
 import { BackupProtectionDetails } from './BackupProtectionDetails'
 import { BackupRestoreStatus } from './BackupRestoreStatus'
 import type { AccrualReasonDisplayMode, ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
-import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
+import { hasPermission, isAccountantWorkspace, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage } from '../../shared/AsyncState'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -63,37 +63,44 @@ type SettingsTab = 'security' | 'business-date' | 'cash-bank' | 'display' | 'bac
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
   const [actionCommentsRequired, actionCommentSettingsLoading, actionCommentSettingsError, saveActionCommentsRequired] = useActionCommentSettings()
-  const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
-  const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
+  const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
+  const canUseTechnicalSettings = !isAccountantWorkspace(auth)
+  const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true' && canUseTechnicalSettings
+  const dadataSettingsVisible = canUseTechnicalSettings && canManageApplicationSettings
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
-  const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
+  const canManageIntegrationSettings = integrationSettingsVisible && canManageApplicationSettings
   const canManageDadataSettings = dadataSettingsVisible
-  const integrationTabVisible = canViewIntegrationStatus || canViewReceiptPrintingStatus || canManageIntegrationSettings || canManageDadataSettings
+  const integrationTabVisible = canViewIntegrationStatus || canViewReceiptPrintingStatus || canManageDadataSettings
   const canReadBackups = hasPermission(auth, permissions.backupsRead)
   const canCreateBackups = hasPermission(auth, permissions.backupsCreate)
   const canDownloadBackups = hasPermission(auth, permissions.backupsDownload)
   const canDeleteBackups = hasPermission(auth, permissions.backupsDelete)
   const canRepairBackups = hasPermission(auth, permissions.backupsRepair)
-  const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
   const canManageBusinessDate = isAdministrator(auth)
-  const defaultSettingsTab: SettingsTab = integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
+  const canViewDiagnostics = canUseTechnicalSettings && canManageApplicationSettings
+  const canReadCashBank = (canManageBusinessDate || !canUseTechnicalSettings) && hasPermission(auth, permissions.paymentsRead)
+  const canAdjustCashBank = canReadCashBank && hasPermission(auth, permissions.paymentsWrite)
+  const defaultSettingsTab: SettingsTab = canViewIntegrationStatus || canViewReceiptPrintingStatus
     ? 'integrations'
     : 'security'
   const settingsTabs = [
     ['security', 'Безопасность', KeyRound, true],
     ['business-date', 'Рабочая дата', CalendarClock, canManageBusinessDate],
-    ['cash-bank', 'Касса и счёт', Landmark, canManageBusinessDate],
+    ['cash-bank', 'Касса и счёт', Landmark, canReadCashBank],
     ['display', 'Отображение', Eye, canManageApplicationSettings],
     ['backups', 'Резервные копии', DatabaseBackup, canReadBackups],
-    ['diagnostics', 'Диагностика', FileWarning, canManageApplicationSettings],
+    ['diagnostics', 'Диагностика', FileWarning, canViewDiagnostics],
     ['integrations', 'Интеграции', PlugZap, integrationTabVisible],
   ] as const
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => loadStoredWorkspaceView(
+  const [selectedSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => loadStoredWorkspaceView(
     workspaceViewStorageKeys.settingsTab,
     settingsTabs.filter(([, , , visible]) => visible).map(([tab]) => tab),
     defaultSettingsTab,
   ))
+  const activeSettingsTab = settingsTabs.find(([tab]) => tab === selectedSettingsTab)?.[3]
+    ? selectedSettingsTab
+    : 'security'
   useEffect(() => {
     saveStoredWorkspaceView(workspaceViewStorageKeys.settingsTab, activeSettingsTab)
   }, [activeSettingsTab])
@@ -225,7 +232,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
-    if (!canManageBusinessDate || activeSettingsTab !== 'cash-bank') return
+    if (!canReadCashBank || activeSettingsTab !== 'cash-bank') return
     let ignore = false
     const controller = new AbortController()
     setCashBankLoading(true)
@@ -245,7 +252,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ignore = true
       controller.abort()
     }
-  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient, settingsReloadRevision])
+  }, [activeSettingsTab, auth.accessToken, canReadCashBank, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
     if (!canManageApplicationSettings || activeSettingsTab !== 'display') {
@@ -332,7 +339,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   }, [activeSettingsTab, auth.accessToken, backupReloadToken, canReadBackups, settingsClient])
 
   useEffect(() => {
-    if (!canManageApplicationSettings || activeSettingsTab !== 'diagnostics') {
+    if (!canViewDiagnostics || activeSettingsTab !== 'diagnostics') {
       return
     }
 
@@ -361,7 +368,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ignore = true
       controller.abort()
     }
-  }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, diagnosticReloadToken, settingsClient])
+  }, [activeSettingsTab, auth.accessToken, canViewDiagnostics, diagnosticReloadToken, settingsClient])
 
   async function exportDiagnosticPackage() {
     setDiagnosticExporting(true)
@@ -661,7 +668,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
   async function saveBalanceAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!balanceAdjustmentDraft) return
+    if (!balanceAdjustmentDraft || !canAdjustCashBank) return
     const amount = parseMoneyDraft(balanceAdjustmentDraft.amount)
     const reason = balanceAdjustmentDraft.reason.trim()
     if (amount === null || amount <= 0) {
@@ -702,6 +709,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     account: 'cash' | 'bank',
     direction: 'increase' | 'decrease',
   ) {
+    if (!canAdjustCashBank) return
     setCashBankError(null)
     setBalanceAdjustmentDraft({
       account,
@@ -1085,12 +1093,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       </section>
       ) : null}
-      {canManageBusinessDate && activeSettingsTab === 'cash-bank' ? (
+      {canReadCashBank && activeSettingsTab === 'cash-bank' ? (
       <section className="password-panel settings-card settings-card--cash-bank" aria-label="Остатки кассы и банковского счёта">
         <div className="settings-card-intro">
           <p className="eyebrow">Финансовые настройки</p>
           <h2>Касса и банковский счёт</h2>
-          <p>Текущие остатки изменяются отдельными операциями пополнения и списания. Каждая операция сохраняет дату, время и причину в истории.</p>
+          <p>Дата, время и причина операций сохраняются в истории.</p>
         </div>
         <div className="dictionary-form settings-card-form cash-bank-settings">
           {cashBankLoading && !cashBankSettings ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем остатки кассы и банковского счёта" rows={3} columns={4} /> : null}
@@ -1108,7 +1116,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 </div>
               </div>
 
-              <div className="cash-bank-action-groups" aria-label="Операции с остатками">
+              {canAdjustCashBank ? <div className="cash-bank-action-groups" aria-label="Операции с остатками">
                 {(['cash', 'bank'] as const).map((account) => (
                   <div className="cash-bank-action-card" key={account}>
                     <div>
@@ -1127,7 +1135,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                     </div>
                   </div>
                 ))}
-              </div>
+              </div> : null}
 
               <div className="table-shell cash-bank-history-shell">
                 <table className="cash-bank-history-table" aria-label="Последние операции с кассой и банковским счётом">
@@ -1166,7 +1174,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       </section>
       ) : null}
-      {balanceAdjustmentDraft ? (
+      {balanceAdjustmentDraft && canAdjustCashBank ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeBalanceAdjustment}>
           <section ref={balanceAdjustmentDialogRef} className="detail-dialog cash-bank-adjustment-dialog" role="dialog" aria-modal="true" aria-labelledby="cash-bank-adjustment-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
@@ -1428,7 +1436,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       </section>
       ) : null}
-      {canManageApplicationSettings && activeSettingsTab === 'diagnostics' ? (
+      {canViewDiagnostics && activeSettingsTab === 'diagnostics' ? (
       <section className="password-panel settings-card settings-card--diagnostics" aria-label="Диагностика ошибок приложения">
         <div className="settings-card-intro">
           <p className="eyebrow">Диагностика</p>

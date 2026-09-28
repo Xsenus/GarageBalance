@@ -85,6 +85,10 @@ export function isAdministrator(auth: AuthResponse): boolean {
   return auth.user.roles.includes('administrator')
 }
 
+export function isAccountantWorkspace(auth: AuthResponse): boolean {
+  return auth.user.roles.includes('accountant') && !isAdministrator(auth)
+}
+
 export function hasAnyPermission(auth: AuthResponse, requiredAny?: readonly string[]): boolean {
   return !requiredAny || requiredAny.some((permission) => hasPermission(auth, permission))
 }

@@ -64,6 +64,15 @@ function renderShell(authResponse = auth) {
 }
 
 describe('AuthenticatedAppShell performance', () => {
+  it('hides accountant dictionaries and rejects a previously stored dictionary workspace', () => {
+    window.sessionStorage.setItem('garagebalance.workspace.section', 'dictionaries')
+    renderShell({ ...auth, user: { ...auth.user, roles: ['accountant'] } })
+    expect(screen.queryByRole('button', { name: 'Справочники' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Тарифы и сборы' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Контрагенты' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'workspace-dashboard' })).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('garagebalance.workspace.section')).toBe('dashboard')
+  })
   afterEach(() => {
     workspaceRenderSpy.mockReset()
     workspacePropsSpy.mockReset()

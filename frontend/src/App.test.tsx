@@ -179,6 +179,7 @@ describe('App', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -17202,7 +17203,7 @@ describe('App', () => {
       await user.click(settings.getByRole('tab', { name: 'Отображение' }))
     }
   })
-  it('hides opening balance editing and records a cash replenishment in a modal', async () => {
+  it.each(['administrator', 'accountant'])('hides opening balance editing and records a cash replenishment in a modal for %s', async (role) => {
     const user = userEvent.setup()
     const createCashBankBalanceAdjustment = vi.fn(async (_accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }) => ({
       cashOpeningBalance: 1500,
@@ -17221,7 +17222,7 @@ describe('App', () => {
       }],
     }))
     const settingsClient = createSettingsClient({ createCashBankBalanceAdjustment })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient({ login: async () => createAuthResponse({ user: { roles: [role] } }) })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18024,8 +18025,47 @@ describe('App', () => {
   })
 
   it.each([
+    [true, true, true],
+    [false, true, false],
+    [true, false, false],
+  ])('limits accountant settings with integration flag %s, read %s, write %s', async (enabled, canRead, canWrite) => {
+    vi.stubEnv('VITE_SHOW_INTEGRATION_SETTINGS', String(enabled))
+    window.sessionStorage.setItem('garagebalance.workspace.settings.tab', 'integrations')
+    const user = userEvent.setup()
+    const granted = ['users.manage', 'dictionaries.read', 'import.run', ...(canRead ? ['payments.read'] : []), ...(canWrite ? ['payments.write'] : [])]
+    const auth = createAuthResponse({ user: { roles: ['accountant'], permissions: granted } })
+    const getOneCFreshStatus = vi.fn()
+    const getReceiptPrintingStatus = vi.fn()
+    const getDiagnosticLogStatus = vi.fn()
+    const getCashBankBalances = vi.fn(createSettingsClient().getCashBankBalances)
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient({ getOneCFreshStatus, getReceiptPrintingStatus })} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getCashBankBalances, getDiagnosticLogStatus })} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = within(await screen.findByRole('region', { name: 'Настройки' }))
+    expect(settings.getByRole('tab', { name: 'Безопасность' })).toHaveAttribute('aria-selected', 'true')
+    for (const name of ['Диагностика', 'Интеграции', 'Рабочая дата']) {
+      expect(settings.queryByRole('tab', { name })).not.toBeInTheDocument()
+    }
+    expect(getDiagnosticLogStatus).not.toHaveBeenCalled()
+    expect(getOneCFreshStatus).not.toHaveBeenCalled()
+    expect(getReceiptPrintingStatus).not.toHaveBeenCalled()
+    if (canRead) {
+      await user.click(settings.getByRole('tab', { name: 'Касса и счёт' }))
+      await waitFor(() => expect(getCashBankBalances).toHaveBeenCalled())
+      const panel = within(await settings.findByRole('region', { name: 'Остатки кассы и банковского счёта' }))
+      expect(await panel.findByLabelText('Текущие остатки')).toHaveTextContent('1 200.00 ₽')
+      expect(panel.queryAllByRole('button', { name: 'Пополнить' })).toHaveLength(canWrite ? 2 : 0)
+      expect(panel.queryAllByRole('button', { name: 'Списать' })).toHaveLength(canWrite ? 2 : 0)
+    } else {
+      expect(settings.queryByRole('tab', { name: 'Касса и счёт' })).not.toBeInTheDocument()
+      expect(getCashBankBalances).not.toHaveBeenCalled()
+    }
+  })
+
+  it.each([
     ['администратора', () => createAuthResponse()],
-    ['пользователя без административных прав', () => createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
+    ['пользователя без административных прав', () => createAuthResponse({ user: { roles: ['operator'], permissions: ['dictionaries.read'] } })],
   ])('shows settings tabs and limits integrations for %s', async (_roleLabel, createAuth) => {
     const user = userEvent.setup()
     const auth = createAuth()

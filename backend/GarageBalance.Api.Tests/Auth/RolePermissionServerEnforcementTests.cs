@@ -13,6 +13,74 @@ namespace GarageBalance.Api.Tests.Auth;
 
 public sealed class RolePermissionServerEnforcementTests
 {
+    public static IEnumerable<object[]> TechnicalSettingsCases()
+    {
+        (Type Controller, string Action)[] endpoints =
+        [
+            (typeof(DiagnosticsController), nameof(DiagnosticsController.GetStatus)),
+            (typeof(DiagnosticsController), nameof(DiagnosticsController.CreatePackage)),
+            (typeof(IntegrationsController), nameof(IntegrationsController.UpdateProtectedSetting)),
+            (typeof(IntegrationsController), nameof(IntegrationsController.GetOneCFreshStatus)),
+            (typeof(IntegrationsController), nameof(IntegrationsController.StartOneCFreshSync)),
+            (typeof(IntegrationsController), nameof(IntegrationsController.PreviewOneCFreshSync)),
+            (typeof(IntegrationsController), nameof(IntegrationsController.RetryOneCFreshSync)),
+            (typeof(IntegrationsController), nameof(IntegrationsController.GetReceiptPrintingStatus))
+        ];
+        foreach (var (controller, action) in endpoints)
+        {
+            yield return [controller, action, SystemRoles.Accountant, false];
+            yield return [controller, action, SystemRoles.Administrator, true];
+            yield return [controller, action, SystemRoles.Operator, true];
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(TechnicalSettingsCases))]
+    public async Task TechnicalSettings_ExcludeAccountantEvenWithAllPermissions(
+        Type controller, string action, string role, bool allowed)
+    {
+        await using var provider = CreateServices();
+        var policy = await GetEndpointPolicyAsync(provider, controller, action);
+        var result = await AuthorizeAsync(provider, role, SystemPermissions.All, policy);
+        Assert.Equal(allowed, result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData(SystemRoles.Accountant, true, true, true, true)]
+    [InlineData(SystemRoles.Accountant, true, false, true, false)]
+    [InlineData(SystemRoles.Accountant, false, false, false, false)]
+    [InlineData(SystemRoles.Operator, true, true, false, false)]
+    [InlineData(SystemRoles.Administrator, true, true, true, true)]
+    public async Task CashBank_EnforcesRolesAndReadWritePermissions(
+        string role, bool read, bool write, bool expectedRead, bool expectedWrite)
+    {
+        await using var provider = CreateServices();
+        var granted = new List<string>();
+        if (read) granted.Add(SystemPermissions.PaymentsRead);
+        if (write) granted.Add(SystemPermissions.PaymentsWrite);
+        var readPolicy = await GetEndpointPolicyAsync(provider, typeof(SettingsController), nameof(SettingsController.GetCashBankBalances));
+        var writePolicy = await GetEndpointPolicyAsync(provider, typeof(SettingsController), nameof(SettingsController.CreateCashBankBalanceAdjustment));
+        Assert.Equal(expectedRead, (await AuthorizeAsync(provider, role, granted, readPolicy)).Succeeded);
+        Assert.Equal(expectedWrite, (await AuthorizeAsync(provider, role, granted, writePolicy)).Succeeded);
+        var openingPolicy = await GetEndpointPolicyAsync(provider, typeof(SettingsController), nameof(SettingsController.UpdateCashBankOpeningBalances));
+        Assert.Equal(role == SystemRoles.Administrator, (await AuthorizeAsync(provider, role, granted, openingPolicy)).Succeeded);
+    }
+
+    [Fact]
+    public async Task TechnicalSettings_RejectAnonymousAndRetainAdministratorInCombinedRoles()
+    {
+        await using var provider = CreateServices();
+        var service = provider.GetRequiredService<IAuthorizationService>();
+        Assert.False((await service.AuthorizeAsync(new ClaimsPrincipal(new ClaimsIdentity()), null, SystemPolicies.TechnicalSettingsAccess)).Succeeded);
+        var combined = new ClaimsPrincipal(new ClaimsIdentity([
+            new Claim(ClaimTypes.Role, SystemRoles.Accountant),
+            new Claim(ClaimTypes.Role, SystemRoles.Administrator)
+        ], "Test"));
+        Assert.True((await service.AuthorizeAsync(combined, null, SystemPolicies.TechnicalSettingsAccess)).Succeeded);
+        var receiptPolicy = await GetEndpointPolicyAsync(provider, typeof(IntegrationsController), nameof(IntegrationsController.RegisterReceiptPrintingAction));
+        Assert.True((await AuthorizeAsync(provider, SystemRoles.Accountant, SystemPermissions.Accountant, receiptPolicy)).Succeeded);
+    }
+
     public static TheoryData<string, string[], Type, string, string> ForbiddenEndpointCases => new()
     {
         {
@@ -138,6 +206,7 @@ public sealed class RolePermissionServerEnforcementTests
         services.AddLogging();
         services.AddAuthorization(options =>
         {
+            TechnicalSettingsAccessPolicy.Configure(options);
             foreach (var permission in SystemPermissions.All)
             {
                 options.AddPolicy(permission, policy => policy.Requirements.Add(new PermissionRequirement(permission)));
@@ -174,7 +243,8 @@ public sealed class RolePermissionServerEnforcementTests
         IEnumerable<string> permissions,
         AuthorizationPolicy policy)
     {
-        var claims = permissions.Select(permission => new Claim("permission", permission));
+        var claims = permissions.Select(permission => new Claim("permission", permission))
+            .Append(new Claim(ClaimTypes.Role, role));
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, role));
         var authorizationService = provider.GetRequiredService<IAuthorizationService>();
         return await authorizationService.AuthorizeAsync(principal, resource: null, policy);

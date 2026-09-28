@@ -31,11 +31,13 @@ public sealed class DiagnosticsController(
 
     [HttpGet("status")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<DiagnosticLogStatusDto>(StatusCodes.Status200OK)]
     public ActionResult<DiagnosticLogStatusDto> GetStatus() => Ok(packageService.GetStatus());
 
     [HttpPost("package")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [Produces("application/zip")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]

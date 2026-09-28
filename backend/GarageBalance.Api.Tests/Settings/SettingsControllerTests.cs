@@ -60,9 +60,11 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getSalaryAccrualAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateSalaryAccrualAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
-        Assert.Equal(SystemRoles.Administrator, Assert.Single(getCashBankBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator + "," + SystemRoles.Accountant, Assert.Single(getCashBankBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getCashBankBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateOpeningBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
-        Assert.Equal(SystemRoles.Administrator, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator + "," + SystemRoles.Accountant, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemPermissions.PaymentsWrite, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Null(Assert.Single(getActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateActionCommentsAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Null(Assert.Single(getHistoricalCorrectionAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);

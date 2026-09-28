@@ -16,6 +16,7 @@ public sealed class IntegrationsController(
 {
     [HttpPut("settings/{provider}/{settingKey}")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<IntegrationSecretSettingDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<IntegrationSecretSettingDto>> UpdateProtectedSetting(
@@ -40,6 +41,7 @@ public sealed class IntegrationsController(
 
     [HttpGet("one-c-fresh/status")]
     [Authorize(Policy = SystemPermissions.ImportRun)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<OneCFreshIntegrationStatusDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<OneCFreshIntegrationStatusDto>> GetOneCFreshStatus(CancellationToken cancellationToken)
     {
@@ -48,6 +50,7 @@ public sealed class IntegrationsController(
 
     [HttpPost("one-c-fresh/sync-runs")]
     [Authorize(Policy = SystemPermissions.ImportRun)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<OneCFreshSyncDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -61,6 +64,7 @@ public sealed class IntegrationsController(
 
     [HttpPost("one-c-fresh/sync-runs/preview")]
     [Authorize(Policy = SystemPermissions.ImportRun)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<OneCFreshSyncPreviewDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -74,6 +78,7 @@ public sealed class IntegrationsController(
 
     [HttpPost("one-c-fresh/sync-runs/retry")]
     [Authorize(Policy = SystemPermissions.ImportRun)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<OneCFreshSyncDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -87,6 +92,7 @@ public sealed class IntegrationsController(
 
     [HttpGet("receipt-printing/status")]
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [Authorize(Policy = SystemPolicies.TechnicalSettingsAccess)]
     [ProducesResponseType<ReceiptPrintingIntegrationStatusDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<ReceiptPrintingIntegrationStatusDto>> GetReceiptPrintingStatus(CancellationToken cancellationToken)
     {

@@ -6,6 +6,19 @@ import { canAccessWorkspaceSection } from './workspaceNavigation'
 import type { WorkspaceSection } from './workspaceNavigation'
 
 describe('workspace navigation access', () => {
+  it.each([
+    [['accountant'], false],
+    [['accountant', 'operator'], false],
+    [['administrator', 'accountant'], true],
+    [['administrator'], true],
+  ] as const)('limits the dictionary workspace for roles %s without removing business reference access', (roles, visible) => {
+    const auth = createAuthResponse([permissions.dictionariesRead, permissions.paymentsRead, permissions.reportsRead])
+    auth.user.roles = [...roles]
+    expect(canAccessWorkspaceSection(auth, 'dictionaries')).toBe(visible)
+    for (const section of ['contractors', 'tariffsAndFees', 'payments', 'reports'] as const) {
+      expect(canAccessWorkspaceSection(auth, section)).toBe(true)
+    }
+  })
   it.each<WorkspaceSection>(['dashboard', 'releases', 'settings'])('keeps %s available without a dedicated permission', (section) => {
     expect(canAccessWorkspaceSection(createAuthResponse([]), section)).toBe(true)
   })

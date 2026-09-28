@@ -1,5 +1,5 @@
 import type { AuthResponse } from '../services/authApi'
-import { hasPermission, permissions } from './accessControl'
+import { hasPermission, isAccountantWorkspace, permissions } from './accessControl'
 
 export type WorkspaceSection = 'dashboard' | 'users' | 'contractors' | 'tariffsAndFees' | 'dictionaries' | 'meterReadings' | 'payments' | 'funds' | 'reports' | 'import' | 'audit' | 'releases' | 'settings'
 
@@ -17,6 +17,7 @@ const requiredPermissionsBySection: Partial<Record<WorkspaceSection, readonly st
 }
 
 export function canAccessWorkspaceSection(auth: AuthResponse, section: WorkspaceSection): boolean {
+  if (section === 'dictionaries' && isAccountantWorkspace(auth)) return false
   return requiredPermissionsBySection[section]?.every((permission) => hasPermission(auth, permission)) ?? true
 }
 

@@ -273,7 +273,7 @@ public sealed class SettingsController(
     }
 
     [HttpGet("cash-bank-balances")]
-    [Authorize(Roles = SystemRoles.Administrator)]
+    [Authorize(Roles = SystemRoles.Administrator + "," + SystemRoles.Accountant, Policy = SystemPermissions.PaymentsRead)]
     [ProducesResponseType<CashBankBalanceSettingsDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<CashBankBalanceSettingsDto>> GetCashBankBalances(
         CancellationToken cancellationToken)
@@ -298,7 +298,7 @@ public sealed class SettingsController(
     }
 
     [HttpPost("cash-bank-balances/adjustments")]
-    [Authorize(Roles = SystemRoles.Administrator)]
+    [Authorize(Roles = SystemRoles.Administrator + "," + SystemRoles.Accountant, Policy = SystemPermissions.PaymentsWrite)]
     [ProducesResponseType<CashBankBalanceSettingsDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]

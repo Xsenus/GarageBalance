@@ -443,6 +443,7 @@ builder.Services
     });
 builder.Services.AddAuthorization(options =>
 {
+    TechnicalSettingsAccessPolicy.Configure(options);
     foreach (var permission in SystemPermissions.Administrator)
     {
         options.AddPolicy(permission, policy => policy.Requirements.Add(new PermissionRequirement(permission)));
