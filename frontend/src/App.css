@@ -6881,12 +6881,16 @@ input.meter-readings-control {
 }
 
 .users-panel-v2 {
+  min-height: 0;
   max-height: none;
-  overflow: visible;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .users-workbench {
   display: flex;
+  flex: 0 0 auto;
   min-height: min(520px, calc(100vh - 280px));
   max-height: calc(100vh - 280px);
 }
@@ -7729,6 +7733,7 @@ input.meter-readings-control {
 
 .role-matrix {
   display: grid;
+  flex: 0 0 auto;
   gap: 12px;
   margin-top: 16px;
 }
@@ -9648,14 +9653,8 @@ button.operation-row:focus-visible {
 
   .users-panel-v2 .role-matrix {
     min-height: 0;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .workspace--users > .users-panel-v2 {
-    min-height: 0;
-    flex: 1 1 auto;
-    overflow: hidden;
   }
 
   .role-matrix-table-scroll {

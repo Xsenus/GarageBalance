@@ -708,7 +708,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.funds-table-row-actions {\n  display: inline-flex;\n  align-items: center;')
   })
 
-  it('recomposes the access matrix into compact role groups without horizontal scrolling', () => {
+  it('keeps the access matrix reachable below the user list at every viewport height', () => {
+    expect(normalizedAppCss).toContain('.users-panel-v2 {\n  min-height: 0;\n  max-height: none;\n  flex: 1 1 auto;\n  overflow-x: hidden;\n  overflow-y: auto;')
+    expect(normalizedAppCss).toContain('.users-workbench {\n  display: flex;\n  flex: 0 0 auto;')
+    expect(normalizedAppCss).toContain('.role-matrix {\n  display: grid;\n  flex: 0 0 auto;')
+    expect(normalizedAppCss).not.toMatch(/\.workspace--users > \.users-panel-v2\s*\{[^}]*overflow:\s*hidden;/)
+    expect(normalizedAppCss).toContain('.users-panel-v2 .role-matrix {\n    min-height: 0;\n    flex: 0 0 auto;')
     expect(normalizedAppCss).toContain('.role-matrix-table-scroll {\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.role-matrix-table {\n  width: max-content;\n  min-width: 100%;')
     const compactDesktopCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1499px), (max-height: 849px) {'))
