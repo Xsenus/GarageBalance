@@ -603,7 +603,8 @@ describe('responsive layout styles', () => {
   it('adapts the tariff service dialog to irregular and regular creation modes', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog {\n  overflow-x: hidden;\n  transition: width 240ms ease, min-height 240ms ease;')
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--compact {\n  width: min(680px, calc(100vw - 48px));\n  min-height: 0;')
-    expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--regular {\n  width: min(1280px, calc(100vw - 48px));\n  min-height: min(640px, calc(100dvh - 48px));')
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--regular {\n  width: min(1280px, calc(100vw - 48px));\n  height: min(720px, calc(100dvh - 48px));\n  min-height: 0;')
+    expect(normalizedAppCss).toMatch(/\.contractors-service-dialog--regular \.tariff-card-form > \.detail-dialog-actions \{[^}]*flex-shrink: 0;/u)
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .detail-dialog-header h3 {\n  flex: 1;\n  text-align: center;')
     expect(normalizedAppCss).toContain('.contractors-service-header-actions {\n  display: inline-flex;\n  align-items: center;\n  gap: 12px;')
     expect(normalizedAppCss).toContain('@media (prefers-reduced-motion: reduce) {\n  .detail-dialog.contractors-service-dialog {\n    transition: none;')
