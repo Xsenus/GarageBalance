@@ -6,9 +6,10 @@ const budget = {
   mainJsGzipBytes: 180 * 1024,
   initialJsGzipBytes: 110 * 1024,
   mainCssGzipBytes: 40 * 1024,
-  // Storage protection status and its explicit verify/retry controls add less
-  // than 1 KiB gzip without changing the initial-load limits or dependencies.
-  totalAssetsGzipBytes: 293 * 1024,
+  // Individual garage tariffs and the daily service-payment report expand the
+  // authenticated workspace. The initial-load and per-asset limits stay unchanged.
+  // The 310 KiB total budget was approved for this feature release.
+  totalAssetsGzipBytes: 310 * 1024,
 }
 
 function formatBytes(bytes) {

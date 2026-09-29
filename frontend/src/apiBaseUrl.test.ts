@@ -20,7 +20,8 @@ describe('frontend API base URL', () => {
       expect(
         content.includes("import.meta.env.VITE_API_BASE_URL ?? ''") ||
         content.includes("from './authenticatedApiFetch'") ||
-        (content.includes("import { requestFinanceJson } from './financeApi'") && content.includes('return requestFinanceJson<')),
+        (content.includes("import { requestFinanceJson } from './financeApi'") && content.includes('return requestFinanceJson<')) ||
+        (content.includes("import { requestDictionaryJson } from './dictionariesApi'") && content.includes('return requestDictionaryJson<')),
       ).toBe(true)
       expect(content).not.toContain('http://127.0.0.1:5080')
       expect(content).not.toContain('http://localhost:5080')

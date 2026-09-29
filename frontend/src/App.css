@@ -3664,18 +3664,18 @@ input.meter-readings-control {
     minmax(92px, 0.48fr)
     minmax(125px, 0.62fr)
     minmax(100px, 0.52fr)
-    146px;
-  min-width: 1110px;
+    176px;
+  min-width: 1140px;
 }
 
 .tariffs-page :is(.tariffs-show-periodicity, .tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row) {
   --tariffs-schedule-columns: minmax(130px, 0.65fr);
-  min-width: 1240px;
+  min-width: 1270px;
 }
 
 .tariffs-page .tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {
   --tariffs-schedule-columns: repeat(2, minmax(130px, 0.65fr));
-  min-width: 1370px;
+  min-width: 1400px;
 }
 
 .tariffs-page .contractors-sheet-header span,
@@ -9945,7 +9945,7 @@ button.operation-row:focus-visible {
       minmax(0, 0.58fr)
       minmax(0, 0.72fr)
       minmax(0, 0.62fr)
-      112px;
+      140px;
     min-width: 0;
   }
 

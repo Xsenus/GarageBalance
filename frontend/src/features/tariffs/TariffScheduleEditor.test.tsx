@@ -27,6 +27,55 @@ describe('removeTariffSchedulePeriod', () => {
 })
 
 describe('редактор тарифной сетки услуги', () => {
+  it('does not confuse a failed schedule load with an empty schedule and supports retry', () => {
+    const onClose = vi.fn()
+    const onRetryTariffSchedule = vi.fn()
+    const { rerender } = render(<AddServicePrototypeDialog isSaving={false} funds={[]} incomeTypes={[]} tariffs={[]}
+      onClose={onClose} onRetryTariffSchedule={onRetryTariffSchedule} tariffScheduleError="Сетка временно недоступна" />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Сетка временно недоступна')
+    expect(screen.queryByLabelText('Наименование услуги')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить загрузку' }))
+    expect(onRetryTariffSchedule).toHaveBeenCalledOnce()
+    expect(onClose).not.toHaveBeenCalled()
+    rerender(<AddServicePrototypeDialog isSaving={false} funds={[]} incomeTypes={[]} tariffs={[]}
+      onClose={onClose} onRetryTariffSchedule={onRetryTariffSchedule} tariffScheduleError={null} tariffScheduleLoading />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Загрузка тарифной сетки' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    rerender(<AddServicePrototypeDialog isSaving={false} funds={[]} incomeTypes={[]} tariffs={[]}
+      onClose={onClose} tariffScheduleError="Не удалось загрузить периоды" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
+    expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits for the tariff schedule before allowing edits and still allows canceling the load', () => {
+    const onClose = vi.fn()
+    const props = {
+      initialSetting: {
+        id: 'service-loading', name: 'Охрана', isRegular: true, periodicityMonths: 1,
+        accrualStartMonth: 1, paymentDueDay: 20, paymentDueMonth: null, overdueGraceDays: 0,
+        incomeTypeId: 'income-loading', tariffId: null, isMetered: false,
+        hasTieredTariff: false, unitName: null, isArchived: false, version: 'service-version',
+      },
+      isSaving: false, funds: [], incomeTypes: [], measurementUnits: [], tariffs: [], onClose,
+    }
+    const { rerender } = render(<AddServicePrototypeDialog {...props} tariffScheduleLoading />)
+    const status = screen.getByRole('status', { name: 'Загрузка тарифной сетки' })
+    expect(status).toHaveClass('loading-skeleton')
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(screen.queryByLabelText('Наименование услуги')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Закрыть форму услуги' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    rerender(<AddServicePrototypeDialog {...props} tariffScheduleLoading={false} tariffSchedule={[]} />)
+    expect(screen.queryByRole('status', { name: 'Загрузка тарифной сетки' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Наименование услуги')).toHaveValue('Охрана')
+    expect(screen.getByRole('button', { name: 'Сохранить' })).toBeEnabled()
+  })
+
   it('keeps a new irregular service compact and places the regularity switch on the left side of the action row', () => {
     render(<AddServicePrototypeDialog
       isSaving={false}

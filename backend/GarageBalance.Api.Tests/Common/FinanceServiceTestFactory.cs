@@ -51,6 +51,7 @@ internal static class FinanceServiceTestFactory
             new AuditEventWriter(dbContext),
             timeProvider ?? TimeProvider.System,
             TestBusinessDateProvider.From(timeProvider),
+            new EfGarageTariffAssignmentQuery(dbContext),
             payoutMutationPolicy);
 
     private sealed class EnabledHistoricalMeterReadingCorrectionPolicy : IHistoricalMeterReadingCorrectionPolicy

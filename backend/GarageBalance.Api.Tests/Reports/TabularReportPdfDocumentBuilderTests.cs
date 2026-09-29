@@ -7,6 +7,20 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class TabularReportPdfDocumentBuilderTests
 {
     [Fact]
+    public void Build_AppliesOptionalNumericFontSizeToBodyAndFooterOnly()
+    {
+        var content = TabularReportPdfDocumentBuilder.Build("Размер числовых ячеек", null, [],
+            [new(null, [new("Метка"), new("Сумма", AlignRight: true, BodyFontSize: 7.5f)],
+                [["Строка", "777"]], Footer: ["Итог", "777"])]);
+        using var document = PdfDocument.Open(content);
+        var page = Assert.Single(document.GetPages());
+        var digits = page.Letters.Where(letter => letter.Value == "7").ToArray();
+        Assert.Equal(6, digits.Length);
+        Assert.All(digits, letter => Assert.InRange(letter.FontSize, 7.49, 7.51));
+        Assert.Contains(page.Letters, letter => letter.Value == "С" && letter.FontSize > 8);
+    }
+
+    [Fact]
     public void Build_AllowsACommentLongerThanOnePageWithoutDroppingItsEnd()
     {
         var comment = "Начало большого комментария\n" + string.Join("\n", Enumerable.Repeat("Строка большого комментария", 150)) + "\nКонец большого комментария";

@@ -26,6 +26,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<OwnerAdditionalPhone> OwnerAdditionalPhones => Set<OwnerAdditionalPhone>();
     public DbSet<Garage> Garages => Set<Garage>();
     public DbSet<GaragePeopleCountPeriod> GaragePeopleCountPeriods => Set<GaragePeopleCountPeriod>();
+    public DbSet<GarageTariffAssignment> GarageTariffAssignments => Set<GarageTariffAssignment>();
     public DbSet<SupplierGroup> SupplierGroups => Set<SupplierGroup>();
     public DbSet<SupplierService> SupplierServices => Set<SupplierService>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
@@ -917,6 +918,23 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(item => item.TariffId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GarageTariffAssignment>(entity =>
+        {
+            entity.ToTable("garage_tariff_assignments", table => table.HasCheckConstraint(
+                "CK_garage_tariff_assignments_period", "\"EffectiveTo\" IS NULL OR \"EffectiveTo\" >= \"EffectiveFrom\""));
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Comment).HasMaxLength(2000);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
+            entity.HasIndex(item => new { item.GarageId, item.ChargeServiceSettingId, item.EffectiveFrom })
+                .IsUnique().HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(item => new { item.ChargeServiceSettingId, item.EffectiveFrom, item.EffectiveTo })
+                .HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(item => item.TariffId);
+            entity.HasOne(item => item.Garage).WithMany().HasForeignKey(item => item.GarageId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ChargeServiceSetting).WithMany().HasForeignKey(item => item.ChargeServiceSettingId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Tariff).WithMany().HasForeignKey(item => item.TariffId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<MeterReading>(entity =>

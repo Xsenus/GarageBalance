@@ -45,6 +45,7 @@ public sealed class FinanceService(
     IAuditEventWriter auditEventWriter,
     TimeProvider timeProvider,
     IBusinessDateProvider businessDateProvider,
+    IGarageTariffAssignmentQuery garageTariffAssignmentQuery,
     IPayoutMutationPolicy? payoutMutationPolicy = null) : IFinanceService, IRegularAccrualRecalculationService
 {
     private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
@@ -147,7 +148,11 @@ public sealed class FinanceService(
             normalizedOffset,
             normalizedLimit,
             cancellationToken,
-            request.IncludeCanceled);
+            request.IncludeCanceled,
+            request.GarageId,
+            request.IncomeTypeId,
+            request.IrregularPaymentId,
+            request.FeeCampaignId);
         return new FinancePagedResult<AccrualDto>(page.Items.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
@@ -833,6 +838,8 @@ public sealed class FinanceService(
         var definitions = await GetAnnualServiceDefinitionsAsync(year, cancellationToken);
         var yearFrom = new DateOnly(year, 1, 1);
         var yearTo = new DateOnly(year, 12, 1);
+        var individualPeriods = (await garageTariffAssignmentQuery.GetForGaragePeriodAsync(
+            garage.Id, yearFrom, yearTo, cancellationToken)).ToLookup(period => period.ChargeServiceSettingId);
         var accruals = (await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
                 garage.Id,
                 yearFrom,
@@ -871,7 +878,8 @@ public sealed class FinanceService(
                     cancellationToken));
             }
 
-            var plannedAmount = accrual?.Amount ?? CalculateAnnualPlannedAmount(garage, definition);
+            var plannedAmount = accrual?.Amount ?? CalculateAnnualPlannedAmount(garage, definition,
+                definition is null ? [] : individualPeriods[definition.Setting.Id]);
             var outstandingAmount = accrual is null
                 ? 0m
                 : MoneyMath.RoundMoney(Math.Max(accrual.Amount - paidAmount, 0m));
@@ -959,6 +967,8 @@ public sealed class FinanceService(
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(keys, cancellationToken);
+        var individualPeriodsByService = (await garageTariffAssignmentQuery.GetForGaragePeriodAsync(
+            garage.Id, new(year, 1, 1), new(year, 12, 1), cancellationToken)).ToLookup(period => period.ChargeServiceSettingId);
         var existingAccruals = (await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
                 garage.Id,
                 new DateOnly(year, 1, 1),
@@ -978,7 +988,8 @@ public sealed class FinanceService(
             var accrualMonth = definition.AccountingMonth < GetGarageAccrualStartMonth(garage)
                 ? GetGarageAccrualStartMonth(garage)
                 : definition.AccountingMonth;
-            var segments = BuildRegularAccrualSegments(definition.AccountingMonth, definition.Setting, definition.Tariff);
+            var segments = ApplyGarageTariffPeriods(definition.AccountingMonth, definition.Setting, definition.Tariff,
+                BuildRegularAccrualSegments(definition.AccountingMonth, definition.Setting, definition.Tariff), individualPeriodsByService[definition.Setting.Id]);
             var meteredBase = segments.Select(segment => segment.CalculationBase)
                 .FirstOrDefault(value => value is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
             var meterKind = MeterKinds.IsValid(definition.Setting.MeterKind)
@@ -1043,7 +1054,7 @@ public sealed class FinanceService(
                 CalculationMeterKind = calculation.Details.RequiresMeter ? meterKind : null,
                 CalculationDetailsJson = RegularAccrualCalculator.Serialize(calculation.Details),
                 Source = AccrualSources.Regular,
-                Comment = BuildRegularAccrualComment(definition.Tariff, "Расчет годового платежа из карточки гаража")
+                Comment = BuildRegularAccrualComment(definition.Tariff, "Расчет годового платежа из карточки гаража", appliedSegments: segments)
             };
             accrualRepository.Add(accrual);
             AddAudit(
@@ -1144,15 +1155,16 @@ public sealed class FinanceService(
             await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(
                 garage.Id,
                 cancellationToken);
+        var individualPeriodsByService = (await garageTariffAssignmentQuery.GetForGaragePeriodAsync(
+            garage.Id, calculationMonthFrom, monthTo, cancellationToken)).ToLookup(period => period.ChargeServiceSettingId);
 
         var settings = (await chargeServiceSettingRepository.GetActiveRegularAsync(monthTo, cancellationToken))
             .Where(setting => setting.IncomeTypeId.HasValue)
             .GroupBy(setting => setting.IncomeTypeId!.Value)
             .Select(group => group.First())
             .ToArray();
-        var incomeTypes = (await incomeTypeRepository.GetActiveByIdsAsync(
-                settings.Select(setting => setting.IncomeTypeId!.Value).ToArray(),
-                cancellationToken))
+        var incomeTypes = settings.Select(setting => setting.IncomeType)
+            .OfType<IncomeType>().Where(incomeType => !incomeType.IsArchived).DistinctBy(incomeType => incomeType.Id)
             .ToDictionary(incomeType => incomeType.Id);
         var meterKinds = settings
             .Select(setting => MeterKinds.IsValid(setting.MeterKind) ? setting.MeterKind : null)
@@ -1299,7 +1311,7 @@ public sealed class FinanceService(
                     continue;
                 }
 
-                var segments = BuildRegularAccrualSegments(month, setting, tariff);
+                var segments = ApplyGarageTariffPeriods(month, setting, tariff, BuildRegularAccrualSegments(month, setting, tariff), individualPeriodsByService[setting.Id]);
                 var meteredBase = segments
                     .Select(segment => segment.CalculationBase)
                     .FirstOrDefault(calculationBase =>
@@ -1370,7 +1382,7 @@ public sealed class FinanceService(
                         Comment = BuildRegularAccrualComment(
                             tariff,
                             "Расчет из формы платежей гаража",
-                            useTieredTariff)
+                            useTieredTariff, segments)
                     };
                     accrualRepository.Add(existing);
                     accrualsByMonth[(month, incomeType.Id)] = existing;
@@ -1420,7 +1432,7 @@ public sealed class FinanceService(
                 existing.Comment = BuildRegularAccrualComment(
                     tariff,
                     "Повторный расчет из формы платежей гаража",
-                    useTieredTariff);
+                    useTieredTariff, segments);
                 existing.UpdatedAtUtc = timeProvider.GetUtcNow();
                 AddAudit(
                     actorUserId,
@@ -1472,7 +1484,7 @@ public sealed class FinanceService(
                     continue;
                 }
 
-                var segments = BuildRegularAccrualSegments(month, setting, tariff);
+                var segments = ApplyGarageTariffPeriods(month, setting, tariff, BuildRegularAccrualSegments(month, setting, tariff), individualPeriodsByService[setting.Id]);
                 var meteredBase = segments
                     .Select(segment => segment.CalculationBase)
                     .FirstOrDefault(calculationBase =>
@@ -5444,6 +5456,7 @@ public sealed class FinanceService(
                 !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
             .ToArray();
+        var individualPeriods = await LoadIndividualTariffPeriodsAsync(pendingGarageIds, matchingSetting, month, cancellationToken);
         var meteredCalculationBase = calculationSegments
             .Select(segment => segment.CalculationBase)
             .FirstOrDefault(calculationBase => calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
@@ -5482,7 +5495,8 @@ public sealed class FinanceService(
             }
 
             meterReadings.TryGetValue(garage.Id, out var meterReading);
-            var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, calculationSegments,
+            var garageSegments = ApplyGarageTariffPeriods(month, matchingSetting, tariff, calculationSegments, individualPeriods[garage.Id]);
+            var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, garageSegments,
                 peopleCountPeriodsByGarage[garage.Id].ToArray());
             if (!amountResult.Succeeded)
             {
@@ -5519,7 +5533,7 @@ public sealed class FinanceService(
                 CalculationMeterKind = amountResult.Details.RequiresMeter ? meterKind : null,
                 CalculationDetailsJson = RegularAccrualCalculator.Serialize(amountResult.Details),
                 Source = AccrualSources.Regular,
-                Comment = BuildRegularAccrualComment(tariff, request.Comment, useTieredElectricity)
+                Comment = BuildRegularAccrualComment(tariff, request.Comment, useTieredElectricity, garageSegments)
             };
             accrualRepository.Add(accrual);
             created.Add(ToDto(accrual));
@@ -5904,6 +5918,8 @@ public sealed class FinanceService(
             accruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
         var segments = BuildRegularAccrualSegments(month, setting, tariff);
+        var individualPeriods = await LoadIndividualTariffPeriodsAsync(
+            accruals.Where(accrual => !paidIds.Contains(accrual.Id)).Select(accrual => accrual.GarageId).ToArray(), setting, month, cancellationToken);
         var meterKind = setting is not null && MeterKinds.IsValid(setting.MeterKind)
             ? setting.MeterKind
             : ResolveMeterKind(segments.Select(segment => segment.CalculationBase));
@@ -5936,7 +5952,8 @@ public sealed class FinanceService(
             }
 
             readings.TryGetValue(accrual.GarageId, out var reading);
-            var calculation = RegularAccrualCalculator.Calculate(accrual.Garage, month, reading, segments,
+            var garageSegments = ApplyGarageTariffPeriods(month, setting, tariff, segments, individualPeriods[accrual.GarageId]);
+            var calculation = RegularAccrualCalculator.Calculate(accrual.Garage, month, reading, garageSegments,
                 peopleCountPeriodsByGarage[accrual.GarageId].ToArray());
             if (!calculation.Succeeded || calculation.Details is null)
             {
@@ -7361,15 +7378,18 @@ public sealed class FinanceService(
             .ToArray();
     }
 
-    private static decimal? CalculateAnnualPlannedAmount(Garage garage, AnnualServiceDefinition? definition)
+    private static decimal? CalculateAnnualPlannedAmount(Garage garage, AnnualServiceDefinition? definition,
+        IEnumerable<GarageTariffAssignment>? individualPeriods = null)
     {
         if (definition?.Tariff is null)
         {
             return null;
         }
 
-        var calculation = CalculateRegularAccrualAmount(garage, definition.Tariff, meterReading: null);
-        return calculation.Succeeded ? calculation.Value : null;
+        var segments = ApplyGarageTariffPeriods(definition.AccountingMonth, definition.Setting, definition.Tariff,
+            BuildRegularAccrualSegments(definition.AccountingMonth, definition.Setting, definition.Tariff), individualPeriods ?? []);
+        var calculation = RegularAccrualCalculator.Calculate(garage, definition.AccountingMonth, null, segments);
+        return calculation.Succeeded ? calculation.Amount : null;
     }
 
     private static FinanceResult<MeterReadingDto> HistoricalMeterReadingMonthRequired() =>
@@ -7809,23 +7829,6 @@ public sealed class FinanceService(
         }
     }
 
-    private static AmountCalculationResult CalculateRegularAccrualAmount(
-        Garage garage,
-        Tariff tariff,
-        MeterReading? meterReading,
-        bool useTieredElectricity = true)
-    {
-        return tariff.CalculationBase switch
-        {
-            TariffCalculationBases.Fixed => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate)),
-            TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount)),
-            TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity => useTieredElectricity
-                ? CalculateTieredMeterAmount(meterReading, tariff)
-                : CalculateMeterAmount(meterReading, tariff.Rate),
-            _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
-        };
-    }
-
     private static RegularAccrualCalculationResult CalculateLegacyRegularAccrual(
         Garage garage,
         Accrual accrual,
@@ -7840,6 +7843,44 @@ public sealed class FinanceService(
             UsesTieredElectricitySnapshot(accrual));
 
         return RegularAccrualCalculator.Calculate(garage, accrual.AccountingMonth, meterReading, [segment]);
+    }
+
+    private async Task<ILookup<Guid, GarageTariffAssignment>> LoadIndividualTariffPeriodsAsync(
+        IReadOnlyCollection<Guid> garageIds, ChargeServiceSetting? setting, DateOnly month, CancellationToken cancellationToken)
+    {
+        var periods = new List<GarageTariffAssignment>();
+        if (setting is not null)
+        {
+            foreach (var batch in garageIds.Distinct().Chunk(500))
+                periods.AddRange(await garageTariffAssignmentQuery.GetApplicableForGaragesAsync(batch, setting.Id, month, cancellationToken));
+        }
+        return periods.ToLookup(period => period.GarageId);
+    }
+
+    private async Task<IReadOnlyList<RegularAccrualSegmentDefinition>> BuildGarageRegularAccrualSegmentsAsync(
+        Guid garageId, DateOnly month, ChargeServiceSetting? setting, Tariff tariff, CancellationToken cancellationToken)
+    {
+        var general = BuildRegularAccrualSegments(month, setting, tariff);
+        if (setting is null) return general;
+        var periods = await garageTariffAssignmentQuery.GetApplicableAsync(garageId, setting.Id, month, cancellationToken);
+        return ApplyGarageTariffPeriods(month, setting, tariff, general, periods);
+    }
+
+    private static IReadOnlyList<RegularAccrualSegmentDefinition> ApplyGarageTariffPeriods(
+        DateOnly month, ChargeServiceSetting? setting, Tariff generalTariff,
+        IReadOnlyList<RegularAccrualSegmentDefinition> general, IEnumerable<GarageTariffAssignment> assignments)
+    {
+        var end = MonthPeriod.Normalize(month).AddMonths(1).AddDays(-1);
+        var start = MonthPeriod.Normalize(month);
+        var individual = assignments.Where(assignment => assignment.EffectiveFrom <= end
+            && (!assignment.EffectiveTo.HasValue || assignment.EffectiveTo >= start)).Select(assignment =>
+        {
+            if (assignment.Tariff.CalculationBase != generalTariff.CalculationBase)
+                throw new InvalidOperationException("Способ расчёта индивидуального тарифа не совпадает с тарифом услуги.");
+            return CreateTariffSegment(assignment.EffectiveFrom, assignment.EffectiveTo ?? end, assignment.Tariff,
+                setting?.UnitName, ReadElectricityTiers(assignment.Tariff).Count >= 2);
+        }).ToArray();
+        return RegularAccrualTariffResolver.ApplyIndividualSegments(month, general, individual);
     }
 
     private static IReadOnlyList<RegularAccrualSegmentDefinition> BuildRegularAccrualSegments(
@@ -7965,9 +8006,22 @@ public sealed class FinanceService(
         string? configuredUnitName) =>
         new(from, to, null, 0m, NormalizeOptional(configuredUnitName) ?? string.Empty, []);
 
-    private static string BuildRegularAccrualComment(Tariff tariff, string? comment, bool useTieredElectricity = true)
+    private static string BuildRegularAccrualComment(Tariff tariff, string? comment, bool useTieredElectricity = true,
+        IReadOnlyList<RegularAccrualSegmentDefinition>? appliedSegments = null)
     {
         var snapshot = $"тариф {tariff.Name}: {FormatTariffRateSnapshot(tariff, useTieredElectricity)}, действует с {tariff.EffectiveFrom:dd.MM.yyyy}";
+        var expectedTiers = useTieredElectricity ? ReadElectricityTiers(tariff)
+            .Select(tier => new RegularAccrualTariffTier(tier.UpperBound, tier.Rate)).ToArray() : [];
+        if (appliedSegments is { Count: > 0 } && (appliedSegments.Count != 1
+            || appliedSegments[0].Rate != tariff.Rate || !appliedSegments[0].Tiers.SequenceEqual(expectedTiers)))
+        {
+            snapshot = "фактически применённые тарифные периоды: " + string.Join("; ", appliedSegments.Select(segment =>
+                $"{segment.EffectiveFrom:dd.MM.yyyy}–{segment.EffectiveTo:dd.MM.yyyy}: " +
+                (segment.CalculationBase is null ? "нет тарифа" : segment.Tiers.Count == 0
+                    ? $"ставка {MoneyFormatting.Format(segment.Rate)}"
+                    : "ступени " + string.Join(", ", segment.Tiers.Select(tier =>
+                        $"{(tier.UpperBound.HasValue ? $"до {tier.UpperBound.Value.ToString("0.###", RussianCulture)}" : "без верхней границы")} по {MoneyFormatting.Format(tier.Rate)}")))));
+        }
         var userComment = NormalizeOptional(comment);
         return userComment is null
             ? $"Автоначисление; {snapshot}."
@@ -8283,45 +8337,6 @@ public sealed class FinanceService(
         return comment is null ? baseComment : $"{baseComment}. {comment}";
     }
 
-    private static AmountCalculationResult CalculateMeterAmount(MeterReading? reading, decimal rate)
-    {
-        return reading is null
-            ? AmountCalculationResult.Failure("нет показания счетчика за месяц.")
-            : AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * rate));
-    }
-
-    private static AmountCalculationResult CalculateTieredMeterAmount(MeterReading? reading, Tariff tariff)
-    {
-        if (reading is null)
-        {
-            return AmountCalculationResult.Failure("нет показания счетчика за месяц.");
-        }
-
-        var tiers = ReadElectricityTiers(tariff);
-        if (tiers.Count == 0)
-        {
-            return AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * tariff.Rate));
-        }
-
-        var remainingConsumption = MoneyMath.RoundMeterValue(reading.Consumption);
-        var lowerBound = 0m;
-        var amount = 0m;
-        foreach (var tier in tiers)
-        {
-            var tierQuantity = tier.UpperBound.HasValue
-                ? Math.Max(0m, Math.Min(remainingConsumption, tier.UpperBound.Value) - lowerBound)
-                : Math.Max(0m, remainingConsumption - lowerBound);
-            amount += tierQuantity * tier.Rate;
-            if (!tier.UpperBound.HasValue || remainingConsumption <= tier.UpperBound.Value)
-            {
-                break;
-            }
-
-            lowerBound = tier.UpperBound.Value;
-        }
-        return AmountCalculationResult.Success(MoneyMath.RoundMoney(amount));
-    }
-
     private static string FormatTariffRateSnapshot(Tariff tariff, bool useTieredTariff = true)
     {
         var tiers = useTieredTariff ? ReadElectricityTiers(tariff) : [];
@@ -8410,7 +8425,7 @@ public sealed class FinanceService(
                 continue;
             }
 
-            var calculationSegments = BuildRegularAccrualSegments(reading.AccountingMonth, setting, tariff);
+            var calculationSegments = await BuildGarageRegularAccrualSegmentsAsync(garage.Id, reading.AccountingMonth, setting, tariff, cancellationToken);
             if (calculationSegments.Any(segment => segment.CalculationBase == TariffCalculationBases.People))
             {
                 peopleCountPeriods ??= await garageRepository.GetPeopleCountPeriodsAsync(
@@ -8448,7 +8463,7 @@ public sealed class FinanceService(
                 Comment = BuildRegularAccrualComment(
                     tariff,
                     $"Начисление по показанию {reading.MeterKind}: расход {reading.Consumption.ToString("0.###", RussianCulture)}",
-                    useTieredTariff)
+                    useTieredTariff, calculationSegments)
             };
             accrualRepository.Add(accrual);
             AddAudit(
@@ -9852,16 +9867,4 @@ public sealed class FinanceService(
             device.FinalValue,
             device.Version);
 
-    private readonly record struct AmountCalculationResult(bool Succeeded, decimal Value, string? ErrorMessage)
-    {
-        public static AmountCalculationResult Success(decimal value)
-        {
-            return new AmountCalculationResult(true, value, null);
-        }
-
-        public static AmountCalculationResult Failure(string errorMessage)
-        {
-            return new AmountCalculationResult(false, 0m, errorMessage);
-        }
-    }
 }

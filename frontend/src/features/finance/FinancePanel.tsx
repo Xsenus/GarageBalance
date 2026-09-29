@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, Warehouse, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -25,6 +25,8 @@ import { fitContextMenuToViewport, focusAfterDomUpdate, handleMenuArrowNavigatio
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { NegativeFundBalanceConfirmation } from './NegativeFundBalanceConfirmation'
+import { GarageAccrualActions } from './GarageAccrualActions'
+import type { GarageAccrualActionTarget } from './GarageAccrualActions'
 import { useExpenseFundOptions } from './useExpenseFundOptions'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
@@ -1075,6 +1077,7 @@ export function FinancePanel({
   function refreshFinanceWorkbenchAfterSave(section: FinanceSectionKey, offset = financePage.offset) {
     void loadFinanceWorkbench(section, offset, financePage.limit, true)
     setFinancePreviewReloadRevision((value) => value + 1)
+    setPaymentsPrototypeRefreshRevision((value) => value + 1)
   }
 
   useEffect(() => {
@@ -2451,6 +2454,8 @@ export function FinancePanel({
         )}
         onEnsureReferences={ensureFinanceReferenceBundle}
         onOpenDialog={openPaymentsPrototypeDialog}
+        onEditGarageAccrual={(record) => { void openFinanceEditor('accruals', record) }}
+        onCancelGarageAccrual={(record) => openCancelFinanceDialog('accruals', record)}
         refreshRevision={paymentsPrototypeRefreshRevision}
         initialTarget={initialTarget}
         showGarageDebtPeriodByDefault={showGarageDebtPeriodByDefault}
@@ -3574,6 +3579,8 @@ function PaymentsPrototypePanel({
   headingNotices,
   onEnsureReferences,
   onOpenDialog,
+  onEditGarageAccrual,
+  onCancelGarageAccrual,
   refreshRevision,
   initialTarget,
   showGarageDebtPeriodByDefault,
@@ -3597,6 +3604,8 @@ function PaymentsPrototypePanel({
   headingNotices: ReactNode
   onEnsureReferences: () => Promise<boolean>
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
+  onEditGarageAccrual: (record: AccrualDto) => void
+  onCancelGarageAccrual: (record: AccrualDto) => void
   refreshRevision: number
   initialTarget?: PaymentOpenTarget | null
   showGarageDebtPeriodByDefault: boolean
@@ -3617,6 +3626,7 @@ function PaymentsPrototypePanel({
   const [garageSearchOpen, setGarageSearchOpen] = useState(false)
   const garageSearchWrapRef = useCloseOnOutsidePointer<HTMLDivElement>(garageSearchOpen, setGarageSearchOpen)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
+  const [accrualActionTarget, setAccrualActionTarget] = useState<GarageAccrualActionTarget | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const activateGarageRef = useRef<(garage: PaymentsPrototypeGarage) => void>(() => undefined)
   const initialTargetHandledRef = useRef<string | null>(null)
@@ -4092,6 +4102,7 @@ function PaymentsPrototypePanel({
     preservedMeter?: Pick<GarageIncomePrototypeRow, 'meterKind' | 'month' | 'meterDraft' | 'meterError'>,
     resolveAvailablePeriod = false,
     minimumAccrualTotal?: number,
+    recalculate = true,
   ) {
     incomeWorksheetRequestControllerRef.current?.abort()
     const controller = new AbortController()
@@ -4121,7 +4132,7 @@ function PaymentsPrototypePanel({
         monthFrom: `${resolvedMonthFrom}-01`,
         monthTo: `${resolvedMonthTo}-01`,
       }
-      const worksheet = canWritePayments && financeClient.calculateGarageIncomeWorksheet
+      const worksheet = recalculate && canWritePayments && financeClient.calculateGarageIncomeWorksheet
         ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
         : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
@@ -4473,6 +4484,24 @@ function PaymentsPrototypePanel({
       }
     })
   }
+
+  const refreshGarageAfterExternalSave = useEffectEvent(() => {
+    if (!selectedGarage) return
+    const garage = selectedGarage
+    void Promise.all([
+      loadGarageIncomeWorksheet(garage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, undefined, false, undefined, false),
+      refreshGarageOverdueDebt(garage),
+      paymentHistoryOpen ? loadGaragePaymentHistory(garage) : Promise.resolve(),
+    ]).then(([, debtRefreshed]) => {
+      if (!debtRefreshed && selectedGarageIdRef.current === garage.id) setPaymentError(garageRefreshError)
+    })
+  })
+  const appliedExternalRefreshRef = useRef(refreshRevision)
+  useEffect(() => {
+    if (appliedExternalRefreshRef.current === refreshRevision) return
+    appliedExternalRefreshRef.current = refreshRevision
+    refreshGarageAfterExternalSave()
+  }, [refreshRevision])
 
   function refreshGarageAfterAccrualSave(garage: PaymentsPrototypeGarage, accrual: AccrualDto, incomeTypeCode: string) {
     if (selectedGarageIdRef.current !== garage.id) return
@@ -5940,7 +5969,19 @@ function PaymentsPrototypePanel({
                 <tbody>
                   {garageRows.map((row) => (
                           <Fragment key={row.id}>
-                          <tr>
+                          <tr tabIndex={canWritePayments ? 0 : undefined}
+                            onContextMenu={(event) => {
+                              if (!canWritePayments) return
+                              event.preventDefault()
+                              event.currentTarget.focus()
+                              setAccrualActionTarget({ row, garageId: selectedGarage.id, x: event.clientX, y: event.clientY })
+                            }}
+                            onKeyDown={(event) => {
+                              if (!canWritePayments || event.target !== event.currentTarget || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return
+                              event.preventDefault()
+                              const rect = event.currentTarget.getBoundingClientRect()
+                              setAccrualActionTarget({ row, garageId: selectedGarage.id, x: rect.left, y: rect.bottom })
+                            }}>
                             <td className="payments-prototype-month-cell">{row.monthLabel}</td>
                             <td>
                               <span className="payments-prototype-service-name">{getGarageIncomeRowTitle(row)}</span>
@@ -6521,6 +6562,7 @@ function PaymentsPrototypePanel({
           onSubmit={commitFullGaragePayment}
         />
       ) : null}
+      {accrualActionTarget ? <GarageAccrualActions target={accrualActionTarget} accessToken={auth.accessToken} financeClient={financeClient} canWrite={canWritePayments} onClose={() => setAccrualActionTarget(null)} onEdit={onEditGarageAccrual} onCancel={onCancelGarageAccrual} /> : null}
       {garageAccrualDialogOpen ? (
         <GarageAccrualPrototypeDialog
           irregularPayments={irregularPayments.filter((payment) => payment.isActive && !payment.isArchived)}

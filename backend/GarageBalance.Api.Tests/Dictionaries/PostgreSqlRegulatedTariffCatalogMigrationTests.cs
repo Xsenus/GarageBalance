@@ -56,14 +56,14 @@ public sealed class PostgreSqlRegulatedTariffCatalogMigrationTests
                 EffectiveFrom = new DateOnly(2026, 9, 4),
                 Comment = "Synthetic migration test tariff"
             };
-            context.Tariffs.Add(oldTariff);
-            context.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
-            {
-                ChargeServiceSettingId = waterService.Id,
-                Tariff = oldTariff,
-                EffectiveFrom = new DateOnly(2026, 9, 4)
-            });
-            await context.SaveChangesAsync();
+            // Seed the historical schema explicitly: the current EF model also
+            // contains IsIndividual, which does not exist before this migration.
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO tariffs ("Id", "Name", "CalculationBase", "Rate", "EffectiveFrom", "Comment", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc", "Version")
+                VALUES ({oldTariff.Id}, {oldTariff.Name}, {oldTariff.CalculationBase}, {oldTariff.Rate}, {oldTariff.EffectiveFrom}, {oldTariff.Comment}, {false}, {oldTariff.CreatedAtUtc}, {oldTariff.UpdatedAtUtc}, {oldTariff.Version});
+                INSERT INTO charge_service_tariff_versions ("ChargeServiceSettingId", "TariffId", "EffectiveFrom", "CreatedAtUtc", "IsArchived")
+                VALUES ({waterService.Id}, {oldTariff.Id}, {oldTariff.EffectiveFrom}, {oldTariff.CreatedAtUtc}, {false});
+                """);
             await context.Database.MigrateAsync();
         }
 

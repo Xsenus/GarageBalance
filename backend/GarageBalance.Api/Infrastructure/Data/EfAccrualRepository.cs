@@ -77,9 +77,25 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         int offset,
         int limit,
         CancellationToken cancellationToken,
-        bool includeCanceled = false)
+        bool includeCanceled = false,
+        Guid? garageId = null,
+        Guid? incomeTypeId = null,
+        Guid? irregularPaymentId = null,
+        Guid? feeCampaignId = null)
     {
         var query = ApplyPeriod(QueryActive(includeCanceled), monthFrom, monthTo);
+        if (garageId.HasValue)
+        {
+            query = query.Where(accrual => accrual.GarageId == garageId.Value);
+        }
+        if (incomeTypeId.HasValue)
+        {
+            // An income worksheet row represents one service group, including
+            // its optional irregular payment or fee campaign, not the entire month.
+            query = query.Where(accrual => accrual.IncomeTypeId == incomeTypeId.Value
+                && accrual.IrregularPaymentId == irregularPaymentId
+                && accrual.FeeCampaignId == feeCampaignId);
+        }
         if (normalizedSearch is not null && IsSqliteProvider())
         {
             var filtered = (await Order(query).ToListAsync(cancellationToken))
@@ -868,7 +884,19 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= accountingMonth)
             .SumAsync(accrual => accrual.Amount, cancellationToken);
 
-    public void Add(Accrual accrual) => dbContext.Accruals.Add(accrual);
+    public void Add(Accrual accrual)
+    {
+        // Catalog projections are detached. Reuse a tracked reference when present,
+        // otherwise attach it as existing rather than inserting another income type.
+        if (accrual.IncomeType is not null)
+        {
+            accrual.IncomeType = dbContext.IncomeTypes.Local.FirstOrDefault(item => item.Id == accrual.IncomeTypeId)
+                ?? accrual.IncomeType;
+            if (dbContext.Entry(accrual.IncomeType).State == EntityState.Detached)
+                dbContext.Entry(accrual.IncomeType).State = EntityState.Unchanged;
+        }
+        dbContext.Accruals.Add(accrual);
+    }
 
     private IQueryable<Accrual> QueryActiveList() =>
         dbContext.Accruals.AsNoTracking()

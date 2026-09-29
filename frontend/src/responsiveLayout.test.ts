@@ -219,14 +219,16 @@ describe('responsive layout styles', () => {
 
   it('reserves separate tariff schedule columns and enough room for all row actions', () => {
     expect(normalizedAppCss).toContain('--tariffs-schedule-columns: ;')
-    expect(normalizedAppCss).toContain(':is(.tariffs-show-periodicity, .tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row) {\n  --tariffs-schedule-columns: minmax(130px, 0.65fr);\n  min-width: 1240px;')
-    expect(normalizedAppCss).toContain('.tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {\n  --tariffs-schedule-columns: repeat(2, minmax(130px, 0.65fr));\n  min-width: 1370px;')
+    expect(normalizedAppCss).toContain('minmax(100px, 0.52fr)\n    176px;\n  min-width: 1140px;')
+    expect(normalizedAppCss).toContain(':is(.tariffs-show-periodicity, .tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row) {\n  --tariffs-schedule-columns: minmax(130px, 0.65fr);\n  min-width: 1270px;')
+    expect(normalizedAppCss).toContain('.tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {\n  --tariffs-schedule-columns: repeat(2, minmax(130px, 0.65fr));\n  min-width: 1400px;')
     expect(normalizedAppCss).toContain('.tariffs-row-actions {\n  display: flex;\n  min-height: 34px;')
     expect(normalizedAppCss).toContain('.tariffs-due-date-cell .contractors-date-value {\n  grid-template-columns: minmax(52px, 64px) minmax(112px, 1fr);\n  align-items: center;')
     expect(normalizedAppCss).toContain('height: 36px;\n  min-height: 36px;\n  box-sizing: border-box;')
     expect(normalizedAppCss).toContain('.tariffs-page > .dictionary-pagination {\n  min-height: 54px;')
     expect(normalizedAppCss).toContain('.tariffs-threshold-range__input {\n  width: 62px;\n  min-width: 62px;')
     const compactDesktopCss = normalizedAppCss.slice(normalizedAppCss.indexOf('@media (max-width: 1499px), (max-height: 849px) {'))
+    expect(compactDesktopCss).toContain('minmax(0, 0.62fr)\n      140px;\n    min-width: 0;')
     expect(compactDesktopCss).toContain('.tariffs-row-action-button.icon-button {\n    width: 30px;\n    min-width: 30px;\n    height: 30px;')
   })
 

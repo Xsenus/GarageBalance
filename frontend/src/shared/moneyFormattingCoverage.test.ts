@@ -24,7 +24,7 @@ const sources = collectSourceFiles(sourceRoot).map((path) => ({
 describe('unified money formatting coverage', () => {
   it('keeps decimal money inputs inside the shared control', () => {
     const offenders = sources
-      .filter(({ path }) => !['shared/MoneyInput.tsx', 'shared/MeterReadingInput.tsx'].includes(path))
+      .filter(({ path }) => !['shared/MoneyInput.tsx', 'shared/DecimalTextInput.tsx'].includes(path))
       .filter(({ source }) => /inputMode="decimal"|step="0\.01"/.test(source))
       .map(({ path }) => path)
 
@@ -37,6 +37,11 @@ describe('unified money formatting coverage', () => {
       .map(({ path }) => path)
 
     expect(formatterOwners).toEqual(['shared/moneyInputFormatting.ts'])
+  })
+
+  it('keeps precision-sensitive tariff rates and meter values in the shared decimal control', () => {
+    expect(sources.find(({ path }) => path === 'features/tariffs/GarageTariffAssignmentsDialog.tsx')?.source).toContain('<DecimalTextInput')
+    expect(sources.find(({ path }) => path === 'shared/MeterReadingInput.tsx')?.source).toContain("export { DecimalTextInput as MeterReadingInput } from './DecimalTextInput'")
   })
 
   it('covers every working section that accepts money', () => {

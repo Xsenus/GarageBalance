@@ -479,7 +479,11 @@ public sealed record AccrualListRequest(
     string? Search,
     int? Limit = null,
     int? Offset = null,
-    bool IncludeCanceled = false);
+    bool IncludeCanceled = false,
+    Guid? GarageId = null,
+    Guid? IncomeTypeId = null,
+    Guid? IrregularPaymentId = null,
+    Guid? FeeCampaignId = null);
 
 public sealed record SupplierAccrualListRequest(
     DateOnly? MonthFrom,

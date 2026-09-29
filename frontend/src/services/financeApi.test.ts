@@ -68,6 +68,14 @@ describe('financeApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/accruals/page?limit=25', expect.any(Object))
   })
 
+  it('filters garage accrual groups on the server before pagination', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await financeApi.getAccrualsPage('token', { garageId: 'garage-85', incomeTypeId: 'income-1', irregularPaymentId: 'irregular-1', feeCampaignId: 'fee-1', monthFrom: '2026-09', monthTo: '2026-09', offset: 10, limit: 10 })
+    const url = new URL(fetchMock.mock.calls[0][0], 'https://example.test')
+    expect(Object.fromEntries(url.searchParams)).toEqual({ garageId: 'garage-85', incomeTypeId: 'income-1', irregularPaymentId: 'irregular-1', feeCampaignId: 'fee-1', monthFrom: '2026-09-01', monthTo: '2026-09-01', offset: '10', limit: '10' })
+  })
+
   it('sends the loaded operation version when updating an income payment', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), {
       status: 200,

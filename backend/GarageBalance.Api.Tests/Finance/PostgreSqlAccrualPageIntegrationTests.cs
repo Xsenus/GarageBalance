@@ -11,6 +11,47 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlAccrualPageIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task AccrualPageFiltersExactGarageServiceGroupBeforeCountingAndPaging()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var garage = new Garage { Number = "85", PeopleCount = 1, FloorCount = 1 };
+        var otherGarage = new Garage { Number = "86", PeopleCount = 1, FloorCount = 1 };
+        var income = new IncomeType { Name = "Проверка подключения" };
+        var otherIncome = new IncomeType { Name = "Проверка другого вида" };
+        var irregular = new IrregularPayment { Name = "Тестовое подключение канализации 2046", Amount = 20000m };
+        var month = new DateOnly(2046, 9, 1);
+        context.AddRange(
+            CreateAccrual(garage, income, month, 20000m, "Исправляемая запись", irregularPayment: irregular),
+            CreateAccrual(garage, income, month, 100m, "Вторая запись", irregularPayment: irregular),
+            CreateAccrual(otherGarage, income, month, 200m, "Чужой гараж", irregularPayment: irregular),
+            CreateAccrual(garage, otherIncome, month, 300m, "Другой вид", irregularPayment: irregular),
+            CreateAccrual(garage, income, month, 400m, "Не нерегулярное"),
+            CreateAccrual(garage, income, month, 500m, "Отменённое", irregularPayment: irregular, isCanceled: true));
+        await context.SaveChangesAsync();
+        var repository = new EfAccrualRepository(context);
+        var page = await repository.GetPageAsync(month, month, null, 0, 1, CancellationToken.None,
+            garageId: garage.Id, incomeTypeId: income.Id, irregularPaymentId: irregular.Id);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Single(page.Items);
+        Assert.All(page.Items, item => { Assert.Equal(garage.Id, item.GarageId); Assert.Equal(irregular.Id, item.IrregularPaymentId); });
+        var next = await repository.GetPageAsync(month, month, null, 1, 1, CancellationToken.None,
+            garageId: garage.Id, incomeTypeId: income.Id, irregularPaymentId: irregular.Id);
+        Assert.Equal(2, next.TotalCount);
+        Assert.NotEqual(page.Items[0].Id, Assert.Single(next.Items).Id);
+        var ordinary = await repository.GetPageAsync(month, month, null, 0, 10, CancellationToken.None,
+            garageId: garage.Id, incomeTypeId: income.Id);
+        Assert.Equal(400m, Assert.Single(ordinary.Items).Amount);
+        var empty = await repository.GetPageAsync(month, month, null, 0, 10, CancellationToken.None,
+            garageId: Guid.NewGuid(), incomeTypeId: income.Id);
+        Assert.Empty(empty.Items);
+        Assert.Equal(0, empty.TotalCount);
+        var canceled = await repository.GetPageAsync(month, month, null, 0, 10, CancellationToken.None,
+            includeCanceled: true, garageId: garage.Id, incomeTypeId: income.Id, irregularPaymentId: irregular.Id);
+        Assert.Equal(3, canceled.TotalCount);
+    }
+
+    [PostgreSqlFact]
     public async Task AccrualPageLoadsCountRowsAndRelatedNamesInOneCommandForEveryPageShape()
     {
         var owner = new Owner { LastName = "Петров", FirstName = "Пётр", MiddleName = "Петрович" };

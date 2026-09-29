@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { getManualChunkName } from '../vite.config'
 
 describe('frontend bundle budget gate', () => {
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
@@ -21,7 +22,7 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('mainJsGzipBytes: 180 * 1024')
     expect(budgetScript).toContain('initialJsGzipBytes: 110 * 1024')
     expect(budgetScript).toContain('mainCssGzipBytes: 40 * 1024')
-    expect(budgetScript).toContain('totalAssetsGzipBytes: 293 * 1024')
+    expect(budgetScript).toContain('totalAssetsGzipBytes: 310 * 1024')
     expect(budgetScript).toContain('gzipSync')
     expect(budgetScript).toContain('collectStaticJsGraph')
     expect(budgetScript).toContain('remaining ${limit - bytes} bytes')
@@ -43,5 +44,15 @@ describe('frontend bundle budget gate', () => {
   it('loads the authenticated workspace only after authentication', () => {
     expect(appSource).toContain("import('./features/workspace/AppShell')")
     expect(appSource).not.toContain("import { AuthenticatedAppShell } from './features/workspace/AppShell'")
+  })
+
+  it.each(['formFeedback.tsx', 'validation.ts', 'AsyncState.tsx', 'accessControl.ts'])('keeps login primitive %s outside authenticated chunks', (file) => {
+    expect(getManualChunkName(`/project/src/shared/${file}`)).toBe('app-runtime')
+    expect(getManualChunkName(`C:\\project\\src\\shared\\${file}`)).toBe('app-runtime')
+  })
+
+  it.each(['settings/PasswordPanel.tsx', 'users/UserManagementPanel.tsx'])('does not include authenticated panel %s in the login runtime', (file) => {
+    expect(getManualChunkName(`/project/src/features/${file}`)).toBe('workspace-operations')
+    expect(getManualChunkName(`C:\\project\\src\\features\\${file.replaceAll('/', '\\')}`)).toBe('workspace-operations')
   })
 })

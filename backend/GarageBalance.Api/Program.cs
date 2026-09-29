@@ -131,6 +131,8 @@ builder.Services.AddScoped<ITariffRepository, EfTariffRepository>();
 builder.Services.AddScoped<IMeasurementUnitRepository, EfMeasurementUnitRepository>();
 builder.Services.AddScoped<IIrregularPaymentRepository, EfIrregularPaymentRepository>();
 builder.Services.AddScoped<IChargeServiceSettingRepository, EfChargeServiceSettingRepository>();
+builder.Services.AddScoped<IGarageTariffAssignmentRepository, EfGarageTariffAssignmentRepository>();
+builder.Services.AddScoped<IGarageTariffAssignmentService, GarageTariffAssignmentService>();
 builder.Services.AddScoped<IFeeCampaignRepository, EfFeeCampaignRepository>();
 builder.Services.AddScoped<IMissingMeterReadingQuery, EfMissingMeterReadingQuery>();
 builder.Services.AddScoped<IGarageIncomeWorksheetQuery, EfGarageIncomeWorksheetQuery>();
@@ -190,6 +192,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IAuditEventWriter>(),
     services.GetRequiredService<TimeProvider>(),
     services.GetRequiredService<IBusinessDateProvider>(),
+    services.GetRequiredService<IGarageTariffAssignmentQuery>(),
     services.GetRequiredService<IPayoutMutationPolicy>()));
 builder.Services.AddScoped<IRegularAccrualRecalculationService>(services =>
     (IRegularAccrualRecalculationService)services.GetRequiredService<IFinanceService>());
@@ -359,6 +362,9 @@ builder.Services.AddScoped<IGarageReportQuery, EfGarageReportQuery>();
 builder.Services.AddScoped<IFeeReportQuery, EfFeeReportQuery>();
 builder.Services.AddScoped<IExpenseReportQuery, EfExpenseReportQuery>();
 builder.Services.AddScoped<IIncomeReportQuery, EfIncomeReportQuery>();
+builder.Services.AddScoped<IDailyServicePaymentReportQuery, EfDailyServicePaymentReportQuery>();
+builder.Services.AddScoped<IGarageTariffAssignmentQuery, EfGarageTariffAssignmentQuery>();
+builder.Services.AddScoped<IDailyServicePaymentReportService, DailyServicePaymentReportService>();
 builder.Services.AddScoped<IUserManagementRepository, EfUserManagementRepository>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAuditService, AuditService>();

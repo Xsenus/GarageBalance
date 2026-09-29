@@ -7,6 +7,7 @@ describe('production chunking', () => {
     expect(getManualChunkName('\0vite/preload-helper.js')).toBe('app-runtime')
     expect(getManualChunkName('C:\\project\\src\\shared\\LocalizedDatePicker.tsx')).toBe('app-runtime')
     expect(getManualChunkName('/project/src/shared/PhoneListInput.tsx')).toBe('app-runtime')
+    expect(getManualChunkName('/project/src/shared/DecimalTextInput.tsx')).toBe('app-runtime')
     expect(getManualChunkName('/project/node_modules/lucide-react/dist/esm/icons/save.js')).toBe('app-runtime')
     expect(getManualChunkName('/project/src/services/apiFetch.ts')).toBe('app-runtime')
     expect(getManualChunkName('C:\\project\\src\\services\\dictionaryResponseCache.ts')).toBe('app-runtime')
@@ -27,7 +28,7 @@ describe('production chunking', () => {
     expect(getManualChunkName('/project/src/features/dictionaries/DictionaryPanel.tsx')).toBe('workspace-operations')
     expect(getManualChunkName('/project/src/shared/dictionaryWorkbench.ts')).toBe('workspace-operations')
     expect(getManualChunkName('/project/src/features/reports/ReportPanel.tsx')).toBe('workspace-operations')
-    expect(getManualChunkName('/project/src/features/users/UserManagementPanel.tsx')).toBe('app-runtime')
+    expect(getManualChunkName('/project/src/features/users/UserManagementPanel.tsx')).toBe('workspace-operations')
   })
 
   it('leaves unrelated modules to Rolldown automatic chunking', () => {

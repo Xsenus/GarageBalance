@@ -69,9 +69,13 @@ public sealed class FinanceController(
         [FromQuery] int? offset,
         [FromQuery] int? limit,
         CancellationToken cancellationToken,
-        [FromQuery] bool includeCanceled = false)
+        [FromQuery] bool includeCanceled = false,
+        [FromQuery] Guid? garageId = null,
+        [FromQuery] Guid? incomeTypeId = null,
+        [FromQuery] Guid? irregularPaymentId = null,
+        [FromQuery] Guid? feeCampaignId = null)
     {
-        return Ok(await financeService.GetAccrualsPageAsync(new AccrualListRequest(monthFrom, monthTo, search, limit, offset, includeCanceled), cancellationToken));
+        return Ok(await financeService.GetAccrualsPageAsync(new AccrualListRequest(monthFrom, monthTo, search, limit, offset, includeCanceled, garageId, incomeTypeId, irregularPaymentId, feeCampaignId), cancellationToken));
     }
 
     [HttpGet("accruals/due-date-review")]

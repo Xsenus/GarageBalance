@@ -34,12 +34,18 @@ public sealed class PostgreSqlDefaultFeeFundMigrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync(PreviousMigration);
         await using var context = database.CreateContext();
-        var expectedTariffs = System.Text.Json.JsonSerializer.Serialize(await context.Tariffs.AsNoTracking().OrderBy(item => item.Id).ToListAsync());
+        // Compare every column in the historical table, without selecting fields
+        // added by later migrations through the current EF entity model.
+        var tariffSnapshot = context.Database.SqlQuery<string>($"""
+            SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY t."Id"), '[]'::jsonb)::text AS "Value"
+            FROM tariffs t
+            """);
+        var expectedTariffs = await tariffSnapshot.SingleAsync();
         await context.Database.MigrateAsync(DefaultFeeMigration);
         await context.Database.MigrateAsync(PreviousMigration);
         await context.Database.MigrateAsync(DefaultFeeMigration);
 
-        Assert.Equal(expectedTariffs, System.Text.Json.JsonSerializer.Serialize(await context.Tariffs.AsNoTracking().OrderBy(item => item.Id).ToListAsync()));
+        Assert.Equal(expectedTariffs, await tariffSnapshot.SingleAsync());
         Assert.All(await context.IncomeTypes.Where(item => item.Code == "membership" || item.Code == "target").ToListAsync(),
             item => Assert.Equal(OtherFundId, item.DestinationFundId));
         Assert.False(await context.Funds.AnyAsync(item => item.Id == MembershipFundId || item.Id == TargetFundId));

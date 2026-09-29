@@ -485,6 +485,63 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.GarageTariffAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ChargeServiceSettingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("GarageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TariffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TariffId");
+
+                    b.HasIndex("ChargeServiceSettingId", "EffectiveFrom", "EffectiveTo")
+                        .HasFilter("\"IsArchived\" = false");
+
+                    b.HasIndex("GarageId", "ChargeServiceSettingId", "EffectiveFrom")
+                        .IsUnique()
+                        .HasFilter("\"IsArchived\" = false");
+
+                    b.ToTable("garage_tariff_assignments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_garage_tariff_assignments_period", "\"EffectiveTo\" IS NULL OR \"EffectiveTo\" >= \"EffectiveFrom\"");
+                        });
+                });
+
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.IncomeType", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1098,6 +1155,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasColumnType("jsonb");
 
                     b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsIndividual")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -3057,6 +3117,33 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasForeignKey("GarageId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.GarageTariffAssignment", b =>
+                {
+                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.ChargeServiceSetting", "ChargeServiceSetting")
+                        .WithMany()
+                        .HasForeignKey("ChargeServiceSettingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.Garage", "Garage")
+                        .WithMany()
+                        .HasForeignKey("GarageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.Tariff", "Tariff")
+                        .WithMany()
+                        .HasForeignKey("TariffId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ChargeServiceSetting");
+
+                    b.Navigation("Garage");
+
+                    b.Navigation("Tariff");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Dictionaries.IncomeType", b =>

@@ -57,6 +57,17 @@ public sealed class DatabaseStartupHostedServiceTests
         await using var provider = CreateProvider(database, backup);
         var service = CreateService(provider);
 
+        string[] pendingBefore;
+        string[] appliedBefore;
+        await using (var beforeStart = database.CreateContext())
+        {
+            pendingBefore = (await beforeStart.Database.GetPendingMigrationsAsync()).ToArray();
+            appliedBefore = (await beforeStart.Database.GetAppliedMigrationsAsync()).ToArray();
+            Assert.NotEmpty(pendingBefore);
+            Assert.Contains("20260928111147_AddGarageTariffAssignments", pendingBefore);
+            Assert.Contains("20260928122556_SeparateIndividualTariffCatalog", pendingBefore);
+        }
+
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.StartAsync(CancellationToken.None));
         Assert.Contains("backup_failed", error.Message, StringComparison.Ordinal);
@@ -64,7 +75,8 @@ public sealed class DatabaseStartupHostedServiceTests
         Assert.Equal(DatabaseBackupKind.PreUpdate, backup.LastKind);
         await using (var before = database.CreateContext())
         {
-            Assert.Single(await before.Database.GetPendingMigrationsAsync());
+            Assert.Equal(pendingBefore, (await before.Database.GetPendingMigrationsAsync()).ToArray());
+            Assert.Equal(appliedBefore, (await before.Database.GetAppliedMigrationsAsync()).ToArray());
         }
 
         backup.CreateResult = DatabaseBackupResult<DatabaseBackupFileDto>.Success(

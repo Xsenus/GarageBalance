@@ -136,10 +136,10 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
     }
 
     public Task<Tariff?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived && !item.IsIndividual, cancellationToken);
 
     public Task<Tariff?> FindArchivedAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        dbContext.Tariffs.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived && !item.IsIndividual, cancellationToken);
 
     public Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, DateOnly effectiveFrom, CancellationToken cancellationToken) =>
         dbContext.Tariffs.AsNoTracking().AnyAsync(
@@ -163,7 +163,7 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
 
     private IQueryable<Tariff> ApplyFilters(string? normalizedSearch, bool includeArchived)
     {
-        var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var query = dbContext.Tariffs.AsNoTracking().Where(item => !item.IsIndividual && (includeArchived || !item.IsArchived));
         if (normalizedSearch is not null)
         {
             if (dbContext.Database.IsNpgsql())

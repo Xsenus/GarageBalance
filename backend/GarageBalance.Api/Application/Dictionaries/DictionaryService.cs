@@ -2137,6 +2137,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<TariffDto>> UpdateTariffAsync(Guid id, UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var allocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var tariff = await tariffRepository.FindActiveAsync(id, cancellationToken);
         if (tariff is null)
         {
@@ -2189,7 +2190,8 @@ public sealed class DictionaryService(
             request.EffectiveFrom,
             tariff.Comment,
             electricityTiers.Value);
-        if (financialTermsChanged && await chargeServiceSettingRepository.HasTariffVersionAsync(tariff.Id, cancellationToken))
+        if (financialTermsChanged && (await chargeServiceSettingRepository.HasTariffVersionAsync(tariff.Id, cancellationToken)
+            || calculationBase != tariff.CalculationBase && await tariffRepository.HasActiveServiceAssignmentsAsync(tariff.Id, cancellationToken)))
         {
             return DictionaryResult<TariffDto>.Failure(
                 "tariff_history_version_required",
@@ -2536,6 +2538,28 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
         }
 
+        if (setting.IsRegular && (!request.IsRegular || request.TariffId != setting.TariffId))
+        {
+            var linkedTariff = request.IsRegular && request.TariffId.HasValue
+                ? await tariffRepository.FindActiveAsync(request.TariffId.Value, cancellationToken)
+                : null;
+            var startsOn = linkedTariff?.EffectiveFrom ?? OpenTariffScheduleStart;
+            var schedule = await chargeServiceSettingRepository.GetActiveTariffScheduleAsync(id, cancellationToken);
+            var exact = schedule.Periods.FirstOrDefault(period => period.EffectiveFrom == startsOn);
+            var endsOn = exact is not null ? exact.EffectiveTo : schedule.Periods
+                .Where(period => period.EffectiveFrom > startsOn)
+                .OrderBy(period => period.EffectiveFrom)
+                .FirstOrDefault()?.EffectiveFrom.AddDays(-1);
+            if (await chargeServiceSettingRepository.HasIncompatibleIndividualTariffAsync(
+                id, linkedTariff?.CalculationBase ?? string.Empty, startsOn,
+                request.IsRegular ? endsOn : null, cancellationToken))
+            {
+                return DictionaryResult<ChargeServiceSettingDto>.Failure(
+                    "charge_service_individual_tariff_base_conflict",
+                    "Изменение услуги несовместимо с индивидуальными тарифами. Сначала ограничьте или отмените эти назначения.");
+            }
+        }
+
         var name = request.Name.Trim();
         if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
@@ -2711,6 +2735,12 @@ public sealed class DictionaryService(
         OptimisticConcurrencyGuard.EnsureCurrent(request.TariffVersion, tariff);
 
         var roundedRate = MoneyMath.RoundRate(request.Rate);
+        if (tariff.Rate != roundedRate
+            && await chargeServiceSettingRepository.HasOtherServiceTariffReferenceAsync(setting.Id, tariff.Id, cancellationToken))
+        {
+            forceTariffClone = true;
+            request = request with { EffectiveFrom = request.EffectiveFrom ?? tariff.EffectiveFrom };
+        }
         if (tariff.Rate != roundedRate && request.EffectiveFrom.HasValue &&
             (request.EffectiveFrom.Value != tariff.EffectiveFrom || forceTariffClone))
         {
@@ -2807,6 +2837,7 @@ public sealed class DictionaryService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        await using var allocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {
@@ -2843,8 +2874,9 @@ public sealed class DictionaryService(
                 "Действующий тариф услуги не найден.");
         }
 
-        var replacements = new List<ChargeServiceTariffVersion>(request.Periods.Count);
-        var usedTariffIds = new HashSet<Guid>();
+        // Resolve and validate every period before changing any tracked tariff.
+        // A late conflict must not leave an earlier period dirty in the unit of work.
+        var planned = new List<(UpsertChargeServiceTariffPeriodRequest Period, DateOnly StartsOn, ChargeServiceTariffVersion? Exact, Tariff Source)>();
         foreach (var period in request.Periods.OrderBy(item => item.EffectiveFrom ?? OpenTariffScheduleStart))
         {
             var startsOn = period.EffectiveFrom ?? OpenTariffScheduleStart;
@@ -2860,9 +2892,24 @@ public sealed class DictionaryService(
             {
                 OptimisticConcurrencyGuard.EnsureCurrent(period.TariffVersion, source);
             }
+            if (await chargeServiceSettingRepository.HasIncompatibleIndividualTariffAsync(
+                id, source.CalculationBase, startsOn, period.EffectiveTo, cancellationToken))
+                return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(
+                    "charge_service_individual_tariff_base_conflict",
+                    "Тарифная сетка пересекается с индивидуальными назначениями с другой базой расчёта. Сначала ограничьте или отмените эти назначения.");
+            // Snapshot terms now: later reuse must not alter another planned source.
+            planned.Add((period, startsOn, exactExistingPeriod,
+                CloneTariffForSchedule(source, setting.Name, startsOn, source.Rate, request.ChangeReason)));
+        }
 
+        var replacements = new List<ChargeServiceTariffVersion>(request.Periods.Count);
+        var usedTariffIds = new HashSet<Guid>();
+        foreach (var (period, startsOn, exactExistingPeriod, source) in planned)
+        {
             var roundedRate = MoneyMath.RoundRate(period.Rate);
-            var canReuse = exactExistingPeriod is not null && usedTariffIds.Add(exactExistingPeriod.TariffId);
+            var canReuse = exactExistingPeriod is not null && usedTariffIds.Add(exactExistingPeriod.TariffId)
+                && !await chargeServiceSettingRepository.HasOtherServiceTariffReferenceAsync(id, exactExistingPeriod.TariffId, cancellationToken)
+                && !await chargeServiceSettingRepository.HasOtherTariffPeriodAsync(id, exactExistingPeriod.TariffId, startsOn, cancellationToken);
             var tariff = canReuse
                 ? exactExistingPeriod!.Tariff
                 : CloneTariffForSchedule(source, setting.Name, startsOn, roundedRate, request.ChangeReason);
@@ -3049,6 +3096,11 @@ public sealed class DictionaryService(
             setting.Id,
             effectiveFrom,
             cancellationToken);
+        if (tariff is not null && (await chargeServiceSettingRepository.HasOtherServiceTariffReferenceAsync(setting.Id, tariff.Id, cancellationToken)
+            || await chargeServiceSettingRepository.HasOtherTariffPeriodAsync(setting.Id, tariff.Id, effectiveFrom, cancellationToken)))
+        {
+            tariff = null;
+        }
         var createdTariff = forceClone || tariff is null || tariff.Id == sourceTariff.Id && effectiveFrom != sourceTariff.EffectiveFrom;
         if (createdTariff)
         {
@@ -3101,11 +3153,14 @@ public sealed class DictionaryService(
         {
             tariffRepository.Add(tariff);
         }
-        await chargeServiceSettingRepository.SetTariffVersionAsync(
-            setting.Id,
-            sourceTariff.Id,
-            sourceTariff.EffectiveFrom,
-            cancellationToken);
+        if (sourceTariff.EffectiveFrom != effectiveFrom)
+        {
+            await chargeServiceSettingRepository.SetTariffVersionAsync(
+                setting.Id,
+                sourceTariff.Id,
+                sourceTariff.EffectiveFrom,
+                cancellationToken);
+        }
         await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, effectiveFrom, cancellationToken);
         AddAudit(
             actorUserId,
@@ -3211,6 +3266,19 @@ public sealed class DictionaryService(
         }
 
         var isMetered = mode is "metered" or "metered_tiered";
+        var existingSchedule = await chargeServiceSettingRepository.GetActiveTariffScheduleAsync(setting.Id, cancellationToken);
+        var startsOn = request.EffectiveFrom.Value;
+        var matchingPeriod = existingSchedule.Periods.FirstOrDefault(item => item.EffectiveFrom == startsOn);
+        var endsOn = matchingPeriod is not null ? matchingPeriod.EffectiveTo : existingSchedule.Periods
+            .Where(item => item.EffectiveFrom > startsOn).OrderBy(item => item.EffectiveFrom)
+            .Select(item => (DateOnly?)item.EffectiveFrom.AddDays(-1)).FirstOrDefault();
+        if (await chargeServiceSettingRepository.HasIncompatibleIndividualTariffAsync(
+            setting.Id, targetCalculationBase, startsOn, endsOn, cancellationToken))
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_individual_tariff_base_conflict",
+                "В этом периоде гаражам назначены индивидуальные тарифы с другой базой расчёта. Сначала ограничьте или отмените эти назначения, затем измените способ расчёта услуги.");
+        }
         var isTiered = mode == "metered_tiered";
         if (isTiered && !IsMeterCalculationBase(targetCalculationBase))
         {
@@ -3247,6 +3315,9 @@ public sealed class DictionaryService(
             setting.Id,
             request.EffectiveFrom.Value,
             cancellationToken);
+        if (tariff is not null && (await chargeServiceSettingRepository.HasOtherServiceTariffReferenceAsync(setting.Id, tariff.Id, cancellationToken)
+            || await chargeServiceSettingRepository.HasOtherTariffPeriodAsync(setting.Id, tariff.Id, request.EffectiveFrom.Value, cancellationToken)))
+            tariff = null;
         var createdTariff = tariff is null;
         tariff ??= new Tariff
         {
@@ -3296,11 +3367,14 @@ public sealed class DictionaryService(
         {
             tariffRepository.Add(tariff);
         }
-        await chargeServiceSettingRepository.SetTariffVersionAsync(
-            setting.Id,
-            sourceTariff.Id,
-            sourceTariff.EffectiveFrom,
-            cancellationToken);
+        if (sourceTariff.EffectiveFrom != tariff.EffectiveFrom)
+        {
+            await chargeServiceSettingRepository.SetTariffVersionAsync(
+                setting.Id,
+                sourceTariff.Id,
+                sourceTariff.EffectiveFrom,
+                cancellationToken);
+        }
         await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, tariff.EffectiveFrom, cancellationToken);
         AddAudit(
             actorUserId,

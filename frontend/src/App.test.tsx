@@ -29,6 +29,7 @@ vi.mock('./services/settingsApi', () => ({
 }))
 
 import App from './App'
+import { garageTariffAssignmentsApi } from './services/garageTariffAssignmentsApi'
 // Compile these large sections before workflow timing starts. Their first Vite
 // transform can outlast a DOM wait in parallel coverage workers; loading and
 // chunk-recovery behavior is covered separately by the workspace tests.
@@ -8012,6 +8013,47 @@ describe('App', () => {
     expect(tariffSignals.every((signal) => signal.aborted)).toBe(true)
   })
 
+  it('blocks tariff editing after a failed schedule load and reloads the real periods on retry', async () => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'tariff-schedule-retry', name: 'Тариф охраны', calculationBase: 'fixed', rate: 100 })
+    const service = createChargeServiceSetting({ id: 'service-schedule-retry', name: 'Охрана', isRegular: true, tariffId: tariff.id, unitName: 'руб.' })
+    const periods = [{ tariffId: tariff.id, effectiveFrom: '2026-07-01', effectiveTo: null, rate: 222, tariffVersion: 'latest-version' }]
+    let resolveRetry!: (value: ChargeServiceTariffPeriodDto[]) => void
+    const pendingRetry = new Promise<ChargeServiceTariffPeriodDto[]>((resolve) => { resolveRetry = resolve })
+    const getChargeServiceTariffSchedule = vi.fn().mockResolvedValue(periods)
+      .mockRejectedValueOnce(new Error('Не удалось прочитать тарифную сетку'))
+      .mockImplementationOnce(() => pendingRetry)
+    const updateChargeServiceWithTariff = vi.fn().mockRejectedValue(new Error('Saving unloaded data is forbidden'))
+    const updateChargeServiceTariffSchedule = vi.fn().mockRejectedValue(new Error('Saving unloaded periods is forbidden'))
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [tariff], getChargeServiceSettings: async () => [service],
+      getChargeServiceTariffSchedule, updateChargeServiceWithTariff, updateChargeServiceTariffSchedule,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(panel).findByRole('button', { name: 'Изменить услугу Охрана' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    await within(dialog).findByText('Не удалось прочитать тарифную сетку')
+    expect(within(dialog).queryByLabelText('Наименование услуги')).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument()
+    expect(updateChargeServiceWithTariff).not.toHaveBeenCalled()
+    expect(updateChargeServiceTariffSchedule).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
+    await waitFor(() => expect(getChargeServiceTariffSchedule).toHaveBeenCalledTimes(2))
+    dialog = screen.getByRole('dialog', { name: 'Изменить услугу' })
+    expect(within(dialog).getByRole('status', { name: 'Загрузка тарифной сетки' })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument()
+    await act(async () => { resolveRetry(periods); await pendingRetry })
+    dialog = screen.getByRole('dialog', { name: 'Изменить услугу' })
+    expect(within(dialog).getByLabelText('Тариф регулярной услуги')).toHaveValue('222.00')
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
+    expect(updateChargeServiceWithTariff).not.toHaveBeenCalled()
+    expect(updateChargeServiceTariffSchedule).not.toHaveBeenCalled()
+  })
+
   it('cancels a closed tariff schedule request and keeps a reopened editor on the latest response', async () => {
     const user = userEvent.setup()
     const tariff = createTariff({ id: 'tariff-schedule-lifecycle', name: 'Тариф охраны', calculationBase: 'fixed', rate: 100 })
@@ -8058,6 +8100,8 @@ describe('App', () => {
     const firstDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
     await waitFor(() => expect(scheduleSignals).toHaveLength(1))
     expect(within(firstDialog).getByRole('status')).toHaveTextContent('Загрузка тарифной сетки')
+    expect(within(firstDialog).queryByLabelText('Наименование услуги')).not.toBeInTheDocument()
+    expect(within(firstDialog).queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument()
     await user.click(within(firstDialog).getByRole('button', { name: 'Отмена' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
@@ -17506,7 +17550,113 @@ describe('App', () => {
     expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
   })
 
-  it('shows inline tariff and payment-rule edits in the service card', async () => {
+  it('opens daily service payments from reports and preserves its date and garage across workbook tabs', async () => {
+    const user = userEvent.setup()
+    const getDailyServicePayments = vi.fn(createReportClient().getDailyServicePayments)
+    const garage = createGarage({ id: 'daily-report-garage', number: '85', ownerName: 'Тестовый владелец' })
+    let searchLoads = 0
+    const dictionaryClient = createDictionaryClient({ getGarages: async () => ++searchLoads === 1 ? [garage] : [] })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getDailyServicePayments })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    await user.click(await screen.findByRole('tab', { name: 'Оплата по услугам' }))
+    await screen.findByRole('table', { name: 'Оплаты гаражей по услугам' })
+    fireEvent.change(screen.getByLabelText('Дата ежедневного отчёта'), { target: { value: '18.09.2026' } })
+    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ throughDate: '2026-09-18' }), expect.any(AbortSignal)))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' })).not.toBeDisabled())
+    await user.click(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' }))
+    await user.click(screen.getByRole('option', { name: /Гараж 85/ }))
+    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ garageId: garage.id }), expect.any(AbortSignal)))
+    await user.click(screen.getByRole('tab', { name: 'По гаражам' }))
+    await user.click(screen.getByRole('tab', { name: 'Оплата по услугам' }))
+    expect(screen.getByLabelText('Дата ежедневного отчёта')).toHaveValue('18.09.2026')
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' })).not.toBeDisabled())
+    expect(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' })).toHaveTextContent('Гараж 85')
+    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ throughDate: '2026-09-18', garageId: garage.id }), expect.any(AbortSignal)))
+  })
+
+  it('opens individual tariffs from the table and returns to the unchanged service draft', async () => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'individual-entry-tariff', name: 'Охрана', calculationBase: 'fixed', rate: 100 })
+    const income = createAccountingType({ id: 'individual-entry-income', name: 'Охрана', code: 'security' })
+    const service = createChargeServiceSetting({ id: 'individual-entry-service', name: 'Охрана', isRegular: true, isMetered: false, incomeTypeId: income.id, tariffId: tariff.id })
+    const getPage = vi.spyOn(garageTariffAssignmentsApi, 'getPage').mockResolvedValue({ items: [], totalCount: 0, offset: 0, limit: 25 })
+    try {
+      const dictionaryClient = createDictionaryClient({ getTariffs: async () => [tariff], getIncomeTypes: async () => [income], getChargeServiceSettings: async () => [service], getChargeServiceTariffSchedule: async () => [] })
+      render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+      await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+      await user.click(screen.getByRole('button', { name: 'Войти' }))
+      await openSection(user, 'Тарифы и сборы')
+      await user.click(await screen.findByRole('button', { name: 'Индивидуальные тарифы услуги Охрана' }))
+      await screen.findByText('Индивидуальные тарифы пока не назначены')
+      expect(getPage).toHaveBeenCalledWith('token', service.id, expect.objectContaining({ includeArchived: false }), expect.any(AbortSignal))
+      await user.click(screen.getByRole('button', { name: 'Закрыть индивидуальные тарифы' }))
+      await user.click(screen.getByRole('button', { name: 'Изменить услугу Охрана' }))
+      const card = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+      await waitFor(() => expect(within(card).getByRole('button', { name: 'Индивидуальные тарифы' })).toBeEnabled())
+      const day = within(card).getByLabelText('День оплаты')
+      await user.clear(day)
+      await user.type(day, '27')
+      await user.click(within(card).getByRole('button', { name: 'Индивидуальные тарифы' }))
+      expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument()
+      await screen.findByText('Индивидуальные тарифы пока не назначены')
+      await user.keyboard('{Escape}')
+      const returned = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+      expect(within(returned).getByLabelText('День оплаты')).toHaveValue('27')
+      expect(within(returned).getByRole('button', { name: 'Индивидуальные тарифы' })).toHaveFocus()
+    } finally { getPage.mockRestore() }
+  })
+
+  it('shows inline electricity threshold and rate edits after reopening the tariff card', async () => {
+    const user = userEvent.setup()
+    const income = createAccountingType({ id: 'income-tier-card', name: 'Электроэнергия', code: 'electricity' })
+    let tariff = createTariff({
+      id: 'tariff-tier-card', name: 'Электроэнергия', calculationBase: 'meter_electricity', rate: 2,
+      electricityTiers: [
+        { id: '11111111-1111-4111-8111-111111111111', name: '0–50', upperBound: 50, rate: 2, isCustom: true },
+        { id: '22222222-2222-4222-8222-222222222222', name: '51–100', upperBound: 100, rate: 3, isCustom: true },
+        { id: '33333333-3333-4333-8333-333333333333', name: '101+', upperBound: null, rate: 5, isCustom: true },
+      ],
+    })
+    let service = createChargeServiceSetting({ id: 'service-tier-card', name: 'Электроэнергия', isRegular: true,
+      isMetered: true, hasTieredTariff: true, incomeTypeId: income.id, tariffId: tariff.id, unitName: 'кВт·ч', meterKind: 'electricity' })
+    let revision = 0
+    const save = vi.fn(async (_token: string, _id: string, request: UpdateChargeServiceWithTariffRequest) => {
+      revision += 1
+      tariff = { ...tariff, rate: request.rate, version: `tariff-saved-${revision}`,
+        electricityTiers: (request.electricityTiers ?? []).map((tier) => ({ ...tier, id: tier.id!, upperBound: tier.upperBound ?? null, isCustom: true })) }
+      service = { ...service, version: `service-saved-${revision}` }
+      return { service, tariff }
+    })
+    const dictionaryClient = createDictionaryClient({ getIncomeTypes: async () => [income], getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [service], getChargeServiceTariffSchedule: async () => [], updateChargeServiceWithTariff: save })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const upper = await within(panel).findByLabelText('Электроэнергия: 0.00–50.00: до')
+    await user.clear(upper)
+    await user.type(upper, '60{Enter}')
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    const rate = await within(panel).findByLabelText('Электроэнергия: 61.00–100.00: значение')
+    await user.clear(rate)
+    await user.type(rate, '3.5{Enter}')
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await user.click(within(panel).getByRole('button', { name: 'Изменить услугу Электроэнергия' }))
+      const card = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+      await waitFor(() => expect(within(card).getByLabelText('0.00–60.00: верхняя граница')).toHaveValue('60'))
+      expect(within(card).getByLabelText('61.00–100.00: цена за единицу')).toHaveValue('3.50')
+      await user.click(within(card).getByRole('button', { name: 'Отмена', exact: true }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
+    }
+  })
+
+  it.each(['empty', 'populated'] as const)('shows inline tariff and payment-rule edits in the service card with %s schedule', async (scheduleKind) => {
     const user = userEvent.setup()
     let tariff = createTariff({ id: 'tariff-inline-card', name: 'Тариф охраны', calculationBase: 'fixed', rate: 100 })
     let service = createChargeServiceSetting({
@@ -17525,7 +17675,7 @@ describe('App', () => {
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [tariff],
       getChargeServiceSettings: async () => [service],
-      getChargeServiceTariffSchedule: async () => [],
+      getChargeServiceTariffSchedule: async () => scheduleKind === 'empty' ? [] : [{ tariffId: tariff.id, tariffVersion: tariff.version, effectiveFrom: tariff.effectiveFrom, effectiveTo: null, rate: tariff.rate }],
       updateChargeServiceWithTariff: updateRate,
       updateChargeServiceSetting: updateSetting,
     })
@@ -17563,6 +17713,13 @@ describe('App', () => {
     await waitFor(() => expect(within(card).getByLabelText('Тариф регулярной услуги')).toHaveValue('125.00'))
     expect(within(card).getByLabelText('Перенос долга в просроченный')).toHaveValue('15')
     expect(within(card).getByLabelText('День оплаты')).toHaveValue('25')
+    await user.click(within(card).getByRole('button', { name: 'Отмена', exact: true }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
+    await user.click(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    await waitFor(() => expect(within(reopened).getByLabelText('Тариф регулярной услуги')).toHaveValue('125.00'))
+    expect(within(reopened).getByLabelText('Перенос долга в просроченный')).toHaveValue('15')
+    expect(within(reopened).getByLabelText('День оплаты')).toHaveValue('25')
   })
 
   it('allows backup read-only access without exposing create, download, or delete actions', async () => {
@@ -21542,6 +21699,53 @@ describe('App', () => {
     expect(await within(financePanel).findByText('Начисление после сверки')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('1 350.00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('Начисление edit')).not.toBeInTheDocument()
+  })
+
+  it('edits and cancels an individual garage accrual through right click while the overview is hidden', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-right-click', number: '85' })
+    const income = createAccountingType({ id: 'income-right-click', name: 'Прочие оплаты', code: 'other_payments', isSystem: true })
+    let accrual = createAccrual({ id: 'accrual-right-click', garageId: garage.id, garageNumber: garage.number, incomeTypeId: income.id, incomeTypeName: income.name, amount: 20000, basis: 'Подключение канализации' })
+    const worksheet = () => createGarageIncomeWorksheet({ garageId: garage.id, garageNumber: garage.number, ownerName: garage.ownerName, accrualTotal: accrual.isCanceled ? 0 : accrual.amount, closingDebt: accrual.isCanceled ? 0 : accrual.amount, rows: accrual.isCanceled ? [] : [{ accountingMonth: accrual.accountingMonth, incomeTypeId: income.id, incomeTypeName: income.name, incomeTypeCode: income.code, reason: accrual.basis, meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: accrual.amount, incomeAmount: 0, debt: accrual.amount }] })
+    const getGarageIncomeWorksheet = vi.fn(async () => worksheet())
+    const updateAccrual = vi.fn(async (_token: string, _id: string, request: CreateAccrualRequest) => { accrual = { ...accrual, amount: request.amount }; return accrual })
+    const cancelAccrual = vi.fn(async () => { accrual = { ...accrual, isCanceled: true }; return accrual })
+    const calculateGarageIncomeWorksheet = vi.fn(async () => worksheet())
+    const financeClient = createFinanceClient({ getGarageIncomeWorksheet, calculateGarageIncomeWorksheet, getAccrualsPage: async () => ({ items: accrual.isCanceled ? [] : [accrual], totalCount: accrual.isCanceled ? 0 : 1, offset: 0, limit: 10 }), updateAccrual, cancelAccrual })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], getIncomeTypes: async () => [income] })} financeClient={financeClient} settingsClient={createSettingsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = await screen.findByRole('region', { name: 'Платежи' })
+    expect(panel).not.toHaveClass('finance-panel--show-overview')
+    await user.type(within(panel).getByLabelText('Поиск номера гаража или ФИО владельца'), '85')
+    await user.click(await within(panel).findByRole('option', { name: /Гараж\s*85/ }))
+    let row = (await within(panel).findByText('Основание: Подключение канализации')).closest('tr')!
+    fireEvent.contextMenu(row, { clientX: 200, clientY: 200 })
+    await user.click(screen.getByRole('menuitem', { name: 'Редактировать' }))
+    await user.click(await screen.findByRole('button', { name: 'Редактировать' }))
+    const editor = await screen.findByRole('dialog', { name: 'Ручное начисление' })
+    await user.clear(within(editor).getByLabelText('Сумма начисления'))
+    await user.type(within(editor).getByLabelText('Сумма начисления'), '18000')
+    await user.click(within(editor).getByRole('button', { name: 'Сохранить' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateAccrual).toHaveBeenCalledWith('token', accrual.id, expect.objectContaining({ amount: 18000, basis: 'Подключение канализации', irregularPaymentId: null })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ручное начисление' })).not.toBeInTheDocument())
+    const table = within(panel).getByRole('table', { name: 'Поступления гаража 85' })
+    await waitFor(() => expect(within(table).getAllByText('18 000.00').length).toBeGreaterThan(0))
+    row = within(table).getByText('Основание: Подключение канализации').closest('tr')!
+    row.focus()
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true })
+    await user.click(screen.getByRole('menuitem', { name: 'Удалить' }))
+    await user.click(await screen.findByRole('button', { name: 'Удалить' }))
+    const cancelDialog = await screen.findByRole('dialog', { name: /Отменить начисление/ })
+    await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибка ввода')
+    await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
+    await waitFor(() => expect(cancelAccrual).toHaveBeenCalledWith('token', accrual.id, { reason: 'Ошибка ввода' }))
+    await waitFor(() => expect(within(table).queryByText('Основание: Подключение канализации')).not.toBeInTheDocument())
+    expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2)
+    expect(calculateGarageIncomeWorksheet).toHaveBeenCalledTimes(1)
   })
 
   it('edits a custom irregular accrual without replacing its identity', async () => {
@@ -26004,7 +26208,7 @@ describe('App', () => {
     expect(reportsPanel.closest('.workspace')).toHaveClass('workspace--reports')
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(reportsPanel).getByRole('tab', { name: /Консолидированный/ })).toHaveAttribute('aria-selected', 'true')
-    for (const tabName of ['По гаражам', 'По выплатам', 'Поступления', 'Оплаты из кассы', 'Сдача кассы в банк', 'Сборы', 'Изменение фондов']) {
+    for (const tabName of ['По гаражам', 'По выплатам', 'Поступления', 'Оплата по услугам', 'Оплаты из кассы', 'Сдача кассы в банк', 'Сборы', 'Изменение фондов']) {
       expect(within(reportsPanel).getByRole('tab', { name: new RegExp(tabName) })).toBeInTheDocument()
     }
     for (const tabName of ['Оплаты из кассы', 'Сдача кассы в банк', 'Изменение фондов']) {
@@ -26012,7 +26216,7 @@ describe('App', () => {
     }
 
     const reportTabs = within(reportsPanel).getAllByRole('tab')
-    expect(reportTabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1])
+    expect(reportTabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1])
     reportTabs[0].focus()
     await user.keyboard('{ArrowRight}')
     expect(reportTabs[1]).toHaveFocus()
@@ -26020,13 +26224,13 @@ describe('App', () => {
     await user.keyboard('{Enter}')
     expect(reportTabs[1]).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{End}')
-    expect(reportTabs[7]).toHaveFocus()
+    expect(reportTabs[8]).toHaveFocus()
     await user.keyboard('{Home}')
     expect(reportTabs[0]).toHaveFocus()
     await user.keyboard('{Enter}')
     expect(reportTabs[0]).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{ArrowLeft}')
-    expect(reportTabs[7]).toHaveFocus()
+    expect(reportTabs[8]).toHaveFocus()
     await user.keyboard('{ArrowRight}')
     expect(reportTabs[0]).toHaveFocus()
 
@@ -27053,7 +27257,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()
     const cashPaymentsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по оплатам из кассы' })
-    expect(cashPaymentsTable).toHaveTextContent('Вода: Водоканал')
+    expect(await within(cashPaymentsTable).findByText('Вода: Водоканал')).toBeInTheDocument()
     expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
     expect(cashPaymentsTable).toHaveTextContent('400.00')
     expect(cashPaymentsTable).toHaveTextContent('12.06.2026')
@@ -27073,7 +27277,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
     expect(within(reportsPanel).getByText('Отчёт по сдаче кассы в банк')).toBeInTheDocument()
     const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
-    expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
+    expect(await within(bankDepositsTable).findByText('Сдача наличных в банк')).toBeInTheDocument()
     expect(bankDepositsTable).toHaveTextContent('3 000.00')
     expect(bankDepositsTable).toHaveTextContent('15.06.2026')
     expect(bankDepositsTable).toHaveTextContent('2 операции')
@@ -27580,7 +27784,10 @@ describe('App', () => {
     await waitFor(() => expect(requests.funds).toContainEqual(expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
   })
 
-  it('keeps active filters, grouping and sorting when every report is exported', async () => {
+  it.each([
+    'Консолидированный', 'По гаражам', 'По выплатам', 'Поступления',
+    'Оплаты из кассы', 'Сдача кассы в банк', 'Сборы', 'Изменение фондов',
+  ])('keeps active filters, grouping and sorting when %s is exported', async (reportTab) => {
     const user = userEvent.setup()
     const exportConsolidatedReportXlsx = vi.fn(async () => new Blob(['consolidated']))
     const exportGarageReportXlsx = vi.fn(async () => new Blob(['garages']))
@@ -27612,68 +27819,78 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     const exportXlsx = async () => user.click(within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' }))
 
-    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Месяц/ }))
-    await exportXlsx()
-    await waitFor(() => expect(exportConsolidatedReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'asc' })))
+    await openReportTab(user, reportsPanel, reportTab)
+    if (reportTab === 'Консолидированный') {
+      await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Месяц/ }))
+      await exportXlsx()
+      await waitFor(() => expect(exportConsolidatedReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'По гаражам')
-    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
-    const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
-    await user.type(garageFilter, '12')
-    const garageSearchResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
-    await user.click(await within(garageSearchResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
-    await exportXlsx()
-    await waitFor(() => expect(exportGarageReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], groupAccruals: true, sortBy: 'garageNumber', sortDirection: 'asc' })))
+    if (reportTab === 'По гаражам') {
+      await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+      const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
+      await user.type(garageFilter, '12')
+      const garageSearchResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
+      await user.click(await within(garageSearchResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
+      await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
+      await exportXlsx()
+      await waitFor(() => expect(exportGarageReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], groupAccruals: true, sortBy: 'garageNumber', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'По выплатам')
-    const counterpartyFilter = within(reportsPanel).getByLabelText('Поставщики или сотрудники')
-    await user.type(counterpartyFilter, 'вод')
-    await user.click(await within(reportsPanel).findByRole('checkbox', { name: 'Выбрать водоканал, поставщик' }))
-    await user.clear(counterpartyFilter)
-    await user.type(counterpartyFilter, 'петрова')
-    await user.click(await within(reportsPanel).findByRole('checkbox', { name: 'Выбрать петрова ольга, сотрудник' }))
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Поставщик\/сотрудник/ }))
-    await exportXlsx()
-    await waitFor(() => expect(exportExpenseReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ supplierIds: ['supplier-1'], staffMemberIds: ['staff-member-1'], sortBy: 'supplierName', sortDirection: 'asc' })))
+    if (reportTab === 'По выплатам') {
+      const counterpartyFilter = within(reportsPanel).getByLabelText('Поставщики или сотрудники')
+      await user.type(counterpartyFilter, 'вод')
+      await user.click(await within(reportsPanel).findByRole('checkbox', { name: 'Выбрать водоканал, поставщик' }))
+      await user.clear(counterpartyFilter)
+      await user.type(counterpartyFilter, 'петрова')
+      await user.click(await within(reportsPanel).findByRole('checkbox', { name: 'Выбрать петрова ольга, сотрудник' }))
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Поставщик\/сотрудник/ }))
+      await exportXlsx()
+      await waitFor(() => expect(exportExpenseReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ supplierIds: ['supplier-1'], staffMemberIds: ['staff-member-1'], sortBy: 'supplierName', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'Поступления')
-    const incomeGarageFilter = within(reportsPanel).getByLabelText('Гаражи по поступлениям')
-    await user.type(incomeGarageFilter, '12')
-    const incomeGarageResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
-    await user.click(await within(incomeGarageResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' }))
-    await exportXlsx()
-    await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: false, sortBy: 'incomeAmount', sortDirection: 'asc' })))
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
-    await waitFor(() => expect(exportIncomeReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: false, sortBy: 'incomeAmount', sortDirection: 'asc' })))
+    if (reportTab === 'Поступления') {
+      const incomeGarageFilter = within(reportsPanel).getByLabelText('Гаражи по поступлениям')
+      await user.type(incomeGarageFilter, '12')
+      const incomeGarageResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
+      await user.click(await within(incomeGarageResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
+      await user.click(within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' }))
+      await exportXlsx()
+      await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: false, sortBy: 'incomeAmount', sortDirection: 'asc' })))
+      await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
+      await waitFor(() => expect(exportIncomeReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: false, sortBy: 'incomeAmount', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'Оплаты из кассы')
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Наличие чека/ }))
-    await exportXlsx()
-    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'hasReceipt', sortDirection: 'asc' })))
+    if (reportTab === 'Оплаты из кассы') {
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Наличие чека/ }))
+      await exportXlsx()
+      await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'hasReceipt', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Комментарий/ }))
-    await exportXlsx()
-    await waitFor(() => expect(exportBankDepositReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'comment', sortDirection: 'asc' })))
+    if (reportTab === 'Сдача кассы в банк') {
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Комментарий/ }))
+      await exportXlsx()
+      await waitFor(() => expect(exportBankDepositReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'comment', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'Сборы')
-    const feeFilter = within(reportsPanel).getByRole('combobox', { name: 'Вариации сборов' })
-    await user.click(feeFilter)
-    await user.click(await within(reportsPanel).findByRole('checkbox', { name: /Выбрать членский взнос/ }))
-    await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать должников' }))
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Задолженность/ }))
-    await exportXlsx()
-    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ feeEntryIds: ['income-type-membership'], sortBy: 'debt', sortDirection: 'asc' })))
+    if (reportTab === 'Сборы') {
+      const feeFilter = within(reportsPanel).getByRole('combobox', { name: 'Вариации сборов' })
+      await user.click(feeFilter)
+      await user.click(await within(reportsPanel).findByRole('checkbox', { name: /Выбрать членский взнос/ }))
+      await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
+      await user.click(within(reportsPanel).getByRole('button', { name: 'Показать должников' }))
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Задолженность/ }))
+      await exportXlsx()
+      await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ feeEntryIds: ['income-type-membership'], sortBy: 'debt', sortDirection: 'asc' })))
+    }
 
-    await openReportTab(user, reportsPanel, 'Изменение фондов')
-    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Пользователь/ }))
-    await exportXlsx()
-    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
+    if (reportTab === 'Изменение фондов') {
+      await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Пользователь/ }))
+      await exportXlsx()
+      await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
+    }
   })
 
   it('shows loading and error states for the complete garage report', async () => {
@@ -30216,6 +30433,8 @@ function createIntegrationSecretSetting(overrides: Partial<IntegrationSecretSett
 
 function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient {
   return {
+    getDailyServicePayments: async () => ({ dateFrom: '2026-09-01', throughDate: '2026-09-28', data: { rows: [], days: [], monthTotal: { electricity: 0, water: 0, trash: 0, outdoorLighting: 0, membership: 0, target: 0, other: 0, total: 0 }, rowCount: 0, hasOther: false, offset: 0, limit: 25 } }),
+    exportDailyServicePayments: async () => new Blob(),
     getGarageReportQuickLists: async () => [],
     createGarageReportQuickList: async (_token, request) => ({
       id: 'garage-quick-list-created',

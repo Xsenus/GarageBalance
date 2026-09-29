@@ -92,6 +92,9 @@ export type FinancePagedResult<TItem> = {
 }
 
 export type FinancePageParams = {
+  incomeTypeId?: string
+  irregularPaymentId?: string
+  feeCampaignId?: string
   monthFrom?: string
   monthTo?: string
   search?: string
@@ -1017,6 +1020,10 @@ export const financeApi: FinanceClient = {
   },
   getAccrualsPage(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/accruals/page', {
+      garageId: params.garageId,
+      incomeTypeId: params.incomeTypeId,
+      irregularPaymentId: params.irregularPaymentId,
+      feeCampaignId: params.feeCampaignId,
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
       search: params.search,

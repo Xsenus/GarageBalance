@@ -1,5 +1,21 @@
 import { authenticatedApiFetch, authenticatedJsonBodyApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
+export type DailyServicePaymentQuery = { throughDate?: string; garageId?: string; offset?: number; limit?: number }
+export type DailyServicePaymentAmounts = { electricity: number; water: number; trash: number; outdoorLighting: number; membership: number; target: number; other: number; total: number }
+export type DailyServicePaymentReportDto = {
+  dateFrom: string
+  throughDate: string
+  data: {
+    rows: Array<{ date: string; garageId: string; garageNumber: string; amounts: DailyServicePaymentAmounts }>
+    days: Array<{ date: string; amounts: DailyServicePaymentAmounts }>
+    monthTotal: DailyServicePaymentAmounts
+    rowCount: number
+    hasOther: boolean
+    offset: number
+    limit: number
+  }
+}
+
 export type MonthlyReportRowDto = {
   accountingMonth: string
   incomeTotal: number
@@ -276,6 +292,8 @@ export type FeeReportDto = {
 }
 
 export type ReportClient = {
+  getDailyServicePayments(accessToken: string, params?: DailyServicePaymentQuery, signal?: AbortSignal): Promise<DailyServicePaymentReportDto>
+  exportDailyServicePayments(accessToken: string, params: Pick<DailyServicePaymentQuery, 'throughDate' | 'garageId'>, format: 'xlsx' | 'pdf', signal?: AbortSignal): Promise<Blob>
   getGarageReportQuickLists(accessToken: string, signal?: AbortSignal): Promise<GarageReportQuickListDto[]>
   createGarageReportQuickList(accessToken: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
   updateGarageReportQuickList(accessToken: string, id: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
@@ -531,6 +549,14 @@ function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1]
 }
 
 export const reportsApi: ReportClient = {
+  getDailyServicePayments(accessToken, params = {}, signal) {
+    const query = buildReportQuery(params, ['throughDate', 'garageId', 'offset', 'limit'])
+    return requestJson(accessToken, `/api/reports/daily-service-payments${query ? `?${query}` : ''}`, { signal })
+  },
+  exportDailyServicePayments(accessToken, params, format, signal) {
+    const query = buildReportQuery(params, ['throughDate', 'garageId'])
+    return requestBlob(accessToken, `/api/reports/daily-service-payments/export/${format}${query ? `?${query}` : ''}`, { method: 'POST', signal })
+  },
   getGarageReportQuickLists(accessToken, signal) {
     return requestJson(accessToken, '/api/reports/garage-quick-lists', { signal })
   },

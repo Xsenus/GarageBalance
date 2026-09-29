@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent } from 'react'
-import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, UsersRound, X } from 'lucide-react'
+import { GarageTariffAssignmentsDialog } from './GarageTariffAssignmentsDialog'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, StaffDepartmentSalaryFundDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -843,6 +844,7 @@ function getFeeCampaignDisplayRank(campaign: FeeCampaignDto, today: string) {
 export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient, settingsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; fundsClient: FundsClient; settingsClient: ApplicationSettingsClient }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
+  const [individualTariffTarget, setIndividualTariffTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
   const [tariffPageSize, setTariffPageSize] = useState(25)
@@ -886,6 +888,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [chargeServiceEditTarget, setChargeServiceEditTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceTariffSchedule, setChargeServiceTariffSchedule] = useState<ChargeServiceTariffPeriodDto[] | null>(null)
   const [chargeServiceTariffScheduleLoading, setChargeServiceTariffScheduleLoading] = useState(false)
+  const [chargeServiceTariffScheduleError, setChargeServiceTariffScheduleError] = useState<string | null>(null)
   const chargeServiceEditorControllerRef = useRef<AbortController | null>(null)
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
@@ -1070,6 +1073,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   function closeChargeServiceEditor() {
     chargeServiceEditorControllerRef.current?.abort()
     setChargeServiceEditTarget(null)
+    setChargeServiceTariffSchedule(null)
+    setChargeServiceTariffScheduleError(null)
+    setChargeServiceTariffScheduleLoading(false)
   }
 
   function ensureTariffReferences() {
@@ -2259,14 +2265,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     if (controller.signal.aborted) return
     setChargeServiceEditTarget(setting)
     setChargeServiceTariffScheduleLoading(true)
+    setChargeServiceTariffScheduleError(null)
     try {
       const schedule = await dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, setting.id, controller.signal)
       if (controller.signal.aborted) return
       setChargeServiceTariffSchedule(schedule)
     } catch (caught) {
       if (controller.signal.aborted) return
-      setTariffPersistenceError(getErrorMessage(caught, 'Не удалось загрузить тарифы.'))
-      setChargeServiceTariffSchedule([])
+      setChargeServiceTariffScheduleError(getErrorMessage(caught, 'Не удалось загрузить тарифы.'))
+      setChargeServiceTariffSchedule(null)
     } finally {
       if (!controller.signal.aborted) {
         setChargeServiceTariffScheduleLoading(false)
@@ -3087,6 +3094,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     <span className="tariffs-row-actions">
                       {row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted ? (
                         <>
+                          {serviceSetting.isRegular && serviceSetting.tariffId ? <button className="icon-button tariffs-row-action-button" type="button" aria-label={`Индивидуальные тарифы услуги ${serviceSetting.name}`} title="Индивидуальные тарифы" disabled={isRowDisabled || tariffsLoading} onClick={() => setIndividualTariffTarget(serviceSetting)}><UsersRound size={16} aria-hidden="true" /></button> : null}
                           <button
                             className="icon-button tariffs-row-action-button"
                             type="button"
@@ -3810,11 +3818,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         />
       ) : null}
       {chargeServiceEditTarget ? (
+        <div hidden={Boolean(individualTariffTarget)}>
         <AddServicePrototypeDialog
           key={`${chargeServiceEditTarget.id}-${chargeServiceTariffScheduleLoading ? 'loading' : 'ready'}`}
           initialSetting={chargeServiceEditTarget}
+          suspended={Boolean(individualTariffTarget)}
+          onOpenIndividualTariffs={chargeServiceEditTarget.isRegular && chargeServiceEditTarget.tariffId ? () => setIndividualTariffTarget(chargeServiceEditTarget) : undefined}
           tariffSchedule={chargeServiceTariffSchedule}
           tariffScheduleLoading={chargeServiceTariffScheduleLoading}
+          tariffScheduleError={chargeServiceTariffScheduleError}
+          onRetryTariffSchedule={() => void openChargeServiceEditor(chargeServiceEditTarget)}
           isSaving={tariffSavingRowId === `charge-service-${chargeServiceEditTarget.id}`}
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
@@ -3826,7 +3839,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           title="Изменить услугу"
         />
+        </div>
       ) : null}
+      {individualTariffTarget ? <GarageTariffAssignmentsDialog key={individualTariffTarget.id} accessToken={auth.accessToken} service={individualTariffTarget}
+        rate={backendTariffs.find((item) => item.id === individualTariffTarget.tariffId)?.rate ?? 0}
+        calculationBase={backendTariffs.find((item) => item.id === individualTariffTarget.tariffId)?.calculationBase ?? 'fixed'}
+        initialTiers={getElectricityTariffTiers(backendTariffs.find((item) => item.id === individualTariffTarget.tariffId) ?? null)}
+        dictionaryClient={dictionaryClient} canWrite={canManageTariffs} onClose={() => setIndividualTariffTarget(null)} /> : null}
       {modal === 'fee' ? (
         <AddFeePrototypeDialog
           activeGarageCount={feeCampaignActiveGarageCount}
@@ -3866,11 +3885,15 @@ export function AddServicePrototypeDialog({
   onSave,
   onUpdateWithTariff,
   onUpdateTariffSchedule,
+  onOpenIndividualTariffs,
+  suspended = false,
   regularOnly = false,
   submitLabel = 'Сохранить',
   tariffs,
   tariffSchedule = null,
   tariffScheduleLoading = false,
+  tariffScheduleError = null,
+  onRetryTariffSchedule,
   title = 'Добавить услугу',
 }: {
   initialSetting?: ChargeServiceSettingDto
@@ -3884,11 +3907,15 @@ export function AddServicePrototypeDialog({
   onSave?: (request: UpsertChargeServiceSettingRequest) => Promise<void>
   onUpdateWithTariff?: (request: UpdateChargeServiceWithTariffRequest) => Promise<void>
   onUpdateTariffSchedule?: (request: UpsertChargeServiceTariffScheduleRequest) => Promise<ChargeServiceTariffPeriodDto[]>
+  onOpenIndividualTariffs?: () => void
+  suspended?: boolean
   regularOnly?: boolean
   submitLabel?: string
   tariffs: TariffDto[]
   tariffSchedule?: ChargeServiceTariffPeriodDto[] | null
   tariffScheduleLoading?: boolean
+  tariffScheduleError?: string | null
+  onRetryTariffSchedule?: () => void
   title?: string
 }) {
   const initialIncomeTypeId = initialSetting?.incomeTypeId ?? ''
@@ -3941,8 +3968,8 @@ export function AddServicePrototypeDialog({
   const canChooseRegularity = !regularOnly && !initialSetting
   const dialogBusy = isSaving || scheduleSaving
   useRestoreFocusOnClose(true)
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(!dialogBusy, onClose)
+  const dialogRef = useFocusTrap<HTMLElement>(!suspended)
+  useEscapeKey(!dialogBusy && !suspended, onClose)
 
   async function saveTariffSchedule() {
     if (!onUpdateTariffSchedule || !initialSetting || scheduleSaveInFlightRef.current) {
@@ -4194,13 +4221,18 @@ export function AddServicePrototypeDialog({
         <div className="detail-dialog-header">
           <h3 id="contractor-service-title">{title}</h3>
           <div className="contractors-service-header-actions">
+            {onOpenIndividualTariffs ? <button className="secondary-button" type="button" disabled={dialogBusy || tariffScheduleLoading || Boolean(tariffScheduleError)} onClick={onOpenIndividualTariffs}><UsersRound size={16} aria-hidden="true" />Индивидуальные тарифы</button> : null}
             <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose} disabled={dialogBusy}>
               <X size={18} />
             </button>
           </div>
         </div>
 
-        <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} noValidate onSubmit={submitService}>
+        {tariffScheduleLoading || tariffScheduleError ? <>
+          {tariffScheduleLoading ? <TableLoadingState label="Загрузка тарифной сетки" rows={4} columns={2} />
+            : <AsyncErrorState message={tariffScheduleError} onRetry={onRetryTariffSchedule ?? onClose} retryLabel={onRetryTariffSchedule ? 'Повторить загрузку' : 'Закрыть'} />}
+          <div className="detail-dialog-actions"><button className="ghost-button" type="button" onClick={onClose} disabled={dialogBusy}>Отмена</button></div>
+        </> : <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} noValidate onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
           {isRegular ? (
             <>
@@ -4322,9 +4354,6 @@ export function AddServicePrototypeDialog({
                       Добавить период
                     </button>
                   </div>
-                  {tariffScheduleLoading ? (
-                    <div className="tariff-schedule-loading" role="status" aria-live="polite">Загрузка тарифной сетки…</div>
-                  ) : (
                     <div className="tariff-schedule-table" role="table" aria-label="Тарифная сетка услуги">
                       <div className="tariff-schedule-row tariff-schedule-row--header" role="row">
                         <span role="columnheader">Начальная дата</span>
@@ -4393,7 +4422,6 @@ export function AddServicePrototypeDialog({
                         </div>
                       ))}
                     </div>
-                  )}
                   {scheduleMessage ? <p className="tariff-schedule-message" role="status">{scheduleMessage}</p> : null}
                   <div className="tariff-schedule-footer tariff-schedule-footer--actions-only">
                     <button className="secondary-button" type="button" disabled={dialogBusy || tariffScheduleLoading} onClick={() => void saveTariffSchedule()}>
@@ -4580,7 +4608,7 @@ export function AddServicePrototypeDialog({
               Отмена
             </button>
           </div>
-        </form>
+        </form>}
       </section>
     </div>
   )

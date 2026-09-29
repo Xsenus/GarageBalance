@@ -4,6 +4,38 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { reportsApi } from './reportsApi'
 
 describe('reportsApi', () => {
+  it('loads daily service payments and exports with filters, POST and cancellation', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>().mockResolvedValueOnce(new Response(JSON.stringify({ data: { rows: [] } }), { status: 200 }))
+      .mockImplementation(async () => new Response('fixture', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    await reportsApi.getDailyServicePayments('token', { throughDate: '2026-09-18', garageId: 'garage-85', offset: 0, limit: 25 }, controller.signal)
+    for (const format of ['xlsx', 'pdf'] as const) await reportsApi.exportDailyServicePayments('token', { throughDate: '2026-09-18', garageId: 'garage-85' }, format, controller.signal)
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/daily-service-payments?throughDate=2026-09-18&garageId=garage-85&offset=0&limit=25', getRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/daily-service-payments/export/xlsx?throughDate=2026-09-18&garageId=garage-85', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/daily-service-payments/export/pdf?throughDate=2026-09-18&garageId=garage-85', postRequest())
+    expect(fetchMock.mock.calls.every(([, init]) => init?.signal instanceof AbortSignal)).toBe(true)
+  })
+  it('aborts pending daily service reads and exports through the shared timeout controller', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>().mockImplementation((_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    const read = reportsApi.getDailyServicePayments('token', {}, controller.signal)
+    const exported = reportsApi.exportDailyServicePayments('token', {}, 'xlsx', controller.signal)
+    const checkRead = expect(read).rejects.toMatchObject({ name: 'AbortError' })
+    const checkExport = expect(exported).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await Promise.all([checkRead, checkExport])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true)
+  })
+  it.each(['read', 'xlsx', 'pdf'] as const)('reports daily service %s failures', async (kind) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'Нет доступа к отчёту' }), { status: 403 })))
+    const request = kind === 'read' ? reportsApi.getDailyServicePayments('token') : reportsApi.exportDailyServicePayments('token', {}, kind)
+    await expect(request).rejects.toThrow('Нет доступа к отчёту')
+  })
   it('preserves false grouping and zero offset while omitting empty filters', async () => {
     const fetchMock = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
       .mockImplementation(async () => new Response('{}', { status: 200 }))

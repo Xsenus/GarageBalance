@@ -26,7 +26,11 @@ public interface IAccrualRepository
         int offset,
         int limit,
         CancellationToken cancellationToken,
-        bool includeCanceled = false);
+        bool includeCanceled = false,
+        Guid? garageId = null,
+        Guid? incomeTypeId = null,
+        Guid? irregularPaymentId = null,
+        Guid? feeCampaignId = null);
 
     Task<AccrualPageData> GetDueDateReviewPageAsync(int offset, int limit, CancellationToken cancellationToken);
 

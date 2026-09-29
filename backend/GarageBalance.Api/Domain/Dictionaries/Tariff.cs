@@ -20,6 +20,8 @@ public sealed class Tariff : IOptimisticConcurrencyEntity
     public DateOnly EffectiveFrom { get; set; }
     public string? Comment { get; set; }
     public bool IsArchived { get; set; }
+    // Assignment revisions are immutable rate snapshots, not shared catalog tariffs.
+    public bool IsIndividual { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Guid Version { get; set; } = Guid.NewGuid();

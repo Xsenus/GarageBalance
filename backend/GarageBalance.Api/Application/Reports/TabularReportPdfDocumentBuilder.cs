@@ -10,7 +10,8 @@ internal sealed record TabularPdfColumn(
     string Header,
     float RelativeWidth = 1,
     bool AlignRight = false,
-    bool AlignCenter = false);
+    bool AlignCenter = false,
+    float? BodyFontSize = null);
 
 internal sealed record TabularPdfSection(
     string? Title,
@@ -143,7 +144,9 @@ internal static class TabularReportPdfDocumentBuilder
                     for (var index = 0; index < section.Columns.Count; index++)
                     {
                         var cell = AlignCell(rowTable.Cell().Element(BodyCell), section.Columns[index]);
-                        cell.Text(index < row.Count ? row[index] : string.Empty);
+                        var text = cell.Text(index < row.Count ? row[index] : string.Empty);
+                        if (section.Columns[index].BodyFontSize is { } fontSize)
+                            text.FontSize(fontSize);
                     }
                 });
             }
@@ -156,7 +159,9 @@ internal static class TabularReportPdfDocumentBuilder
                 var cell = table.Cell().Element(FooterCell);
                 cell = AlignCell(cell, section.Columns[index]);
 
-                cell.Text(index < section.Footer.Count ? section.Footer[index] : string.Empty).Bold();
+                var text = cell.Text(index < section.Footer.Count ? section.Footer[index] : string.Empty).Bold();
+                if (section.Columns[index].BodyFontSize is { } fontSize)
+                    text.FontSize(fontSize);
             }
         }
     }

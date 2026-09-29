@@ -13,6 +13,26 @@ namespace GarageBalance.Api.Tests.Auth;
 
 public sealed class RolePermissionServerEnforcementTests
 {
+    [Theory]
+    [InlineData(nameof(GarageTariffAssignmentsController.Get), false)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Get), true)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Create), false)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Create), true)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Update), false)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Update), true)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Archive), false)]
+    [InlineData(nameof(GarageTariffAssignmentsController.Archive), true)]
+    public async Task IndividualTariffsRequireReadAndSeparateWritePermission(string action, bool write)
+    {
+        await using var provider = CreateServices();
+        var policy = await GetEndpointPolicyAsync(provider, typeof(GarageTariffAssignmentsController), action);
+        var granted = write ? new[] { SystemPermissions.DictionariesRead, SystemPermissions.TariffsManage }
+            : new[] { SystemPermissions.DictionariesRead };
+        Assert.Equal(action == nameof(GarageTariffAssignmentsController.Get) || write,
+            (await AuthorizeAsync(provider, SystemRoles.Accountant, granted, policy)).Succeeded);
+        Assert.False((await AuthorizeAsync(provider, SystemRoles.Accountant, [], policy)).Succeeded);
+    }
+
     public static IEnumerable<object[]> TechnicalSettingsCases()
     {
         (Type Controller, string Action)[] endpoints =
@@ -83,6 +103,9 @@ public sealed class RolePermissionServerEnforcementTests
 
     public static TheoryData<string, string[], Type, string, string> ForbiddenEndpointCases => new()
     {
+        { SystemRoles.Operator, SystemPermissions.Operator, typeof(DailyServicePaymentsController), nameof(DailyServicePaymentsController.Get), SystemPermissions.ReportsRead },
+        { SystemRoles.Operator, SystemPermissions.Operator, typeof(DailyServicePaymentsController), nameof(DailyServicePaymentsController.ExportXlsx), SystemPermissions.ReportsRead },
+        { SystemRoles.Operator, SystemPermissions.Operator, typeof(DailyServicePaymentsController), nameof(DailyServicePaymentsController.ExportPdf), SystemPermissions.ReportsRead },
         {
             SystemRoles.Operator,
             SystemPermissions.Operator,
@@ -122,6 +145,9 @@ public sealed class RolePermissionServerEnforcementTests
 
     public static TheoryData<string, string[], Type, string> AllowedEndpointCases => new()
     {
+        { SystemRoles.ReportsViewer, SystemPermissions.ReportsViewer, typeof(DailyServicePaymentsController), nameof(DailyServicePaymentsController.Get) },
+        { SystemRoles.ReportsViewer, SystemPermissions.ReportsViewer, typeof(DailyServicePaymentsController), nameof(DailyServicePaymentsController.ExportXlsx) },
+        { SystemRoles.ReportsViewer, SystemPermissions.ReportsViewer, typeof(DailyServicePaymentsController), nameof(DailyServicePaymentsController.ExportPdf) },
         {
             SystemRoles.Operator,
             SystemPermissions.Operator,

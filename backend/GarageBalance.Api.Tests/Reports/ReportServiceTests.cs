@@ -3598,6 +3598,23 @@ public sealed class ReportServiceTests
     {
         using var stream = new MemoryStream(content);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        foreach (var entry in archive.Entries.Where(entry => entry.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal)))
+        {
+            var sheet = System.Xml.Linq.XDocument.Parse(ReadEntry(entry));
+            Assert.DoesNotContain(sheet.Descendants(), element => element.Name.LocalName is "mergeCell" or "mergeCells");
+            var garageHeader = sheet.Descendants().First(element => element.Name.LocalName == "row")
+                .Elements().FirstOrDefault(cell => cell.Value == "Гараж");
+            if (garageHeader is null)
+            {
+                continue;
+            }
+            var column = new string(garageHeader.Attribute("r")!.Value.TakeWhile(char.IsAsciiLetter).ToArray());
+            var garageCells = sheet.Descendants().Where(element => element.Name.LocalName == "c"
+                && new string(element.Attribute("r")!.Value.TakeWhile(char.IsAsciiLetter).ToArray()) == column
+                && element != garageHeader);
+            Assert.All(garageCells.Where(cell => cell.Value.Length is > 0 and <= 15 && cell.Value.All(char.IsAsciiDigit)),
+                cell => Assert.Null(cell.Attribute("t")));
+        }
         var styles = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/styles.xml")!));
         var worksheet = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/worksheets/sheet1.xml")!));
         Assert.Equal("2", styles.Descendants().Single(element => element.Name.LocalName == "fonts").Attribute("count")?.Value);

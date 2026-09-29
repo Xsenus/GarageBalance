@@ -12,6 +12,7 @@ public interface IChargeServiceSettingRepository
         int limit,
         DateOnly businessDate,
         CancellationToken cancellationToken);
+    // Includes the linked IncomeType so financial callers need no second lookup.
     Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
         DateOnly accountingMonth,
@@ -39,6 +40,9 @@ public interface IChargeServiceSettingRepository
     Task SetTariffVersionAsync(Guid serviceId, Guid tariffId, DateOnly effectiveFrom, CancellationToken cancellationToken, DateOnly? effectiveTo = null);
     void ReplaceTariffPeriods(Guid serviceId, IReadOnlyCollection<ChargeServiceTariffVersion> existing, IReadOnlyCollection<ChargeServiceTariffVersion> replacements);
     Task<bool> HasTariffVersionAsync(Guid tariffId, CancellationToken cancellationToken);
+    Task<bool> HasOtherServiceTariffReferenceAsync(Guid serviceId, Guid tariffId, CancellationToken cancellationToken);
+    Task<bool> HasIncompatibleIndividualTariffAsync(Guid serviceId, string calculationBase,
+        DateOnly effectiveFrom, DateOnly? effectiveTo, CancellationToken cancellationToken);
     void Add(ChargeServiceSetting setting);
 }
 

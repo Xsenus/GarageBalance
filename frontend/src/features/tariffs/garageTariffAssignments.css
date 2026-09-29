@@ -1,0 +1,19 @@
+.garage-tariff-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.garage-tariff-body { overflow: auto; min-height: 0; padding: 16px; }
+.garage-tariff-toolbar, .garage-tariff-row-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.garage-tariff-table-scroll { overflow-x: auto; margin-top: 12px; }
+.garage-tariff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.garage-tariff-table th, .garage-tariff-table td { padding: 8px; border-bottom: 1px solid var(--border-color, #dce3ee); text-align: left; vertical-align: top; }
+.garage-tariff-table thead { background: var(--surface-muted, #f5f7fb); }
+.garage-tariff-fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.garage-tariff-garages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-height: 180px; overflow: auto; }
+.garage-tariff-garages label { display: flex; align-items: center; gap: 8px; }
+.garage-tariff-tier { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 8px; align-items: end; margin: 8px 0; }
+.garage-tariff-edit-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.garage-tariff-edit-fields > .form-field { margin-top: 12px; }
+.garage-tariff-selection { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+@media (max-width: 640px) {
+  .garage-tariff-fields, .garage-tariff-garages { grid-template-columns: 1fr; }
+  .garage-tariff-tier { grid-template-columns: 1fr 1fr; }
+  .garage-tariff-toolbar { flex-wrap: wrap; }
+}

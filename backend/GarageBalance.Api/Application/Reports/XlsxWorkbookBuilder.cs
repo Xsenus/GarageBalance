@@ -169,9 +169,6 @@ internal static class XlsxWorkbookBuilder
                 BuildColumns(sheet),
                 new XElement(Spreadsheet + "sheetData", rows),
                 new XElement(Spreadsheet + "autoFilter", new XAttribute("ref", $"A1:{lastColumn}{lastDataRow}")),
-                string.IsNullOrWhiteSpace(sheet.Note)
-                    ? null
-                    : new XElement(Spreadsheet + "mergeCells", new XAttribute("count", 1), new XElement(Spreadsheet + "mergeCell", new XAttribute("ref", $"A{lastRow}:{lastColumn}{lastRow}"))),
                 new XElement(Spreadsheet + "pageMargins", new XAttribute("left", 0.3), new XAttribute("right", 0.3), new XAttribute("top", 0.5), new XAttribute("bottom", 0.5), new XAttribute("header", 0.2), new XAttribute("footer", 0.2)),
                 new XElement(Spreadsheet + "pageSetup", new XAttribute("orientation", "landscape"), new XAttribute("fitToWidth", 1), new XAttribute("fitToHeight", 0), new XAttribute("paperSize", 9))));
     }
@@ -261,6 +258,14 @@ internal static class XlsxWorkbookBuilder
     private static XElement BuildCell(int rowIndex, int columnIndex, XlsxCell cell, string header)
     {
         var reference = $"{ColumnName(columnIndex + 1)}{rowIndex}";
+        var normalizedHeader = header.Trim().ToUpperInvariant();
+        // Excel sorting requires numeric garage identifiers to be numeric cells.
+        // Lettered identifiers and values beyond Excel's 15-digit precision stay text.
+        if (rowIndex > 1 && normalizedHeader == "ГАРАЖ" && cell.Kind == XlsxCellKind.Text
+            && cell.Value.Length is > 0 and <= 15 && cell.Value.All(char.IsAsciiDigit))
+        {
+            cell = new XlsxCell(long.Parse(cell.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture), XlsxCellKind.Integer);
+        }
         if (cell.Kind is XlsxCellKind.Decimal or XlsxCellKind.Integer)
         {
             return new XElement(Spreadsheet + "c",
@@ -269,7 +274,6 @@ internal static class XlsxWorkbookBuilder
                 new XElement(Spreadsheet + "v", cell.Value));
         }
 
-        var normalizedHeader = header.Trim().ToUpperInvariant();
         var style = rowIndex == 1
             ? 1
             : IsDateColumn(normalizedHeader) || IsMonthColumn(normalizedHeader) || normalizedHeader.Contains("ГОД", StringComparison.Ordinal)
@@ -284,10 +288,10 @@ internal static class XlsxWorkbookBuilder
 
     private static XElement BuildNoteRow(int rowIndex, string note)
     {
+        // Unlike the former merged note, the text now wraps inside column A.
+        // Leave the height automatic so Excel can show the whole explanation.
         return new XElement(Spreadsheet + "row",
             new XAttribute("r", rowIndex),
-            new XAttribute("ht", 42),
-            new XAttribute("customHeight", 1),
             BuildCell(rowIndex, 0, XlsxCell.Text(note), string.Empty));
     }
 

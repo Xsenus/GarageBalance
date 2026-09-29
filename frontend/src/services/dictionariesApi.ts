@@ -584,6 +584,8 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return responsePromise
 }
 
+export { requestJson as requestDictionaryJson }
+
 function withQuery(path: string, params: Record<string, string | number | boolean | undefined>): string {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {

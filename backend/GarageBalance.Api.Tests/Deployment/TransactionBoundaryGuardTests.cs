@@ -4,12 +4,18 @@ public sealed class TransactionBoundaryGuardTests
 {
     private static readonly string[] ApprovedExplicitTransactions =
     [
+        // A bounded page and at most 31 daily aggregates share one repeatable-read
+        // snapshot. PostgreSQL report tests cover cancellation and transaction disposal.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfDailyServicePaymentReportQuery.cs: BeginTransactionAsync(",
         // One batch must commit or roll back all financial writes together. The runner
         // starts after account locks and is covered by PostgreSQL rollback/cancellation tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfExpenseBatchTransactionRunner.cs: BeginTransactionAsync(",
         // Creating a garage with its historical annual payments must be atomic and is
         // covered by PostgreSQL commit, rollback, cancellation and conflict tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfGarageOnboardingTransactionRunner.cs: BeginTransactionAsync(",
+        // At most 100 garage locks are acquired before the short atomic assignment
+        // write. PostgreSQL assignment tests verify commit, rollback and cancellation.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfGarageTariffAssignmentRepository.cs: BeginTransactionAsync(",
         // Registering the logical object, its primary replica and replication jobs is
         // one short atomic catalog operation covered by storage catalog integration tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfStorageCatalog.cs: BeginTransactionAsync(",

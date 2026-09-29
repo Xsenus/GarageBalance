@@ -270,6 +270,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     {
         var monthEnd = accountingMonth.AddMonths(1).AddDays(-1);
         var rows = await dbContext.ChargeServiceSettings.AsNoTracking()
+            .Include(setting => setting.IncomeType)
             .Include(setting => setting.Tariff)
             .Include(setting => setting.TariffVersions.Where(version =>
                 !version.IsArchived &&
@@ -600,6 +601,28 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     public Task<bool> HasTariffVersionAsync(Guid tariffId, CancellationToken cancellationToken) =>
         dbContext.ChargeServiceTariffVersions.AsNoTracking()
             .AnyAsync(item => item.TariffId == tariffId, cancellationToken);
+
+    public Task<bool> HasIncompatibleIndividualTariffAsync(Guid serviceId, string calculationBase,
+        DateOnly effectiveFrom, DateOnly? effectiveTo, CancellationToken cancellationToken)
+    {
+        if (serviceId == Guid.Empty || effectiveTo < effectiveFrom)
+            throw new ArgumentException("Проверьте услугу и период тарифной версии.");
+        return dbContext.GarageTariffAssignments.AsNoTracking().AnyAsync(item =>
+            item.ChargeServiceSettingId == serviceId && !item.IsArchived
+            && item.Tariff.CalculationBase != calculationBase
+            && (!effectiveTo.HasValue || item.EffectiveFrom <= effectiveTo.Value)
+            && (!item.EffectiveTo.HasValue || item.EffectiveTo.Value >= effectiveFrom), cancellationToken);
+    }
+
+    public Task<bool> HasOtherServiceTariffReferenceAsync(Guid serviceId, Guid tariffId, CancellationToken cancellationToken)
+    {
+        if (serviceId == Guid.Empty || tariffId == Guid.Empty)
+            throw new ArgumentException("Укажите услугу и тарифную версию.");
+        // Include archived references: another service's historical terms must
+        // remain immutable even when its current version has changed.
+        return dbContext.ChargeServiceSettings.AsNoTracking().AnyAsync(item => item.Id != serviceId
+            && (item.TariffId == tariffId || item.TariffVersions.Any(version => version.TariffId == tariffId)), cancellationToken);
+    }
 
     public void Add(ChargeServiceSetting setting) => dbContext.ChargeServiceSettings.Add(setting);
 
