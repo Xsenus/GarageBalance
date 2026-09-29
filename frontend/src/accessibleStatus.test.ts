@@ -8,6 +8,12 @@ describe('accessible dynamic messages', () => {
   const appSource = readFileSync(resolve(process.cwd(), 'src', 'App.tsx'), 'utf8')
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
+  it('keeps tariff tabs in a fixed viewport-bounded card with scrollable content and an intact invalid name border', () => {
+    expect(normalizedAppCss).toMatch(/\.detail-dialog\.contractors-service-dialog--regular \{[^}]*height: min\(720px, calc\(100dvh - 48px\)\);[^}]*display: flex;[^}]*overflow: hidden;/u)
+    expect(normalizedAppCss).toMatch(/\.contractors-service-dialog--regular > \.tariff-card-form \{[^}]*flex: 1;[^}]*min-height: 0;[^}]*flex-direction: column;/u)
+    expect(normalizedAppCss).toMatch(/\.contractors-service-dialog--regular \.tariff-card-form > :is\(\.tariff-card-main-panel, \.tariff-card-garages-panel\) \{[^}]*overflow-y: auto;/u)
+    expect(normalizedAppCss).toMatch(/\.contractors-service-dialog input\[aria-label='Наименование услуги'\]:required:invalid:not\(:disabled\) \{[^}]*border-color: #f04438;/u)
+  })
   const formFeedbackSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'formFeedback.tsx'), 'utf8')
   const authGateSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'auth', 'AuthGate.tsx'), 'utf8')
   const releasePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'releases', 'ReleasePanel.tsx'), 'utf8')
