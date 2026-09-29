@@ -16,5 +16,6 @@ public interface IRegularAccrualRecalculationService
         DateOnly accountingMonth,
         Guid? actorUserId,
         string reason,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? chargeServiceId = null);
 }

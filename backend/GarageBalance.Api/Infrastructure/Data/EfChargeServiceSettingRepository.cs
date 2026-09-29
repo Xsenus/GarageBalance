@@ -106,6 +106,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                    setting."MeterKind" AS "MeterKind",
                    setting."HasTieredTariff" AS "HasTieredTariff",
                    setting."UnitName" AS "UnitName",
+                   setting."AppliesToSelectedGarages" AS "AppliesToSelectedGarages",
+                   setting."GarageIds" AS "GarageIds",
                    setting."IsArchived" AS "IsArchived",
                    setting."Version" AS "Version",
                    direct_tariff."Id" AS "DirectTariffId",
@@ -207,6 +209,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             MeterKind = row.MeterKind,
             HasTieredTariff = row.HasTieredTariff,
             UnitName = row.UnitName,
+            AppliesToSelectedGarages = row.AppliesToSelectedGarages,
+            GarageIds = row.GarageIds,
             IsArchived = row.IsArchived,
             Version = row.Version
         };
@@ -715,6 +719,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         string? MeterKind,
         bool HasTieredTariff,
         string? UnitName,
+        bool AppliesToSelectedGarages,
+        Guid[] GarageIds,
         bool IsArchived,
         Guid Version,
         Guid? DirectTariffId,

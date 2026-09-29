@@ -274,7 +274,9 @@ public sealed record ChargeServiceSettingDto(
     bool IsArchived,
     string? TariffCalculationBase = null,
     Guid Version = default,
-    string? MeterKind = null);
+    string? MeterKind = null,
+    bool AppliesToSelectedGarages = false,
+    IReadOnlyList<Guid>? GarageIds = null);
 
 public sealed record UpsertChargeServiceSettingRequest(
     [Required, MaxLength(200)] string Name,
@@ -289,7 +291,9 @@ public sealed record UpsertChargeServiceSettingRequest(
     [MaxLength(40)] string? UnitName,
     Guid? IncomeTypeId = null,
     Guid? TariffId = null,
-    Guid? Version = null);
+    Guid? Version = null,
+    bool AppliesToSelectedGarages = false,
+    [MaxLength(100)] IReadOnlyList<Guid>? GarageIds = null);
 
 public sealed record CreateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,
@@ -337,7 +341,9 @@ public sealed record UpsertChargeServiceTariffScheduleRequest(
     [Required, MinLength(1), MaxLength(120)] IReadOnlyList<UpsertChargeServiceTariffPeriodRequest> Periods,
     bool AllowGaps,
     [MaxLength(1000)] string? ChangeReason,
-    Guid ServiceVersion);
+    Guid ServiceVersion,
+    UpsertChargeServiceSettingRequest? Service = null,
+    Guid? IncomeFundId = null);
 
 public sealed record UpdatedChargeServiceTariffScheduleDto(
     ChargeServiceSettingDto Service,

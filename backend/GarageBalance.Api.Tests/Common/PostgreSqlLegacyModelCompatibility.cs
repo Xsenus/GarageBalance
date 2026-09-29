@@ -25,7 +25,9 @@ internal static class PostgreSqlLegacyModelCompatibility
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"NegativeFundBalanceConfirmed\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"NegativeFundBalanceConfirmed\""),
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"TargetAccrualId\" uuid NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"TargetAccrualId\""),
-        ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"MeterKind\" character varying(40) NULL", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"MeterKind\"")
+        ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"MeterKind\" character varying(40) NULL", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"MeterKind\""),
+        ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"AppliesToSelectedGarages\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"AppliesToSelectedGarages\""),
+        ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"GarageIds\" uuid[] NOT NULL DEFAULT ARRAY[]::uuid[]", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"GarageIds\"")
     ];
 
     public static async Task AddCurrentVersionColumnsAsync(GarageBalanceDbContext context)

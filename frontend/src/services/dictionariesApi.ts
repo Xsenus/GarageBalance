@@ -192,6 +192,8 @@ export type ChargeServiceSettingDto = {
   isArchived: boolean
   tariffCalculationBase?: string | null
   meterKind?: string | null
+  appliesToSelectedGarages?: boolean
+  garageIds?: string[]
   version: string
 }
 
@@ -367,6 +369,8 @@ export type UpsertChargeServiceSettingRequest = {
   hasTieredTariff: boolean
   unitName?: string | null
   version?: string
+  appliesToSelectedGarages?: boolean
+  garageIds?: string[]
 }
 
 export type CreateChargeServiceWithTariffRequest = {
@@ -410,6 +414,8 @@ export type ChargeServiceTariffPeriodDto = {
 }
 
 export type UpsertChargeServiceTariffScheduleRequest = {
+  service?: UpsertChargeServiceSettingRequest
+  incomeFundId?: string | null
   periods: Array<{
     tariffId?: string | null
     effectiveFrom?: string | null

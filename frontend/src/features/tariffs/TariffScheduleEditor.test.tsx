@@ -5,6 +5,40 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
 import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
+import type { DictionaryClient, GarageDto, TariffDto } from '../../services/dictionariesApi'
+
+it('saves garage scope and tariff periods together and keeps keyboard-accessible tabs in one card', async () => {
+  const savedPeriods = [{ tariffId: 'tariff-1', effectiveFrom: '2026-01-01', effectiveTo: null, rate: 350, tariffVersion: 'tariff-version' }]
+  const save = vi.fn().mockResolvedValue(savedPeriods)
+  const updateWithTariff = vi.fn()
+  const client = { getGaragesPage: vi.fn(async () => ({ items: [{ id: 'garage-85', number: '85' } as GarageDto], totalCount: 1, offset: 0, limit: 10 })) } as unknown as DictionaryClient
+  render(<AddServicePrototypeDialog accessToken="token" dictionaryClient={client}
+    initialSetting={{ id: 'service-1', name: 'Охрана', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1, paymentDueDay: 20,
+      paymentDueMonth: null, overdueGraceDays: 0, incomeTypeId: 'income-1', tariffId: 'tariff-1', isMetered: false, hasTieredTariff: false,
+      unitName: 'руб.', isArchived: false, version: 'service-version' }}
+    funds={[{ id: 'fund-1', name: 'Охрана', allowOperations: true }]}
+    incomeTypes={[{ id: 'income-1', name: 'Охрана', code: 'security', isArchived: false, destinationFundId: 'fund-1' }]}
+    tariffs={[{ id: 'tariff-1', calculationBase: 'fixed', rate: 350, effectiveFrom: '2026-01-01', version: 'tariff-version' } as TariffDto]}
+    tariffSchedule={savedPeriods} isSaving={false} onClose={vi.fn()} onUpdateTariffSchedule={save} onUpdateWithTariff={updateWithTariff} />)
+  const tariffTab = screen.getByRole('tab', { name: 'Тариф и периоды' })
+  tariffTab.focus()
+  fireEvent.keyDown(tariffTab, { key: 'ArrowRight' })
+  expect(screen.getByRole('tab', { name: 'Гаражи' })).toHaveFocus()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Только для выбранных гаражей' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+  expect(screen.getByRole('alert')).toHaveTextContent('Выберите хотя бы один гараж')
+  expect(save).not.toHaveBeenCalled()
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Выбрать гараж 85' }))
+  fireEvent.keyDown(screen.getByRole('tab', { name: 'Гаражи (1)' }), { key: 'Home' })
+  expect(tariffTab).toHaveFocus()
+  fireEvent.change(screen.getByLabelText('День оплаты'), { target: { value: '27' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+  await waitFor(() => expect(save).toHaveBeenCalledOnce())
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ serviceVersion: 'service-version', incomeFundId: 'fund-1',
+    service: expect.objectContaining({ appliesToSelectedGarages: true, garageIds: ['garage-85'], paymentDueDay: 27 }), periods: savedPeriods }))
+  expect(updateWithTariff).not.toHaveBeenCalled()
+  expect(screen.getAllByRole('dialog')).toHaveLength(1)
+})
 
 describe('removeTariffSchedulePeriod', () => {
   const periods = [
@@ -125,7 +159,7 @@ describe('редактор тарифной сетки услуги', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Регулярные платежи' }))
 
-    const form = screen.getByLabelText('Наименование услуги').closest('form')
+    const form = screen.getByRole('tabpanel', { name: 'Тариф и периоды' })
     expect(form).toHaveClass('contractors-modal-form--service-edit')
     expect(screen.getByRole('heading', { name: 'Настройки услуги' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Начальный тариф' })).toBeInTheDocument()
@@ -172,7 +206,7 @@ describe('редактор тарифной сетки услуги', () => {
     expect(screen.getByRole('heading', { name: 'Изменение тарифов по периодам' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Тарифная сетка услуги' })).toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Регулярные платежи' })).not.toBeInTheDocument()
-    const form = screen.getByLabelText('Наименование услуги').closest('form')
+    const form = screen.getByRole('tabpanel', { name: 'Тариф и периоды' })
     const settingsColumn = screen.getByRole('heading', { name: 'Настройки услуги' }).closest('.contractors-service-settings-column')
     const scheduleEditor = screen.getByRole('heading', { name: 'Изменение тарифов по периодам' }).closest('.tariff-schedule-editor')
     expect(form).toHaveClass('contractors-modal-form--service-edit')
@@ -182,7 +216,7 @@ describe('редактор тарифной сетки услуги', () => {
     expect(settingsColumn).toContainElement(screen.getByRole('checkbox', { name: 'По счетчику' }))
     expect(settingsColumn).not.toContainElement(scheduleEditor)
     expect(scheduleEditor?.parentElement).toBe(form)
-    fireEvent.click(screen.getByRole('button', { name: 'Сохранить тарифную сетку' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
 
     await waitFor(() => expect(onUpdateTariffSchedule).toHaveBeenCalledWith(expect.objectContaining({
       allowGaps: true,
@@ -240,12 +274,13 @@ describe('редактор тарифной сетки услуги', () => {
     const rateInputs = screen.getAllByLabelText('Тариф регулярной услуги')
     await user.clear(rateInputs[1])
     await user.type(rateInputs[1], '150')
-    await user.click(screen.getByRole('button', { name: 'Сохранить тарифную сетку' }))
+    await user.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
     expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
-
-    await waitFor(() => expect(onUpdateWithTariff).toHaveBeenCalledWith(expect.objectContaining({ rate: 101 })))
+    expect(onUpdateTariffSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      periods: [expect.objectContaining({ rate: 101 }), expect.objectContaining({ rate: 150 })],
+    }))
+    expect(onUpdateWithTariff).not.toHaveBeenCalled()
   })
 
   it('не отправляет повторный запрос при двух нажатиях до завершения сохранения', async () => {
@@ -281,7 +316,7 @@ describe('редактор тарифной сетки услуги', () => {
       onUpdateTariffSchedule={onUpdateTariffSchedule}
     />)
 
-    const saveButton = screen.getByRole('button', { name: 'Сохранить тарифную сетку' })
+    const saveButton = screen.getByRole('button', { name: 'Сохранить', exact: true })
     await act(async () => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -327,7 +362,7 @@ describe('редактор тарифной сетки услуги', () => {
       onUpdateTariffSchedule={onUpdateTariffSchedule}
     />)
 
-    const saveButton = screen.getByRole('button', { name: 'Сохранить тарифную сетку' })
+    const saveButton = screen.getByRole('button', { name: 'Сохранить', exact: true })
     fireEvent.click(saveButton)
     expect(await screen.findByText('Не удалось сохранить тарифную сетку.')).toBeInTheDocument()
     expect(saveButton).toBeEnabled()
@@ -367,7 +402,7 @@ describe('редактор тарифной сетки услуги', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Добавить период тарифа' }))
     await user.type(screen.getByLabelText('Начальная дата тарифа'), '01.07.2026')
-    await user.click(screen.getByRole('button', { name: 'Сохранить тарифную сетку' }))
+    await user.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
 
     await waitFor(() => expect(onUpdateTariffSchedule).toHaveBeenCalledWith(expect.objectContaining({
       periods: expect.arrayContaining([
@@ -401,7 +436,7 @@ describe('редактор тарифной сетки услуги', () => {
       onUpdateTariffSchedule={vi.fn()}
     />)
 
-    const form = screen.getByLabelText('Наименование услуги').closest('form')
+    const form = screen.getByRole('tabpanel', { name: 'Тариф и периоды' })
     expect(screen.getByRole('heading', { name: 'Изменение тарифов по периодам' })).toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Разрешить периоды без тарифа' })).not.toBeInTheDocument()
 

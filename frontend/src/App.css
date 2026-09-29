@@ -2248,6 +2248,62 @@ h1 {
   gap: 14px;
 }
 
+.tariff-card-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #dce3ee;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.tariff-card-tabs [aria-selected="true"] {
+  color: #1558e8;
+  background: #eef4ff;
+}
+
+.tariff-card-form > .tariff-card-main-panel,
+.tariff-card-form > .tariff-card-garages-panel,
+.tariff-card-form > .form-error,
+.tariff-card-form > .detail-dialog-actions {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.tariff-card-form > [hidden] {
+  display: none;
+}
+
+.tariff-garage-scope {
+  display: grid;
+  gap: 12px;
+}
+
+.tariff-garage-scope input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  accent-color: #1558e8;
+  cursor: pointer;
+}
+
+.tariff-garage-scope-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.tariff-garage-scope-table {
+  max-height: 270px;
+  overflow: auto;
+}
+
+.tariff-garage-scope-table th:first-child {
+  width: 64px;
+}
+
 .contractors-tariff-dialog .contractors-service-period-grid--catalogs {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

@@ -835,7 +835,8 @@ public sealed class FinanceService(
             return FinanceResult<GarageAnnualPaymentsDto>.Failure("garage_not_found", "Гараж для годовых платежей не найден.");
         }
 
-        var definitions = await GetAnnualServiceDefinitionsAsync(year, cancellationToken);
+        var definitions = (await GetAnnualServiceDefinitionsAsync(year, cancellationToken))
+            .Where(item => item.Setting.AppliesToGarage(garageId)).ToArray();
         var yearFrom = new DateOnly(year, 1, 1);
         var yearTo = new DateOnly(year, 12, 1);
         var individualPeriods = (await garageTariffAssignmentQuery.GetForGaragePeriodAsync(
@@ -952,7 +953,7 @@ public sealed class FinanceService(
         var definitions = await GetAnnualServiceDefinitionsAsync(year, cancellationToken);
         var currentMonth = GetCurrentAccountingMonth();
         var dueDefinitions = definitions
-            .Where(item => item.AccountingMonth <= currentMonth)
+            .Where(item => item.AccountingMonth <= currentMonth && item.Setting.AppliesToGarage(garageId))
             .ToArray();
         if (dueDefinitions.Length == 0)
         {
@@ -1096,7 +1097,7 @@ public sealed class FinanceService(
         };
         var definitions = await GetAnnualServiceDefinitionsAsync(accountingYear, cancellationToken);
         var items = definitions
-            .Where(definition => definition.AccountingMonth <= currentMonth && definition.Tariff is not null)
+            .Where(definition => definition.AccountingMonth <= currentMonth && definition.Tariff is not null && definition.Setting.AppliesToGarage(garage.Id))
             .Select(definition => new
             {
                 Definition = definition,
@@ -1162,6 +1163,7 @@ public sealed class FinanceService(
             .Where(setting => setting.IncomeTypeId.HasValue)
             .GroupBy(setting => setting.IncomeTypeId!.Value)
             .Select(group => group.First())
+            .Where(setting => setting.AppliesToGarage(garage.Id))
             .ToArray();
         var incomeTypes = settings.Select(setting => setting.IncomeType)
             .OfType<IncomeType>().Where(incomeType => !incomeType.IsArchived).DistinctBy(incomeType => incomeType.Id)
@@ -4870,6 +4872,8 @@ public sealed class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
+        if (dueDateSetting?.AppliesToGarage(garage.Id) == false)
+            return FinanceResult<AccrualDto>.Failure("tariff_not_applicable", "Тариф не действует для выбранного гаража.");
         if (source == AccrualSources.Regular &&
             await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
         {
@@ -5074,6 +5078,9 @@ public sealed class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
+        if (dueDateSetting?.AppliesToGarage(garage.Id) == false &&
+            (accrual.GarageId != garage.Id || accrual.IncomeTypeId != incomeType.Id || accrual.Source != source))
+            return FinanceResult<AccrualDto>.Failure("tariff_not_applicable", "Тариф не действует для выбранного гаража.");
         var duplicateExists = !isIrregular && source == AccrualSources.Regular && await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 garage.Id,
@@ -5411,7 +5418,7 @@ public sealed class FinanceService(
                 month,
                 AccrualSources.Regular,
                 cancellationToken);
-        if (existingAccrualCount > 0)
+        if (existingAccrualCount > 0 && matchingSetting?.AppliesToSelectedGarages != true)
         {
             var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
             if (activeGarageCount > 0 && existingAccrualCount >= activeGarageCount)
@@ -5422,7 +5429,9 @@ public sealed class FinanceService(
                     $"Регулярные начисления {periodLabel} уже сформированы для всех активных гаражей ({activeGarageCount}).");
             }
         }
-        var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
+        var garages = (matchingSetting?.AppliesToSelectedGarages == true
+            ? await garageRepository.GetActiveByIdsAsync(matchingSetting.GarageIds, cancellationToken)
+            : await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)).ToArray();
         await using var garageLocks = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             garages
                 .Select(garage => new AccrualPaymentAllocationKey(garage.Id, incomeType.Id))
@@ -5441,12 +5450,12 @@ public sealed class FinanceService(
                 month,
                 AccrualSources.Regular,
                 cancellationToken);
-        if (garages.Count > 0 && existingGarageIds.Count >= garages.Count)
+        if (garages.Length > 0 && garages.All(garage => existingGarageIds.Contains(garage.Id)))
         {
             var periodLabel = accountingYear.HasValue ? $"за {accountingYear.Value} год" : $"за {month:MM.yyyy}";
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
                 "regular_accruals_empty",
-                $"Регулярные начисления {periodLabel} уже сформированы для всех активных гаражей ({garages.Count}).");
+                $"Регулярные начисления {periodLabel} уже сформированы для всех выбранных гаражей ({garages.Length}).");
         }
         var pendingGarageIds = garages
             .Where(garage =>
@@ -5830,8 +5839,16 @@ public sealed class FinanceService(
         DateOnly accountingMonth,
         Guid? actorUserId,
         string reason,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? chargeServiceId = null)
     {
+        var setting = chargeServiceId.HasValue
+            ? await chargeServiceSettingRepository.FindActiveAsync(chargeServiceId.Value, cancellationToken)
+            : null;
+        if (chargeServiceId.HasValue && setting is null)
+        {
+            return FinanceResult<int>.Failure("charge_service_not_found", "Услуга для перерасчёта не найдена.");
+        }
         var month = MonthPeriod.Normalize(accountingMonth);
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [new AccrualPaymentAllocationKey(Guid.Empty, incomeTypeId)],
@@ -5847,7 +5864,7 @@ public sealed class FinanceService(
             accruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
         var canceledCount = 0;
-        foreach (var accrual in accruals.Where(accrual => !paidIds.Contains(accrual.Id)))
+        foreach (var accrual in accruals.Where(accrual => !paidIds.Contains(accrual.Id) && (setting is null || setting.AppliesToGarage(accrual.GarageId))))
         {
             accrual.IsCanceled = true;
             accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
@@ -5948,6 +5965,13 @@ public sealed class FinanceService(
                     "paid",
                     "Есть активное распределение платежа: сумма и снимок сохранены без изменений.",
                     true));
+                continue;
+            }
+
+            if (setting?.AppliesToGarage(accrual.GarageId) == false)
+            {
+                rows.Add(new RegularAccrualRecalculationRowDto(accrual.Id, accrual.Garage.Number,
+                    accrual.Amount, accrual.Amount, 0m, "unchanged", "Тариф не действует для этого гаража. Историческое начисление сохранено.", false));
                 continue;
             }
 
@@ -7381,7 +7405,7 @@ public sealed class FinanceService(
     private static decimal? CalculateAnnualPlannedAmount(Garage garage, AnnualServiceDefinition? definition,
         IEnumerable<GarageTariffAssignment>? individualPeriods = null)
     {
-        if (definition?.Tariff is null)
+        if (definition?.Tariff is null || !definition.Setting.AppliesToGarage(garage.Id))
         {
             return null;
         }
@@ -7870,6 +7894,8 @@ public sealed class FinanceService(
         DateOnly month, ChargeServiceSetting? setting, Tariff generalTariff,
         IReadOnlyList<RegularAccrualSegmentDefinition> general, IEnumerable<GarageTariffAssignment> assignments)
     {
+        // A restricted service uses its own tariff, not the legacy per-garage overrides.
+        if (setting?.AppliesToSelectedGarages == true) return general;
         var end = MonthPeriod.Normalize(month).AddMonths(1).AddDays(-1);
         var start = MonthPeriod.Normalize(month);
         var individual = assignments.Where(assignment => assignment.EffectiveFrom <= end
@@ -8403,7 +8429,7 @@ public sealed class FinanceService(
         {
             var incomeType = setting.IncomeType;
             var tariff = SelectTariffForMonth(setting, reading.AccountingMonth);
-            if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue)
+            if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue || !setting.AppliesToGarage(garage.Id))
             {
                 continue;
             }

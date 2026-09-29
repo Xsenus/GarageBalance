@@ -22,6 +22,10 @@ public sealed class ChargeServiceSetting : IOptimisticConcurrencyEntity
     public string? MeterKind { get; set; }
     public bool HasTieredTariff { get; set; }
     public string? UnitName { get; set; }
+    public bool AppliesToSelectedGarages { get; set; }
+    public Guid[] GarageIds { get; set; } = [];
+
+    public bool AppliesToGarage(Guid garageId) => !AppliesToSelectedGarages || GarageIds.Contains(garageId);
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

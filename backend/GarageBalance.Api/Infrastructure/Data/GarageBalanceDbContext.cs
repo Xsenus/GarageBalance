@@ -588,6 +588,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.UnitName).HasMaxLength(40);
             entity.Property(item => item.MeterKind).HasMaxLength(40);
+            entity.Property(item => item.AppliesToSelectedGarages).HasDefaultValue(false);
+            entity.Property(item => item.GarageIds)
+                .HasColumnType(Database.IsNpgsql() ? "uuid[]" : "TEXT")
+                .HasDefaultValueSql(Database.IsNpgsql() ? "ARRAY[]::uuid[]" : "'[]'");
             entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.IsRegular);

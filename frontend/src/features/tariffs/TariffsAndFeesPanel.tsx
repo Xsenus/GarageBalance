@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent } from 'react'
-import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, UsersRound, X } from 'lucide-react'
-import { GarageTariffAssignmentsDialog } from './GarageTariffAssignmentsDialog'
+import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { TariffGarageScope } from './TariffGarageScope'
+import { sameTariffScheduleTerms, sameTariffServiceSettings } from './tariffCardConcurrency'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, StaffDepartmentSalaryFundDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -844,7 +845,6 @@ function getFeeCampaignDisplayRank(campaign: FeeCampaignDto, today: string) {
 export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient, settingsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; fundsClient: FundsClient; settingsClient: ApplicationSettingsClient }) {
   const [actionCommentsRequired] = useActionCommentSettings()
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
-  const [individualTariffTarget, setIndividualTariffTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
   const [tariffPageSize, setTariffPageSize] = useState(25)
@@ -1467,6 +1467,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       incomeTypeId: isRegular ? setting.incomeTypeId ?? null : null,
       tariffId: isRegular ? linkedTariffId ?? null : null,
       version: setting.version,
+      appliesToSelectedGarages: setting.appliesToSelectedGarages ?? false,
+      garageIds: setting.garageIds ?? [],
     }
   }
 
@@ -1585,6 +1587,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       return {
         service: {
           name: currentSetting.name,
+          appliesToSelectedGarages: currentSetting.appliesToSelectedGarages ?? false,
+          garageIds: currentSetting.garageIds ?? [],
           isRegular: currentSetting.isRegular,
           periodicityMonths: currentSetting.periodicityMonths,
           accrualStartMonth: currentSetting.accrualStartMonth,
@@ -2288,17 +2292,26 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     const target = chargeServiceEditTarget
     let version = target.version
+    let periods = request.periods
     for (let attempt = 0; ; attempt += 1) {
       try {
-        const saved = await dictionaryClient.updateChargeServiceTariffSchedule(auth.accessToken, target.id, { ...request, serviceVersion: version })
+        const saved = await dictionaryClient.updateChargeServiceTariffSchedule(auth.accessToken, target.id, { ...request, periods, serviceVersion: version })
         applySavedServiceTariff(saved)
         setChargeServiceEditTarget(saved.service)
         setChargeServiceTariffSchedule(saved.periods)
+        if (request.service) closeChargeServiceEditor()
         return saved.periods
       } catch (caught) {
         if (attempt > 0 || !isConcurrentWriteConflict(caught)) throw caught
-        const [latestTarget] = await reloadServiceTariff(target.id)
+        const [latestTarget, latestTariff] = await reloadServiceTariff(target.id)
         if (!latestTarget) throw caught
+        if (request.service && !sameTariffServiceSettings(target, latestTarget)) throw caught
+        const latestPeriods = await dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, target.id)
+        if (!sameTariffScheduleTerms(chargeServiceTariffSchedule ?? [], latestPeriods)) throw caught
+        const baselineTariff = backendTariffs.find((item) => item.id === latestTariff?.id)
+        if (latestTariff && baselineTariff && (latestTariff.rate !== baselineTariff.rate || latestTariff.calculationBase !== baselineTariff.calculationBase)) throw caught
+        periods = periods.map((period) => ({ ...period, tariffVersion: latestPeriods.find((item) => item.tariffId === period.tariffId)?.tariffVersion
+          ?? (period.tariffId === latestTariff?.id ? latestTariff?.version : period.tariffVersion) }))
         version = latestTarget.version
       }
     }
@@ -3094,7 +3107,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     <span className="tariffs-row-actions">
                       {row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted ? (
                         <>
-                          {serviceSetting.isRegular && serviceSetting.tariffId ? <button className="icon-button tariffs-row-action-button" type="button" aria-label={`Индивидуальные тарифы услуги ${serviceSetting.name}`} title="Индивидуальные тарифы" disabled={isRowDisabled || tariffsLoading} onClick={() => setIndividualTariffTarget(serviceSetting)}><UsersRound size={16} aria-hidden="true" /></button> : null}
                           <button
                             className="icon-button tariffs-row-action-button"
                             type="button"
@@ -3807,6 +3819,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
       {modal === 'service' ? (
         <AddServicePrototypeDialog
+          accessToken={auth.accessToken}
+          dictionaryClient={dictionaryClient}
           isSaving={tariffSavingRowId === 'new-service'}
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
@@ -3818,12 +3832,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         />
       ) : null}
       {chargeServiceEditTarget ? (
-        <div hidden={Boolean(individualTariffTarget)}>
         <AddServicePrototypeDialog
+          accessToken={auth.accessToken}
+          dictionaryClient={dictionaryClient}
           key={`${chargeServiceEditTarget.id}-${chargeServiceTariffScheduleLoading ? 'loading' : 'ready'}`}
           initialSetting={chargeServiceEditTarget}
-          suspended={Boolean(individualTariffTarget)}
-          onOpenIndividualTariffs={chargeServiceEditTarget.isRegular && chargeServiceEditTarget.tariffId ? () => setIndividualTariffTarget(chargeServiceEditTarget) : undefined}
           tariffSchedule={chargeServiceTariffSchedule}
           tariffScheduleLoading={chargeServiceTariffScheduleLoading}
           tariffScheduleError={chargeServiceTariffScheduleError}
@@ -3839,13 +3852,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           title="Изменить услугу"
         />
-        </div>
       ) : null}
-      {individualTariffTarget ? <GarageTariffAssignmentsDialog key={individualTariffTarget.id} accessToken={auth.accessToken} service={individualTariffTarget}
-        rate={backendTariffs.find((item) => item.id === individualTariffTarget.tariffId)?.rate ?? 0}
-        calculationBase={backendTariffs.find((item) => item.id === individualTariffTarget.tariffId)?.calculationBase ?? 'fixed'}
-        initialTiers={getElectricityTariffTiers(backendTariffs.find((item) => item.id === individualTariffTarget.tariffId) ?? null)}
-        dictionaryClient={dictionaryClient} canWrite={canManageTariffs} onClose={() => setIndividualTariffTarget(null)} /> : null}
       {modal === 'fee' ? (
         <AddFeePrototypeDialog
           activeGarageCount={feeCampaignActiveGarageCount}
@@ -3874,6 +3881,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 }
 
 export function AddServicePrototypeDialog({
+  accessToken,
+  dictionaryClient,
   funds,
   initialSetting,
   isSaving,
@@ -3885,7 +3894,6 @@ export function AddServicePrototypeDialog({
   onSave,
   onUpdateWithTariff,
   onUpdateTariffSchedule,
-  onOpenIndividualTariffs,
   suspended = false,
   regularOnly = false,
   submitLabel = 'Сохранить',
@@ -3896,6 +3904,8 @@ export function AddServicePrototypeDialog({
   onRetryTariffSchedule,
   title = 'Добавить услугу',
 }: {
+  accessToken?: string
+  dictionaryClient?: DictionaryClient
   initialSetting?: ChargeServiceSettingDto
   isSaving: boolean
   funds: FundOptionDto[]
@@ -3907,7 +3917,6 @@ export function AddServicePrototypeDialog({
   onSave?: (request: UpsertChargeServiceSettingRequest) => Promise<void>
   onUpdateWithTariff?: (request: UpdateChargeServiceWithTariffRequest) => Promise<void>
   onUpdateTariffSchedule?: (request: UpsertChargeServiceTariffScheduleRequest) => Promise<ChargeServiceTariffPeriodDto[]>
-  onOpenIndividualTariffs?: () => void
   suspended?: boolean
   regularOnly?: boolean
   submitLabel?: string
@@ -3922,6 +3931,13 @@ export function AddServicePrototypeDialog({
   const initialTariffId = initialSetting?.tariffId ?? ''
   const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId) ?? null
   const [name, setName] = useState(initialSetting?.name ?? '')
+  const [activeTab, setActiveTab] = useState<'tariff' | 'garages'>('tariff')
+  const [restricted, setRestricted] = useState(initialSetting?.appliesToSelectedGarages ?? false)
+  const [selectedGarageIds, setSelectedGarageIds] = useState(initialSetting?.garageIds ?? [])
+  const tariffTabRef = useRef<HTMLButtonElement>(null)
+  const garageTabRef = useRef<HTMLButtonElement>(null)
+  const submitInFlightRef = useRef(false)
+  const [submitting, setSubmitting] = useState(false)
   const [isRegular, setIsRegular] = useState(initialSetting?.isRegular ?? regularOnly)
   const [incomeFundId, setIncomeFundId] = useState(() => (
     incomeTypes.find((incomeType) => incomeType.id === initialIncomeTypeId)?.destinationFundId
@@ -3966,15 +3982,26 @@ export function AddServicePrototypeDialog({
     && (effectiveCalculationBase === 'meter_water' || effectiveCalculationBase === 'meter_electricity')
   const isMonthly = periodicityMonths === '1'
   const canChooseRegularity = !regularOnly && !initialSetting
-  const dialogBusy = isSaving || scheduleSaving
+  const dialogBusy = isSaving || scheduleSaving || submitting
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(!suspended)
   useEscapeKey(!dialogBusy && !suspended, onClose)
 
-  async function saveTariffSchedule() {
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const tab = event.key === 'Home' ? 'tariff' : event.key === 'End' ? 'garages' : activeTab === 'tariff' ? 'garages' : 'tariff'
+    setActiveTab(tab)
+    ;(tab === 'tariff' ? tariffTabRef : garageTabRef).current?.focus()
+  }
+
+  async function saveTariffSchedule(service?: UpsertChargeServiceSettingRequest, incomeFundId?: string) {
     if (!onUpdateTariffSchedule || !initialSetting || scheduleSaveInFlightRef.current) {
       return
     }
+
+    setActiveTab('tariff')
+    setError(null)
 
     if (scheduleDraft.length === 0) {
       setScheduleMessage('Добавьте хотя бы один период тарифа.')
@@ -4009,6 +4036,8 @@ export function AddServicePrototypeDialog({
     setScheduleMessage(null)
     try {
       const saved = await onUpdateTariffSchedule({
+        service,
+        incomeFundId,
         periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText }) => ({
           tariffId: tariffId || null,
           tariffVersion: tariffVersion || null,
@@ -4023,7 +4052,7 @@ export function AddServicePrototypeDialog({
       setScheduleDraft(saved.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
       setScheduleMessage('Тарифная сетка сохранена.')
     } catch (caught) {
-      setScheduleMessage(getErrorMessage(caught, 'Не удалось сохранить тарифную сетку.'))
+      setError(getErrorMessage(caught, 'Не удалось сохранить тарифную сетку.'))
     } finally {
       scheduleSaveInFlightRef.current = false
       setScheduleSaving(false)
@@ -4050,6 +4079,7 @@ export function AddServicePrototypeDialog({
 
   async function submitService(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (dialogBusy || submitInFlightRef.current) return
     const trimmedName = name.trim()
     const parsedPeriodicity = Number(periodicityMonths)
     const parsedDueDay = Number(paymentDueDay)
@@ -4121,6 +4151,8 @@ export function AddServicePrototypeDialog({
       }
 
       setError(null)
+      submitInFlightRef.current = true
+      setSubmitting(true)
       try {
         await onSaveIrregular({
           name: trimmedName,
@@ -4129,13 +4161,25 @@ export function AddServicePrototypeDialog({
         })
       } catch (caught) {
         setError(getErrorMessage(caught, 'Не удалось сохранить услугу.'))
+      } finally {
+        submitInFlightRef.current = false
+        setSubmitting(false)
       }
       return
     }
 
     setError(null)
+    submitInFlightRef.current = true
+    setSubmitting(true)
     try {
+      if (isRegular && restricted && selectedGarageIds.length === 0) {
+        setActiveTab('garages')
+        setError('Выберите хотя бы один гараж для тарифа.')
+        return
+      }
       const serviceRequest: UpsertChargeServiceSettingRequest = {
+        appliesToSelectedGarages: isRegular && restricted,
+        garageIds: isRegular && restricted ? selectedGarageIds : [],
         name: trimmedName,
         isRegular,
         periodicityMonths: isRegular ? parsedPeriodicity : null,
@@ -4172,6 +4216,10 @@ export function AddServicePrototypeDialog({
         const calculationChanged = selectedTariff?.calculationBase !== effectiveCalculationBase
         const tiersChanged = JSON.stringify(getElectricityTariffTiers(selectedTariff)) !== JSON.stringify(tariffTiers)
         const tariffStructureChanged = modeChanged || calculationChanged || (isTiered && tiersChanged)
+        if (!tariffStructureChanged && !isTiered && onUpdateTariffSchedule) {
+          await saveTariffSchedule(serviceRequest, incomeFundId)
+          return
+        }
         await onUpdateWithTariff({
           service: serviceRequest,
           rate: effectiveRate!,
@@ -4197,6 +4245,9 @@ export function AddServicePrototypeDialog({
       }
     } catch (caught) {
       setError(getErrorMessage(caught, 'Не удалось сохранить услугу.'))
+    } finally {
+      submitInFlightRef.current = false
+      setSubmitting(false)
     }
   }
 
@@ -4221,19 +4272,23 @@ export function AddServicePrototypeDialog({
         <div className="detail-dialog-header">
           <h3 id="contractor-service-title">{title}</h3>
           <div className="contractors-service-header-actions">
-            {onOpenIndividualTariffs ? <button className="secondary-button" type="button" disabled={dialogBusy || tariffScheduleLoading || Boolean(tariffScheduleError)} onClick={onOpenIndividualTariffs}><UsersRound size={16} aria-hidden="true" />Индивидуальные тарифы</button> : null}
             <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose} disabled={dialogBusy}>
               <X size={18} />
             </button>
           </div>
         </div>
 
+        {isRegular ? <div className="tariff-card-tabs" role="tablist" aria-label="Настройки тарифа">
+          <button ref={tariffTabRef} type="button" role="tab" id="tariff-card-tab" tabIndex={activeTab === 'tariff' ? 0 : -1} aria-selected={activeTab === 'tariff'} aria-controls="tariff-card-main" className="ghost-button" onKeyDown={handleTabKeyDown} onClick={() => setActiveTab('tariff')}>Тариф и периоды</button>
+          <button ref={garageTabRef} type="button" role="tab" id="tariff-garages-tab" tabIndex={activeTab === 'garages' ? 0 : -1} aria-selected={activeTab === 'garages'} aria-controls="tariff-card-garages" className="ghost-button" onKeyDown={handleTabKeyDown} onClick={() => setActiveTab('garages')}>Гаражи{restricted ? ` (${selectedGarageIds.length})` : ''}</button>
+        </div> : null}
         {tariffScheduleLoading || tariffScheduleError ? <>
           {tariffScheduleLoading ? <TableLoadingState label="Загрузка тарифной сетки" rows={4} columns={2} />
             : <AsyncErrorState message={tariffScheduleError} onRetry={onRetryTariffSchedule ?? onClose} retryLabel={onRetryTariffSchedule ? 'Повторить загрузку' : 'Закрыть'} />}
           <div className="detail-dialog-actions"><button className="ghost-button" type="button" onClick={onClose} disabled={dialogBusy}>Отмена</button></div>
-        </> : <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} noValidate onSubmit={submitService}>
+        </> : <form className="dictionary-modal-form contractors-modal-form tariff-card-form" noValidate onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
+          <div id="tariff-card-main" role={isRegular ? 'tabpanel' : undefined} aria-labelledby={isRegular ? 'tariff-card-tab' : undefined} hidden={isRegular && activeTab !== 'tariff'} className={`tariff-card-main-panel dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`}>
           {isRegular ? (
             <>
               <div className="contractors-service-settings-column">
@@ -4423,12 +4478,6 @@ export function AddServicePrototypeDialog({
                       ))}
                     </div>
                   {scheduleMessage ? <p className="tariff-schedule-message" role="status">{scheduleMessage}</p> : null}
-                  <div className="tariff-schedule-footer tariff-schedule-footer--actions-only">
-                    <button className="secondary-button" type="button" disabled={dialogBusy || tariffScheduleLoading} onClick={() => void saveTariffSchedule()}>
-                      <Save size={16} aria-hidden="true" />
-                      <span>{scheduleSaving ? 'Сохраняем…' : 'Сохранить тарифную сетку'}</span>
-                    </button>
-                  </div>
                 </section>
               ) : null}
               {!initialSetting && !isTiered ? (
@@ -4585,6 +4634,11 @@ export function AddServicePrototypeDialog({
             </>
           )}
 
+          </div>
+          {isRegular ? <div id="tariff-card-garages" role="tabpanel" aria-labelledby="tariff-garages-tab" hidden={activeTab !== 'garages'} className="tariff-card-garages-panel">
+            <TariffGarageScope accessToken={accessToken} dictionaryClient={dictionaryClient} restricted={restricted} garageIds={selectedGarageIds} disabled={dialogBusy}
+              onRestrictedChange={setRestricted} onSelectionChange={setSelectedGarageIds} />
+          </div> : null}
           <div className="detail-dialog-actions contractors-service-dialog-actions">
             {canChooseRegularity ? (
               <label className="contractors-service-regular-toggle contractors-service-regular-toggle--in-actions">

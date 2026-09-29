@@ -44,9 +44,10 @@ public sealed class PostgreSqlRegulatedTariffCatalogMigrationTests
             "20260907132111_AllowGeneratedAccrualCommentExpansion");
         await using (var context = database.CreateContext())
         {
-            var waterService = await context.ChargeServiceSettings
-                .Include(item => item.IncomeType)
-                .SingleAsync(item => item.IncomeType!.Code == "water");
+            var historicalWaterServiceId = await context.ChargeServiceSettings
+                .Where(item => item.IncomeType!.Code == "water")
+                .Select(item => item.Id)
+                .SingleAsync();
             var oldTariff = new Tariff
             {
                 Id = Guid.Parse("b0010000-0000-4000-8000-000000000001"),
@@ -62,7 +63,7 @@ public sealed class PostgreSqlRegulatedTariffCatalogMigrationTests
                 INSERT INTO tariffs ("Id", "Name", "CalculationBase", "Rate", "EffectiveFrom", "Comment", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc", "Version")
                 VALUES ({oldTariff.Id}, {oldTariff.Name}, {oldTariff.CalculationBase}, {oldTariff.Rate}, {oldTariff.EffectiveFrom}, {oldTariff.Comment}, {false}, {oldTariff.CreatedAtUtc}, {oldTariff.UpdatedAtUtc}, {oldTariff.Version});
                 INSERT INTO charge_service_tariff_versions ("ChargeServiceSettingId", "TariffId", "EffectiveFrom", "CreatedAtUtc", "IsArchived")
-                VALUES ({waterService.Id}, {oldTariff.Id}, {oldTariff.EffectiveFrom}, {oldTariff.CreatedAtUtc}, {false});
+                VALUES ({historicalWaterServiceId}, {oldTariff.Id}, {oldTariff.EffectiveFrom}, {oldTariff.CreatedAtUtc}, {false});
                 """);
             await context.Database.MigrateAsync();
         }

@@ -328,6 +328,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken) =>
         await dbContext.Garages
+            .Include(garage => garage.Owner)
             .Where(garage => ids.Contains(garage.Id) && !garage.IsArchived)
             .OrderBy(garage => garage.Number)
             .ToListAsync(cancellationToken);

@@ -23,6 +23,100 @@ public sealed class FinanceServiceTests
 {
     private const decimal SeededBankAmount = 1000000m;
 
+    [Theory]
+    [InlineData(1, "fixed")]
+    [InlineData(12, "fixed")]
+    [InlineData(1, "meter_water")]
+    public async Task RestrictedTariff_GeneratesOnlySelectedGaragesWithoutGeneralFallback(int periodicity, string calculationBase)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var excluded = new Garage { Number = "85", CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero), InitialWaterMeterValue = 10m };
+        var tariff = new Tariff { Name = "Выбранные гаражи", CalculationBase = calculationBase, Rate = 350m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Выборочная услуга",
+            IsRegular = true,
+            PeriodicityMonths = periodicity,
+            AccrualStartMonth = 6,
+            PaymentDueDay = 20,
+            PaymentDueMonth = periodicity == 12 ? 6 : null,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            UnitName = "руб.",
+            IsMetered = calculationBase == TariffCalculationBases.MeterWater,
+            MeterKind = MeterKinds.Water,
+            AppliesToSelectedGarages = true,
+            GarageIds = [fixtures.Garage.Id]
+        };
+        database.Context.AddRange(excluded, setting);
+        var legacyTariff = new Tariff { Name = "Старая индивидуальная ставка", CalculationBase = calculationBase, Rate = 10m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.GarageTariffAssignments.Add(new GarageTariffAssignment
+        {
+            Garage = fixtures.Garage,
+            ChargeServiceSetting = setting,
+            Tariff = legacyTariff,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        });
+        if (setting.IsMetered)
+            database.Context.MeterReadings.Add(new MeterReading
+            {
+                Garage = fixtures.Garage,
+                MeterKind = MeterKinds.Water,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                ReadingDate = new DateOnly(2026, 6, 20),
+                PreviousValue = 10m,
+                CurrentValue = 11m,
+                Consumption = 1m
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context, new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var result = await service.GenerateRegularAccrualsAsync(new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null), null, CancellationToken.None);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(fixtures.Garage.Id, Assert.Single(database.Context.Accruals).GarageId);
+        Assert.Equal(350m, Assert.Single(database.Context.Accruals).Amount);
+        var worksheet = await service.CalculateGarageIncomeWorksheetAsync(excluded.Id, new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)), null, CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        if (setting.IsMetered)
+        {
+            var reading = await service.SavePaymentFormMeterReadingAsync(new SavePaymentFormMeterReadingRequest(excluded.Id, MeterKinds.Water,
+                new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 11m, null), null, CancellationToken.None);
+            Assert.True(reading.Succeeded, reading.ErrorMessage);
+        }
+        Assert.Single(database.Context.Accruals);
+        Assert.DoesNotContain(database.Context.Accruals, item => item.GarageId == excluded.Id);
+        var direct = await service.CreateAccrualAsync(new CreateAccrualRequest(excluded.Id, fixtures.IncomeType.Id,
+            new DateOnly(2026, 7, 1), 350m, AccrualSources.Regular, null), null, CancellationToken.None);
+        Assert.False(direct.Succeeded);
+        Assert.Equal("tariff_not_applicable", direct.ErrorCode);
+        if (periodicity == 12)
+        {
+            var preview = await service.PreviewGarageAnnualPaymentsAsync(new GarageAnnualPaymentPreviewRequest(0, 0), CancellationToken.None);
+            Assert.True(preview.Succeeded, preview.ErrorMessage);
+            Assert.Empty(preview.Value!.Items);
+        }
+        var excludedHistorical = new Accrual
+        {
+            Garage = excluded,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 350m,
+            Source = AccrualSources.Regular
+        };
+        database.Context.Add(excludedHistorical);
+        await database.Context.SaveChangesAsync();
+        var cancellation = await service.CancelUnpaidRegularAccrualsWithoutTariffAsync(fixtures.IncomeType.Id,
+            new DateOnly(2026, 6, 1), null, "Проверка границ тарифа", CancellationToken.None, setting.Id);
+        Assert.True(cancellation.Succeeded, cancellation.ErrorMessage);
+        Assert.False(excludedHistorical.IsCanceled);
+        Assert.Equal(1, cancellation.Value);
+        var missingService = await service.CancelUnpaidRegularAccrualsWithoutTariffAsync(fixtures.IncomeType.Id,
+            new DateOnly(2026, 6, 1), null, "Проверка", CancellationToken.None, Guid.NewGuid());
+        Assert.False(missingService.Succeeded);
+        Assert.Equal("charge_service_not_found", missingService.ErrorCode);
+    }
+
     [Fact]
     public async Task GetFinancialReportPeriodAsync_ReturnsFullActivePeriodForEachCounterpartyType()
     {

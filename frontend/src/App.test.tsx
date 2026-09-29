@@ -29,7 +29,6 @@ vi.mock('./services/settingsApi', () => ({
 }))
 
 import App from './App'
-import { garageTariffAssignmentsApi } from './services/garageTariffAssignmentsApi'
 // Compile these large sections before workflow timing starts. Their first Vite
 // transform can outlast a DOM wait in parallel coverage workers; loading and
 // chunk-recovery behavior is covered separately by the workspace tests.
@@ -6850,7 +6849,7 @@ describe('App', () => {
     const updateRequests: unknown[] = []
     const rejectedDateRequests: unknown[] = []
     let meterSaveFailuresRemaining = 1
-    const dictionaryClient = createDictionaryClient({
+    const dictionaryClient: DictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => [serviceIncomeType],
       getTariffs: async () => [serviceTariff, meterTariff],
       getChargeServiceSettings: async () => [serviceSetting],
@@ -6861,6 +6860,21 @@ describe('App', () => {
         rate: serviceTariff.rate,
         tariffVersion: serviceTariff.version,
       }],
+      updateChargeServiceTariffSchedule: async (token, id, request) => {
+        if (!request.service) throw new Error('Параметры услуги обязательны для общего сохранения.')
+        const period = request.periods[0]
+        const saved = await dictionaryClient.updateChargeServiceWithTariff(token, id, {
+          service: { ...request.service, version: request.serviceVersion },
+          rate: period.rate ?? serviceTariff.rate,
+          effectiveFrom: period.effectiveFrom,
+          tariffVersion: period.tariffVersion,
+          incomeFundId: request.incomeFundId,
+        })
+        return { ...saved, periods: request.periods.map((item) => ({
+          tariffId: item.tariffId ?? saved.tariff.id, effectiveFrom: item.effectiveFrom ?? null,
+          effectiveTo: item.effectiveTo ?? null, rate: item.rate ?? saved.tariff.rate, tariffVersion: saved.tariff.version,
+        })) }
+      },
       updateChargeServiceWithTariff: async (_token, id, request) => {
         if (request.effectiveFrom && request.effectiveFrom < serviceTariff.effectiveFrom) {
           rejectedDateRequests.push(request)
@@ -6941,7 +6955,7 @@ describe('App', () => {
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
     expect(within(editDialog).getByLabelText('Наименование услуги')).toHaveValue('Охрана')
     expect(within(editDialog).queryByLabelText('Регулярные платежи')).not.toBeInTheDocument()
-    expect(within(editDialog).getByLabelText('Наименование услуги').closest('form')).toHaveClass('contractors-modal-form--service-edit')
+    expect(within(editDialog).getByRole('tabpanel', { name: 'Тариф и периоды' })).toHaveClass('contractors-modal-form--service-edit')
     expect(within(editDialog).getByRole('heading', { name: 'Настройки услуги' })).toBeInTheDocument()
     expect(within(editDialog).getByRole('heading', { name: 'Параметры начисления' })).toBeInTheDocument()
     expect(within(editDialog).queryByText('Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.')).not.toBeInTheDocument()
@@ -7000,6 +7014,8 @@ describe('App', () => {
     expect(updateRequests[1]).toEqual({
       service: {
         version: 'charge-service-version',
+        appliesToSelectedGarages: false,
+        garageIds: [],
         name: 'Охрана территории',
         isRegular: true,
         periodicityMonths: 1,
@@ -7161,9 +7177,9 @@ describe('App', () => {
     await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Охрана' }))
     const dialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
     await within(dialog).findByRole('table', { name: 'Тарифная сетка услуги' })
-    await user.click(within(dialog).getByRole('button', { name: 'Сохранить тарифную сетку' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить изменения' }))
 
-    expect(await within(dialog).findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
     expect(scheduleRequests).toHaveLength(2)
     expect(scheduleRequests[0].serviceVersion).toBe(initialService.version)
     expect(scheduleRequests[1].serviceVersion).toBe(refreshedService.version)
@@ -17576,36 +17592,28 @@ describe('App', () => {
     await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ throughDate: '2026-09-18', garageId: garage.id }), expect.any(AbortSignal)))
   })
 
-  it('opens individual tariffs from the table and returns to the unchanged service draft', async () => {
+  it('keeps garage selection in the same tariff card without losing the service draft', async () => {
     const user = userEvent.setup()
     const tariff = createTariff({ id: 'individual-entry-tariff', name: 'Охрана', calculationBase: 'fixed', rate: 100 })
     const income = createAccountingType({ id: 'individual-entry-income', name: 'Охрана', code: 'security' })
     const service = createChargeServiceSetting({ id: 'individual-entry-service', name: 'Охрана', isRegular: true, isMetered: false, incomeTypeId: income.id, tariffId: tariff.id })
-    const getPage = vi.spyOn(garageTariffAssignmentsApi, 'getPage').mockResolvedValue({ items: [], totalCount: 0, offset: 0, limit: 25 })
-    try {
       const dictionaryClient = createDictionaryClient({ getTariffs: async () => [tariff], getIncomeTypes: async () => [income], getChargeServiceSettings: async () => [service], getChargeServiceTariffSchedule: async () => [] })
       render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
       await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
       await user.click(screen.getByRole('button', { name: 'Войти' }))
       await openSection(user, 'Тарифы и сборы')
-      await user.click(await screen.findByRole('button', { name: 'Индивидуальные тарифы услуги Охрана' }))
-      await screen.findByText('Индивидуальные тарифы пока не назначены')
-      expect(getPage).toHaveBeenCalledWith('token', service.id, expect.objectContaining({ includeArchived: false }), expect.any(AbortSignal))
-      await user.click(screen.getByRole('button', { name: 'Закрыть индивидуальные тарифы' }))
-      await user.click(screen.getByRole('button', { name: 'Изменить услугу Охрана' }))
+      expect(screen.queryByRole('button', { name: 'Индивидуальные тарифы услуги Охрана' })).not.toBeInTheDocument()
+      await user.click(await screen.findByRole('button', { name: 'Изменить услугу Охрана' }))
       const card = await screen.findByRole('dialog', { name: 'Изменить услугу' })
-      await waitFor(() => expect(within(card).getByRole('button', { name: 'Индивидуальные тарифы' })).toBeEnabled())
+      await within(card).findByRole('tabpanel', { name: 'Тариф и периоды' })
       const day = within(card).getByLabelText('День оплаты')
       await user.clear(day)
       await user.type(day, '27')
-      await user.click(within(card).getByRole('button', { name: 'Индивидуальные тарифы' }))
-      expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument()
-      await screen.findByText('Индивидуальные тарифы пока не назначены')
-      await user.keyboard('{Escape}')
-      const returned = await screen.findByRole('dialog', { name: 'Изменить услугу' })
-      expect(within(returned).getByLabelText('День оплаты')).toHaveValue('27')
-      expect(within(returned).getByRole('button', { name: 'Индивидуальные тарифы' })).toHaveFocus()
-    } finally { getPage.mockRestore() }
+      await user.click(within(card).getByRole('tab', { name: 'Гаражи' }))
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+      expect(within(card).getByRole('checkbox', { name: 'Только для выбранных гаражей' })).toBeInTheDocument()
+      await user.click(within(card).getByRole('tab', { name: 'Тариф и периоды' }))
+      expect(within(card).getByLabelText('День оплаты')).toHaveValue('27')
   })
 
   it('shows inline electricity threshold and rate edits after reopening the tariff card', async () => {

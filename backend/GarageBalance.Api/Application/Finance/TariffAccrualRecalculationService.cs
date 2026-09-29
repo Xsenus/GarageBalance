@@ -47,7 +47,8 @@ public sealed class TariffAccrualRecalculationService(
                     month,
                     actorUserId,
                     reason,
-                    cancellationToken);
+                    cancellationToken,
+                    setting?.Id);
                 if (!cancellationResult.Succeeded)
                 {
                     throw new InvalidOperationException(cancellationResult.ErrorMessage ?? "Не удалось отменить неоплаченные начисления за период без тарифа.");

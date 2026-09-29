@@ -84,6 +84,8 @@ public sealed class DictionaryService(
         ["electricityThirdRate"] = "Цена сверх порога 2",
         ["electricityTiers"] = "Ступени тарифа электроэнергии",
         ["isRegular"] = "Регулярные платежи",
+        ["appliesToSelectedGarages"] = "Только выбранные гаражи",
+        ["garageIds"] = "Гаражи тарифа",
         ["periodicityMonths"] = "Периодичность",
         ["accrualStartMonth"] = "Учитывать платеж с",
         ["paymentDueDay"] = "День оплаты",
@@ -2860,6 +2862,22 @@ public sealed class DictionaryService(
             return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
+        if (request.Service is not null)
+        {
+            var serviceValidation = ValidateChargeServiceSettingRequest(request.Service);
+            if (!serviceValidation.Succeeded)
+                return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(serviceValidation.ErrorCode!, serviceValidation.ErrorMessage!);
+            if (!request.Service.IsRegular || request.Service.IncomeTypeId != setting.IncomeTypeId || !request.Service.TariffId.HasValue ||
+                request.Service.TariffId != setting.TariffId &&
+                await chargeServiceSettingRepository.FindLinkedTariffAsync(id, request.Service.TariffId.Value, cancellationToken) is null)
+                return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure("charge_service_schedule_mode_conflict", "Изменение способа расчёта выполняется через параметры тарифа.");
+            var links = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
+            if (!links.Succeeded)
+                return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(links.ErrorCode!, links.ErrorMessage!);
+            if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, request.Service.Name.Trim(), cancellationToken))
+                return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
+        }
+
         var allExisting = await chargeServiceSettingRepository.GetTrackedTariffPeriodsAsync(id, cancellationToken);
         var existing = allExisting.Where(item => !item.IsArchived).ToList();
         var existingByTariff = existing
@@ -2900,6 +2918,21 @@ public sealed class DictionaryService(
             // Snapshot terms now: later reuse must not alter another planned source.
             planned.Add((period, startsOn, exactExistingPeriod,
                 CloneTariffForSchedule(source, setting.Name, startsOn, source.Rate, request.ChangeReason)));
+        }
+
+        if (request.Service is not null)
+        {
+            var fundUpdate = await ApplyRequestedIncomeFundAsync(setting.IncomeTypeId, request.IncomeFundId, actorUserId, cancellationToken);
+            if (!fundUpdate.Succeeded)
+                return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(fundUpdate.ErrorCode!, fundUpdate.ErrorMessage!);
+            var oldValues = ToChargeServiceAuditValues(setting);
+            ApplyChargeServiceSetting(setting, request.Service with
+            {
+                UnitName = await EnsureMeasurementUnitExistsAsync(request.Service.UnitName, actorUserId, cancellationToken)
+            });
+            await SynchronizeManagedServiceIncomeTypeAsync(setting, setting.Name, request.IncomeFundId, actorUserId, cancellationToken);
+            AddAudit(actorUserId, "dictionary.charge_service_updated", "charge_service", setting.Id,
+                $"Обновлена настройка услуги {setting.Name}.", oldValues: oldValues, newValues: ToChargeServiceAuditValues(setting));
         }
 
         var replacements = new List<ChargeServiceTariffVersion>(request.Periods.Count);
@@ -4342,6 +4375,15 @@ public sealed class DictionaryService(
 
     private static DictionaryResult<object> ValidateChargeServiceSettingRequest(UpsertChargeServiceSettingRequest request)
     {
+        if (request.AppliesToSelectedGarages && (!request.IsRegular || request.GarageIds is not { Count: > 0 and <= 100 } ||
+            request.GarageIds.Any(id => id == Guid.Empty) || request.GarageIds.Distinct().Count() != request.GarageIds.Count))
+        {
+            return DictionaryResult<object>.Failure("charge_service_garages_invalid", "Выберите от 1 до 100 разных гаражей для регулярного тарифа.");
+        }
+        if (!request.AppliesToSelectedGarages && request.GarageIds is { Count: > 0 })
+        {
+            return DictionaryResult<object>.Failure("charge_service_garages_invalid", "Для общего тарифа список выбранных гаражей должен быть пустым.");
+        }
         var name = request.Name.Trim();
         if (name.Length == 0)
         {
@@ -4415,6 +4457,14 @@ public sealed class DictionaryService(
         Tariff? tariffOverride = null,
         IncomeType? incomeTypeOverride = null)
     {
+        if (request.AppliesToSelectedGarages)
+        {
+            var garages = await garageRepository.GetActiveByIdsAsync(request.GarageIds ?? [], cancellationToken);
+            if (garages.Count != request.GarageIds?.Count)
+            {
+                return DictionaryResult<object>.Failure("charge_service_garage_not_found", "Один из выбранных гаражей удалён или не найден. Обновите список гаражей.");
+            }
+        }
         if (!request.IsRegular)
         {
             return DictionaryResult<object>.Success(new object());
@@ -4677,6 +4727,8 @@ public sealed class DictionaryService(
         setting.IsMetered = request.IsRegular && request.IsMetered;
         setting.HasTieredTariff = request.IsRegular && request.IsMetered && request.HasTieredTariff;
         setting.UnitName = NormalizeOptional(request.UnitName);
+        setting.AppliesToSelectedGarages = request.AppliesToSelectedGarages;
+        setting.GarageIds = request.AppliesToSelectedGarages ? request.GarageIds!.Order().ToArray() : [];
     }
 
     private static bool ChargeServiceSettingMatches(ChargeServiceSetting setting, UpsertChargeServiceSettingRequest request)
@@ -4692,6 +4744,8 @@ public sealed class DictionaryService(
             setting.TariffId == (request.IsRegular ? request.TariffId : null) &&
             setting.IsMetered == (request.IsRegular && request.IsMetered) &&
             setting.HasTieredTariff == (request.IsRegular && request.IsMetered && request.HasTieredTariff) &&
+            setting.AppliesToSelectedGarages == request.AppliesToSelectedGarages &&
+            setting.GarageIds.Order().SequenceEqual((request.GarageIds ?? []).Order()) &&
             StringEquals(setting.UnitName, NormalizeOptional(request.UnitName));
     }
 
@@ -4806,7 +4860,9 @@ public sealed class DictionaryService(
             ["isMetered"] = setting.IsMetered,
             ["meterKind"] = setting.MeterKind,
             ["hasTieredTariff"] = setting.HasTieredTariff,
-            ["unitName"] = setting.UnitName
+            ["unitName"] = setting.UnitName,
+            ["appliesToSelectedGarages"] = setting.AppliesToSelectedGarages,
+            ["garageIds"] = setting.GarageIds.ToArray()
         };
     }
 
@@ -5439,7 +5495,9 @@ public sealed class DictionaryService(
             setting.IsArchived,
             setting.Tariff?.CalculationBase,
             setting.Version,
-            setting.MeterKind);
+            setting.MeterKind,
+            setting.AppliesToSelectedGarages,
+            setting.GarageIds.ToArray());
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)
