@@ -7,10 +7,18 @@
 .service-report-table thead th { position: sticky; top: 0; background: #edf2f9; z-index: 1; white-space: normal; min-width: 95px; }
 .service-report-table tfoot th, .service-report-table tfoot td { position: sticky; bottom: 0; background: #eaf2ff; font-weight: 700; }
 .service-report-total { background: #f4f7fc; font-weight: 600; }
-.service-report-modes { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+.service-report-modes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .service-report-modes button { background: #fff; color: #34425c; border: 1px solid #d1dbea; }
 .service-report-modes button[aria-pressed=true] { background: #165bfa; color: #fff; border-color: #165bfa; }
-.service-report-summary { margin: 12px 0; }
+.workspace--reports > .reports-workbook-panel:has(.service-report-panel--debt) > .section-heading,
+.workspace--reports > .reports-workbook-panel:has(.service-report-panel--debt) > .report-tabs { flex-shrink: 0; }
+.report-tab-panel:has(.service-report-panel--debt) { display: flex; flex: 1 1 auto; min-height: 0; }
+.report-workbook-sheet:has(.service-report-panel--debt) { flex: 1 1 auto; min-height: 0; }
+.service-report-panel--debt { display: flex; flex: 1 1 auto; flex-direction: column; gap: 12px; }
+.service-report-panel--debt > .report-workbook-filter { flex-shrink: 0; }
+.service-report-panel--debt .service-report-scroll { flex: 1 1 auto; min-height: 180px; max-height: none; }
+.service-report-panel--debt .service-report-table { height: 100%; }
+.service-report-fill-row td { height: 100%; padding: 0; border: 0; }
 .report-column-editor { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.5fr); gap: 16px; }
 .report-column-list { display: grid; align-content: start; gap: 8px; }
 .report-column-item { display: flex; align-items: center; gap: 6px; }
