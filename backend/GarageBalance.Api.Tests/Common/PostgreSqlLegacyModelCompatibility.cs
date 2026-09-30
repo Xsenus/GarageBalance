@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,6 +6,7 @@ namespace GarageBalance.Api.Tests.Common;
 
 internal static class PostgreSqlLegacyModelCompatibility
 {
+    private static readonly ConcurrentDictionary<string, string[]> AddedColumnRemovals = new(StringComparer.Ordinal);
     private static readonly (string Add, string Remove)[] CurrentModelColumnStatements =
     [
         ("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"RegisteredOn\" date NULL", "ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"RegisteredOn\""),
@@ -32,6 +34,17 @@ internal static class PostgreSqlLegacyModelCompatibility
 
     public static async Task AddCurrentVersionColumnsAsync(GarageBalanceDbContext context)
     {
+        var connection = context.Database.GetConnectionString()!;
+        var existingColumns = (await context.Database.SqlQueryRaw<string>(
+            """
+            SELECT 'ALTER TABLE IF EXISTS ' || table_name || ' DROP COLUMN IF EXISTS "' || column_name || '"' AS "Value"
+            FROM information_schema.columns WHERE table_schema = 'public'
+            """).ToArrayAsync()).ToHashSet(StringComparer.Ordinal);
+        // Restore only columns added by this compatibility layer, never columns
+        // already present at the historical migration under test.
+        AddedColumnRemovals.TryAdd(connection, CurrentModelColumnStatements
+            .Where(statement => !existingColumns.Contains(statement.Remove))
+            .Select(statement => statement.Remove).ToArray());
         foreach (var statement in CurrentModelColumnStatements)
         {
             await context.Database.ExecuteSqlRawAsync(statement.Add);
@@ -40,9 +53,10 @@ internal static class PostgreSqlLegacyModelCompatibility
 
     public static async Task RemoveCurrentVersionColumnsAsync(GarageBalanceDbContext context)
     {
-        foreach (var statement in CurrentModelColumnStatements)
+        if (!AddedColumnRemovals.TryRemove(context.Database.GetConnectionString()!, out var removals)) return;
+        foreach (var statement in removals)
         {
-            await context.Database.ExecuteSqlRawAsync(statement.Remove);
+            await context.Database.ExecuteSqlRawAsync(statement);
         }
     }
 

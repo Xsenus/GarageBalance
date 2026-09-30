@@ -20,7 +20,7 @@ describe('production chunking', () => {
 
   it('splits authenticated accounting sections into bounded business chunks', () => {
     expect(getManualChunkName('C:\\project\\src\\features\\finance\\FinancePanel.tsx')).toBe('workspace-finance')
-    expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('workspace-finance')
+    expect(getManualChunkName('/project/src/features/funds/FundsPanel.tsx')).toBe('workspace-funds')
     expect(getManualChunkName('/project/src/features/import/ImportPanel.tsx')).toBe('workspace-finance')
     expect(getManualChunkName('/project/src/features/meterReadings/MeterReadingsPanel.tsx')).toBe('workspace-operations')
     expect(getManualChunkName('C:\\project\\src\\features\\contractors\\ContractorsPanel.tsx')).toBe('workspace-operations')
@@ -42,11 +42,14 @@ describe('production chunking', () => {
     const entry = chunks.find((chunk) => chunk.isEntry)
     const workspaces = chunks.filter((chunk) => chunk.name.startsWith('workspace-'))
     const financeWorkspace = chunks.find((chunk) => chunk.name === 'workspace-finance')
+    const fundsWorkspace = chunks.find((chunk) => chunk.name === 'workspace-funds')
     const shell = chunks.find((chunk) => chunk.name === 'AppShell')
     expect(entry).toBeDefined()
     expect(financeWorkspace).toBeDefined()
+    expect(fundsWorkspace).toBeDefined()
     expect(workspaces.map((chunk) => chunk.name).sort()).toEqual([
       'workspace-finance',
+      'workspace-funds',
       'workspace-operations',
     ])
     const visited = new Set<string>()
@@ -59,7 +62,7 @@ describe('production chunking', () => {
     }
     for (const workspace of workspaces) expect(visited).not.toContain(workspace.fileName)
     expect(visited).not.toContain(shell!.fileName)
-    expect(Object.keys(financeWorkspace!.modules).some((id) => /[/\\]features[/\\]funds[/\\]FundsPanel\./.test(id))).toBe(true)
+    expect(Object.keys(fundsWorkspace!.modules).some((id) => /[/\\]features[/\\]funds[/\\]FundsPanel\./.test(id))).toBe(true)
     expect(Object.keys(financeWorkspace!.modules).some((id) => /[/\\]features[/\\]import[/\\]ImportPanel\./.test(id))).toBe(true)
     expect(Object.keys(financeWorkspace!.modules).some((id) => /[/\\]features[/\\]tariffs[/\\]TariffsAndFeesPanel\./.test(id))).toBe(true)
   })

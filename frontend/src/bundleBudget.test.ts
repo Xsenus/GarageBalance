@@ -41,6 +41,12 @@ describe('frontend bundle budget gate', () => {
     expect(viteConfig).toContain('(meterReadings|contractors|dictionaries)')
   })
 
+  it('keeps funds in a separate bounded authenticated chunk on both path formats', () => {
+    expect(getManualChunkName('/project/src/features/funds/FundsPrototypePanel.tsx')).toBe('workspace-funds')
+    expect(getManualChunkName('C:\\project\\src\\features\\funds\\FundsPrototypePanel.tsx')).toBe('workspace-funds')
+    expect(getManualChunkName('/project/src/features/finance/FinancePanel.tsx')).toBe('workspace-finance')
+  })
+
   it('loads the authenticated workspace only after authentication', () => {
     expect(appSource).toContain("import('./features/workspace/AppShell')")
     expect(appSource).not.toContain("import { AuthenticatedAppShell } from './features/workspace/AppShell'")

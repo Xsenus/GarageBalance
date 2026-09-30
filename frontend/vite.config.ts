@@ -10,6 +10,7 @@ export function getManualChunkName(id: string): string | undefined {
   if (/[/\\]src[/\\]shared[/\\](formFeedback|validation|AsyncState|accessControl)\./.test(id)) return 'app-runtime'
   // Keep the authenticated workspace outside the login graph, but split its
   // largest business areas and keep their size visible in the bundle budget.
+  if (/[/\\]src[/\\]features[/\\]funds[/\\]/.test(id)) return 'workspace-funds'
   if (/[/\\]src[/\\]features[/\\](finance|funds|import|tariffs)[/\\]/.test(id)) return 'workspace-finance'
   if (/[/\\]src[/\\]features[/\\](meterReadings|contractors|dictionaries)[/\\]/.test(id)) return 'workspace-operations'
   // Dictionary form metadata is only needed after authentication, not at login.

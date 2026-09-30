@@ -16,6 +16,10 @@ public sealed class TransactionBoundaryGuardTests
         // At most 100 garage locks are acquired before the short atomic assignment
         // write. PostgreSQL assignment tests verify commit, rollback and cancellation.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfGarageTariffAssignmentRepository.cs: BeginTransactionAsync(",
+        // Service reports keep a bounded page and server-side totals in one short
+        // repeatable-read snapshot. PostgreSQL tests protect cancellation, disposal
+        // and caller-owned transactions; no network/export I/O runs inside it.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfServiceReportRepository.cs: BeginTransactionAsync(",
         // Registering the logical object, its primary replica and replication jobs is
         // one short atomic catalog operation covered by storage catalog integration tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfStorageCatalog.cs: BeginTransactionAsync(",
