@@ -6,6 +6,7 @@ import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto
 import { normalizeAccrualReasonDisplayMode } from '../../services/settingsApi'
 import { BackupProtectionDetails } from './BackupProtectionDetails'
 import { BackupRestoreStatus } from './BackupRestoreStatus'
+import { ReportColumnsPanel } from './ReportColumnsPanel'
 import type { AccrualReasonDisplayMode, ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAccountantWorkspace, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, StatusMessage } from '../../shared/AsyncState'
@@ -59,7 +60,7 @@ const accrualReasonDisplayOptions = [
   { value: 'hidden', label: 'Не показывать' },
 ]
 
-type SettingsTab = 'security' | 'business-date' | 'cash-bank' | 'display' | 'backups' | 'diagnostics' | 'integrations'
+type SettingsTab = 'security' | 'business-date' | 'cash-bank' | 'report-columns' | 'display' | 'backups' | 'diagnostics' | 'integrations'
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
   const [actionCommentsRequired, actionCommentSettingsLoading, actionCommentSettingsError, saveActionCommentsRequired] = useActionCommentSettings()
@@ -88,6 +89,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     ['security', 'Безопасность', KeyRound, true],
     ['business-date', 'Рабочая дата', CalendarClock, canManageBusinessDate],
     ['cash-bank', 'Касса и счёт', Landmark, canReadCashBank],
+    ['report-columns', 'Колонки отчётов', Eye, hasPermission(auth, permissions.tariffsManage)],
     ['display', 'Отображение', Eye, canManageApplicationSettings],
     ['backups', 'Резервные копии', DatabaseBackup, canReadBackups],
     ['diagnostics', 'Диагностика', FileWarning, canViewDiagnostics],
@@ -996,6 +998,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           role="tabpanel"
           aria-labelledby={`settings-${activeSettingsTab}-tab`}
         >
+      {activeSettingsTab === 'report-columns' ? <ReportColumnsPanel key={auth.accessToken} token={auth.accessToken} canManage={hasPermission(auth, permissions.tariffsManage)} /> : null}
       {activeSettingsTab === 'security' ? (
       <section className="password-panel settings-card settings-card--security" aria-label="Безопасность аккаунта">
         <div className="settings-card-intro">

@@ -9,6 +9,7 @@ public sealed class ApplicationSetting : IOptimisticConcurrencyEntity
     public bool BooleanValue { get; set; }
     public int? IntegerValue { get; set; }
     public DateOnly? DateValue { get; set; }
+    public string? JsonValue { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Guid? UpdatedByUserId { get; set; }
     public Guid Version { get; set; } = Guid.NewGuid();

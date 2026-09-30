@@ -365,6 +365,8 @@ builder.Services.AddScoped<IIncomeReportQuery, EfIncomeReportQuery>();
 builder.Services.AddScoped<IDailyServicePaymentReportQuery, EfDailyServicePaymentReportQuery>();
 builder.Services.AddScoped<IGarageTariffAssignmentQuery, EfGarageTariffAssignmentQuery>();
 builder.Services.AddScoped<IDailyServicePaymentReportService, DailyServicePaymentReportService>();
+builder.Services.AddScoped<IServiceReportRepository, EfServiceReportRepository>();
+builder.Services.AddScoped<IServiceReportService, ServiceReportService>();
 builder.Services.AddScoped<IUserManagementRepository, EfUserManagementRepository>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAuditService, AuditService>();

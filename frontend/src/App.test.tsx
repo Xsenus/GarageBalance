@@ -2,6 +2,13 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import { vi } from 'vitest'
+import { serviceReportsApi } from './services/serviceReportsApi'
+
+vi.mock('./services/serviceReportsApi', () => ({ serviceReportsApi: {
+  getReport: vi.fn(async (_token: string, _kind: string, query: { dateFrom?: string; dateTo?: string }) => ({ dateFrom: query.dateFrom ?? null, dateTo: query.dateTo ?? '2026-09-30', columns: [], rows: [], days: [], totals: [], total: 0, rowCount: 0, offset: 0, limit: 50 })),
+  getColumns: vi.fn(async () => ({ version: 'columns-version', columns: [{ id: 'column-1', name: 'Свет', serviceIds: [] }], services: [] })),
+  saveColumns: vi.fn(), exportReport: vi.fn(),
+} }))
 
 vi.mock('./services/settingsApi', () => ({
   normalizeAccrualReasonDisplayMode: (value: string | null | undefined) => value === 'all' || value === 'hidden' ? value : 'penalties_only',
@@ -17568,28 +17575,28 @@ describe('App', () => {
 
   it('opens daily service payments from reports and preserves its date and garage across workbook tabs', async () => {
     const user = userEvent.setup()
-    const getDailyServicePayments = vi.fn(createReportClient().getDailyServicePayments)
+    const getDailyServicePayments = vi.mocked(serviceReportsApi.getReport)
     const garage = createGarage({ id: 'daily-report-garage', number: '85', ownerName: 'Тестовый владелец' })
     let searchLoads = 0
     const dictionaryClient = createDictionaryClient({ getGarages: async () => ++searchLoads === 1 ? [garage] : [] })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getDailyServicePayments })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     await user.click(await screen.findByRole('tab', { name: 'Оплата по услугам' }))
     await screen.findByRole('table', { name: 'Оплаты гаражей по услугам' })
-    fireEvent.change(screen.getByLabelText('Дата ежедневного отчёта'), { target: { value: '18.09.2026' } })
-    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ throughDate: '2026-09-18' }), expect.any(AbortSignal)))
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' })).not.toBeDisabled())
-    await user.click(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' }))
+    fireEvent.change(screen.getByLabelText('Конец периода отчёта'), { target: { value: '18.09.2026' } })
+    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', 'payments', expect.objectContaining({ dateTo: '2026-09-18' }), expect.any(AbortSignal)))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Гараж отчёта по услугам' })).not.toBeDisabled())
+    await user.click(screen.getByRole('combobox', { name: 'Гараж отчёта по услугам' }))
     await user.click(screen.getByRole('option', { name: /Гараж 85/ }))
-    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ garageId: garage.id }), expect.any(AbortSignal)))
+    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', 'payments', expect.objectContaining({ garageId: garage.id }), expect.any(AbortSignal)))
     await user.click(screen.getByRole('tab', { name: 'По гаражам' }))
     await user.click(screen.getByRole('tab', { name: 'Оплата по услугам' }))
-    expect(screen.getByLabelText('Дата ежедневного отчёта')).toHaveValue('18.09.2026')
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' })).not.toBeDisabled())
-    expect(screen.getByRole('combobox', { name: 'Гараж ежедневного отчёта' })).toHaveTextContent('Гараж 85')
-    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', expect.objectContaining({ throughDate: '2026-09-18', garageId: garage.id }), expect.any(AbortSignal)))
+    expect(screen.getByLabelText('Конец периода отчёта')).toHaveValue('18.09.2026')
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Гараж отчёта по услугам' })).not.toBeDisabled())
+    expect(screen.getByRole('combobox', { name: 'Гараж отчёта по услугам' })).toHaveTextContent('Гараж 85')
+    await waitFor(() => expect(getDailyServicePayments).toHaveBeenLastCalledWith('token', 'payments', expect.objectContaining({ dateTo: '2026-09-18', garageId: garage.id }), expect.any(AbortSignal)))
   })
 
   it('keeps garage selection in the same tariff card without losing the service draft', async () => {
@@ -26224,7 +26231,7 @@ describe('App', () => {
     }
 
     const reportTabs = within(reportsPanel).getAllByRole('tab')
-    expect(reportTabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1])
+    expect(reportTabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1])
     reportTabs[0].focus()
     await user.keyboard('{ArrowRight}')
     expect(reportTabs[1]).toHaveFocus()
@@ -26232,13 +26239,13 @@ describe('App', () => {
     await user.keyboard('{Enter}')
     expect(reportTabs[1]).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{End}')
-    expect(reportTabs[8]).toHaveFocus()
+    expect(reportTabs.at(-1)).toHaveFocus()
     await user.keyboard('{Home}')
     expect(reportTabs[0]).toHaveFocus()
     await user.keyboard('{Enter}')
     expect(reportTabs[0]).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{ArrowLeft}')
-    expect(reportTabs[8]).toHaveFocus()
+    expect(reportTabs.at(-1)).toHaveFocus()
     await user.keyboard('{ArrowRight}')
     expect(reportTabs[0]).toHaveFocus()
 

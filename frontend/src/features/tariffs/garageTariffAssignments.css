@@ -12,6 +12,15 @@
 .garage-tariff-edit-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .garage-tariff-edit-fields > .form-field { margin-top: 12px; }
 .garage-tariff-selection { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tariff-garage-scope-grid-scroll { max-height: clamp(150px, calc(100dvh - 500px), 310px); overflow: auto; overscroll-behavior: contain; }
+.tariff-garage-scope-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 2px; }
+.tariff-garage-scope-choice { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--border-color, #dce3ee); border-radius: 7px; background: var(--surface, #fff); cursor: pointer; }
+.tariff-garage-scope-choice.is-selected { background: #edf3ff; border-color: #91b4ff; }
+.tariff-garage-scope-choice:focus-within { outline: 2px solid #165bfa; outline-offset: 1px; }
+.tariff-garage-scope-choice input { width: 17px; height: 17px; flex: none; }
+.tariff-garage-scope-progress { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; }
+@media (max-width: 1000px) { .tariff-garage-scope-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .tariff-garage-scope-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   .garage-tariff-fields, .garage-tariff-garages { grid-template-columns: 1fr; }
   .garage-tariff-tier { grid-template-columns: 1fr 1fr; }

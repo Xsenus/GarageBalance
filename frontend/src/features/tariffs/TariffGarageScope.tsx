@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import type { DictionaryClient, GarageDto } from '../../services/dictionariesApi'
 import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { FieldHelp, FormField } from '../../shared/FormField'
-import { TablePagination } from '../../shared/TablePagination'
 import './garageTariffAssignments.css'
 
 export function TariffGarageScope({ accessToken, dictionaryClient, restricted, garageIds, disabled, onRestrictedChange, onSelectionChange }: {
@@ -16,7 +15,7 @@ export function TariffGarageScope({ accessToken, dictionaryClient, restricted, g
 }) {
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(10)
+  const limit = 48
   const [page, setPage] = useState<{ items: GarageDto[]; totalCount: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -37,7 +36,7 @@ export function TariffGarageScope({ accessToken, dictionaryClient, restricted, g
         return
       }
       dictionaryClient.getGaragesPage(accessToken, search.trim() || undefined, offset, limit, false, 'number', 'asc', false, {}, controller.signal)
-        .then((result) => { if (!controller.signal.aborted) setPage(result) })
+        .then((result) => { if (!controller.signal.aborted) setPage((previous) => ({ ...result, items: offset === 0 ? result.items : [...(previous?.items ?? []), ...result.items.filter((garage) => !previous?.items.some((item) => item.id === garage.id))] })) })
         .catch(() => { if (!controller.signal.aborted) setError('Не удалось загрузить гаражи. Повторите попытку.') })
         .finally(() => { if (!controller.signal.aborted) { setPending(false); setCompletedRequestKey(requestKey) } })
     }, 250)
@@ -54,19 +53,24 @@ export function TariffGarageScope({ accessToken, dictionaryClient, restricted, g
     </div>
     {!restricted ? <p role="status">Тариф действует для всех гаражей.</p> : <>
       <div className="tariff-garage-scope-toolbar">
-        <FormField label="Поиск гаража"><input value={search} disabled={disabled} onChange={(event) => { setSearch(event.target.value); setOffset(0) }} /></FormField>
+        <FormField label="Поиск гаража"><input value={search} disabled={disabled} onChange={(event) => { setSearch(event.target.value); setOffset(0); setPage(null) }} /></FormField>
         <span role="status">Выбрано: {garageIds.length} из 100</span>
         <button className="ghost-button" type="button" disabled={disabled || garageIds.length === 0} onClick={() => onSelectionChange([])}>Снять выбор</button>
       </div>
-      {loading ? <TableLoadingState label="Загрузка гаражей тарифа" rows={4} columns={2} />
-        : error ? <AsyncErrorState message={error} onRetry={() => setRetry((value) => value + 1)} />
-          : page?.items.length ? <div className="table-scroll tariff-garage-scope-table"><table className="garage-tariff-table"><thead><tr><th>Выбор</th><th>Гараж</th></tr></thead><tbody>
-            {page.items.map((garage) => <tr key={garage.id}><td><input type="checkbox" aria-label={`Выбрать гараж ${garage.number}`} checked={garageIds.includes(garage.id)}
+      <div className="tariff-garage-scope-grid-scroll" role="region" aria-label="Список гаражей тарифа" tabIndex={0} onScroll={(event) => {
+        const element = event.currentTarget
+        if (!loading && !error && page && page.items.length < page.totalCount && element.scrollHeight - element.scrollTop - element.clientHeight < 100) setOffset(offset + limit)
+      }}>
+      {page?.items.length ? <div className="tariff-garage-scope-grid">
+            {page.items.map((garage) => <label className={`tariff-garage-scope-choice${garageIds.includes(garage.id) ? ' is-selected' : ''}`} key={garage.id}><input type="checkbox" aria-label={`Выбрать гараж ${garage.number}`} checked={garageIds.includes(garage.id)}
               disabled={disabled || (!garageIds.includes(garage.id) && garageIds.length >= 100)} onChange={(event) => onSelectionChange(event.target.checked
-                ? [...garageIds, garage.id] : garageIds.filter((id) => id !== garage.id))} /></td><td>{garage.number}</td></tr>)}
-          </tbody></table></div> : <EmptyState>Гаражи не найдены</EmptyState>}
-      <TablePagination ariaLabel="Гаражи тарифа" totalCount={page?.totalCount ?? 0} offset={offset} limit={limit} visibleCount={loading || error ? 0 : page?.items.length ?? 0}
-        disabled={disabled || loading} onPageChange={(number) => setOffset((number - 1) * limit)} onPageSizeChange={(size) => { setLimit(size); setOffset(0) }} />
+                ? [...garageIds, garage.id] : garageIds.filter((id) => id !== garage.id))} /><span>Гараж {garage.number}</span></label>)}
+          </div> : null}
+      {loading ? <TableLoadingState label="Загрузка гаражей тарифа" rows={offset === 0 ? 4 : 1} columns={4} />
+        : error ? <AsyncErrorState message={error} onRetry={() => setRetry((value) => value + 1)} />
+          : !page?.items.length ? <EmptyState>Гаражи не найдены</EmptyState> : null}
+      </div>
+      {!loading && page?.items.length ? <div className="tariff-garage-scope-progress"><span role="status">Загружено: {page.items.length} из {page.totalCount}</span>{page.items.length < page.totalCount ? <button type="button" className="ghost-button" disabled={disabled || Boolean(error)} onClick={() => setOffset(offset + limit)}>Показать ещё гаражи</button> : null}</div> : null}
     </>}
   </div>
 }

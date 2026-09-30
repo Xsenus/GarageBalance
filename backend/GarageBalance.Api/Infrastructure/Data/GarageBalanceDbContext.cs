@@ -112,6 +112,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("application_settings");
             entity.HasKey(setting => setting.Id);
             entity.Property(setting => setting.Key).HasMaxLength(160).IsRequired();
+            entity.Property(setting => setting.JsonValue).HasColumnType("jsonb");
             entity.Property(setting => setting.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(setting => setting.Key).IsUnique();
         });

@@ -4,7 +4,8 @@ import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Search, Trash2, X } fr
 import type { FundsClient } from '../../services/fundsApi'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient, GarageDto } from '../../services/dictionariesApi'
-import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, DailyServicePaymentQuery, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
+import type { ServiceReportQuery } from '../../services/serviceReportsApi'
+import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { scheduleDebouncedRequest } from '../../shared/debouncedRequest'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
@@ -24,9 +25,9 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { useToast } from '../../shared/useToast'
 import { getReportDateRangeValidationErrors } from '../../shared/validation'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
-import { DailyServicePaymentPanel } from './DailyServicePaymentPanel'
+import { ServiceReportPanel } from './ServiceReportPanel'
 
-type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'dailyServices' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
+type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'dailyServices' | 'serviceDebt' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
 type ReportDateFilterKey = 'income' | 'cashPayments' | 'bankDeposits' | 'funds'
 
@@ -271,6 +272,7 @@ const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; compact
   { key: 'payouts', label: 'По выплатам' },
   { key: 'income', label: 'Поступления' },
   { key: 'dailyServices', label: 'Оплата по услугам', compactLabel: ['Оплата по', 'услугам'] },
+  { key: 'serviceDebt', label: 'Задолженность' },
   { key: 'cashPayments', label: 'Оплаты из кассы', compactLabel: ['Оплаты из', 'кассы'] },
   { key: 'bankDeposits', label: 'Сдача кассы в банк', compactLabel: ['Сдача кассы', 'в банк'] },
   { key: 'fees', label: 'Сборы' },
@@ -327,8 +329,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     saveStoredWorkspaceView(workspaceViewStorageKeys.reportsTab, activeReportTab)
   }, [activeReportTab])
   const [reportSorts, setReportSorts] = useState<Partial<Record<ReportWorkbookTab, ReportSort>>>({})
-  const [dailyFilters, setDailyFilters] = useState<DailyServicePaymentQuery>({ throughDate: today, offset: 0, limit: 25 })
-  const [dailySelectedGarage, setDailySelectedGarage] = useState<GarageDto | null>(null)
+  const [servicePaymentQuery, setServicePaymentQuery] = useState<ServiceReportQuery>()
+  const [serviceDebtQuery, setServiceDebtQuery] = useState<ServiceReportQuery>()
+  const [paymentSelectedGarage, setPaymentSelectedGarage] = useState<GarageDto | null>(null)
+  const [debtSelectedGarage, setDebtSelectedGarage] = useState<GarageDto | null>(null)
   const [monthlyFilters, setMonthlyFilters] = useState<Record<ReportMonthlyFilterKey, ReportMonthRange>>({
     consolidated: { monthFrom: currentMonth, monthTo: currentMonth },
     garages: { monthFrom: currentMonth, monthTo: currentMonth },
@@ -432,7 +436,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
     garages: [monthlyFilters.garages, selectedGarageIds, garageAccrualsGrouped, reportSorts.garages],
     payouts: [monthlyFilters.payouts, selectedCounterpartyKeys, reportSorts.payouts],
     income: [dateFilters.income, selectedIncomeGarageIds, incomePaymentsGrouped, reportSorts.income],
-    dailyServices: [dailyFilters],
+    dailyServices: [servicePaymentQuery],
+    serviceDebt: [serviceDebtQuery],
     cashPayments: [dateFilters.cashPayments, reportSorts.cashPayments],
     bankDeposits: [dateFilters.bankDeposits, reportSorts.bankDeposits],
     fees: [selectedFeeEntryIds, reportSorts.fees],
@@ -1105,7 +1110,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient, fundsClient 
   }
 
   function renderActiveReport() {
-    if (activeReportTab === 'dailyServices') return <ReportWorkbookSheet title="Ежедневная оплата услуг"><DailyServicePaymentPanel accessToken={auth.accessToken} canRead={auth.user.permissions.includes('reports.read')} dictionaryClient={dictionaryClient} reportClient={reportClient} initialFilters={dailyFilters} onFiltersChange={setDailyFilters} initialSelectedGarage={dailySelectedGarage} onSelectedGarageChange={setDailySelectedGarage} /></ReportWorkbookSheet>
+    if (activeReportTab === 'dailyServices' || activeReportTab === 'serviceDebt') return <ReportWorkbookSheet title={activeReportTab === 'serviceDebt' ? 'Задолженность' : 'Оплата по услугам'}><ServiceReportPanel key={`${activeReportTab}-${auth.accessToken}`} kind={activeReportTab === 'serviceDebt' ? 'debt' : 'payments'} accessToken={auth.accessToken} canRead={auth.user.permissions.includes('reports.read')} dictionaryClient={dictionaryClient} initialQuery={activeReportTab === 'serviceDebt' ? serviceDebtQuery : servicePaymentQuery} onQueryChange={activeReportTab === 'serviceDebt' ? setServiceDebtQuery : setServicePaymentQuery} initialSelectedGarage={activeReportTab === 'serviceDebt' ? debtSelectedGarage : paymentSelectedGarage} onSelectedGarageChange={activeReportTab === 'serviceDebt' ? setDebtSelectedGarage : setPaymentSelectedGarage} /></ReportWorkbookSheet>
     if (activeReportTab === 'consolidated') {
       const [report, primaryLoading, refreshing] = getReportView(consolidatedReport, consolidatedReportLoading, consolidatedReportError)
       const reportRows = (report?.monthlyRows ?? []).flatMap((month) => {
