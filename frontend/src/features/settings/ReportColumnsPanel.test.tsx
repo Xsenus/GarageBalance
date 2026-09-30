@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import type { ServiceReportColumns, ServiceReportsClient } from '../../services/serviceReportsApi'
 import { ReportColumnsPanel } from './ReportColumnsPanel'
@@ -10,7 +10,7 @@ it('edits column name and bindings, prevents duplicate assignment, persists vers
   await screen.findByDisplayValue('Свет')
   fireEvent.change(screen.getByLabelText('Название колонки'), { target: { value: 'Энергия' } })
   fireEvent.click(screen.getByLabelText('Услуга Вода'))
-  fireEvent.click(screen.getByRole('button', { name: 'Вода · 0' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Вода, услуг: 0' }))
   expect(screen.getByLabelText('Услуга Электричество')).toBeDisabled()
   expect(screen.getByLabelText('Услуга Вода')).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Поднять колонку Вода' }))
@@ -19,6 +19,22 @@ it('edits column name and bindings, prevents duplicate assignment, persists vers
   expect(api.saveColumns).toHaveBeenCalledWith('token', { version: 'old', columns: [{ id: 'c2', name: 'Вода', serviceIds: [] }, { id: 'c1', name: 'Энергия', serviceIds: ['s1', 's2'] }] }, expect.any(AbortSignal))
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить колонки' }))
   await waitFor(() => expect(api.saveColumns).toHaveBeenLastCalledWith('token', expect.objectContaining({ version: 'new' }), expect.any(AbortSignal)))
+})
+
+it('shows service counts as separate badges and identifies assigned columns without duplicate text separators', async () => {
+  render(<ReportColumnsPanel token="token" canManage client={client()} />)
+  const light = await screen.findByRole('button', { name: 'Свет, услуг: 1' })
+  expect(within(light).getByText('1')).toHaveClass('report-column-count')
+  expect(light).not.toHaveTextContent('·')
+  const water = screen.getByRole('button', { name: 'Вода, услуг: 0' })
+  expect(within(water).getByText('0')).toHaveClass('report-column-count')
+  expect(screen.getByLabelText('Услуга Электричество').closest('label')?.querySelector('.report-column-assignment')).toBeNull()
+  fireEvent.click(water)
+  const assigned = screen.getByLabelText('Услуга Электричество').closest('label')!
+  expect(within(assigned).getByText('Колонка')).toHaveClass('report-column-assignment-label')
+  expect(within(assigned).getByText('Свет').closest('.report-column-assignment')).not.toBeNull()
+  expect(assigned).not.toHaveTextContent('·')
+  expect(screen.getByLabelText('Услуга Электричество')).toBeDisabled()
 })
 
 it('adds and removes columns and filters available services', async () => {
