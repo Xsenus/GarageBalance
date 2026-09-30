@@ -37,7 +37,9 @@ it('defaults to all history through month end and appends without losing rows or
   expect(screen.queryByText(/Загружено:/)).not.toBeInTheDocument()
   scrollToEnd()
   expect(api.getReport).toHaveBeenCalledTimes(2)
-  expect(screen.getByRole('rowheader', { name: 'ИТОГО по всему фильтру' }).parentElement).toHaveTextContent('100.00')
+  expect(screen.getByRole('rowheader', { name: 'ИТОГО', exact: true }).parentElement).toHaveTextContent('100.00')
+  expect(screen.queryByText('ИТОГО по всему фильтру')).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Строки отчёта по услугам' })).toHaveClass('report-workbook-table')
   expect(screen.getByRole('rowheader', { name: 'Итого за 30.09.2046' })).toBeInTheDocument()
 })
 

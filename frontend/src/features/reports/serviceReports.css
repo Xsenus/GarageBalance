@@ -1,12 +1,13 @@
 .service-report-panel { min-height: 0; }
-.service-report-scroll { overflow: auto; max-height: 400px; overscroll-behavior: contain; border: 1px solid #dce3ee; border-radius: 8px; }
-.service-report-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-.service-report-table th, .service-report-table td { padding: 9px 10px; border-bottom: 1px solid #e1e6ef; border-right: 1px solid #e1e6ef; white-space: nowrap; text-align: right; }
+.service-report-scroll { overflow: auto; max-height: 400px; overscroll-behavior: contain; }
+.service-report-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; color: #101828; }
+.service-report-table th, .service-report-table td { padding: 5px 7px; border-bottom: 1px solid #111827; border-right: 1px solid #111827; white-space: nowrap; text-align: right; }
 .service-report-table th { text-align: left; }
+.service-report-table tbody th:not([colspan]) { font-weight: 400; }
 .service-report-table tbody tr:not([aria-hidden]) { height: 38px; }
-.service-report-table thead th { position: sticky; top: 0; background: #edf2f9; z-index: 1; white-space: normal; min-width: 95px; }
-.service-report-table tfoot th, .service-report-table tfoot td { position: sticky; bottom: 0; background: #eaf2ff; font-weight: 700; }
-.service-report-total { background: #f4f7fc; font-weight: 600; }
+.service-report-table thead th { position: sticky; top: 0; background: #f8fafc; font-weight: 800; text-align: center; z-index: 1; white-space: normal; min-width: 95px; }
+.service-report-table tfoot th, .service-report-table tfoot td { position: sticky; bottom: 0; background: #fff1e8; font-weight: 850; }
+.service-report-total { background: #fff1e8; font-weight: 850; }
 .service-report-modes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .service-report-modes button { background: #fff; color: #34425c; border: 1px solid #d1dbea; }
 .service-report-modes button[aria-pressed=true] { background: #165bfa; color: #fff; border-color: #165bfa; }

@@ -94,14 +94,14 @@ export function ServiceReportPanel({ accessToken, canRead, dictionaryClient, kin
     {!valid ? <p role="alert">{!query.dateTo ? 'Укажите дату окончания.' : 'Дата начала не может быть позже даты окончания.'}</p> : <>
     {loading && !report ? <LoadingSkeleton label="Получаем отчёт по услугам" columns={8} /> : null}
     {report ? <>
-      <div ref={scrollRef} className="service-report-scroll" tabIndex={0} role="region" aria-label="Строки отчёта по услугам" onScroll={(event) => { const target = event.currentTarget; setScrollTop(target.scrollTop); if (target.scrollHeight - target.scrollTop - target.clientHeight < 100) append() }}>
+      <div ref={scrollRef} className="report-workbook-table service-report-scroll" tabIndex={0} role="region" aria-label="Строки отчёта по услугам" onScroll={(event) => { const target = event.currentTarget; setScrollTop(target.scrollTop); if (target.scrollHeight - target.scrollTop - target.clientHeight < 100) append() }}>
       <table className="service-report-table" aria-label={kind === 'debt' ? 'Задолженность гаражей по услугам' : 'Оплаты гаражей по услугам'}><thead><tr>{kind === 'payments' ? <th scope="col">Дата</th> : null}<th scope="col">Гараж</th>{report.columns.map((column) => <th scope="col" key={column.id}>{column.name}</th>)}<th scope="col">ИТОГО</th></tr></thead><tbody>
         {window.before ? <tr aria-hidden="true"><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)} style={{ height: window.before, padding: 0, border: 0 }} /></tr> : null}
         {window.rows.map((row) => <tr key={row.key} className={row.dayTotal ? 'service-report-total' : undefined}>{row.dayTotal ? <th colSpan={2} scope="row">Итого за {formatDateOnly(row.date!)}</th> : <>{kind === 'payments' ? <td>{formatDateOnly(row.date!)}</td> : null}<th scope="row">{row.garageNumber}</th></>}{cells(row.amounts)}<td>{formatMoney(row.total)}</td></tr>)}
         {window.after ? <tr aria-hidden="true"><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)} style={{ height: window.after, padding: 0, border: 0 }} /></tr> : null}
         {!report.rows.length ? <tr><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)}><EmptyState>{kind === 'debt' ? 'Задолженности нет' : 'Оплат за выбранный период нет'}</EmptyState></td></tr> : null}
         {kind === 'debt' ? <tr className="service-report-fill-row" aria-hidden="true"><td colSpan={report.columns.length + 2} /></tr> : null}
-      </tbody><tfoot><tr><th colSpan={kind === 'payments' ? 2 : 1} scope="row">ИТОГО по всему фильтру</th>{cells(report.totals)}<td>{formatMoney(report.total)}</td></tr></tfoot></table>
+      </tbody><tfoot><tr><th colSpan={kind === 'payments' ? 2 : 1} scope="row">ИТОГО</th>{cells(report.totals)}<td>{formatMoney(report.total)}</td></tr></tfoot></table>
       {loading ? <LoadingSkeleton label="Подгружаем строки отчёта" rows={1} /> : null}
       </div>
     </> : null}
