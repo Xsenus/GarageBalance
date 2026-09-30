@@ -41,6 +41,7 @@ import-queue/
 artifacts/
 .deploy/
 /.playwright-mcp/
+/.playwright-cli/
 /tmp/
 
 # OS/editor
