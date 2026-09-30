@@ -93,7 +93,7 @@ export function ServiceReportPanel({ accessToken, canRead, dictionaryClient, kin
     {exportError ? <p role="alert">{exportError}</p> : null}
     {!valid ? <p role="alert">{!query.dateTo ? 'Укажите дату окончания.' : 'Дата начала не может быть позже даты окончания.'}</p> : <>
     {loading && !report ? <LoadingSkeleton label="Получаем отчёт по услугам" columns={8} /> : null}
-    {report ? <><p className="service-report-summary">{kind === 'debt' ? `Задолженность на ${formatDateOnly(report.dateTo)}` : `${report.dateFrom ? formatDateOnly(report.dateFrom) : 'С начала учёта'} — ${formatDateOnly(report.dateTo)}`} · ИТОГО: <strong>{formatMoney(report.total)}</strong></p>
+    {report ? <>{kind === 'debt' ? <p className="service-report-summary">Задолженность на {formatDateOnly(report.dateTo)} · ИТОГО: <strong>{formatMoney(report.total)}</strong></p> : null}
       <div ref={scrollRef} className="service-report-scroll" tabIndex={0} role="region" aria-label="Строки отчёта по услугам" onScroll={(event) => { const target = event.currentTarget; setScrollTop(target.scrollTop); if (target.scrollHeight - target.scrollTop - target.clientHeight < 100) append() }}>
       <table className="service-report-table" aria-label={kind === 'debt' ? 'Задолженность гаражей по услугам' : 'Оплаты гаражей по услугам'}><thead><tr>{kind === 'payments' ? <th scope="col">Дата</th> : null}<th scope="col">Гараж</th>{report.columns.map((column) => <th scope="col" key={column.id}>{column.name}</th>)}<th scope="col">ИТОГО</th></tr></thead><tbody>
         {window.before ? <tr aria-hidden="true"><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)} style={{ height: window.before, padding: 0, border: 0 }} /></tr> : null}
@@ -102,7 +102,7 @@ export function ServiceReportPanel({ accessToken, canRead, dictionaryClient, kin
         {!report.rows.length ? <tr><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)}><EmptyState>{kind === 'debt' ? 'Задолженности нет' : 'Оплат за выбранный период нет'}</EmptyState></td></tr> : null}
       </tbody><tfoot><tr><th colSpan={kind === 'payments' ? 2 : 1} scope="row">ИТОГО по всему фильтру</th>{cells(report.totals)}<td>{formatMoney(report.total)}</td></tr></tfoot></table>
       {loading ? <LoadingSkeleton label="Подгружаем строки отчёта" rows={1} /> : null}
-      </div><div className="service-report-progress"><span role="status">Загружено: {report.rows.length} из {report.rowCount}</span>{report.rows.length < report.rowCount ? <button type="button" className="ghost-button" disabled={loading || exporting || Boolean(error)} onClick={append}>Показать ещё строки</button> : null}</div>
+      </div>
     </> : null}
     {error ? <><AsyncErrorState message={error} onRetry={() => { setError(null); setLoading(true); setRetry((value) => value + 1) }} />{report ? <button type="button" className="ghost-button" onClick={() => change({})}>Переформировать отчёт</button> : null}</> : null}
     </>}

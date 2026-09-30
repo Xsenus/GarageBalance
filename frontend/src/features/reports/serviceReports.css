@@ -7,8 +7,7 @@
 .service-report-table thead th { position: sticky; top: 0; background: #edf2f9; z-index: 1; white-space: normal; min-width: 95px; }
 .service-report-table tfoot th, .service-report-table tfoot td { position: sticky; bottom: 0; background: #eaf2ff; font-weight: 700; }
 .service-report-total { background: #f4f7fc; font-weight: 600; }
-.service-report-progress, .service-report-modes { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
-.service-report-progress { justify-content: space-between; }
+.service-report-modes { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
 .service-report-modes button { background: #fff; color: #34425c; border: 1px solid #d1dbea; }
 .service-report-modes button[aria-pressed=true] { background: #165bfa; color: #fff; border-color: #165bfa; }
 .service-report-summary { margin: 12px 0; }

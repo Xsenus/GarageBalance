@@ -12,6 +12,11 @@ const data = (offset = 0): ServiceReport => ({ dateFrom: null, dateTo: '2046-09-
   days: [{ date: '2046-09-30', amounts: [100], total: 100 }], totals: [100], total: 100, rowCount: 2, offset, limit: 50 })
 const dictionary = { getGarages: vi.fn(async () => [{ id: 'g2', number: '2' }]) } as unknown as DictionaryClient
 function client(): ServiceReportsClient { return { getColumns: vi.fn(), saveColumns: vi.fn(), getReport: vi.fn(async (_token, _kind, query) => data(query.offset)), exportReport: vi.fn(async () => new Blob(['export'])) } }
+function scrollToEnd() {
+  const region = screen.getByRole('region', { name: 'Строки отчёта по услугам' })
+  Object.defineProperties(region, { scrollHeight: { configurable: true, value: 500 }, clientHeight: { configurable: true, value: 400 } })
+  fireEvent.scroll(region, { target: { scrollTop: 100 } })
+}
 
 it('defaults to all history through month end and appends without losing rows or totals', async () => {
   const api = client()
@@ -22,10 +27,16 @@ it('defaults to all history through month end and appends without losing rows or
   const end = new Date(`${request.dateTo}T12:00:00`)
   expect(end.getDate()).toBe(new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate())
   expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Показать ещё строки' }))
+  expect(screen.queryByRole('button', { name: 'Показать ещё строки' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Загружено:/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/С начала учёта/)).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Строки отчёта по услугам' })).toHaveAttribute('tabindex', '0')
+  scrollToEnd()
   await screen.findByRole('rowheader', { name: '10' })
   expect(screen.getByRole('rowheader', { name: '2' })).toBeInTheDocument()
-  expect(screen.getByText('Загружено: 2 из 2')).toBeInTheDocument()
+  expect(screen.queryByText(/Загружено:/)).not.toBeInTheDocument()
+  scrollToEnd()
+  expect(api.getReport).toHaveBeenCalledTimes(2)
   expect(screen.getByRole('rowheader', { name: 'ИТОГО по всему фильтру' }).parentElement).toHaveTextContent('100.00')
   expect(screen.getByRole('rowheader', { name: 'Итого за 30.09.2046' })).toBeInTheDocument()
 })
@@ -47,7 +58,7 @@ it('keeps existing rows after append failure and retries the same page', async (
   const api = client(); vi.mocked(api.getReport).mockResolvedValueOnce(data()).mockRejectedValueOnce(new Error('Ошибка страницы')).mockResolvedValue(data(50))
   render(<ServiceReportPanel accessToken="token" canRead dictionaryClient={dictionary} kind="payments" client={api} />)
   await screen.findByRole('rowheader', { name: '2' })
-  fireEvent.click(screen.getByRole('button', { name: 'Показать ещё строки' }))
+  scrollToEnd()
   expect(await screen.findByRole('alert')).toHaveTextContent('Ошибка страницы')
   expect(screen.getByRole('rowheader', { name: '2' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Повторить загрузку' }))
@@ -103,7 +114,7 @@ it('refuses to merge pages with changed column bindings and allows reformatting 
   const api = client(); vi.mocked(api.getReport).mockResolvedValueOnce(data()).mockResolvedValue({ ...data(50), columns: [{ id: 'water', name: 'Вода', serviceIds: ['water-service'] }] })
   render(<ServiceReportPanel accessToken="token" canRead dictionaryClient={dictionary} kind="payments" client={api} />)
   await screen.findByRole('rowheader', { name: '2' })
-  fireEvent.click(screen.getByRole('button', { name: 'Показать ещё строки' }))
+  scrollToEnd()
   expect(await screen.findByRole('alert')).toHaveTextContent('Колонки отчёта изменились')
   expect(screen.queryByRole('columnheader', { name: 'Вода' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Переформировать отчёт' }))
