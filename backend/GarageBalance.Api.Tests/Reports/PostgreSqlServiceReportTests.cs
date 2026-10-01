@@ -137,8 +137,13 @@ public sealed class PostgreSqlServiceReportTests
             new AccrualPaymentAllocation { Accrual = old, FinancialOperation = Payment(first, income, day, 40), Amount = 40, IsActive = true },
             Payment(first, income, day.AddDays(1), 1000));
         await db.SaveChangesAsync();
-        var repository = new EfServiceReportRepository(db); var config = await repository.GetColumnsAsync(default);
-        await repository.SaveColumnsAsync(new(config.Version, [new(Guid.NewGuid(), "Свет", [service.Id])]), null, default); await db.SaveChangesAsync();
+        var repository = new EfServiceReportRepository(db);
+        foreach (var scope in new[] { "accrued", "overdue" })
+        {
+            var config = await repository.GetColumnsAsync(default, scope);
+            await repository.SaveColumnsAsync(new(config.Version, [new(Guid.NewGuid(), "Свет", [service.Id])], scope), null, default);
+        }
+        await db.SaveChangesAsync();
         var report = await repository.GetDebtAsync(new(DateTo: day, Limit: 1), default);
         Assert.Equal(2, report.RowCount); Assert.Equal(240, report.Total); Assert.Equal(160, Assert.Single(report.Rows).Total);
         Assert.Equal([220m, 20m], report.Totals);
@@ -146,6 +151,50 @@ public sealed class PostgreSqlServiceReportTests
         Assert.Equal(160, overdue.Total); Assert.Equal([140m, 20m], overdue.Totals);
         var garage = await repository.GetDebtAsync(new(DateTo: day, GarageId: second.Id), default);
         Assert.Equal(80, garage.Total); Assert.DoesNotContain(garage.Columns, column => column.Name == "Прочее");
+    }
+
+    [PostgreSqlFact]
+    public async Task MigrationPreservesLegacyConfigurationAndReportScopesAreIndependent()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20260930080739_AddServiceReportColumns");
+        var legacy = await db.ApplicationSettings.SingleAsync(setting => setting.Key == "reports.service_columns");
+        var columnId = Guid.NewGuid();
+        legacy.JsonValue = System.Text.Json.JsonSerializer.Serialize(new[] { new ServiceReportColumn(columnId, "Своя колонка", []) });
+        await db.SaveChangesAsync();
+        var legacyVersion = legacy.Version;
+        db.ChangeTracker.Clear();
+        await migrator.MigrateAsync();
+        var repository = new EfServiceReportRepository(db);
+        var configs = new List<ServiceReportColumnsDto>();
+        foreach (var scope in new[] { "payments", "accrued", "overdue" })
+        {
+            var config = await repository.GetColumnsAsync(default, scope);
+            Assert.Equal(scope, config.Report);
+            Assert.Equal(columnId, Assert.Single(config.Columns).Id);
+            Assert.Equal("Своя колонка", config.Columns[0].Name);
+            configs.Add(config);
+        }
+        Assert.Equal(legacyVersion, configs[0].Version);
+        Assert.Equal(3, configs.Select(config => config.Version).Distinct().Count());
+        foreach (var config in configs)
+        {
+            await repository.SaveColumnsAsync(new(config.Version, [new(columnId, config.Report, [])], config.Report), null, default);
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+        }
+        Assert.Equal("payments", Assert.Single((await repository.GetPaymentsAsync(new(DateTo: new(2046, 9, 30)), default)).Columns).Name);
+        Assert.Equal("accrued", Assert.Single((await repository.GetDebtAsync(new(DateTo: new(2046, 9, 30)), default)).Columns).Name);
+        Assert.Equal("overdue", Assert.Single((await repository.GetDebtAsync(new(DateTo: new(2046, 9, 30), OverdueOnly: true), default)).Columns).Name);
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => repository.SaveColumnsAsync(new(configs[1].Version, [new(columnId, "Старая версия", [])], "accrued"), null, default));
+        await migrator.MigrateAsync("20260930080739_AddServiceReportColumns");
+        await migrator.MigrateAsync();
+        db.ChangeTracker.Clear();
+        Assert.All(await db.ApplicationSettings.Where(setting => setting.Key.StartsWith("reports.service_columns.")).ToArrayAsync(), setting => Assert.Contains("payments", setting.JsonValue!));
+        Assert.False(db.Database.HasPendingModelChanges());
+        Assert.Empty(await db.FinancialOperations.ToArrayAsync());
     }
 
     private static FinancialOperation Payment(Garage garage, IncomeType? income, DateOnly date, decimal amount, bool canceled = false) => new()

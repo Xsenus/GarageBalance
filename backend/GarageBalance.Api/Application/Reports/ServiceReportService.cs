@@ -9,12 +9,14 @@ namespace GarageBalance.Api.Application.Reports;
 public sealed class ServiceReportService(IServiceReportRepository repository, IBusinessDateProvider businessDate,
     IAuditEventWriter audit, IApplicationUnitOfWork unitOfWork) : IServiceReportService
 {
-    public Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken) => repository.GetColumnsAsync(cancellationToken);
+    public Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken, string report = "payments") => repository.GetColumnsAsync(cancellationToken, report);
 
     public async Task<ReportResult<ServiceReportColumnsDto>> SaveColumnsAsync(UpdateServiceReportColumnsRequest request, Guid? actorId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var existing = await repository.GetColumnsAsync(cancellationToken);
+        if (!ServiceReportScopes.IsValid(request.Report))
+            return ReportResult<ServiceReportColumnsDto>.Failure("report_invalid", "Выберите отчёт для настройки колонок.");
+        var existing = await repository.GetColumnsAsync(cancellationToken, request.Report);
         if (request.Columns is null || request.Columns.Length is < 1 or > 20
             || request.Columns.Any(column => column is null || column.Id == Guid.Empty || column.Id == Guid.Parse("970bf090-583f-46f3-a04f-67e96665b829") || string.IsNullOrWhiteSpace(column.Name)
                 || column.Name.Trim().Length > 80 || column.Name.Trim().Equals("Прочее", StringComparison.OrdinalIgnoreCase) || column.ServiceIds is null)
@@ -28,12 +30,12 @@ public sealed class ServiceReportService(IServiceReportRepository repository, IB
         if (links.GroupBy(link => link.Income).Any(group => group.Select(link => link.Id).Distinct().Count() > 1))
             return ReportResult<ServiceReportColumnsDto>.Failure("services_ambiguous", "Услуги одного вида поступления должны находиться в одной колонке: исторические оплаты не различают их.");
         await repository.SaveColumnsAsync(request with { Columns = request.Columns.Select(column => column with { Name = column.Name.Trim() }).ToArray() }, actorId, cancellationToken);
-        audit.Add(new(actorId, "settings.service_report_columns_updated", "application_setting", "service_report_columns",
-            "Изменён состав колонок отчётов оплаты и задолженности.", EntityDisplayName: "Колонки отчётов",
+        audit.Add(new(actorId, "settings.service_report_columns_updated", "application_setting", $"service_report_columns.{request.Report}",
+            "Изменён состав колонок выбранного отчёта.", EntityDisplayName: "Колонки отчётов",
             OldValues: new Dictionary<string, object?> { ["columns"] = JsonSerializer.Serialize(existing.Columns) }, NewValues: new Dictionary<string, object?> { ["columns"] = JsonSerializer.Serialize(request.Columns) },
             FieldLabels: new Dictionary<string, string> { ["columns"] = "Колонки отчётов" }));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return ReportResult<ServiceReportColumnsDto>.Success(await repository.GetColumnsAsync(cancellationToken));
+        return ReportResult<ServiceReportColumnsDto>.Success(await repository.GetColumnsAsync(cancellationToken, request.Report));
     }
 
     public async Task<ReportResult<ServiceReportDto>> GetAsync(ServiceReportRequest request, bool debt, CancellationToken cancellationToken)

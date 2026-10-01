@@ -12,7 +12,11 @@ public sealed class ServiceReportsController(IServiceReportService service) : Co
 {
     [HttpGet("columns")]
     [Authorize(Policy = SystemPermissions.TariffsManage)]
-    public async Task<ActionResult<ServiceReportColumnsDto>> GetColumns(CancellationToken cancellationToken) => Ok(await service.GetColumnsAsync(cancellationToken));
+    public async Task<ActionResult<ServiceReportColumnsDto>> GetColumns(CancellationToken cancellationToken, [FromQuery] string report = "payments")
+    {
+        if (!ServiceReportScopes.IsValid(report)) return BadRequest(ApiProblemDetails.Create("report_invalid", "Выберите отчёт для настройки колонок.", StatusCodes.Status400BadRequest));
+        return Ok(await service.GetColumnsAsync(cancellationToken, report));
+    }
 
     [HttpPut("columns")]
     [Authorize(Policy = SystemPermissions.TariffsManage)]

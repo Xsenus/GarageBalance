@@ -1,13 +1,14 @@
 import { authenticatedApiFetch, authenticatedJsonApiFetch, readApiErrorMessage } from './authenticatedApiFetch'
 
 export type ServiceReportColumn = { id: string; name: string; serviceIds: string[] }
-export type ServiceReportColumns = { version: string; columns: ServiceReportColumn[]; services: { id: string; name: string; incomeTypeId: string | null; isArchived: boolean }[] }
+export type ServiceReportScope = 'payments' | 'accrued' | 'overdue'
+export type ServiceReportColumns = { version: string; report?: ServiceReportScope; columns: ServiceReportColumn[]; services: { id: string; name: string; incomeTypeId: string | null; isArchived: boolean }[] }
 export type ServiceReportQuery = { dateFrom?: string; dateTo?: string; garageId?: string; offset?: number; limit?: number; overdueOnly?: boolean }
 export type ServiceReport = { dateFrom: string | null; dateTo: string; columns: ServiceReportColumn[]; rows: { date: string | null; garageId: string; garageNumber: string; amounts: number[]; total: number }[]; days: { date: string; amounts: number[]; total: number }[]; totals: number[]; total: number; rowCount: number; offset: number; limit: number }
 export type ServiceReportKind = 'payments' | 'debt'
 export interface ServiceReportsClient {
-  getColumns(token: string, signal?: AbortSignal): Promise<ServiceReportColumns>
-  saveColumns(token: string, request: Pick<ServiceReportColumns, 'version' | 'columns'>, signal?: AbortSignal): Promise<ServiceReportColumns>
+  getColumns(token: string, signal?: AbortSignal, report?: ServiceReportScope): Promise<ServiceReportColumns>
+  saveColumns(token: string, request: Pick<ServiceReportColumns, 'version' | 'columns' | 'report'>, signal?: AbortSignal): Promise<ServiceReportColumns>
   getReport(token: string, kind: ServiceReportKind, query: ServiceReportQuery, signal?: AbortSignal): Promise<ServiceReport>
   exportReport(token: string, kind: ServiceReportKind, query: ServiceReportQuery, format: 'xlsx' | 'pdf', signal?: AbortSignal): Promise<Blob>
 }
@@ -21,7 +22,7 @@ async function json<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 export const serviceReportsApi: ServiceReportsClient = {
-  async getColumns(token, signal) { return json(await authenticatedApiFetch(token, '/api/reports/services/columns', { signal })) },
+  async getColumns(token, signal, report) { return json(await authenticatedApiFetch(token, `/api/reports/services/columns${report ? `?report=${report}` : ''}`, { signal })) },
   async saveColumns(token, request, signal) { return json(await authenticatedJsonApiFetch(token, '/api/reports/services/columns', { method: 'PUT', body: JSON.stringify(request), signal })) },
   async getReport(token, kind, query, signal) { return json(await authenticatedApiFetch(token, `/api/reports/services/${kind}?${queryString(query)}`, { signal })) },
   async exportReport(token, kind, query, format, signal) {

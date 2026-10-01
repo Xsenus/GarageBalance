@@ -78,6 +78,48 @@ public sealed class ServiceReportsHttpTests
             Assert.Equal(1, await check.AuditEvents.CountAsync(item => item.Action == "settings.service_report_columns_updated"));
             Assert.Equal(4, await check.AuditEvents.CountAsync(item => item.Action == "reports.service_report_exported"));
             Assert.Empty(await check.FinancialOperations.ToArrayAsync());
+            using (var invalid = await client.GetAsync(root + "columns?report=unknown")) Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            using (var invalid = await client.PutAsJsonAsync(root + "columns", new UpdateServiceReportColumnsRequest(Guid.NewGuid(), columns, "unknown"))) Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            foreach (var scope in new[] { "payments", "accrued", "overdue" })
+            {
+                var config = (await client.GetFromJsonAsync<ServiceReportColumnsDto>(root + $"columns?report={scope}"))!;
+                Assert.Equal(scope, config.Report);
+                using var saved = await client.PutAsJsonAsync(root + "columns", new UpdateServiceReportColumnsRequest(config.Version, [new(Guid.NewGuid(), scope, [])], scope));
+                Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+            }
+            Authorize([SystemPermissions.ReportsRead, SystemPermissions.TariffsManage]);
+            foreach (var scope in new[] { "payments", "accrued", "overdue" })
+            {
+                var route = scope == "payments" ? "payments" : $"debt?overdueOnly={scope == "overdue"}";
+                var report = (await client.GetFromJsonAsync<ServiceReportDto>(root + route))!;
+                Assert.Equal(scope, Assert.Single(report.Columns).Name);
+                var exportRoute = scope == "payments" ? "payments/export/" : "debt/export/";
+                foreach (var format in new[] { "xlsx", "pdf" })
+                {
+                    using var export = await client.PostAsync(root + exportRoute + format + $"?overdueOnly={scope == "overdue"}", null);
+                    Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+                    var bytes = await export.Content.ReadAsByteArrayAsync();
+                    if (format == "xlsx")
+                    {
+                        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(bytes));
+                        using var reader = new StreamReader(archive.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+                        Assert.Contains(scope, await reader.ReadToEndAsync(), StringComparison.Ordinal);
+                    }
+                    else
+                    {
+                        using var pdf = UglyToad.PdfPig.PdfDocument.Open(bytes);
+                        Assert.Contains(scope, string.Concat(pdf.GetPages().Select(page => page.Text)), StringComparison.Ordinal);
+                    }
+                }
+            }
+            Assert.Equal(4, await check.AuditEvents.CountAsync(item => item.Action == "settings.service_report_columns_updated"));
+            Assert.Equal(10, await check.AuditEvents.CountAsync(item => item.Action == "reports.service_report_exported"));
+            Authorize([SystemPermissions.ReportsRead]);
+            foreach (var scope in new[] { "payments", "accrued", "overdue" })
+            {
+                using var denied = await client.GetAsync(root + $"columns?report={scope}");
+                Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+            }
             Task<HttpResponseMessage> Send(string route) => route.Contains("export", StringComparison.Ordinal) ? client.PostAsync(root + route, null) : client.GetAsync(root + route);
             void Authorize(string[] permissions)
             {

@@ -15,6 +15,15 @@ it('loads and saves columns with JSON version and cancellation', async () => {
   expect(await serviceReportsApi.saveColumns('token', { version: 'v', columns: [] })).toEqual({ version: 'next' })
   expect(authenticatedJsonApiFetch).toHaveBeenCalledWith('token', '/api/reports/services/columns', { method: 'PUT', body: JSON.stringify({ version: 'v', columns: [] }), signal: undefined })
 })
+it.each(['payments', 'accrued', 'overdue'] as const)('loads and saves independent columns for %s', async (report) => {
+  vi.mocked(authenticatedApiFetch).mockImplementation(async () => new Response(JSON.stringify({ report })))
+  vi.mocked(authenticatedJsonApiFetch).mockImplementation(async () => new Response(JSON.stringify({ report })))
+  const controller = new AbortController()
+  expect(await serviceReportsApi.getColumns('token', controller.signal, report)).toEqual({ report })
+  expect(authenticatedApiFetch).toHaveBeenLastCalledWith('token', `/api/reports/services/columns?report=${report}`, { signal: controller.signal })
+  await serviceReportsApi.saveColumns('token', { version: 'v', columns: [], report }, controller.signal)
+  expect(authenticatedJsonApiFetch).toHaveBeenLastCalledWith('token', '/api/reports/services/columns', { method: 'PUT', body: JSON.stringify({ version: 'v', columns: [], report }), signal: controller.signal })
+})
 it.each(['xlsx', 'pdf'] as const)('exports %s with the full filter rather than the loaded page', async (format) => {
   vi.mocked(authenticatedApiFetch).mockResolvedValue(new Response('export'))
   const blob = await serviceReportsApi.exportReport('token', 'payments', { dateTo: '2026-09-30', offset: 50, limit: 50 }, format)

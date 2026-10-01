@@ -104,6 +104,28 @@ public sealed class ServiceReportServiceTests
         Assert.False((await service.ExportAsync(new(GarageId: Guid.Empty), debt, pdf, null, default)).Succeeded);
     }
 
+    [Theory]
+    [InlineData("payments")]
+    [InlineData("accrued")]
+    [InlineData("overdue")]
+    public async Task SaveTargetsOnlySelectedReportAndValidatesScope(string report)
+    {
+        var repository = new FakeRepository(); var audit = new FakeAudit(); var service = Create(repository, audit);
+        var request = new UpdateServiceReportColumnsRequest(Guid.NewGuid(), [new(Guid.NewGuid(), "Колонка", [])], report);
+        var result = await service.SaveColumnsAsync(request, null, default);
+        Assert.True(result.Succeeded);
+        Assert.Equal(report, result.Value!.Report);
+        Assert.Equal(report, repository.Saved!.Report);
+        Assert.EndsWith($".{report}", Assert.Single(audit.Events).EntityId);
+        Assert.Equal("report_invalid", (await service.SaveColumnsAsync(request with { Report = "other" }, null, default)).ErrorCode);
+        Assert.Single(audit.Events);
+        Assert.True(ServiceReportScopes.IsValid(report));
+        Assert.NotEqual(Guid.Empty, ServiceReportScopes.SettingsId(report));
+        Assert.Throws<ArgumentException>(() => ServiceReportScopes.SettingsId("other"));
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.SaveColumnsAsync(request, null, cancellation.Token));
+    }
+
     private static ServiceReportService Create(FakeRepository repository, FakeAudit? audit = null, FakeWork? work = null) => new(repository, new TestBusinessDateProvider(new(2046, 9, 18)), audit ?? new(), work ?? new());
     private sealed class FakeRepository : IServiceReportRepository
     {
@@ -114,7 +136,7 @@ public sealed class ServiceReportServiceTests
         public int ColumnsCount { get; set; } = 1;
         public UpdateServiceReportColumnsRequest? Saved { get; private set; }
         public Guid? Actor { get; private set; }
-        public Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken) => Task.FromResult(new ServiceReportColumnsDto(Guid.NewGuid(), [], [new(Service1, "Свет", Income, false), new(Service2, "Свет старый", Income, true)]));
+        public Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken, string report = "payments") => Task.FromResult(new ServiceReportColumnsDto(Guid.NewGuid(), [], [new(Service1, "Свет", Income, false), new(Service2, "Свет старый", Income, true)], report));
         public Task SaveColumnsAsync(UpdateServiceReportColumnsRequest request, Guid? actorId, CancellationToken cancellationToken) { Saved = request; Actor = actorId; return Task.CompletedTask; }
         public Task<ServiceReportDto> GetPaymentsAsync(ServiceReportRequest request, CancellationToken cancellationToken) { Debt = false; return Get(request); }
         public Task<ServiceReportDto> GetDebtAsync(ServiceReportRequest request, CancellationToken cancellationToken) { Debt = true; return Get(request); }

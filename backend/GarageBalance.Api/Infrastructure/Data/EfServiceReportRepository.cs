@@ -12,14 +12,16 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfServiceReportRepository(GarageBalanceDbContext db) : IServiceReportRepository
 {
-    public const string SettingsKey = "reports.service_columns";
+    public const string SettingsKey = "reports.service_columns.payments";
     public static readonly Guid SettingsId = Guid.Parse("96f302bb-d6b0-4e91-aafe-b4713ff788df");
     private static readonly (string Code, string Name)[] Defaults = [("electricity", "Электроэнергия"), ("water", "Вода"), ("trash", "Мусор"), ("outdoor_lighting", "Наружное освещение"), ("membership", "Членский взнос"), ("target", "Целевой взнос")];
     private static readonly Guid OtherId = Guid.Parse("970bf090-583f-46f3-a04f-67e96665b829");
 
-    public async Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken)
+    public async Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken, string report = "payments")
     {
-        var setting = await db.ApplicationSettings.AsNoTracking().SingleOrDefaultAsync(item => item.Key == SettingsKey, cancellationToken);
+        var settingsId = ServiceReportScopes.SettingsId(report);
+        var key = $"reports.service_columns.{report}";
+        var setting = await db.ApplicationSettings.AsNoTracking().SingleOrDefaultAsync(item => item.Key == key, cancellationToken);
         var options = await db.ChargeServiceSettings.AsNoTracking().OrderBy(service => service.Name).Select(service => new
         {
             service.Id,
@@ -31,15 +33,17 @@ public sealed class EfServiceReportRepository(GarageBalanceDbContext db) : IServ
         if (options.Length > 2000) throw new InvalidOperationException("В справочнике больше 2000 услуг. Уточните конфигурацию отчёта.");
         var columns = setting?.JsonValue is not null ? JsonSerializer.Deserialize<ServiceReportColumn[]>(setting.JsonValue)!
             : Defaults.Select((item, index) => new ServiceReportColumn(new Guid(index + 1, 0, 0, new byte[8]), item.Name, options.Where(option => option.Code == item.Code).Select(option => option.Id).ToArray())).ToArray();
-        return new(setting?.Version ?? SettingsId, columns, options.Select(option => new ServiceReportServiceOption(option.Id, option.Name, option.IncomeTypeId, option.IsArchived)).ToArray());
+        return new(setting?.Version ?? settingsId, columns, options.Select(option => new ServiceReportServiceOption(option.Id, option.Name, option.IncomeTypeId, option.IsArchived)).ToArray(), report);
     }
 
     public async Task SaveColumnsAsync(UpdateServiceReportColumnsRequest request, Guid? actorId, CancellationToken cancellationToken)
     {
-        var setting = await db.ApplicationSettings.SingleOrDefaultAsync(item => item.Key == SettingsKey, cancellationToken);
+        var settingsId = ServiceReportScopes.SettingsId(request.Report);
+        var key = $"reports.service_columns.{request.Report}";
+        var setting = await db.ApplicationSettings.SingleOrDefaultAsync(item => item.Key == key, cancellationToken);
         if (setting is null)
         {
-            setting = new ApplicationSetting { Id = SettingsId, Key = SettingsKey, Version = SettingsId };
+            setting = new ApplicationSetting { Id = settingsId, Key = key, Version = settingsId };
             db.ApplicationSettings.Add(setting);
         }
         OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
@@ -128,7 +132,7 @@ public sealed class EfServiceReportRepository(GarageBalanceDbContext db) : IServ
     public async Task<ServiceReportDto> GetDebtAsync(ServiceReportRequest request, CancellationToken cancellationToken)
     {
         await using var transaction = db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken) : null;
-        var configuration = await GetColumnsAsync(cancellationToken);
+        var configuration = await GetColumnsAsync(cancellationToken, request.OverdueOnly ? "overdue" : "accrued");
         // Windowed credit application is performed in PostgreSQL, oldest debt first.
         // Neither historical payments nor individual accruals are loaded into application memory.
         const string sql = """

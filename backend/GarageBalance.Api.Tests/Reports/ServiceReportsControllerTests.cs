@@ -64,6 +64,18 @@ public sealed class ServiceReportsControllerTests
         Assert.Equal(request, fake.Columns); Assert.Null(fake.Actor);
         if (failure) Assert.IsType<BadRequestObjectResult>(result.Result); else Assert.IsType<OkObjectResult>(result.Result);
     }
+    [Theory]
+    [InlineData("payments")]
+    [InlineData("accrued")]
+    [InlineData("overdue")]
+    public async Task GetColumnsSelectsReportAndRejectsUnknownScope(string report)
+    {
+        var controller = new ServiceReportsController(new FakeService());
+        var result = await controller.GetColumns(default, report);
+        Assert.Equal(report, Assert.IsType<ServiceReportColumnsDto>(Assert.IsType<OkObjectResult>(result.Result).Value).Report);
+        Assert.IsType<BadRequestObjectResult>((await controller.GetColumns(default, "all")).Result);
+    }
+
     private sealed class FakeService : IServiceReportService
     {
         public bool Fail { get; set; }
@@ -73,7 +85,7 @@ public sealed class ServiceReportsControllerTests
         public Guid? Actor { get; private set; }
         public CancellationToken Token { get; private set; }
         public UpdateServiceReportColumnsRequest? Columns { get; private set; }
-        public Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken) => Task.FromResult(new ServiceReportColumnsDto(Guid.NewGuid(), [], []));
+        public Task<ServiceReportColumnsDto> GetColumnsAsync(CancellationToken cancellationToken, string report = "payments") => Task.FromResult(new ServiceReportColumnsDto(Guid.NewGuid(), [], [], report));
         public async Task<ReportResult<ServiceReportColumnsDto>> SaveColumnsAsync(UpdateServiceReportColumnsRequest request, Guid? actorId, CancellationToken cancellationToken)
         { Columns = request; Actor = actorId; return Fail ? ReportResult<ServiceReportColumnsDto>.Failure("invalid", "Ошибка") : ReportResult<ServiceReportColumnsDto>.Success(await GetColumnsAsync(cancellationToken)); }
         public Task<ReportResult<ServiceReportDto>> GetAsync(ServiceReportRequest request, bool debt, CancellationToken cancellationToken)
