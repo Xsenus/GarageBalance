@@ -100,7 +100,7 @@ export function ServiceReportPanel({ accessToken, canRead, dictionaryClient, kin
         {window.rows.map((row) => <tr key={row.key} className={row.dayTotal ? 'service-report-total' : undefined}>{row.dayTotal ? <th colSpan={2} scope="row">Итого за {formatDateOnly(row.date!)}</th> : <>{kind === 'payments' ? <td>{formatDateOnly(row.date!)}</td> : null}<th scope="row">{row.garageNumber}</th></>}{cells(row.amounts)}<td>{formatMoney(row.total)}</td></tr>)}
         {window.after ? <tr aria-hidden="true"><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)} style={{ height: window.after, padding: 0, border: 0 }} /></tr> : null}
         {!report.rows.length ? <tr><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)}><EmptyState>{kind === 'debt' ? 'Задолженности нет' : 'Оплат за выбранный период нет'}</EmptyState></td></tr> : null}
-        {kind === 'debt' ? <tr className="service-report-fill-row" aria-hidden="true"><td colSpan={report.columns.length + 2} /></tr> : null}
+        <tr className="service-report-fill-row" aria-hidden="true"><td colSpan={report.columns.length + (kind === 'payments' ? 3 : 2)} /></tr>
       </tbody><tfoot><tr><th colSpan={kind === 'payments' ? 2 : 1} scope="row">ИТОГО</th>{cells(report.totals)}<td>{formatMoney(report.total)}</td></tr></tfoot></table>
       {loading ? <LoadingSkeleton label="Подгружаем строки отчёта" rows={1} /> : null}
       </div>

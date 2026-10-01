@@ -40,7 +40,20 @@ it('defaults to all history through month end and appends without losing rows or
   expect(screen.getByRole('rowheader', { name: 'ИТОГО', exact: true }).parentElement).toHaveTextContent('100.00')
   expect(screen.queryByText('ИТОГО по всему фильтру')).not.toBeInTheDocument()
   expect(screen.getByRole('region', { name: 'Строки отчёта по услугам' })).toHaveClass('report-workbook-table')
+  expect(screen.getByRole('region', { name: 'Строки отчёта по услугам' }).querySelector('.service-report-fill-row td')).toHaveAttribute('colspan', '4')
   expect(screen.getByRole('rowheader', { name: 'Итого за 30.09.2046' })).toBeInTheDocument()
+})
+
+it.each(['payments', 'debt'] as const)('keeps the empty %s footer below a decorative fill row spanning every column', async (kind) => {
+  const api = client(); vi.mocked(api.getReport).mockResolvedValue({ ...data(), rows: [], rowCount: 0, totals: [0], total: 0, days: [] })
+  render(<ServiceReportPanel accessToken="token" canRead dictionaryClient={dictionary} kind={kind} client={api} />)
+  await screen.findByText(kind === 'payments' ? 'Оплат за выбранный период нет' : 'Задолженности нет')
+  const table = screen.getByRole('table', { name: kind === 'payments' ? 'Оплаты гаражей по услугам' : 'Задолженность гаражей по услугам' })
+  const fill = table.querySelector('tbody > tr:last-child')
+  expect(fill).toHaveClass('service-report-fill-row')
+  expect(fill).toHaveAttribute('aria-hidden', 'true')
+  expect(fill?.firstElementChild).toHaveAttribute('colspan', kind === 'payments' ? '4' : '3')
+  expect(table.querySelector('tfoot')).toHaveTextContent('ИТОГО')
 })
 
 it('shows debt modes and resets the page on mode and garage changes', async () => {
