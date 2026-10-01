@@ -2812,7 +2812,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               const serviceSetting = row.backendServiceSettingId
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
-              const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
+              const isServiceSaving = Boolean(serviceSetting && (
+                tariffSavingRowId === `charge-service-${serviceSetting.id}`
+                || tariffRows.some((savingRow) => savingRow.id === tariffSavingRowId
+                  && savingRow.backendServiceSettingId === serviceSetting.id)
+              ))
               const isSalaryFundSummary = row.category === salaryFundCategory
               const isSalaryFundGroupStart = isSalaryFundSummary && (
                 pageIndex === 0 || tariffPage.items[pageIndex - 1]?.category !== salaryFundCategory

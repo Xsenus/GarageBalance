@@ -98,6 +98,35 @@ public sealed class S3CompatibleStorageProviderTests
         Assert.DoesNotContain("secret-token", client.LastMetadata.Keys);
     }
 
+    [Theory]
+    [InlineData("DatabaseBackup", true)]
+    [InlineData("RecoverySecrets", false)]
+    public async Task Write_BackupOriginMatchesConfiguredNamespaceAndCannotBeSpoofed(string dataClass, bool isBackup)
+    {
+        var client = new FakeS3Client();
+        using var provider = new S3CompatibleStorageProvider(
+            CreateDestination() with { BackupPrefix = "backups", BackupSource = "sgk/31.192.110.221" }, client, TimeProvider.System);
+        byte[] bytes = [1, 2, 3, 4];
+        await using var content = new MemoryStream(bytes);
+        var result = await provider.WriteAsync(new StorageWriteRequest(Guid.NewGuid(), "copy.pgdump", 1,
+            bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), new Dictionary<string, string>
+            {
+                ["garagebalance-data-class"] = dataClass,
+                [ReadableBackupLayout.CreatedAtMetadataKey] = Now.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                [ReadableBackupLayout.SourceMetadataKey] = "spoofed/server"
+            }), content, CancellationToken.None);
+        if (isBackup)
+        {
+            Assert.StartsWith("backups/sgk/31.192.110.221/", result.NativeLocator);
+            Assert.Equal("sgk/31.192.110.221", client.LastMetadata[ReadableBackupLayout.SourceMetadataKey]);
+        }
+        else
+        {
+            Assert.StartsWith("private/", result.NativeLocator);
+            Assert.DoesNotContain(ReadableBackupLayout.SourceMetadataKey, client.LastMetadata.Keys);
+        }
+    }
+
     [Fact]
     public async Task Write_TreatsConditionalConflictAsIdempotentOnlyWhenMetadataMatches()
     {

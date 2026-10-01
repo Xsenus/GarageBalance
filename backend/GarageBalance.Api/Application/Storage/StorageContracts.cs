@@ -91,6 +91,7 @@ public sealed class StorageDestinationOptions
     public string Prefix { get; init; } = "garagebalance";
     public string? BackupPrefix { get; init; }
     public string BackupTimeZoneId { get; init; } = "Asia/Novosibirsk";
+    public string? BackupSource { get; init; }
     public string SigningRegion { get; init; } = "us-east-1";
     public bool ForcePathStyle { get; init; } = true;
     public long MultipartThresholdBytes { get; init; } = 64L * 1024 * 1024;
@@ -161,7 +162,8 @@ public sealed record EffectiveStorageDestination(
     S3EncryptionMode EncryptionMode = S3EncryptionMode.SseS3,
     string? KmsKeyId = null,
     string? BackupPrefix = null,
-    string BackupTimeZoneId = "Asia/Novosibirsk");
+    string BackupTimeZoneId = "Asia/Novosibirsk",
+    string? BackupSource = null);
 
 public static partial class StorageObjectKey
 {
@@ -362,10 +364,13 @@ public sealed class StorageOptionsValidator : IValidateOptions<StorageOptions>
         try
         {
             _ = StorageObjectKey.Normalize(destination.Prefix);
+            if (destination.BackupSource is not null && destination.BackupPrefix is null)
+                throw new ArgumentException("Backup source requires a readable backup prefix.");
             if (destination.BackupPrefix is not null)
             {
                 _ = StorageObjectKey.Normalize(destination.BackupPrefix);
                 _ = TimeZoneInfo.FindSystemTimeZoneById(destination.BackupTimeZoneId);
+                if (destination.BackupSource is not null) _ = ReadableBackupLayout.NormalizeSource(destination.BackupSource);
             }
         }
         catch (ArgumentException)
@@ -515,7 +520,8 @@ public sealed class StorageConfigurationResolver(
             item.EncryptionMode,
             item.KmsKeyId,
             item.BackupPrefix,
-            item.BackupTimeZoneId)).ToArray();
+            item.BackupTimeZoneId,
+            item.BackupSource)).ToArray();
         if (errors.Count > 0)
         {
             throw new OptionsValidationException(StorageOptions.SectionName, typeof(StorageOptions), errors);

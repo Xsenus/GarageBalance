@@ -28,6 +28,14 @@ public sealed class BackupLayoutMigration(IStorageCatalog catalog, IStorageProvi
             throw new MigrationToolException("All live backups must be protected before relocation.");
         var fingerprint = Hash(JsonSerializer.Serialize(configuration.Destinations.Select(destination => new
         { destination.Id, destination.Type, destination.Endpoint, destination.Bucket, destination.Prefix, destination.BackupPrefix, destination.BackupTimeZoneId }), MigrationCheckpointStore.JsonOptions));
+        // Keep existing checkpoints compatible when no source is configured, but never
+        // resume/prune a reviewed plan after its organization/server namespace changes.
+        if (configuration.Destinations.Any(destination => destination.BackupSource is not null))
+            fingerprint = Hash(JsonSerializer.Serialize(new
+            {
+                layoutHash = fingerprint,
+                sources = configuration.Destinations.Select(destination => new { destination.Id, destination.BackupSource })
+            }, MigrationCheckpointStore.JsonOptions));
         BackupLayoutCheckpoint checkpoint;
         if (options.Checkpoint is not null && File.Exists(options.Checkpoint))
         {

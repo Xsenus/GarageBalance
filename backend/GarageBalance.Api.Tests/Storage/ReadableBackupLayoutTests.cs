@@ -6,6 +6,28 @@ namespace GarageBalance.Api.Tests.Storage;
 
 public sealed class ReadableBackupLayoutTests
 {
+    [Fact]
+    public void SourceSeparatesOrganizationsAndServersWithoutChangingLegacyKeys()
+    {
+        var operation = Guid.NewGuid();
+        var created = DateTimeOffset.Parse("2026-10-01T10:20:30Z", CultureInfo.InvariantCulture);
+        var key = ReadableBackupLayout.BuildKey("backups", "UTC", created, operation, 1, "sgk/31.192.110.221");
+        Assert.StartsWith("backups/sgk/31.192.110.221/10_2026/sgk_01102026_102030_", key);
+        Assert.NotEqual(key, ReadableBackupLayout.BuildKey("backups", "UTC", created, operation, 1, "other/31.192.110.221"));
+        Assert.NotEqual(key, ReadableBackupLayout.BuildKey("backups", "UTC", created, operation, 1, "sgk/server-two"));
+        Assert.StartsWith("backups/10_2026/", ReadableBackupLayout.BuildKey("backups", "UTC", created, operation, 1));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("../server")]
+    [InlineData("sgk/../../server")]
+    [InlineData("sgk/server?secret=x")]
+    [InlineData("sgk/server\n")]
+    [InlineData("sgk/сервер")]
+    public void UnsafeSourceIsRejected(string source) =>
+        Assert.Throws<ArgumentException>(() => ReadableBackupLayout.NormalizeSource(source));
+
     [Theory]
     [InlineData("2026-09-28T07:30:59.0000000+00:00", "09_2026/sgk_28092026_143059")]
     [InlineData("2026-12-31T18:00:00.0000000+00:00", "01_2027/sgk_01012027_010000")]
@@ -56,6 +78,18 @@ public sealed class ReadableBackupLayoutTests
             }
         }));
         Assert.Null(ReadableBackupLayout.TryBuildKey(destination with { BackupPrefix = null }, request));
+        var backupRequest = request with
+        {
+            Metadata = new Dictionary<string, string>
+            {
+                ["garagebalance-data-class"] = "DatabaseBackup",
+                [ReadableBackupLayout.CreatedAtMetadataKey] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)
+            }
+        };
+        Assert.StartsWith("backups/sgk/31.192.110.221/", ReadableBackupLayout.TryBuildKey(
+            destination with { BackupSource = "sgk/31.192.110.221" }, backupRequest));
+        Assert.Throws<ArgumentException>(() => ReadableBackupLayout.TryBuildKey(
+            destination with { BackupSource = "../unsafe" }, backupRequest));
     }
 
     private sealed class StubClient : IS3ObjectClient

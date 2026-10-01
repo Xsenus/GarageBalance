@@ -9,6 +9,25 @@ namespace GarageBalance.Api.Tests.Storage;
 
 public sealed class BackupLayoutMigrationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChangingOriginCannotResumeOrPruneAnOldLayoutPlan(bool prune)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.RunAsync(true);
+        var changed = fixture.Configuration with
+        {
+            Destinations = fixture.Configuration.Destinations.Select(destination =>
+                destination.Id == "remote-a" ? destination with { BackupSource = "another/server" } : destination).ToArray()
+        };
+        var engine = new BackupLayoutMigration(fixture.Catalog, new Registry(fixture.Cloud, fixture.Local), changed, fixture.Lock);
+        var error = await Assert.ThrowsAsync<MigrationToolException>(() => engine.ExecuteAsync(fixture.Options(true, prune), CancellationToken.None));
+        Assert.Contains("configuration changed", error.Message);
+        Assert.Equal(0, fixture.Cloud.Deletes);
+        Assert.True(fixture.Cloud.Objects.ContainsKey(fixture.Old));
+    }
+
     [Fact]
     public async Task RestoredOldCatalogCanRebindAlreadyMovedCloudCopyWithoutOldObject()
     {
@@ -129,6 +148,7 @@ public sealed class BackupLayoutMigrationTests
         public required EfStorageCatalog Catalog { get; init; }
         public required StorageObject Object { get; init; }
         public required BackupLayoutMigration Engine { get; init; }
+        public required EffectiveStorageConfiguration Configuration { get; init; }
         public required string Root { get; init; }
         public required string Old { get; init; }
         public required MemoryProvider Cloud { get; init; }
@@ -181,6 +201,7 @@ public sealed class BackupLayoutMigrationTests
                 Local = localProvider,
                 Catalog = catalog,
                 Lock = maintenance,
+                Configuration = config,
                 Engine = new(catalog, new Registry(cloud, localProvider), config, maintenance)
             };
         }

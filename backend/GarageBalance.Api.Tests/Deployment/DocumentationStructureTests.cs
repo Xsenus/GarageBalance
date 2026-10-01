@@ -46,6 +46,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/readable-backup-layout-2026-09-28-roadmap.md",
         "roadmaps/service-reports-2026-09-30-roadmap.md",
         "roadmaps/sgk-compact-ui-2026-09-14-roadmap.md",
+        "roadmaps/tariff-cleanup-backup-origin-2026-10-01-roadmap.md",
         "roadmaps/tariffs-and-income-full-audit-2026-09-11-roadmap.md",
         "roadmaps/ui-forms-and-dictionaries-audit-2026-08-01-roadmap.md",
         "roadmaps/visual-audit-remediation-2026-09-07-roadmap.md",

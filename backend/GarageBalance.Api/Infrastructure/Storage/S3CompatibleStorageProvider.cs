@@ -345,11 +345,16 @@ public sealed class S3CompatibleStorageProvider(
         ValidateWriteRequest(request);
         var key = BuildKey(request);
         var metadata = request.Metadata
-            .Where(item => IsSafeMetadata(item.Key, item.Value))
+            .Where(item => IsSafeMetadata(item.Key, item.Value) &&
+                !string.Equals(item.Key, ReadableBackupLayout.SourceMetadataKey, StringComparison.OrdinalIgnoreCase))
             .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
         metadata[Sha256MetadataKey] = request.Sha256.ToLowerInvariant();
         metadata[GenerationMetadataKey] = request.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata[OperationMetadataKey] = request.OperationId.ToString("N");
+        // Origin describes the configured writer, never an untrusted caller or proxy IP.
+        if (destination.BackupPrefix is not null && destination.BackupSource is not null &&
+            request.Metadata.TryGetValue("garagebalance-data-class", out var dataClass) && dataClass == "DatabaseBackup")
+            metadata[ReadableBackupLayout.SourceMetadataKey] = ReadableBackupLayout.NormalizeSource(destination.BackupSource);
         var checksumBase64 = Convert.ToBase64String(Convert.FromHexString(request.Sha256));
         try
         {

@@ -8,10 +8,14 @@ namespace GarageBalance.Api.Tests.Storage;
 public sealed class StorageOptionsTests
 {
     [Theory]
-    [InlineData("backups", "Asia/Novosibirsk", true)]
-    [InlineData("../backups", "UTC", false)]
-    [InlineData("backups", "not-a-real-zone", false)]
-    public void ValidatorAndResolverSupportExplicitReadableLayout(string prefix, string zone, bool valid)
+    [InlineData("backups", "Asia/Novosibirsk", true, null)]
+    [InlineData("../backups", "UTC", false, null)]
+    [InlineData("backups", "not-a-real-zone", false, null)]
+    [InlineData("backups", "UTC", true, "sgk/31.192.110.221")]
+    [InlineData("backups", "UTC", false, "../server")]
+    [InlineData("backups", "UTC", false, "server\n")]
+    [InlineData(null, "UTC", false, "sgk/server")]
+    public void ValidatorAndResolverSupportExplicitReadableLayout(string? prefix, string zone, bool valid, string? source)
     {
         var options = CreateValidAsyncMirror(false);
         options.Destinations[1] = new StorageDestinationOptions
@@ -24,6 +28,7 @@ public sealed class StorageOptionsTests
             Prefix = "legacy",
             BackupPrefix = prefix,
             BackupTimeZoneId = zone,
+            BackupSource = source,
             AllowedEndpointHosts = ["s3-a.example.test"],
             Capabilities = ["Read", "Write", "Stat", "Delete", "ServerSideEncryption"]
         };
@@ -34,6 +39,7 @@ public sealed class StorageOptionsTests
             Assert.Equal("legacy", effective.Prefix);
             Assert.Equal(prefix, effective.BackupPrefix);
             Assert.Equal(zone, effective.BackupTimeZoneId);
+            Assert.Equal(source, effective.BackupSource);
         }
     }
 

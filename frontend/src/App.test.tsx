@@ -17683,7 +17683,9 @@ describe('App', () => {
       service = { ...service, version: 'service-inline-card-v2' }
       return { service, tariff }
     })
+    let releaseSettingSave: (() => void) | undefined
     const updateSetting = vi.fn(async (_token: string, _id: string, request: UpsertChargeServiceSettingRequest) => {
+      await new Promise<void>((resolve) => { releaseSettingSave = resolve })
       service = { ...service, paymentDueDay: request.paymentDueDay, overdueGraceDays: request.overdueGraceDays, version: 'service-inline-card-v3' }
       return service
     })
@@ -17715,6 +17717,9 @@ describe('App', () => {
     const overdueConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(overdueConfirmation).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(1))
+    expect(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' })).toBeDisabled()
+    releaseSettingSave?.()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
 
     const dueDayInput = within(panel).getByLabelText('Охрана: оплата до: день')
     await user.clear(dueDayInput)
@@ -17722,6 +17727,9 @@ describe('App', () => {
     const dueDayConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(dueDayConfirmation).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(2))
+    expect(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' })).toBeDisabled()
+    releaseSettingSave?.()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
 
     await user.click(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' }))
     const card = await screen.findByRole('dialog', { name: 'Изменить услугу' })
