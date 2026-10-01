@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { expect, it, vi } from 'vitest'
 import type { ServiceReportColumns, ServiceReportsClient } from '../../services/serviceReportsApi'
 import { ReportColumnsPanel } from './ReportColumnsPanel'
+import { readFileSync } from 'node:fs'
 function selectReport(label: string) {
   fireEvent.click(screen.getByRole('combobox', { name: 'Отчёт' }))
   fireEvent.click(screen.getByRole('option', { name: label }))
@@ -28,6 +29,8 @@ it('edits column name and bindings, prevents duplicate assignment, persists vers
 it('shows service counts as separate badges and identifies assigned columns without duplicate text separators', async () => {
   render(<ReportColumnsPanel token="token" canManage client={client()} />)
   const light = await screen.findByRole('button', { name: 'Свет, услуг: 1' })
+  expect(screen.getByRole('region', { name: 'Колонки отчётов' })).toHaveClass('report-columns-settings')
+  expect(readFileSync('src/features/reports/serviceReports.css', 'utf8')).toContain('.report-columns-settings > .form-field { margin-top: 8px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #dce3ee; }')
   expect(within(light).getByText('1')).toHaveClass('report-column-count')
   expect(light).not.toHaveTextContent('·')
   const water = screen.getByRole('button', { name: 'Вода, услуг: 0' })

@@ -54,7 +54,7 @@ export function ReportColumnsPanel({ token, canManage, client = serviceReportsAp
     catch (caught) { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Не удалось сохранить колонки.') }
     finally { if (!controller.signal.aborted) setSaving(false) }
   }
-  return <section className="settings-card" aria-label="Колонки отчётов"><h2>Колонки отчётов</h2>
+  return <section className="settings-card report-columns-settings" aria-label="Колонки отчётов"><h2>Колонки отчётов</h2>
     <FormField label="Отчёт" help="У каждого отчёта свой состав и порядок колонок. Правки другого отчёта сохраняются на экране при переключении; для записи каждого набора нажмите «Сохранить колонки»."><SelectControl aria-label="Отчёт" value={report} disabled={saving} onChange={(value) => changeReport(value as ServiceReportScope)} options={[{ value: 'payments', label: 'Оплата по услугам' }, { value: 'accrued', label: 'Задолженность — начисленная' }, { value: 'overdue', label: 'Задолженность — просроченная' }]} /></FormField>
     {loading ? <LoadingSkeleton label="Загрузка колонок отчётов" columns={2} /> : draft ? <>
       <div className="report-column-editor"><div className="report-column-list">
