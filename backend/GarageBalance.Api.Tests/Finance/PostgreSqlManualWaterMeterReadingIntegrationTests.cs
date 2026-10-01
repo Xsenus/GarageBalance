@@ -34,6 +34,18 @@ public sealed class PostgreSqlManualWaterMeterReadingIntegrationTests
         waterSetting.Tariff!.CalculationBase = TariffCalculationBases.MeterWater;
         waterSetting.Tariff.Rate = 50m;
         waterSetting.Tariff.EffectiveFrom = currentMonth.AddMonths(-1);
+        // The test rate must cover the reading month, not only the catalog's base tariff.
+        context.ChargeServiceTariffVersions.RemoveRange(await context.ChargeServiceTariffVersions
+            .Where(version => version.ChargeServiceSettingId == waterSetting.Id).ToListAsync());
+        await context.SaveChangesAsync();
+        context.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
+        {
+            ChargeServiceSetting = waterSetting,
+            ChargeServiceSettingId = waterSetting.Id,
+            Tariff = waterSetting.Tariff,
+            TariffId = waterSetting.Tariff.Id,
+            EffectiveFrom = currentMonth.AddMonths(-1)
+        });
         context.Garages.Add(garage);
         await context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(context);

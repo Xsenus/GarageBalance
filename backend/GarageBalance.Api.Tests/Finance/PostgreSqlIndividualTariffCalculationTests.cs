@@ -1,4 +1,3 @@
-using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -204,9 +203,14 @@ public sealed class PostgreSqlIndividualTariffCalculationTests
     [PostgreSqlFact]
     public async Task ReadingAutomaticallyCreatesIndividualWaterAccrualAndArchiveRestoresGeneralRate()
     {
+        await VerifyIndividualWaterReadingAsync(new DateOnly(2026, 9, 1));
+        await VerifyIndividualWaterReadingAsync(new DateOnly(2026, 10, 1));
+    }
+
+    private static async Task VerifyIndividualWaterReadingAsync(DateOnly month)
+    {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
-        var month = MonthPeriod.CurrentLocalMonth();
         var water = await context.IncomeTypes.SingleAsync(row => row.Code == MeterKinds.Water && !row.IsArchived);
         var setting = await context.ChargeServiceSettings.Include(row => row.Tariff)
             .SingleAsync(row => row.IncomeTypeId == water.Id && !row.IsArchived);
@@ -217,6 +221,19 @@ public sealed class PostgreSqlIndividualTariffCalculationTests
         setting.Tariff!.Rate = 50;
         setting.Tariff.CalculationBase = TariffCalculationBases.MeterWater;
         setting.Tariff.EffectiveFrom = month.AddMonths(-1);
+        // The migrated catalog has dated versions, including the October 2026 rate.
+        // Give this scenario its own known timeline rather than inheriting live calendar data.
+        context.ChargeServiceTariffVersions.RemoveRange(await context.ChargeServiceTariffVersions
+            .Where(row => row.ChargeServiceSettingId == setting.Id).ToListAsync());
+        await context.SaveChangesAsync();
+        context.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
+        {
+            ChargeServiceSetting = setting,
+            ChargeServiceSettingId = setting.Id,
+            Tariff = setting.Tariff,
+            TariffId = setting.Tariff.Id,
+            EffectiveFrom = month.AddMonths(-1)
+        });
         var garage = new Garage { Number = "85-INDIVIDUAL-WATER", InitialWaterMeterValue = 10, RegisteredOn = month };
         var individual = new Tariff
         {
@@ -237,7 +254,8 @@ public sealed class PostgreSqlIndividualTariffCalculationTests
         };
         context.Add(assignment);
         await context.SaveChangesAsync();
-        var service = FinanceServiceTestFactory.Create(context);
+        var service = FinanceServiceTestFactory.Create(context,
+            new FixedTimeProvider(new DateTimeOffset(month.Year, month.Month, 28, 12, 0, 0, TimeSpan.Zero)));
         var reading = await service.SavePaymentFormMeterReadingAsync(new(garage.Id, MeterKinds.Water, month, month.AddDays(19), 15.5m, null), null, CancellationToken.None);
         Assert.True(reading.Succeeded, reading.ErrorMessage);
         var accrual = await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == water.Id);
