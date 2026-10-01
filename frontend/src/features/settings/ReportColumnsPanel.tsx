@@ -4,6 +4,7 @@ import { serviceReportsApi } from '../../services/serviceReportsApi'
 import type { ServiceReportColumns, ServiceReportScope, ServiceReportsClient } from '../../services/serviceReportsApi'
 import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
+import { SelectControl } from '../../shared/SelectControl'
 import '../reports/serviceReports.css'
 
 export function ReportColumnsPanel({ token, canManage, client = serviceReportsApi }: { token: string; canManage: boolean; client?: ServiceReportsClient }) {
@@ -54,7 +55,7 @@ export function ReportColumnsPanel({ token, canManage, client = serviceReportsAp
     finally { if (!controller.signal.aborted) setSaving(false) }
   }
   return <section className="settings-card" aria-label="Колонки отчётов"><h2>Колонки отчётов</h2>
-    <FormField label="Отчёт" help="У каждого отчёта свой состав и порядок колонок. Правки другого отчёта сохраняются на экране при переключении; для записи каждого набора нажмите «Сохранить колонки»."><select aria-label="Отчёт" value={report} disabled={saving} onChange={(event) => changeReport(event.target.value as ServiceReportScope)}><option value="payments">Оплата по услугам</option><option value="accrued">Задолженность — начисленная</option><option value="overdue">Задолженность — просроченная</option></select></FormField>
+    <FormField label="Отчёт" help="У каждого отчёта свой состав и порядок колонок. Правки другого отчёта сохраняются на экране при переключении; для записи каждого набора нажмите «Сохранить колонки»."><SelectControl aria-label="Отчёт" value={report} disabled={saving} onChange={(value) => changeReport(value as ServiceReportScope)} options={[{ value: 'payments', label: 'Оплата по услугам' }, { value: 'accrued', label: 'Задолженность — начисленная' }, { value: 'overdue', label: 'Задолженность — просроченная' }]} /></FormField>
     {loading ? <LoadingSkeleton label="Загрузка колонок отчётов" columns={2} /> : draft ? <>
       <div className="report-column-editor"><div className="report-column-list">
       {draft.columns.map((column, index) => <div key={column.id} className="report-column-item"><button className="secondary-button" type="button" aria-label={`${column.name || 'Без названия'}, услуг: ${column.serviceIds.length}`} aria-pressed={selectedId === column.id} disabled={saving} onClick={() => setSelectedId(column.id)}><span className="report-column-name">{column.name || 'Без названия'}</span><span className="report-column-count" aria-hidden="true">{column.serviceIds.length}</span></button>

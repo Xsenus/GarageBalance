@@ -2,6 +2,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { expect, it, vi } from 'vitest'
 import type { ServiceReportColumns, ServiceReportsClient } from '../../services/serviceReportsApi'
 import { ReportColumnsPanel } from './ReportColumnsPanel'
+function selectReport(label: string) {
+  fireEvent.click(screen.getByRole('combobox', { name: 'Отчёт' }))
+  fireEvent.click(screen.getByRole('option', { name: label }))
+}
 const data: ServiceReportColumns = { version: 'old', columns: [{ id: 'c1', name: 'Свет', serviceIds: ['s1'] }, { id: 'c2', name: 'Вода', serviceIds: [] }], services: [{ id: 's1', name: 'Электричество', incomeTypeId: 'i1', isArchived: false }, { id: 's2', name: 'Вода', incomeTypeId: 'i2', isArchived: false }] }
 function client(): ServiceReportsClient { return { getColumns: vi.fn(async () => structuredClone(data)), saveColumns: vi.fn(async (_token, request) => ({ ...data, ...request, version: 'new' })), getReport: vi.fn(), exportReport: vi.fn() } }
 
@@ -85,14 +89,14 @@ it('keeps separate drafts and versions for each report and saves only the select
   render(<ReportColumnsPanel token="token" canManage client={api} />)
   await screen.findByDisplayValue('payments')
   fireEvent.change(screen.getByLabelText('Название колонки'), { target: { value: 'Мои оплаты' } })
-  fireEvent.change(screen.getByRole('combobox', { name: 'Отчёт' }), { target: { value: 'accrued' } })
+  selectReport('Задолженность — начисленная')
   await screen.findByDisplayValue('accrued')
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить колонки' }))
   await screen.findByText(/Колонки сохранены только/)
   expect(api.saveColumns).toHaveBeenLastCalledWith('token', expect.objectContaining({ report: 'accrued', version: 'accrued' }), expect.any(AbortSignal))
-  fireEvent.change(screen.getByRole('combobox', { name: 'Отчёт' }), { target: { value: 'overdue' } })
+  selectReport('Задолженность — просроченная')
   await screen.findByDisplayValue('overdue')
-  fireEvent.change(screen.getByRole('combobox', { name: 'Отчёт' }), { target: { value: 'payments' } })
+  selectReport('Оплата по услугам')
   await screen.findByDisplayValue('Мои оплаты')
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить колонки' }))
   await screen.findByText(/Колонки сохранены только/)
@@ -104,7 +108,7 @@ it('cancels stale report loads, disables switching while saving and reloads the 
   vi.mocked(api.getColumns).mockImplementationOnce(() => new Promise((finish) => { resolve = finish }))
   vi.mocked(api.saveColumns).mockRejectedValueOnce(new Error('Конфликт версии'))
   render(<ReportColumnsPanel token="token" canManage client={api} />)
-  fireEvent.change(screen.getByRole('combobox', { name: 'Отчёт' }), { target: { value: 'overdue' } })
+  selectReport('Задолженность — просроченная')
   await screen.findByDisplayValue('Свет')
   await act(async () => resolve({ ...data, columns: [{ id: 'stale', name: 'Чужой отчёт', serviceIds: [] }] }))
   expect(screen.queryByDisplayValue('Чужой отчёт')).not.toBeInTheDocument()
@@ -123,9 +127,9 @@ it('aborts a save of a cached draft when the token changes and ignores its late 
   const api = client(); let finish!: (value: ServiceReportColumns) => void
   const view = render(<ReportColumnsPanel token="token" canManage client={api} />)
   await screen.findByDisplayValue('Свет')
-  fireEvent.change(screen.getByRole('combobox', { name: 'Отчёт' }), { target: { value: 'accrued' } })
+  selectReport('Задолженность — начисленная')
   await screen.findByDisplayValue('Свет')
-  fireEvent.change(screen.getByRole('combobox', { name: 'Отчёт' }), { target: { value: 'payments' } })
+  selectReport('Оплата по услугам')
   await screen.findByDisplayValue('Свет')
   vi.mocked(api.saveColumns).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить колонки' }))
