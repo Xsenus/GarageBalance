@@ -157,6 +157,17 @@ All changes to financial values, tariffs, permissions, imports, manual correctio
 
 ## Backend Guidelines
 
+### Local PostgreSQL and production-like test data
+
+- When a task requires database verification, use the PostgreSQL server already installed on the current machine. Discover its service, port, available client tools, and safe local connection settings first. Do not create a separate temporary PostgreSQL cluster or install another server merely for checks. CI-managed PostgreSQL remains valid; use a new local cluster/container only when the user explicitly requests it or approves a documented exception.
+- For database-dependent changes, whenever server access is available, obtain a fresh consistent backup of the deployed GarageBalance database and restore it into a separate, clearly named local test database on that installed server. Prefer an existing verified recent backup when appropriate; do not alter the source database to prepare the copy. Record the source environment and backup time without exposing connection secrets or financial/personal data.
+- Never restore over the local working database, production database, or another project's database. Before restore, migration, reset, or deletion, verify the target host, port, exact database name, purpose, and active connections. Synthetic automated fixtures must continue to use their own disposable databases, not the restored customer-data copy or a production connection.
+- Treat server dumps and restored data as private. Store them only outside Git or in an ignored private location with restricted access. Anonymize data where practical; never put real personal/financial records into fixtures, screenshots, logs, documentation, or CI artifacts. Never upload the customer-data copy to public CI.
+- Disable background jobs and all outbound integrations, synchronization, notifications, printing, and other external side effects in the local test configuration before starting the application against the restored copy. Keep test credentials/configuration separate from production and the local working configuration.
+- If local PostgreSQL or VPS/backup access cannot be discovered or established safely, ask the user for the missing access instead of guessing passwords, repurposing another database, or silently creating another cluster. Do not ask the user to paste secrets into Git-tracked files. If access remains unavailable, report the limitation and use a clearly identified safe substitute.
+- This rule applies when database verification is relevant; do not fetch production data or start database checks solely for documentation, instructions, or isolated visual/CSS changes. Real-data checks supplement, not replace, the automated synthetic regression suite.
+- After verification, stop task-owned application/test processes and remove the task-owned restored database, downloaded dump, synthetic databases, and temporary files unless the user explicitly asks to retain them. Keep an exact inventory of targets; delete only confirmed unused GarageBalance test artifacts, never working databases, required backups, installed PostgreSQL, or other projects' resources. Report anything retained or blocked during cleanup.
+
 Prefer established ASP.NET Core patterns:
 
 - controllers as the default API surface; do not add minimal API endpoints for business functionality unless the user explicitly approves an exception;
