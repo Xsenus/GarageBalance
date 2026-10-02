@@ -12,6 +12,9 @@
 .garage-tariff-edit-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .garage-tariff-edit-fields > .form-field { margin-top: 12px; }
 .garage-tariff-selection { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tariff-garage-scope-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 12px; }
+.tariff-garage-scope-toolbar .form-field { flex: 1 1 220px; }
+.tariff-garage-scope-toolbar > [role="status"] { align-self: center; white-space: nowrap; }
 .tariff-garage-scope-grid-scroll { max-height: clamp(150px, calc(100dvh - 500px), 310px); overflow: auto; overscroll-behavior: contain; }
 .tariff-garage-scope-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 2px; }
 .tariff-garage-scope-choice { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 8px 12px; border: 1px solid var(--border-color, #dce3ee); border-radius: 7px; background: var(--surface, #fff); cursor: pointer; }

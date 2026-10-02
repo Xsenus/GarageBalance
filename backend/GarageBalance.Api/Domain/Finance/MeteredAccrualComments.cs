@@ -7,9 +7,11 @@ public static partial class MeteredAccrualComments
 {
     public static string? Refresh(string? comment, decimal? consumption)
     {
-        if (consumption.HasValue)
+        // PostgreSQL numeric and decimal arithmetic can preserve a negative
+        // sign on zero. It is valid zero consumption, not a decreasing reading.
+        if (consumption < 0m)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(consumption.Value);
+            throw new ArgumentOutOfRangeException(nameof(consumption), consumption, "Расход не может быть отрицательным.");
         }
         if (string.IsNullOrEmpty(comment))
         {

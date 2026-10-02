@@ -61,6 +61,36 @@ describe('removeTariffSchedulePeriod', () => {
 })
 
 describe('редактор тарифной сетки услуги', () => {
+  it.each(['fixed', 'people'])('saves a valid %s schedule when the linked historical tariff is absent from the bounded dictionary', async (calculationBase) => {
+    const periods = [{ tariffId: 'historical', tariffVersion: 'v1', effectiveFrom: '2026-09-01', effectiveTo: null, rate: 128 }]
+    const save = vi.fn().mockResolvedValue(periods)
+    const update = vi.fn()
+    render(<AddServicePrototypeDialog isSaving={false} onClose={vi.fn()} funds={[{ id: 'fund', name: 'Мусор', allowOperations: true }]}
+      incomeTypes={[{ id: 'income', name: 'Мусор', code: 'waste', isArchived: false, destinationFundId: 'fund' }]}
+      initialSetting={{ id: 'service', name: 'Мусор', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+        paymentDueDay: 20, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income', tariffId: 'historical',
+        isMetered: false, hasTieredTariff: false, unitName: 'чел.', isArchived: false, version: 'service-v1', tariffCalculationBase: calculationBase }}
+      tariffs={[]} tariffSchedule={periods} onUpdateTariffSchedule={save} onUpdateWithTariff={update} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ periods }))
+    expect(update).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('validates each visible period instead of an absent linked rate', async () => {
+    const save = vi.fn()
+    render(<AddServicePrototypeDialog isSaving={false} onClose={vi.fn()} funds={[{ id: 'fund', name: 'Мусор', allowOperations: true }]}
+      incomeTypes={[{ id: 'income', name: 'Мусор', code: 'waste', isArchived: false, destinationFundId: 'fund' }]}
+      initialSetting={{ id: 'service', name: 'Мусор', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+        paymentDueDay: 20, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income', tariffId: 'historical',
+        isMetered: false, hasTieredTariff: false, unitName: 'чел.', isArchived: false, version: 'v1' }}
+      tariffs={[]} tariffSchedule={[{ tariffId: 'historical', effectiveFrom: '2026-09-01', effectiveTo: null, rate: 0 }]}
+      onUpdateTariffSchedule={save} onUpdateWithTariff={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+    expect(await screen.findByText('Для каждого периода укажите тариф больше нуля.')).toBeInTheDocument()
+    expect(save).not.toHaveBeenCalled()
+  })
   it('does not confuse a failed schedule load with an empty schedule and supports retry', () => {
     const onClose = vi.fn()
     const onRetryTariffSchedule = vi.fn()

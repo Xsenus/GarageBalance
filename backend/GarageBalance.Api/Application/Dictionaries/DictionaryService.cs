@@ -4375,10 +4375,10 @@ public sealed class DictionaryService(
 
     private static DictionaryResult<object> ValidateChargeServiceSettingRequest(UpsertChargeServiceSettingRequest request)
     {
-        if (request.AppliesToSelectedGarages && (!request.IsRegular || request.GarageIds is not { Count: > 0 and <= 100 } ||
+        if (request.AppliesToSelectedGarages && (!request.IsRegular || request.GarageIds is not { Count: > 0 } ||
             request.GarageIds.Any(id => id == Guid.Empty) || request.GarageIds.Distinct().Count() != request.GarageIds.Count))
         {
-            return DictionaryResult<object>.Failure("charge_service_garages_invalid", "Выберите от 1 до 100 разных гаражей для регулярного тарифа.");
+            return DictionaryResult<object>.Failure("charge_service_garages_invalid", "Выберите хотя бы один гараж для регулярного тарифа без повторений.");
         }
         if (!request.AppliesToSelectedGarages && request.GarageIds is { Count: > 0 })
         {

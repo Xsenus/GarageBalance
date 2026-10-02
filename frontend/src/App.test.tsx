@@ -4549,6 +4549,32 @@ describe('App', () => {
     expect(screen.queryByText('Не удалось загрузить финансовый отчет гаража.')).not.toBeInTheDocument()
   })
 
+  it('opens meter replacement from the contractor garage card and preserves unsaved garage fields on cancel', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-replacement-card', number: '125' })
+    const dictionaryClient = createDictionaryClient({ getGarages: async () => [garage] })
+    const financeClient = createFinanceClient({ replaceMeterDevice: vi.fn(),
+      getMeterReadingsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 100 }) })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient}
+      fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()}
+      releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(await within(panel).findByRole('button', { name: 'Изменить гараж 125' }))
+    const card = await screen.findByRole('dialog', { name: 'Гараж 125' })
+    await user.type(within(card).getByLabelText('Комментарий гаража'), 'Несохранённое уточнение')
+    await user.click(within(card).getByRole('button', { name: 'Заменить счётчик' }))
+    const replacement = await screen.findByRole('dialog', { name: 'Замена счётчика' })
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(within(replacement).getByText('Гараж 125')).toBeInTheDocument()
+    await user.click(within(replacement).getByRole('button', { name: 'Отмена' }))
+    const restoredCard = await screen.findByRole('dialog', { name: 'Гараж 125' })
+    expect(within(restoredCard).getByLabelText('Комментарий гаража')).toHaveValue('Несохранённое уточнение')
+    expect(financeClient.replaceMeterDevice).not.toHaveBeenCalled()
+  })
+
   it('adjusts the garage opening balance and overdue part independently', async () => {
     const user = userEvent.setup()
     let garage = createGarage({ id: 'garage-opening-adjustment', number: '125', startingBalance: 125, startingOverdueDebt: 40, balance: 125, overdueDebt: 40 })
@@ -7976,6 +8002,30 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' }))
     expect(await screen.findByRole('dialog', { name: 'Добавить услугу' })).toBeInTheDocument()
     expect(getIncomeTypes).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not substitute a similarly named tariff when a service has no applicable period', async () => {
+    const user = userEvent.setup()
+    const income = createAccountingType({ id: 'waste-income', name: 'Мусор', code: 'waste', destinationFundId: 'waste-fund' })
+    const unrelated = createTariff({ id: 'unrelated-waste', name: 'Мусор — обычный', calculationBase: 'people', rate: 128 })
+    const service = createChargeServiceSetting({ id: 'waste-service', name: 'Мусор', isRegular: true, incomeTypeId: income.id,
+      tariffId: null, tariffCalculationBase: 'people', isMetered: false, unitName: 'чел.' })
+    const dictionaryClient = createDictionaryClient({ getTariffs: async () => [unrelated], getIncomeTypes: async () => [income],
+      getChargeServiceSettings: async () => [service], getChargeServiceTariffSchedule: async () => [
+        { tariffId: 'historical-waste', effectiveFrom: '2026-01-01', effectiveTo: '2026-09-30', rate: 125 },
+      ] })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()}
+      fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()}
+      releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(panel).findByRole('button', { name: 'Изменить услугу Мусор' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    expect(await within(dialog).findByLabelText('Тариф регулярной услуги')).toHaveValue('125.00')
+    const table = within(panel).getByRole('table', { name: 'Тарифы и сборы' })
+    expect(within(table).queryByDisplayValue('128.00')).not.toBeInTheDocument()
   })
 
   it('keeps empty backend tariff dictionaries empty', async () => {

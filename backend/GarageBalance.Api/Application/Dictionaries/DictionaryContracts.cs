@@ -293,7 +293,7 @@ public sealed record UpsertChargeServiceSettingRequest(
     Guid? TariffId = null,
     Guid? Version = null,
     bool AppliesToSelectedGarages = false,
-    [MaxLength(100)] IReadOnlyList<Guid>? GarageIds = null);
+    IReadOnlyList<Guid>? GarageIds = null);
 
 public sealed record CreateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,

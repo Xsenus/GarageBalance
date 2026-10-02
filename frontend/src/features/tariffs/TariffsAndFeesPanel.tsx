@@ -664,7 +664,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
         group: setting.name,
         category: setting.name,
         title: getServiceTariffDisplayName(linkedTariff?.name, setting.name),
-        amount: linkedTariff ? formatTariffNumber(linkedTariff.rate) : row.amount,
+        amount: linkedTariff ? formatTariffNumber(linkedTariff.rate) : '',
         unit: setting.unitName?.trim() || row.unit || (linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : undefined),
         calculationBase: linkedTariff?.calculationBase ?? row.calculationBase,
         backendTariffId: linkedTariff?.id,
@@ -3947,7 +3947,7 @@ export function AddServicePrototypeDialog({
     incomeTypes.find((incomeType) => incomeType.id === initialIncomeTypeId)?.destinationFundId
       ?? (initialSetting ? '' : funds[0]?.id ?? '')
   ))
-  const [calculationBase, setCalculationBase] = useState(initialTariff?.calculationBase ?? 'fixed')
+  const [calculationBase, setCalculationBase] = useState(initialTariff?.calculationBase ?? initialSetting?.tariffCalculationBase ?? 'fixed')
   const [unitName, setUnitName] = useState(
     initialSetting?.unitName?.trim()
       || getTariffCalculationUnitName(initialTariff?.calculationBase ?? 'fixed'),
@@ -4104,13 +4104,19 @@ export function AddServicePrototypeDialog({
       return
     }
 
+    const modeChanged = initialSetting && (initialSetting.isMetered !== isByMeter || initialSetting.hasTieredTariff !== isTiered)
+    const calculationChanged = (selectedTariff?.calculationBase ?? initialSetting?.tariffCalculationBase ?? 'fixed') !== effectiveCalculationBase
+    const tiersChanged = JSON.stringify(getElectricityTariffTiers(selectedTariff)) !== JSON.stringify(tariffTiers)
+    const tariffStructureChanged = modeChanged || calculationChanged || (isTiered && tiersChanged)
+    const savesSchedule = initialSetting && onUpdateTariffSchedule && !tariffStructureChanged && !isTiered
+
     if (isRegular) {
       if (!incomeFundId) {
         setError('Выберите фонд поступления услуги.')
         return
       }
 
-      if (effectiveRate == null || effectiveRate <= 0 || effectiveRate > 999999999) {
+      if (!savesSchedule && (effectiveRate == null || effectiveRate <= 0 || effectiveRate > 999999999)) {
         setError('Укажите корректный тариф услуги.')
         return
       }
@@ -4216,10 +4222,6 @@ export function AddServicePrototypeDialog({
         })
       } else if (initialSetting && onUpdateWithTariff) {
         const tariffMode = isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular'
-        const modeChanged = initialSetting.isMetered !== isByMeter || initialSetting.hasTieredTariff !== isTiered
-        const calculationChanged = selectedTariff?.calculationBase !== effectiveCalculationBase
-        const tiersChanged = JSON.stringify(getElectricityTariffTiers(selectedTariff)) !== JSON.stringify(tariffTiers)
-        const tariffStructureChanged = modeChanged || calculationChanged || (isTiered && tiersChanged)
         if (!tariffStructureChanged && !isTiered && onUpdateTariffSchedule) {
           await saveTariffSchedule(serviceRequest, incomeFundId)
           return

@@ -28,7 +28,7 @@ public sealed class ChargeServiceGarageScopeTests
     [InlineData("duplicate")]
     [InlineData("missing")]
     [InlineData("archived")]
-    [InlineData("too_many")]
+    [InlineData("empty_id")]
     [InlineData("general_with_selection")]
     public async Task InvalidSelectionDoesNotSaveAnything(string scenario)
     {
@@ -41,7 +41,7 @@ public sealed class ChargeServiceGarageScopeTests
             "empty" => [],
             "duplicate" => [garage.Id, garage.Id],
             "missing" => [Guid.NewGuid()],
-            "too_many" => Enumerable.Range(0, 101).Select(_ => Guid.NewGuid()).ToArray(),
+            "empty_id" => [Guid.Empty],
             _ => [garage.Id]
         };
         var request = new UpsertChargeServiceSettingRequest("Тест", true, 1, 1, 20, null, 0, false, false, "руб.",
@@ -50,6 +50,26 @@ public sealed class ChargeServiceGarageScopeTests
         Assert.False(result.Succeeded);
         Assert.Empty(database.Context.ChargeServiceSettings);
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task SelectionAboveOneHundredPersistsWithoutModelOrServiceLimit()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var garages = Enumerable.Range(1, 125).Select(number => new Garage { Number = number.ToString() }).ToArray();
+        database.Context.Garages.AddRange(garages);
+        await database.Context.SaveChangesAsync();
+        var ids = garages.Select(garage => garage.Id).ToArray();
+        var request = new UpsertChargeServiceSettingRequest("Выборочный тариф", true, 1, 1, 20, null, 0, false, false, "руб.",
+            AppliesToSelectedGarages: true, GarageIds: ids);
+        var validation = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        Assert.True(System.ComponentModel.DataAnnotations.Validator.TryValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), validation, true));
+        var result = await DictionaryServiceTestFactory.Create(database.Context).CreateChargeServiceSettingAsync(request, null, CancellationToken.None);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(ids.Order(), result.Value!.GarageIds!.Order());
+        Assert.Equal(ids.Order(), (await database.Context.ChargeServiceSettings.SingleAsync()).GarageIds.Order());
+        Assert.NotEmpty(database.Context.AuditEvents);
     }
 
     [PostgreSqlFact]

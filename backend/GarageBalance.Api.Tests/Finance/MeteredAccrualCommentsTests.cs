@@ -4,6 +4,17 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class MeteredAccrualCommentsTests
 {
+    [Fact]
+    public void NegativeSignedDecimalZeroIsValidConsumptionAndPreservesNotes()
+    {
+        var signedZero = new decimal(0, 0, 0, true, 3);
+        Assert.True(decimal.IsNegative(signedZero));
+        Assert.Equal("Начисление по показанию electricity: расход 0; заметка",
+            MeteredAccrualComments.Refresh("Начисление по показанию electricity: расход 46; заметка", signedZero));
+        Assert.Null(MeteredAccrualComments.Refresh(null, signedZero));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MeteredAccrualComments.Refresh(null, -0.001m));
+    }
+
     [Theory]
     [InlineData(null, null)]
     [InlineData("", "")]

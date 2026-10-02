@@ -11,6 +11,61 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class MeteredAccrualCommentIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task HistoricalCorrectionToNextReadingRecalculatesZeroConsumptionWithoutServerError()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var september = new DateOnly(2026, 9, 1);
+        var october = september.AddMonths(1);
+        var garage = new Garage
+        {
+            Number = "HISTORICAL-CHAIN",
+            InitialElectricityMeterValue = 0m,
+            InitialMeterReadingMonth = september.AddMonths(-1),
+            CreatedAtUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var income = new IncomeType { Name = "Цепочка показаний", Code = "historical_chain" };
+        var tariff = new Tariff { Name = "Цепочка показаний", CalculationBase = TariffCalculationBases.MeterElectricity, Rate = 10m };
+        context.AddRange(garage, income, tariff);
+        await context.SaveChangesAsync();
+        context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Цепочка показаний",
+            IncomeTypeId = income.Id,
+            TariffId = tariff.Id,
+            IsRegular = true,
+            IsMetered = true,
+            MeterKind = MeterKinds.Electricity,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 20,
+            UnitName = "кВт·ч"
+        });
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context, new FixedTimeProvider(new DateTimeOffset(2026, 10, 2, 12, 0, 0, TimeSpan.Zero)));
+        var first = await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(garage.Id, MeterKinds.Electricity,
+            september, september.AddDays(29), 1m, null, PeriodOverrideReason: "Исторический ввод"), null, CancellationToken.None);
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        var next = await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(garage.Id, MeterKinds.Electricity,
+            october, october, 47m, null), null, CancellationToken.None);
+        Assert.True(next.Succeeded, next.ErrorMessage);
+        context.ChangeTracker.Clear();
+        var corrected = await service.CorrectHistoricalMeterReadingAsync(first.Value!.Id,
+            new CorrectHistoricalMeterReadingRequest(september.AddDays(29), 47m, null, "Коррекция месяца", first.Value.Version), null, CancellationToken.None);
+        Assert.True(corrected.Succeeded, corrected.ErrorMessage);
+        var readings = await context.MeterReadings.AsNoTracking().Where(item => item.GarageId == garage.Id).OrderBy(item => item.AccountingMonth).ToArrayAsync();
+        Assert.Equal(47m, readings[0].Consumption);
+        Assert.Equal(0m, readings[1].Consumption);
+        var accruals = await context.Accruals.AsNoTracking().Where(item => item.GarageId == garage.Id && item.IncomeTypeId == income.Id && !item.IsCanceled).OrderBy(item => item.AccountingMonth).ToArrayAsync();
+        Assert.Equal(2, accruals.Length);
+        Assert.Equal(470m, accruals[0].Amount);
+        Assert.Equal(0m, accruals[1].Amount);
+        Assert.Contains("расход 0", accruals[1].Comment);
+        Assert.Equal(0m, RegularAccrualCalculator.Deserialize(accruals[1].CalculationDetailsJson)!.MeterConsumption);
+        Assert.Contains(await context.AuditEvents.ToListAsync(), item => item.Action == "finance.meter_reading_historical_updated");
+    }
+
     [Fact]
     public async Task SqliteReadingCycleRefreshesCommentAndAuditWithoutLosingNotes()
     {
