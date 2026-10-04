@@ -281,6 +281,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 !setting.IsArchived &&
                 setting.IsRegular &&
                 setting.IsMetered &&
+                (!setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garageId)) &&
                 (setting.Tariff == null ||
                  setting.Tariff.CalculationBase == TariffCalculationBases.MeterWater ||
                  setting.Tariff.CalculationBase == TariffCalculationBases.MeterElectricity) &&
@@ -316,10 +317,15 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
+        // Legacy built-in meters are a fallback only when no active metered
+        // service owns the type; otherwise that service's garage scope applies.
         var legacyMeterIncomeTypeQuery = dbContext.IncomeTypes.AsNoTracking()
             .Where(incomeType =>
                 !incomeType.IsArchived &&
-                (incomeType.Code == MeterKinds.Water || incomeType.Code == MeterKinds.Electricity))
+                (incomeType.Code == MeterKinds.Water || incomeType.Code == MeterKinds.Electricity) &&
+                !dbContext.ChargeServiceSettings.Any(setting =>
+                    !setting.IsArchived && setting.IsRegular && setting.IsMetered &&
+                    setting.IncomeTypeId == incomeType.Id))
             .Select(incomeType => new
             {
                 Category = MeterIncomeTypeCategory,

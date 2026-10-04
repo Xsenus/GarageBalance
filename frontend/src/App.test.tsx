@@ -12582,6 +12582,48 @@ describe('App', () => {
     expect(within(prototype).queryByLabelText(futurePaymentLabel)).not.toBeInTheDocument()
   })
 
+  it('shows a selective meter service only in the selected garage worksheet and clears it after switching garages', async () => {
+    const user = userEvent.setup()
+    const month = `${getTestCurrentMonthInputValue()}-01`
+    const included = createGarage({ id: 'scope-in', number: '1к', ownerName: 'Тестовый владелец А' })
+    const excluded = createGarage({ id: 'scope-out', number: '18', ownerName: 'Тестовый владелец Б' })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: garageId === included.id ? included.number : excluded.number,
+      monthFrom: month,
+      monthTo: month,
+      rows: [
+        { accountingMonth: month, incomeTypeId: 'trash', incomeTypeName: 'Мусор', incomeTypeCode: 'trash',
+          meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 125, incomeAmount: 0, debt: 125 },
+        ...(garageId === included.id ? [{ accountingMonth: month, incomeTypeId: 'commercial', incomeTypeName: 'Коммерческий тариф',
+          meterKind: 'service_11111111111111111111111111111111', meterValue: null, meterConsumption: null,
+          accrualAmount: 0, incomeAmount: 0, debt: 0 }] : []),
+      ],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [included, excluded] })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, savePaymentFormMeterReading: async () => createMeterReading({}) })} importClient={createImportClient()}
+      reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const panel = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(panel).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, included.number)
+    await user.click(await within(panel).findByRole('option', { name: /Гараж\s*1к/ }))
+    expect(await within(panel).findByText('Коммерческий тариф')).toBeInTheDocument()
+    expect(within(panel).getByRole('textbox', { name: /^Показание Коммерческий тариф/ })).toBeEnabled()
+    await user.clear(search)
+    await user.type(search, excluded.number)
+    await user.click(await within(panel).findByRole('option', { name: /Гараж\s*18/ }))
+    await waitFor(() => expect(within(panel).queryByText('Коммерческий тариф')).not.toBeInTheDocument())
+    expect(within(panel).queryByRole('textbox', { name: /^Показание Коммерческий тариф/ })).not.toBeInTheDocument()
+    expect(await within(panel).findByText('Мусор')).toBeInTheDocument()
+    await user.clear(search)
+    await user.type(search, included.number)
+    await user.click(await within(panel).findByRole('option', { name: /Гараж\s*1к/ }))
+    expect(await within(panel).findByRole('textbox', { name: /^Показание Коммерческий тариф/ })).toBeEnabled()
+  })
+
   it('edits a current-month meter reading in the selected garage worksheet', async () => {
     const user = userEvent.setup()
     const currentMonth = getTestCurrentMonthInputValue()
