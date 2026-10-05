@@ -3908,6 +3908,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReplaceMe
                 </FormField>
                 <FormField className="contractors-garage-form-comment" label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
               </div>
+              {item && !canAdjustOpeningData ? <p className="hint" role="status">Для изменения начального баланса и просрочки требуется право «Корректировка начальных данных». После изменения прав выйдите из системы и войдите снова.</p> : null}
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item && canReplaceMeter ? <button type="button" className="secondary-button" disabled={saving} onClick={() => onReplaceMeter(item)}><Gauge size={16} /><span>Заменить счётчик</span></button> : null}

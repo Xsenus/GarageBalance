@@ -4588,7 +4588,8 @@ describe('App', () => {
       getGarages: async () => [garage],
       adjustGarageOpeningBalance,
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const repairedLegacyAdmin = createAuthResponse({ user: { permissions: ['app_releases.manage', 'audit.read', 'dictionaries.read', 'dictionaries.write', 'import.run', 'payments.meter_readings.historical_correct', 'payments.read', 'payments.write', 'reports.read', 'tariffs.manage', 'users.manage', 'opening_data.adjust'] } })
+    render(<App authClient={createAuthClient({ login: async () => repairedLegacyAdmin })} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4616,6 +4617,13 @@ describe('App', () => {
       newOverdueDebt: 75,
       reason: 'Уточнение входящего долга',
     })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Корректировка: Гараж 125' })).not.toBeInTheDocument())
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 125' }))
+    const reopened = await screen.findByRole('dialog', { name: 'Гараж 125' })
+    expect(within(reopened).getByLabelText('Начальный баланс гаража')).toHaveValue('-200.00')
+    expect(within(reopened).getByLabelText('Начальная просрочка')).toHaveValue('75.00')
+    expect(within(reopened).getByLabelText('Начальный баланс гаража')).not.toHaveAttribute('readonly')
+    expect(within(reopened).getByLabelText('Начальная просрочка')).not.toHaveAttribute('readonly')
   }, 20000)
 
   it('rejects a garage opening overdue part greater than the total debt', async () => {
@@ -4662,6 +4670,7 @@ describe('App', () => {
 
     expect(within(garageDialog).getByLabelText('Начальный баланс гаража')).toHaveAttribute('readonly')
     expect(within(garageDialog).getByLabelText('Начальная просрочка')).toHaveAttribute('readonly')
+    expect(within(garageDialog).getByRole('status')).toHaveTextContent('требуется право «Корректировка начальных данных»')
   })
 
   it('saves regular garage fields before continuing an opening-data adjustment', async () => {
