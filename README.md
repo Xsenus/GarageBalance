@@ -2,6 +2,10 @@
 
 GarageBalance — веб-приложение для финансового учёта гаражно-строительного кооператива. Система ведёт гаражи и владельцев, поставщиков и персонал, тарифы и сборы, начисления, платежи, показания счётчиков, фонды, отчёты, импорт из Access и историю изменений.
 
+Документация по установке актуализирована 09.10.2026. Системному администратору начать с [VPS: установка с нуля](docs/vps-deployment-checklist.md) или [Docker: исходники и готовый релиз](docs/docker-install-update-guide.md). Создание БД, миграции, первый администратор, секреты, backup, перенос и восстановление описаны там пошагово.
+
+Архив исходников заказчика содержит приложение и инструкции для сборки. В нём нет готовых Docker-образов, базы клиента и секретов; для первой сборки нужен интернет. Он отличается от автономного GarageBalance-Docker-ВЕРСИЯ.zip из Releases.
+
 ## Содержание
 
 - [Быстрый запуск через Docker](#быстрый-запуск-через-docker)
@@ -27,7 +31,7 @@ GarageBalance — веб-приложение для финансового уч
 - Свободные локальные порты `5173`, `5080` и `5432`.
 
 Git, .NET SDK и Node.js конечному пользователю не требуются.
-После скачивания ZIP интернет для установки и запуска не требуется: архив содержит API, frontend и PostgreSQL image.
+Для готового установочного ZIP из Releases интернет после скачивания не требуется: он содержит API, frontend и PostgreSQL image. К архиву исходников это не относится.
 
 ### Готовый пользовательский релиз
 
@@ -41,7 +45,7 @@ Git, .NET SDK и Node.js конечному пользователю не тре
 
 ### Запуск исходного кода разработчиком
 
-Если необходимо собрать контейнеры из исходников, установите Git и выполните:
+Если необходимо собрать контейнеры из исходников, распакуйте исходный архив и откройте терминал в его корне. Git при установке из ZIP не нужен. Альтернативно получите исходники из репозитория:
 
 ```powershell
 git clone https://github.com/Xsenus/GarageBalance.git
@@ -59,7 +63,7 @@ Copy-Item .env.example .env
 После замены `POSTGRES_PASSWORD` и `JWT_SIGNING_KEY` в `.env`:
 
 ```powershell
-docker compose config
+docker compose config --quiet
 docker compose up --build -d
 docker compose ps
 ```
@@ -69,7 +73,7 @@ docker compose ps
 - интерфейс: <http://127.0.0.1:5173>;
 - проверка API: <http://127.0.0.1:5080/health>.
 
-При первом открытии создайте первого администратора, затем войдите под его учётной записью.
+PostgreSQL сам создаёт БД/роль при первом запуске пустого тома, затем API создаёт таблицы миграциями. При первом открытии создайте первого администратора, затем войдите под его учётной записью. Общего готового пароля в корневом Compose нет. При установке на VPS создайте аккаунт до публичного открытия сайта.
 
 Остановка и повторный запуск:
 
@@ -93,17 +97,21 @@ docker compose start
 
 В корне репозитория:
 
+Сначала создайте отдельную роль и БД на установленном PostgreSQL по [локальной инструкции](docs/local-pc-install-checklist.md); не используйте БД другого проекта. Укажите фактический порт сервера. User secrets загружаются в Development, поэтому для EF CLI задайте это окружение явно.
+
 ```powershell
 dotnet tool restore
 dotnet restore .\GarageBalance.slnx
+$env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet user-secrets set "Jwt:SigningKey" "REPLACE_WITH_AT_LEAST_32_BYTES_SECRET" --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=127.0.0.1;Port=5432;Database=garagebalance;Username=garagebalance;Password=REPLACE_WITH_SECRET" --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj
 dotnet user-secrets set "DataProtection:KeysPath" "C:\GarageBalance\Config\DataProtectionKeys" --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj
 dotnet tool run dotnet-ef database update --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj --startup-project .\backend\GarageBalance.Api\GarageBalance.Api.csproj
-dotnet run --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj
+$env:HttpsRedirection__Enabled = "false"
+dotnet run --no-launch-profile --project .\backend\GarageBalance.Api\GarageBalance.Api.csproj --urls http://127.0.0.1:5080
 ```
 
-API по умолчанию доступен на адресе из launch settings. Проверить его можно запросом `GET /health`.
+В этой команде API явно доступен на http://127.0.0.1:5080. При использовании launch profile вместо неё адрес http-профиля — http://localhost:5182; адрес frontend должен соответствовать выбранному варианту. Проверка готовности: GET /health/ready.
 
 ### 2. Frontend
 

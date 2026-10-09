@@ -2,6 +2,8 @@
 
 Документ фиксирует порядок обновления GarageBalance на локальном ПК или VPS. Цель: перед изменением рабочей базы всегда иметь свежий backup, заранее понимать SQL миграций, проверить health endpoint после запуска и иметь понятный rollback.
 
+Для первой установки и конкретных команд создания БД используйте [VPS с нуля](vps-deployment-checklist.md), [Docker](docker-install-update-guide.md) либо [Windows без Docker](local-pc-install-checklist.md). Архив исходников и автономный Docker ZIP обновляются по разным процедурам. Перед обновлением сохраняйте не только pgdump, но и прежние Data Protection keys, .env/EnvironmentFile и предыдущий комплект приложения.
+
 ## 1. Перед началом
 
 - [ ] Убедиться, что рабочее дерево релиза чистое: `git status --short`.
@@ -37,13 +39,15 @@
 Для VPS:
 
 ```bash
-pg_dump --format=custom --file=/opt/garagebalance-staging/backups/garagebalance_$(date +%Y%m%d_%H%M%S).pgdump garagebalance_staging
+sudo -u postgres pg_dump -p 5432 --format=custom --no-owner --no-acl --file=/var/lib/postgresql/garagebalance-backups/before_update.pgdump garagebalance_staging
 ```
 
 - [ ] Проверить, что backup-файл создан.
 - [ ] Проверить, что backup-файл больше 0 байт.
 - [ ] Записать имя backup-файла в журнал технических работ.
 - [ ] Не удалять предыдущий backup до приемки обновления.
+
+Каталог /var/lib/postgresql/garagebalance-backups заранее создайте с владельцем postgres и правами 0700, как описано в VPS-руководстве. before_update — пример: используйте уникальное имя каждой копии. Порт замените фактическим. Проверяйте pg_restore --list и восстановление в отдельную БД; запись командой без явной роли/порта может подключиться не к тому кластеру.
 
 ## 3. Restore-check перед рисковыми изменениями
 
@@ -63,15 +67,21 @@ pg_dump --format=custom --file=/opt/garagebalance-staging/backups/garagebalance_
 ## 4. Проверки до выкладки
 
 ```powershell
-dotnet test
-npm run test
-npm run build
+dotnet test GarageBalance.slnx --configuration Release
+dotnet format GarageBalance.slnx --verify-no-changes
+Set-Location ./frontend
+npm ci
+npm run test:coverage
 npm run lint
-dotnet format --verify-no-changes
+npm run build
+npm run check:bundle
+Set-Location ..
 ```
 
 - [ ] Все backend-тесты прошли.
 - [ ] Все React-тесты прошли.
+
+Эти команды относятся к полной разработческой копии репозитория с постоянными тестами. Клиентский архив для развёртывания содержит runtime-проекты и не используется как замена CI-копии для запуска всех тестов. Оператор разворачивает уже проверенную версию и выполняет установочные smoke/backup проверки.
 - [ ] Production-сборка frontend создана.
 - [ ] Lint и форматирование прошли.
 - [ ] `git diff --check` не показывает whitespace-ошибок.

@@ -1,6 +1,8 @@
 # Установка и обновление GarageBalance через Docker
 
-Инструкция рассчитана на администратора, который раньше не работал с Docker. Основной пользовательский способ требует только Docker Desktop и одного ZIP из GitHub Releases. Сборка из исходников оставлена отдельным сценарием для разработчика.
+Актуализировано 09.10.2026. Инструкция рассчитана на администратора, который раньше не работал с Docker. Готовый установочный ZIP из Releases и архив исходников — разные поставки. Первый содержит образы и запускается через start.cmd; второй содержит код и собирается по разделу 3, с доступом в интернет. Архив исходников заказчика не включает готовые образы, рабочую БД и секреты.
+
+Для Linux/VPS дополнительно используйте [установку с доменом и TLS](vps-deployment-checklist.md). Docker Engine устанавливается по [официальной инструкции](https://docs.docker.com/engine/install/ubuntu/); Docker Desktop на VPS не нужен.
 
 Отдельная подробная инструкция для Windows, смены портов и подключения других компьютеров локальной сети: [GarageBalance на Windows и в LAN](docker-windows-lan-guide.md).
 
@@ -106,10 +108,17 @@ New-Item -ItemType Directory -Force C:\GarageBalance\Logs
 - `BACKUP_HOST_PATH` — абсолютный путь, например `C:/GarageBalance/Backups`.
 - `LOG_HOST_PATH` — отдельный абсолютный путь, например `C:/GarageBalance/Logs`.
 
-Случайные значения можно получить в PowerShell без внешнего сайта:
+Случайные значения можно получить в Windows PowerShell 5.1 и PowerShell 7 без внешнего сайта:
 
 ```powershell
-[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+$randomBytes = New-Object byte[] 48
+$randomGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $randomGenerator.GetBytes($randomBytes)
+    [Convert]::ToBase64String($randomBytes)
+} finally {
+    $randomGenerator.Dispose()
+}
 ```
 
 Запустите команду два раза и используйте разные результаты. Не отправляйте `.env` в чат, почту или Git. Для Linux пример backup-пути: `/opt/garagebalance/backups`; доступ на запись должен быть у Docker.
@@ -134,7 +143,49 @@ curl.exe -fsS http://127.0.0.1:5173/health
 docker compose logs --tail=100 api
 ```
 
-Откройте `http://127.0.0.1:5173`. При первой пустой базе создайте администратора. API применяет EF Core migrations автоматически. Для действительно пустой базы предобновляющая копия не нужна — сохранять ещё нечего. При изменении существующей схемы сначала обязана создаться и пройти проверку резервная копия.
+Откройте `http://127.0.0.1:5173`. При первой пустой базе создайте администратора. В корневом Compose нет заранее созданного admin@garagebalance.local: автоматический аккаунт относится к готовому установочному ZIP. Выполните первый вход до открытия доступа посторонним.
+
+PostgreSQL при первом запуске пустого volume сам создаёт роль и БД из POSTGRES_USER/POSTGRES_DB. API применяет EF Core migrations и создаёт таблицы автоматически. Для действительно пустой базы предобновляющая копия не нужна — сохранять ещё нечего. При изменении существующей схемы сначала обязана создаться и пройти проверку резервная копия. На непустом volume переменные POSTGRES_DB/POSTGRES_USER/POSTGRES_PASSWORD не пересоздают БД и не меняют пароль существующей роли.
+
+### Полный перечень настройки исходного Compose
+
+Корневой .env читает Docker Compose; ASP.NET Core сам файл .env не загружает. Compose передаёт в контейнер только явно описанные environment-параметры. Добавление произвольного Finance__... или InitialAdministrator__... в .env без соответствующей записи в Compose не изменит backend.
+
+| Параметр .env | Значение / назначение |
+| --- | --- |
+| POSTGRES_DB / POSTGRES_USER | garagebalance; имя БД и роли при первом создании volume |
+| POSTGRES_PASSWORD | уникальный случайный пароль; обязательная замена примера |
+| JWT_SIGNING_KEY | независимый случайный секрет минимум 32 UTF-8 байта |
+| ASPNETCORE_ENVIRONMENT | Production для рабочей установки |
+| POSTGRES_BIND_ADDRESS / POSTGRES_PORT | 127.0.0.1 / 5432; только внешний адрес и порт |
+| API_BIND_ADDRESS / API_PORT | 127.0.0.1 / 5080; API внутри контейнера слушает 8080 |
+| FRONTEND_BIND_ADDRESS / FRONTEND_PORT | 127.0.0.1 / 5173; для LAN меняется только frontend bind |
+| FRONTEND_ORIGIN | фактический адрес браузера, без завершающего слеша |
+| DATA_PROTECTION_KEYS_PATH | /var/lib/garagebalance/keys; mount постоянных ключей |
+| BACKUP_HOST_PATH / LOG_HOST_PATH / IMPORT_QUEUE_HOST_PATH | постоянные закрытые каталоги на хосте |
+| APPLY_MIGRATIONS_ON_STARTUP | true; применение миграций при запуске |
+| REQUIRE_PRE_MIGRATION_BACKUP | true; защита перед изменением существующей схемы |
+| DATABASE_BACKUP_ENABLED / DATABASE_BACKUP_AUTOMATIC_ENABLED | true; сервис копирования и автоматические копии |
+| DATABASE_BACKUP_INTERVAL_HOURS | 24; интервал автоматических копий |
+| DATABASE_BACKUP_CATCH_UP_ENABLED | true; создание пропущенной копии после запуска |
+| DATABASE_BACKUP_FRESHNESS_GRACE_HOURS | 6; допустимая задержка свежести |
+| DATABASE_BACKUP_WINDOW_START_HOUR / DATABASE_BACKUP_WINDOW_END_HOUR | 2 / 5; локальное окно автоматического backup |
+| DATABASE_BACKUP_TIME_ZONE_ID | Europe/Moscow по шаблону; для кооператива в Новосибирске задайте Asia/Novosibirsk |
+| DATABASE_BACKUP_RETENTION_COUNT | 30; число сохраняемых управляемых копий |
+| IMPORT_PROCESSING_CAPACITY | 4; ёмкость очереди импорта |
+| IMPORT_MAXIMUM_FILE_SIZE_MB | 50; предел одного файла |
+| IMPORT_QUEUE_MAXIMUM_WORK_DIRECTORY_SIZE_MB | 512; предел каталога очереди |
+| IMPORT_QUEUE_ORPHAN_RETENTION_HOURS / IMPORT_QUEUE_ORPHAN_SWEEP_INTERVAL_MINUTES | 24 / 60; очистка бесхозных файлов очереди |
+| ONE_C_FRESH_QUEUE_CAPACITY / ONE_C_FRESH_ADAPTER_TIMEOUT_SECONDS | 8 / 30; очередь и таймаут 1C |
+| DIAGNOSTIC_LOGGING_ENABLED | true; технические журналы |
+| DIAGNOSTIC_LOGGING_RETENTION_DAYS / DIAGNOSTIC_LOGGING_MAX_FILE_SIZE_MB | 14 / 10; срок и размер файлов |
+| DIAGNOSTIC_PACKAGE_DAYS / DIAGNOSTIC_PACKAGE_MAX_SIZE_MB | 7 / 20; границы диагностического ZIP |
+| STAGING_DATABASE_RESET_ENABLED / STAGING_DATABASE_RESET_PASSWORD | false / пусто; рабочий сброс отключён |
+| VITE_SHOW_INTEGRATION_SETTINGS | в корневом Compose не передаётся build-аргументом; изменение этой строки .env само по себе не меняет сборку frontend |
+
+Часовой пояс регулярных начислений задан в backend appsettings как Asia/Novosibirsk. Если организация работает в другом поясе, передайте Finance__RegularAccrualAutomation__TimeZoneId через отдельный Compose override. Аналогично настройка адаптеров интеграций и хранилищ требует environment-записей override; параметры и безопасное хранение описаны в [интеграциях](integrations-guide.md) и [хранилищах](storage-operations.md).
+
+Для чистого проекта порты и контейнеры уже имеют фиксированные имена. Вторую установку на том же Docker-хосте нельзя запускать поверх первой: кроме другого project name потребуются уникальные container_name, внешние порты и отдельные тома.
 
 ## 4. Автоматические и ручные копии
 
@@ -223,7 +274,7 @@ docker compose stop frontend api
 docker compose exec postgres pg_dump --format=custom --no-owner --no-privileges -U garagebalance -d garagebalance -f /backups/before_emergency_restore.pgdump
 ```
 
-Затем подтвердите нужный файл через `pg_restore --list` и сначала восстановите его в `garagebalance_restore_check` по разделу 7. Только после проверки и отдельного решения администратора можно пересоздать рабочую базу:
+Затем подтвердите нужный файл через `pg_restore --list` и сначала восстановите его в `garagebalance_restore_check` по разделу 6. Только после проверки и отдельного решения администратора можно пересоздать рабочую базу:
 
 ```powershell
 docker compose exec postgres dropdb --if-exists -U garagebalance garagebalance
@@ -254,7 +305,21 @@ docker compose up -d
 
 Полное удаление допустимо только после проверенной внешней копии. Опасная команда `docker compose down -v` удаляет базу и ключи защиты; в штатной эксплуатации ее не использовать.
 
-Для переноса на другой компьютер перенесите проект без `.git`, защищенный `.env`, свежий проверенный `.pgdump` и архив volume ключей защиты. Разверните чистую установку, восстановите ключи до запуска API и затем восстановите `.pgdump`; секреты и backup передавайте только защищенным способом. Восстановление архива ключей — отдельная административная операция, которую сначала проверяют на тестовой установке.
+Для переноса на другой компьютер перенесите проект, защищенный .env, свежий проверенный .pgdump и архив volume ключей защиты. Секреты и backup передавайте отдельным защищённым способом, а не вкладывайте в исходный архив заказчика.
+
+На новом хосте сначала соберите/загрузите образы и запустите только PostgreSQL:
+
+~~~powershell
+docker compose up -d postgres
+docker volume create garagebalance_data-protection-keys
+docker run --rm -v garagebalance_data-protection-keys:/keys -v C:/GarageBalance/Backups:/backup:ro alpine:3.22 tar -xzf /backup/data-protection-keys.tar.gz -C /keys
+docker compose exec postgres pg_restore --exit-on-error --no-owner --no-privileges -U garagebalance -d garagebalance /backups/ИМЯ_ПРОВЕРЕННОЙ_КОПИИ.pgdump
+docker compose up -d
+docker compose ps
+curl.exe -fsS http://127.0.0.1:5173/health/ready
+~~~
+
+Пример рассчитан на новую пустую БД, пользователя garagebalance и стандартные имена volumes. Если API уже запускался и создал таблицы, не накладывайте дамп поверх них: остановите приложение и используйте процедуру проверенного восстановления из раздела 7. Volume ключей до распаковки должен быть пустым. Убедитесь в происхождении архива ключей и ограничьте доступ к нему. Команда с alpine может потребовать интернет, если этот вспомогательный образ не загружен. Копирование .env сохраняет те же секреты и имя БД; фактические bind-адреса и FRONTEND_ORIGIN адаптируйте новому хосту.
 
 ## 9. Диагностика
 
