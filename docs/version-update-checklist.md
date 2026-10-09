@@ -68,7 +68,7 @@ sudo -u postgres pg_dump -p 5432 --format=custom --no-owner --no-acl --file=/var
 
 ```powershell
 dotnet test GarageBalance.slnx --configuration Release
-dotnet format GarageBalance.slnx --verify-no-changes
+dotnet format --verify-no-changes GarageBalance.slnx
 Set-Location ./frontend
 npm ci
 npm run test:coverage

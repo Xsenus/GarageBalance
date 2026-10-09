@@ -152,6 +152,17 @@ Set-Location C:/GarageBalance/App/api
 
 - [ ] Проверить API: `curl -fsS http://127.0.0.1:5080/health`.
 - [ ] API автоматически применяет EF migrations при Database__ApplyMigrationsOnStartup=true: отдельный EF CLI для установки не нужен. В случае имеющихся таблиц новые миграции предваряет проверенный backup.
+
+Если оператор выбирает ручное применение схемы, загрузите конфигурацию по разделу 3, выполните backup/restore-check, остановите API и из корня исходников выполните:
+
+~~~powershell
+dotnet tool restore
+dotnet tool run dotnet-ef database update --project ./backend/GarageBalance.Api/GarageBalance.Api.csproj --startup-project ./backend/GarageBalance.Api/GarageBalance.Api.csproj
+~~~
+
+Не запускайте ручные и автоматические миграции одновременно. После ручного обновления запускайте API с Database__ApplyMigrationsOnStartup=false либо убедитесь, что новых pending migrations больше нет. Для Development применяется настройка user secrets; для Production — окружение.
+
+В описанном выше nginx-варианте VITE_API_BASE_URL пустой и запросы идут через /api того же адреса. Если frontend намеренно обращается к локальному API напрямую, перед сборкой допустимо задать $env:VITE_API_BASE_URL="http://127.0.0.1:5080"; тогда Cors__AllowedOrigins__0 должен точно совпадать с адресом браузера. Эти варианты не смешивайте.
 - [ ] Раздать собранный frontend локальным nginx на http://127.0.0.1:5173. Файл index.html через file:// не открывать.
 - [ ] Не открывать порты `5080`, `5173`, `5432` во внешнюю сеть без отдельного решения по безопасности.
 

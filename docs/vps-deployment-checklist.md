@@ -403,6 +403,8 @@ sudo -u postgres dropdb -p 5432 garagebalance_restore_check
 
 ## 7. Обновление и возврат предыдущей версии
 
+Rollback выполняется по процедуре ниже с проверкой совместимости схемы.
+
 1. Согласуйте окно работ и остановите запись новых финансовых данных.
 2. Сохраните текущие версии backend/frontend, БД, EnvironmentFile и ключей.
 3. Создайте свежий backup и выполните проверочное восстановление.
@@ -430,6 +432,30 @@ sudo -u postgres dropdb -p 5432 garagebalance_restore_check
 В репозитории push в master запускает GitHub Actions Deploy staging: полный backend/frontend quality gate, упаковка API/frontend/StorageTool, idempotent SQL, предрелизный backup с restore-check, обновление и readiness. Настройки repository secrets: VPS_HOST, VPS_DEPLOY_USER, VPS_SSH_KEY. Текущий workflow получает SSH host key через ssh-keyscan; при подготовке нового сервера дополнительно сверяйте его fingerprint с доверенным каналом администратора. Встроенной проверки отдельного секрета с заранее закреплённым fingerprint в текущем workflow нет.
 
 Deploy-пользователь garagebalance-deploy получает право только на root-owned apply-скрипт /usr/local/bin/garagebalance-deploy-apply, не общий sudo. Не переносите приватный SSH-ключ и файл secrets в исходный архив. Для самостоятельной установки CI и SSH-ключ проекта не нужны.
+
+Для действующего сервера проверяйте полномочия и запуск именно опубликованного workflow:
+
+~~~bash
+sudo -l -U garagebalance-deploy
+sudo systemctl status garagebalance-staging.service --no-pager
+curl -fsS https://sgk.blagodaty.ru/health/ready
+~~~
+
+Workflow находится в .github/workflows/deploy-staging.yml. Применение загруженного согласованного релиза: /usr/local/bin/garagebalance-deploy-apply <release-id>. Выпускающий администратор проверяет desktop/mobile вход, формы и Cache-Control. Для перевыпуска сертификата именно этого домена: certbot --nginx -d sgk.blagodaty.ru; на новой установке используется её собственный домен.
+
+При выборе ручного миграционного SQL вместо автоматического режима, из корня исходников:
+
+~~~bash
+dotnet tool restore
+mkdir -p artifacts
+dotnet tool run dotnet-ef migrations script --idempotent --project backend/GarageBalance.Api/GarageBalance.Api.csproj --startup-project backend/GarageBalance.Api/GarageBalance.Api.csproj --output artifacts/deploy-migrations.sql
+~~~
+
+Сгенерированный SQL применяется только после backup/restore-check при остановленном API. Для обычной установки с автоматическими миграциями этот шаг не нужен.
+
+### Условия финального закрытия VPS/domain deployment
+
+Проверены readiness, сертификат и renewal, полномочия deploy-аккаунта, backup/restore, вход, desktop/mobile и предыдущий комплект для Rollback. В опубликованном appsettings уровень Microsoft.EntityFrameworkCore.Database.Command оставляйте Warning: каждый успешный SQL-запрос не должен записываться в рабочий журнал. Не коммитить реальные secrets, pgdump, ключи защиты, Access-данные и диагностические материалы.
 
 ## 9. Диагностика и приёмка
 
