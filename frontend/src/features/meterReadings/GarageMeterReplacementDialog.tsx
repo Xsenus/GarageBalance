@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LoaderCircle, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
-import type { FinanceClient, MeterReadingDto } from '../../services/financeApi'
+import type { FinanceClient, MeterDeviceDto, MeterReadingDto } from '../../services/financeApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { AsyncErrorState, TableLoadingState } from '../../shared/AsyncState'
@@ -12,12 +12,17 @@ import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
+import { getMeterReplacementConsumption } from './meterReplacementConsumption'
 import { SelectControl } from '../../shared/SelectControl'
 
 const defaultOptions = [{ value: 'electricity', label: 'Электроэнергия' }, { value: 'water', label: 'Вода' }]
 function parseValue(value: string) {
   const normalized = value.trim().replace(',', '.')
   return /^\d+(?:\.\d{1,3})?$/.test(normalized) && Number(normalized) <= 999999999 ? Number(normalized) : null
+}
+
+function formatAmount(value: number) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(Math.round(value * 1000) / 1000)
 }
 
 export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeClient, garage, onClose, onSaved }: {
@@ -31,9 +36,10 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const [initial, setInitial] = useState('0')
   const [current, setCurrent] = useState('0')
   const [final, setFinal] = useState('')
+  const [finalTouched, setFinalTouched] = useState(false)
   const [reason, setReason] = useState('')
   const [retry, setRetry] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: string; reading?: MeterReadingDto; options: typeof defaultOptions } | null>(null)
+  const [loaded, setLoaded] = useState<{ key: string; reading?: MeterReadingDto; activeDevice?: MeterDeviceDto; options: typeof defaultOptions } | null>(null)
   const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -42,6 +48,14 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const month = date.slice(0, 7)
   const requestKey = JSON.stringify([auth.accessToken, garage.id, garage.number, kind, month, retry])
   const loading = canWrite && loaded?.key !== requestKey && loadError?.key !== requestKey
+  const loadedForRequest = loaded?.key === requestKey ? loaded : null
+  const defaultFinal = typeof loadedForRequest?.reading?.currentValue === 'number' ? String(loadedForRequest.reading.currentValue) : ''
+  const finalText = finalTouched ? final : defaultFinal
+  const consumptionBaseline = loadedForRequest?.reading
+    ? loadedForRequest.reading.previousValue
+    : loadedForRequest?.activeDevice ? loadedForRequest.activeDevice.lastReadingValue ?? loadedForRequest.activeDevice.initialValue : null
+  const consumption = getMeterReplacementConsumption(
+    typeof consumptionBaseline === 'number' ? consumptionBaseline : null, parseValue(finalText), parseValue(initial), parseValue(current))
   const ref = useFocusTrap<HTMLElement>(true)
   useRestoreFocusOnClose(true)
   useEscapeKey(!saving, onClose)
@@ -69,7 +83,11 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
           if (reading || offset >= page.totalCount) break
           if (page.items.length === 0) throw new Error('Incomplete meter reading page')
         }
-        if (!controller.signal.aborted) setLoaded({ key: requestKey, reading, options })
+        const devices = financeClient.getMeterDevices
+          ? await financeClient.getMeterDevices(auth.accessToken, garage.id, kind, controller.signal)
+          : []
+        const activeDevice = devices.find((device) => !device.removedOn)
+        if (!controller.signal.aborted) setLoaded({ key: requestKey, reading, activeDevice, options })
       } catch {
         if (!controller.signal.aborted) setLoadError({ key: requestKey, message: 'Не удалось проверить показания перед заменой счётчика.' })
       }
@@ -82,7 +100,7 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
     if (!canWrite || loading || loaded?.key !== requestKey || submitting.current || !financeClient.replaceMeterDevice) return
     const initialValue = parseValue(initial)
     const currentValue = parseValue(current)
-    const finalValue = parseValue(final)
+    const finalValue = parseValue(finalText)
     if (!date || !serial.trim() || serial.trim().length > 100 || initialValue === null || currentValue === null || finalValue === null
       || currentValue < initialValue || reasonRequired && !reason.trim()) {
       setError('Укажите дату, номер нового счётчика, корректные показания и причину замены. Текущее показание нового счётчика не может быть меньше начального.')
@@ -113,13 +131,20 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
       <form className="dictionary-modal-form" noValidate onSubmit={(event) => { event.preventDefault(); void save() }}>
         {!canWrite ? <FormError>Нет права изменять показания и заменять счётчики.</FormError> : null}
         {error ? <FormError>{error}</FormError> : null}
-        <FormField label="Счётчик"><SelectControl aria-label="Счётчик для замены" options={loaded?.options ?? defaultOptions} value={kind} disabled={disabled} onChange={(value) => { setKind(value); setFinal(''); setError(null) }} /></FormField>
+        <FormField label="Счётчик"><SelectControl aria-label="Счётчик для замены" options={loaded?.options ?? defaultOptions} value={kind} disabled={disabled} onChange={(value) => { setKind(value); setFinal(''); setFinalTouched(false); setError(null) }} /></FormField>
         <FormField label="Дата замены"><LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" required value={date} disabled={disabled} onChange={setDate} /></FormField>
         {loading ? <TableLoadingState label="Проверяем показания счётчика" rows={2} columns={2} /> : loadError?.key === requestKey ? <AsyncErrorState message={loadError.message} onRetry={() => setRetry((value) => value + 1)} /> : null}
         <FormField label="Номер нового счётчика"><input aria-label="Номер нового счетчика" required maxLength={100} value={serial} disabled={disabled} onChange={(event) => setSerial(event.target.value)} /></FormField>
-        <FormField label="Конечное показание старого счётчика" help="Последнее значение снимаемого счётчика. Расход до замены сохраняется в начислении этого месяца."><MeterReadingInput aria-label="Конечное показание старого счетчика" required value={final} disabled={disabled} onChange={(event) => setFinal(event.target.value)} /></FormField>
+        <FormField label="Конечное показание старого счётчика" help="Последнее значение снимаемого счётчика. Расход до замены сохраняется в начислении этого месяца."><MeterReadingInput aria-label="Конечное показание старого счетчика" required value={finalText} disabled={disabled} onChange={(event) => { setFinalTouched(true); setFinal(event.target.value) }} /></FormField>
         <FormField label="Начальное показание нового счётчика"><MeterReadingInput aria-label="Начальное показание нового счетчика" required value={initial} disabled={disabled} onChange={(event) => setInitial(event.target.value)} /></FormField>
         <FormField label="Текущее показание нового счётчика"><MeterReadingInput aria-label="Текущее показание нового счетчика" required value={current} disabled={disabled} onChange={(event) => setCurrent(event.target.value)} /></FormField>
+        {consumption ? <p className={`form-hint${consumption.oldMeter < 0 || consumption.newMeter < 0 ? ' form-hint--warning' : ''}`} role="status" aria-live="polite">
+          {consumption.oldMeter < 0
+            ? `Конечное показание старого счётчика меньше его последнего показания (${formatAmount(consumptionBaseline as number)}).`
+            : consumption.newMeter < 0
+              ? 'Текущее показание нового счётчика меньше его начального показания.'
+              : `Расход за месяц: ${formatAmount(consumption.oldMeter + consumption.newMeter)} (старый счётчик ${formatAmount(consumption.oldMeter)}, новый ${formatAmount(consumption.newMeter)}).`}
+        </p> : null}
         <FormField label="Причина замены" help="Замена и пересчёт записываются в историю гаража."><textarea aria-label="Причина замены счетчика" required={reasonRequired} maxLength={1000} value={reason} disabled={disabled} onChange={(event) => setReason(event.target.value)} /></FormField>
         <div className="detail-dialog-actions"><button type="submit" className="secondary-button" disabled={disabled || loading || loaded?.key !== requestKey || !financeClient.replaceMeterDevice} aria-busy={saving}>{saving ? <LoaderCircle size={17} className="financial-report-button__spinner" /> : <Save size={17} />}<span>Сохранить замену</span></button>
           <button type="button" className="ghost-button" disabled={saving} onClick={onClose}>Отмена</button></div>

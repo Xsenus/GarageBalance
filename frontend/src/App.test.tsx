@@ -3101,6 +3101,77 @@ describe('App', () => {
     expect(within(employeeDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
   }, 20000)
 
+  it('shows start meter values only for metered services that apply to the garage and saves a changed commercial value', async () => {
+    const user = userEvent.setup()
+    const garageId = '11111111-1111-4111-8111-111111111111'
+    const commercialKind = 'service_5ea942591f7e441e89ccfa27f4e8a493'
+    const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 (900) 000-00-00' })
+    const garage = createGarage({ id: garageId, number: '1к', ownerId: owner.id, ownerName: owner.fullName, initialElectricityMeterValue: 53547 })
+    const getGarageMeterStartValues = vi.fn(async () => [
+      { meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: 10, hasReadings: false },
+      { meterKind: commercialKind, serviceName: 'Коммерческий тариф', unitName: 'кВт·ч', value: null, hasReadings: true },
+    ])
+    const updateGarage = vi.fn(async (_token: string, id: string, request: UpsertGarageRequest) => createGarage({ ...garage, id, number: request.number }))
+    const dictionaryClient = createDictionaryClient({ getOwners: async () => [owner], getGarages: async () => [garage], getGarageMeterStartValues, updateGarage })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const row = (await within(contractorsPanel).findByText('Иванов Иван')).closest('[role="row"]')!
+    await user.dblClick(row as HTMLElement)
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 1к' })
+
+    const startFields = await within(dialog).findByRole('group', { name: 'Стартовые значения счётчиков' })
+    expect(getGarageMeterStartValues).toHaveBeenCalledWith('token', garageId, expect.any(AbortSignal))
+    expect(within(startFields).getByLabelText('Стартовое значение счётчика: Вода')).toHaveValue('10')
+    const commercial = within(startFields).getByLabelText('Стартовое значение счётчика: Коммерческий тариф')
+    expect(commercial).toHaveValue('')
+    expect(within(dialog).queryByLabelText('Стартовое значение счетчика электричества')).not.toBeInTheDocument()
+
+    await user.type(commercial, '5000')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменения гаража' })
+    expect(confirmation).toHaveTextContent('Стартовое значение: Коммерческий тариф')
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateGarage).toHaveBeenCalledWith('token', garageId, expect.objectContaining({
+      meterStartValues: [{ meterKind: commercialKind, value: 5000 }],
+    })))
+  }, 20000)
+
+  it('explains an invalid service start meter value and retries a failed start value load', async () => {
+    const user = userEvent.setup()
+    const garageId = '22222222-2222-4222-8222-222222222222'
+    const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 (900) 000-00-00' })
+    const garage = createGarage({ id: garageId, number: '7', ownerId: owner.id, ownerName: owner.fullName })
+    const getGarageMeterStartValues = vi.fn<NonNullable<DictionaryClient['getGarageMeterStartValues']>>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue([{ meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: 1, hasReadings: false }])
+    const updateGarage = vi.fn()
+    const dictionaryClient = createDictionaryClient({ getOwners: async () => [owner], getGarages: async () => [garage], getGarageMeterStartValues, updateGarage })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.dblClick((await within(contractorsPanel).findByText('Иванов Иван')).closest('[role="row"]') as HTMLElement)
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 7' })
+
+    expect(await within(dialog).findByText('Не удалось загрузить стартовые значения счётчиков.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
+    const water = await within(dialog).findByLabelText('Стартовое значение счётчика: Вода')
+    await user.clear(water)
+    await user.type(water, '-5')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(within(dialog).getByRole('alert', { name: 'Проверьте данные гаража' })).toHaveTextContent('Стартовое значение «Вода» должно быть числом от 0 до 999 999 999.')
+    expect(water).toHaveAttribute('aria-invalid', 'true')
+    expect(updateGarage).not.toHaveBeenCalled()
+  }, 20000)
+
   it('explains every invalid value in the contractor garage form before saving', async () => {
     const user = userEvent.setup()
     const createGarageRequest = vi.fn()

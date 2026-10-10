@@ -243,6 +243,19 @@ export type UpsertOwnerRequest = {
   meterNotes?: string
 }
 
+export type GarageMeterStartValueDto = {
+  meterKind: string
+  serviceName: string
+  unitName: string | null
+  value: number | null
+  hasReadings: boolean
+}
+
+export type UpsertGarageMeterStartValueRequest = {
+  meterKind: string
+  value: number
+}
+
 export type UpsertGarageRequest = {
   number: string
   peopleCount: number
@@ -252,6 +265,7 @@ export type UpsertGarageRequest = {
   startingOverdueDebt?: number
   initialWaterMeterValue?: number | null
   initialElectricityMeterValue?: number | null
+  meterStartValues?: UpsertGarageMeterStartValueRequest[]
   comment?: string
   version?: string
 }
@@ -411,6 +425,7 @@ export type ChargeServiceTariffPeriodDto = {
   effectiveTo: string | null
   rate: number
   tariffVersion: string
+  electricityTiers?: ElectricityTariffTierDto[] | null
 }
 
 export type UpsertChargeServiceTariffScheduleRequest = {
@@ -422,6 +437,7 @@ export type UpsertChargeServiceTariffScheduleRequest = {
     effectiveTo?: string | null
     rate: number
     tariffVersion?: string | null
+    electricityTiers?: UpsertElectricityTariffTierRequest[]
   }>
   allowGaps: boolean
   changeReason?: string | null
@@ -459,6 +475,7 @@ export type DictionaryClient = {
   createGarageWithAnnualPayments(accessToken: string, request: CreateGarageWithAnnualPaymentsRequest): Promise<GarageDto>
   updateGarageWithAnnualPayments(accessToken: string, id: string, request: UpdateGarageWithAnnualPaymentsRequest): Promise<GarageDto>
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
+  getGarageMeterStartValues?(accessToken: string, id: string, signal?: AbortSignal): Promise<GarageMeterStartValueDto[]>
   archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
   adjustGarageOpeningBalance?(accessToken: string, id: string, request: CreateOpeningBalanceAdjustmentRequest): Promise<unknown>
@@ -640,6 +657,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   updateGarage(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getGarageMeterStartValues(accessToken, id, signal) {
+    return requestJson(accessToken, `/api/dictionaries/garages/${id}/meter-start-values`, { signal })
   },
   archiveGarage(accessToken, id, reason) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })

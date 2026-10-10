@@ -262,6 +262,7 @@ export type MeterDeviceDto = {
   initialValue: number
   finalValue: number | null
   version: string
+  lastReadingValue?: number | null
 }
 
 export type MeterDeviceReplacementDto = { device: MeterDeviceDto; reading: MeterReadingDto }
@@ -937,6 +938,7 @@ export type FinanceClient = {
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
   restoreMeterReading(accessToken: string, meterReadingId: string): Promise<MeterReadingDto>
   replaceMeterDevice?(accessToken: string, request: ReplaceMeterDeviceRequest): Promise<MeterDeviceReplacementDto>
+  getMeterDevices?(accessToken: string, garageId: string, meterKind: string, signal?: AbortSignal): Promise<MeterDeviceDto[]>
 }
 
 const defaultFinanceListLimit = 50
@@ -1289,5 +1291,8 @@ export const financeApi: FinanceClient = {
   },
   replaceMeterDevice(accessToken, request) {
     return requestJson(accessToken, '/api/finance/meter-devices/replace', { method: 'POST', body: JSON.stringify(request) })
+  },
+  getMeterDevices(accessToken, garageId, meterKind, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/meter-devices', { garageId, meterKind }), { signal })
   },
 }

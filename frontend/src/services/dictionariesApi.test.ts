@@ -51,6 +51,21 @@ describe('dictionariesApi response cache', () => {
     }))
   })
 
+  it('reads garage start meter values without using the dictionary response cache', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([
+      { meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: 12, hasReadings: true },
+    ]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const values = await dictionariesApi.getGarageMeterStartValues!('token', 'garage-1', controller.signal)
+    await dictionariesApi.getGarageMeterStartValues!('token', 'garage-1', controller.signal)
+
+    expect(values).toEqual([{ meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: 12, hasReadings: true }])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/dictionaries/garages/garage-1/meter-start-values')
+  })
+
   it('uses the independent supplier service contract and invalidates supplier names without invalidating tariffs', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'service', name: 'Уборка', version: 'v1', isArchived: false }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

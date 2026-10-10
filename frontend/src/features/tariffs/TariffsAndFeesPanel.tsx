@@ -5,7 +5,7 @@ import { TariffGarageScope } from './TariffGarageScope'
 import { sameTariffScheduleTerms, sameTariffServiceSettings } from './tariffCardConcurrency'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, StaffDepartmentSalaryFundDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, ElectricityTariffTierDto, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, StaffDepartmentSalaryFundDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import { areFeeCampaignAmountsEqual, calculateFeeCampaignContributionAmount, calculateFeeCampaignLastContribution, calculateFeeCampaignTargetAmount } from './feeCampaignAmounts'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
@@ -344,6 +344,44 @@ function getElectricityTariffTiers(tariff: TariffDto | null) {
     { id: `${tariff.id}-legacy-2`, name: tariff.electricitySecondTierName ?? 'Порог 2', upperBound: tariff.electricitySecondThreshold, rate: tariff.electricitySecondRate ?? tariff.rate, isCustom: false },
     { id: `${tariff.id}-legacy-3`, name: tariff.electricityThirdTierName ?? 'Порог 3', upperBound: null, rate: tariff.electricityThirdRate ?? tariff.rate, isCustom: false },
   ]
+}
+
+type TariffScheduleDraftPeriod = ChargeServiceTariffPeriodDto & { key: string; rateText: string; tiers?: ElectricityTariffTierDto[] }
+
+function validateTariffTiers(tiers: ElectricityTariffTierDto[]): string | null {
+  if (tiers.length < 2) {
+    return 'Для пороговой тарификации укажите минимум один порог и последнюю ступень без верхней границы.'
+  }
+  for (let index = 0; index < tiers.length - 1; index += 1) {
+    const upperBound = tiers[index].upperBound
+    const lowerBound = index === 0 ? 0 : (tiers[index - 1].upperBound ?? -1) + 1
+    if (upperBound == null || !Number.isFinite(upperBound) || upperBound < lowerBound) {
+      return `В ступени ${index + 1} укажите верхнюю границу не меньше ${lowerBound}.`
+    }
+  }
+  if (tiers.some((tier) => !Number.isFinite(tier.rate) || tier.rate <= 0 || tier.rate > 999999999)) {
+    return 'Тариф каждой ступени должен быть больше нуля.'
+  }
+  return null
+}
+
+function cloneTariffTiersAsDraft(tiers: ElectricityTariffTierDto[]): ElectricityTariffTierDto[] {
+  return tiers.map((tier) => ({ ...tier, id: `draft-tier-${globalThis.crypto.randomUUID()}`, isCustom: true }))
+}
+
+function toTariffScheduleDraft(periods: ChargeServiceTariffPeriodDto[], tariffs: TariffDto[], tiered: boolean): TariffScheduleDraftPeriod[] {
+  return periods.map((period) => ({
+    ...period,
+    rateText: formatTariffDecimal(period.rate),
+    key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}`,
+    tiers: tiered
+      ? (period.electricityTiers?.length ? period.electricityTiers : getElectricityTariffTiers(tariffs.find((tariff) => tariff.id === period.tariffId) ?? null))
+      : undefined,
+  }))
+}
+
+function formatTariffScheduleTiersSummary(tiers: ElectricityTariffTierDto[] | undefined) {
+  return tiers?.length ? tiers.map((tier) => formatTariffDecimal(tier.rate)).join(' / ') : 'Задать пороги'
 }
 
 function isTariffMoneyAmount(row: ContractorTariffRow) {
@@ -3964,7 +4002,7 @@ export function AddServicePrototypeDialog({
   const [tariffTiers, setTariffTiers] = useState(() => getElectricityTariffTiers(initialTariff))
   const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(initialTariff?.effectiveFrom ?? getLocalDateInputValue())
   const [error, setError] = useState<string | null>(null)
-  const [scheduleDraft, setScheduleDraft] = useState<Array<ChargeServiceTariffPeriodDto & { key: string; rateText: string }>>(() => {
+  const [scheduleDraft, setScheduleDraft] = useState<TariffScheduleDraftPeriod[]>(() => {
     const periods = tariffSchedule?.length ? tariffSchedule : initialSetting && initialTariff ? [{
       tariffId: initialTariff.id,
       tariffVersion: initialTariff.version,
@@ -3972,8 +4010,9 @@ export function AddServicePrototypeDialog({
       effectiveTo: null,
       rate: initialTariff.rate,
     }] : []
-    return periods.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` }))
+    return toTariffScheduleDraft(periods, tariffs, Boolean(initialSetting?.hasTieredTariff))
   })
+  const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(null)
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const scheduleSaveInFlightRef = useRef(false)
@@ -3984,6 +4023,22 @@ export function AddServicePrototypeDialog({
   const effectiveCalculationBase = calculationBase
   const canUseTieredTariff = isByMeter
     && (effectiveCalculationBase === 'meter_water' || effectiveCalculationBase === 'meter_electricity')
+  const tieredSchedule = Boolean(initialSetting?.hasTieredTariff) && isTiered && Boolean(onUpdateTariffSchedule) && scheduleDraft.length > 0
+  const selectedPeriod = tieredSchedule
+    ? scheduleDraft.find((period) => period.key === selectedPeriodKey)
+      ?? [...scheduleDraft].reverse().find((period) => !period.effectiveFrom || period.effectiveFrom <= getLocalDateInputValue())
+      ?? scheduleDraft[scheduleDraft.length - 1]
+    : null
+  const activeTiers = tieredSchedule ? selectedPeriod?.tiers ?? [] : tariffTiers
+  function setActiveTiers(update: (current: ElectricityTariffTierDto[]) => ElectricityTariffTierDto[]) {
+    if (!tieredSchedule || !selectedPeriod) {
+      setTariffTiers(update)
+      return
+    }
+    setScheduleDraft((current) => current.map((period) => period.key === selectedPeriod.key
+      ? { ...period, tiers: update(period.tiers ?? []) }
+      : period))
+  }
   const isMonthly = periodicityMonths === '1'
   const canChooseRegularity = !regularOnly && !initialSetting
   const dialogBusy = isSaving || scheduleSaving || submitting
@@ -4015,10 +4070,19 @@ export function AddServicePrototypeDialog({
     const ordered = [...scheduleDraft].sort((left, right) => (left.effectiveFrom ?? '').localeCompare(right.effectiveFrom ?? ''))
     for (let index = 0; index < ordered.length; index += 1) {
       const period = ordered[index]
-      const parsedRate = parsePrototypeAmount(period.rateText)
-      if (parsedRate == null || parsedRate <= 0 || parsedRate > 999999999) {
-        setScheduleMessage('Для каждого периода укажите тариф больше нуля.')
-        return
+      if (tieredSchedule) {
+        const tiersError = validateTariffTiers(period.tiers ?? [])
+        if (tiersError) {
+          setSelectedPeriodKey(period.key)
+          setScheduleMessage(`Период ${period.effectiveFrom ? `с ${formatDateOnly(period.effectiveFrom)}` : 'без начальной даты'}: ${tiersError}`)
+          return
+        }
+      } else {
+        const parsedRate = parsePrototypeAmount(period.rateText)
+        if (parsedRate == null || parsedRate <= 0 || parsedRate > 999999999) {
+          setScheduleMessage('Для каждого периода укажите тариф больше нуля.')
+          return
+        }
       }
       if (period.effectiveFrom && period.effectiveTo && period.effectiveFrom > period.effectiveTo) {
         setScheduleMessage('Конечная дата тарифа не может быть раньше начальной.')
@@ -4042,18 +4106,27 @@ export function AddServicePrototypeDialog({
       const saved = await onUpdateTariffSchedule({
         service,
         incomeFundId,
-        periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText }) => ({
+        periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText, tiers }) => ({
           tariffId: tariffId || null,
           tariffVersion: tariffVersion || null,
           effectiveFrom,
           effectiveTo,
-          rate: parsePrototypeAmount(rateText)!,
+          rate: tieredSchedule ? tiers![0].rate : parsePrototypeAmount(rateText)!,
+          ...(tieredSchedule ? {
+            electricityTiers: tiers!.map(({ id, name, upperBound, rate }) => ({
+              id: persistedGuidPattern.test(id) ? id : undefined,
+              name,
+              upperBound: upperBound ?? undefined,
+              rate,
+            })),
+          } : {}),
         })),
         allowGaps: true,
         changeReason: 'Изменение тарифной сетки в карточке услуги.',
         serviceVersion: initialSetting.version,
       })
-      setScheduleDraft(saved.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
+      setScheduleDraft(toTariffScheduleDraft(saved, tariffs, tieredSchedule))
+      setSelectedPeriodKey(null)
       setScheduleMessage('Тарифная сетка сохранена.')
     } catch (caught) {
       setError(getErrorMessage(caught, 'Не удалось сохранить тарифную сетку.'))
@@ -4106,9 +4179,9 @@ export function AddServicePrototypeDialog({
 
     const modeChanged = initialSetting && (initialSetting.isMetered !== isByMeter || initialSetting.hasTieredTariff !== isTiered)
     const calculationChanged = (selectedTariff?.calculationBase ?? initialSetting?.tariffCalculationBase ?? 'fixed') !== effectiveCalculationBase
-    const tiersChanged = JSON.stringify(getElectricityTariffTiers(selectedTariff)) !== JSON.stringify(tariffTiers)
+    const tiersChanged = !tieredSchedule && JSON.stringify(getElectricityTariffTiers(selectedTariff)) !== JSON.stringify(tariffTiers)
     const tariffStructureChanged = modeChanged || calculationChanged || (isTiered && tiersChanged)
-    const savesSchedule = initialSetting && onUpdateTariffSchedule && !tariffStructureChanged && !isTiered
+    const savesSchedule = initialSetting && onUpdateTariffSchedule && !tariffStructureChanged && (!isTiered || tieredSchedule)
 
     if (isRegular) {
       if (!incomeFundId) {
@@ -4121,18 +4194,11 @@ export function AddServicePrototypeDialog({
         return
       }
 
-      if (isTiered) {
-        if (tariffTiers.length < 2) {
-          setError('Для пороговой тарификации укажите минимум один порог и последнюю ступень без верхней границы.')
+      if (isTiered && !savesSchedule) {
+        const tiersError = validateTariffTiers(tariffTiers)
+        if (tiersError) {
+          setError(tiersError)
           return
-        }
-        for (let index = 0; index < tariffTiers.length - 1; index += 1) {
-          const upperBound = tariffTiers[index].upperBound
-          const lowerBound = index === 0 ? 0 : (tariffTiers[index - 1].upperBound ?? -1) + 1
-          if (upperBound == null || !Number.isFinite(upperBound) || upperBound < lowerBound) {
-            setError(`В ступени ${index + 1} укажите верхнюю границу не меньше ${lowerBound}.`)
-            return
-          }
         }
       }
 
@@ -4222,7 +4288,7 @@ export function AddServicePrototypeDialog({
         })
       } else if (initialSetting && onUpdateWithTariff) {
         const tariffMode = isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular'
-        if (!tariffStructureChanged && !isTiered && onUpdateTariffSchedule) {
+        if (savesSchedule) {
           await saveTariffSchedule(serviceRequest, incomeFundId)
           return
         }
@@ -4389,7 +4455,7 @@ export function AddServicePrototypeDialog({
                 </label>
               </div>
               </div>
-              {initialSetting && !isTiered ? (
+              {initialSetting && (!isTiered || tieredSchedule) ? (
                 <section className="tariff-schedule-editor" aria-labelledby="tariff-schedule-title">
                   <div className="tariff-schedule-heading">
                     <div>
@@ -4401,15 +4467,21 @@ export function AddServicePrototypeDialog({
                       type="button"
                       aria-label="Добавить период тарифа"
                       disabled={dialogBusy || scheduleDraft.length === 120}
-                      onClick={() => setScheduleDraft((current) => [...current, {
-                        key: `new-${Date.now()}`,
-                        tariffId: '',
-                        tariffVersion: '',
-                        effectiveFrom: null,
-                        effectiveTo: null,
-                        rate: parsePrototypeAmount(regularRate) ?? 1,
-                        rateText: regularRate || '1',
-                      }])}
+                      onClick={() => {
+                        const key = `new-${Date.now()}`
+                        const baseTiers = tieredSchedule ? cloneTariffTiersAsDraft(selectedPeriod?.tiers ?? []) : undefined
+                        setScheduleDraft((current) => [...current, {
+                          key,
+                          tariffId: '',
+                          tariffVersion: '',
+                          effectiveFrom: null,
+                          effectiveTo: null,
+                          rate: baseTiers?.[0]?.rate ?? parsePrototypeAmount(regularRate) ?? 1,
+                          rateText: baseTiers?.[0] ? formatTariffDecimal(baseTiers[0].rate) : regularRate || '1',
+                          tiers: baseTiers,
+                        }])
+                        if (tieredSchedule) setSelectedPeriodKey(key)
+                      }}
                     >
                       <FileSpreadsheet size={16} aria-hidden="true" />
                       Добавить период
@@ -4453,7 +4525,16 @@ export function AddServicePrototypeDialog({
                             />
                           </span>
                           <span role="cell">
-                            {isTiered ? <span className="tariff-schedule-tiered-value">По пороговой сетке</span> : (
+                            {tieredSchedule ? (
+                              <button
+                                className={`ghost-button tariff-schedule-tiers-button${selectedPeriod?.key === period.key ? ' is-active' : ''}`}
+                                type="button"
+                                aria-pressed={selectedPeriod?.key === period.key}
+                                aria-label={`Пороги периода ${period.effectiveFrom ? `с ${formatDateOnly(period.effectiveFrom)}` : 'без начальной даты'}`}
+                                disabled={dialogBusy}
+                                onClick={() => setSelectedPeriodKey(period.key)}
+                              >{formatTariffScheduleTiersSummary(period.tiers)}</button>
+                            ) : isTiered ? <span className="tariff-schedule-tiered-value">По пороговой сетке</span> : (
                               <MoneyTextInput
                                 aria-label="Тариф регулярной услуги"
                                 min={0.01}
@@ -4517,13 +4598,18 @@ export function AddServicePrototypeDialog({
               {isTiered ? (
                 <section className="contractors-tier-editor" aria-labelledby="contractors-tier-editor-title">
                   <div className="contractors-tier-editor-heading">
-                    <h4 id="contractors-tier-editor-title">Пороги и тарифы</h4>
-                    <span>{tariffTiers.length} {tariffTiers.length === 1 ? 'порог' : tariffTiers.length < 5 ? 'порога' : 'порогов'}</span>
+                    <h4 id="contractors-tier-editor-title">{tieredSchedule && selectedPeriod ? `Пороги и тарифы${selectedPeriod.effectiveFrom ? ` с ${formatDateOnly(selectedPeriod.effectiveFrom)}` : ''}` : 'Пороги и тарифы'}</h4>
+                    <span>{activeTiers.length} {activeTiers.length === 1 ? 'порог' : activeTiers.length < 5 ? 'порога' : 'порогов'}</span>
                   </div>
-                  {tariffTiers.length > 0 ? (
+                  {!tieredSchedule ? (
+                    <FormField label="Начальная дата">
+                      <LocalizedDatePicker ariaLabel="Ставка с" mode="date" required value={tariffEffectiveFrom} disabled={dialogBusy} onChange={setTariffEffectiveFrom} />
+                    </FormField>
+                  ) : null}
+                  {activeTiers.length > 0 ? (
                     <div className="contractors-threshold-grid" role="group" aria-label="Пороги тарификации выбранного тарифа">
-                      {tariffTiers.map((tier, index) => {
-                        const lowerBound = index === 0 ? 0 : (tariffTiers[index - 1]?.upperBound ?? 0) + 1
+                      {activeTiers.map((tier, index) => {
+                        const lowerBound = index === 0 ? 0 : (activeTiers[index - 1]?.upperBound ?? 0) + 1
                         return (
                         <div className="contractors-threshold-row" key={tier.id}>
                           <label>
@@ -4539,13 +4625,13 @@ export function AddServicePrototypeDialog({
                             <div className="contractors-threshold-with-unit">
                               <MeterReadingInput
                                 aria-label={`${tier.name}: верхняя граница`}
-                                required={index < tariffTiers.length - 1}
+                                required={index < activeTiers.length - 1}
                                 value={tier.upperBound ?? ''}
                                 placeholder="Без верхней границы"
-                                disabled={dialogBusy || index === tariffTiers.length - 1}
+                                disabled={dialogBusy || index === activeTiers.length - 1}
                                 onChange={(event) => {
                                   const nextValue = event.target.value === '' ? null : Number(event.target.value)
-                                  setTariffTiers((current) => current.map((item) => item.id === tier.id
+                                  setActiveTiers((current) => current.map((item) => item.id === tier.id
                                     ? { ...item, upperBound: Number.isFinite(nextValue) ? nextValue : null }
                                     : item))
                                 }}
@@ -4563,7 +4649,7 @@ export function AddServicePrototypeDialog({
                                 value={tier.rate}
                                 disabled={dialogBusy}
                                 onValueChange={(parsedRate) => {
-                                  setTariffTiers((current) => current.map((item) => item.id === tier.id
+                                  setActiveTiers((current) => current.map((item) => item.id === tier.id
                                     ? { ...item, rate: parsedRate }
                                     : item))
                                 }}
@@ -4575,8 +4661,8 @@ export function AddServicePrototypeDialog({
                             className="icon-button danger-icon-button contractors-threshold-delete"
                             type="button"
                             aria-label={`Удалить порог ${index + 1}`}
-                            disabled={dialogBusy || tariffTiers.length <= 2}
-                            onClick={() => setTariffTiers((current) => {
+                            disabled={dialogBusy || activeTiers.length <= 2}
+                            onClick={() => setActiveTiers((current) => {
                               const remaining = current.filter((item) => item.id !== tier.id)
                               return remaining.map((item, remainingIndex) => remainingIndex === remaining.length - 1
                                 ? { ...item, upperBound: null }
@@ -4591,10 +4677,10 @@ export function AddServicePrototypeDialog({
                       <button
                         className="secondary-button create-action-button contractors-threshold-add"
                         type="button"
-                        disabled={dialogBusy || tariffTiers.length >= 20}
+                        disabled={dialogBusy || activeTiers.length >= 20}
                         onClick={() => {
                           const baseRate = parsePrototypeAmount(regularRate) ?? 1
-                          setTariffTiers((current) => {
+                          setActiveTiers((current) => {
                             const last = current.at(-1)
                             const previous = current.at(-2)
                             const nextUpperBound = (previous?.upperBound ?? 0) + 100

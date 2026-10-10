@@ -476,4 +476,126 @@ describe('редактор тарифной сетки услуги', () => {
     expect(screen.getByRole('heading', { name: 'Пороги и тарифы' })).toBeInTheDocument()
     expect(form).toHaveClass('contractors-modal-form--service-edit-tiered')
   })
+
+  describe('пороговые услуги', () => {
+    const tiersA = [
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Ступень 1', upperBound: 100, rate: 7.47, isCustom: false },
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Ступень 2', upperBound: null, rate: 10.17, isCustom: false },
+    ]
+    const tiersB = [
+      { id: '33333333-3333-4333-8333-333333333333', name: 'Ступень 1', upperBound: 120, rate: 8.31, isCustom: false },
+      { id: '44444444-4444-4444-8444-444444444444', name: 'Ступень 2', upperBound: null, rate: 11.7, isCustom: false },
+    ]
+    const periods = [
+      { tariffId: 'tariff-a', effectiveFrom: '2026-01-01', effectiveTo: '2026-09-30', rate: 7.47, tariffVersion: 'va', electricityTiers: tiersA },
+      { tariffId: 'tariff-b', effectiveFrom: '2026-10-01', effectiveTo: null, rate: 8.31, tariffVersion: 'vb', electricityTiers: tiersB },
+    ]
+
+    function renderTiered(overrides: { onUpdateTariffSchedule?: ReturnType<typeof vi.fn>; onUpdateWithTariff?: ReturnType<typeof vi.fn> } = {}) {
+      const onUpdateTariffSchedule = overrides.onUpdateTariffSchedule ?? vi.fn().mockResolvedValue(periods)
+      const onUpdateWithTariff = overrides.onUpdateWithTariff ?? vi.fn()
+      render(<AddServicePrototypeDialog
+        initialSetting={{
+          id: 'service-tiered', name: 'Электроэнергия', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+          paymentDueDay: 30, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income-1',
+          tariffId: 'tariff-b', isMetered: true, hasTieredTariff: true, unitName: 'кВт·ч', isArchived: false, version: 'service-version',
+        }}
+        isSaving={false}
+        funds={[{ id: 'fund-1', name: 'Электроэнергия', allowOperations: true }]}
+        incomeTypes={[{ id: 'income-1', name: 'Электроэнергия', code: 'electricity', isArchived: false, destinationFundId: 'fund-1', destinationFundName: 'Электроэнергия' }]}
+        measurementUnits={[]}
+        tariffs={[]}
+        tariffSchedule={periods}
+        onClose={vi.fn()}
+        onUpdateWithTariff={onUpdateWithTariff}
+        onUpdateTariffSchedule={onUpdateTariffSchedule}
+      />)
+      return { onUpdateTariffSchedule, onUpdateWithTariff }
+    }
+
+    it('показывает даты и пороги каждой версии и сохраняет их через тарифную сетку', async () => {
+      const { onUpdateTariffSchedule, onUpdateWithTariff } = renderTiered()
+
+      expect(screen.getByRole('heading', { name: 'Изменение тарифов по периодам' })).toBeInTheDocument()
+      expect(screen.getAllByLabelText('Конечная дата тарифа')).toHaveLength(2)
+      expect(screen.getByRole('heading', { name: 'Пороги и тарифы с 01.10.2026' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Ступень 1: верхняя граница')).toHaveValue('120')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Пороги периода с 01.01.2026' }))
+      expect(screen.getByRole('heading', { name: 'Пороги и тарифы с 01.01.2026' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Ступень 1: верхняя граница')).toHaveValue('100')
+      fireEvent.change(screen.getByLabelText('Ступень 2: цена за единицу'), { target: { value: '10,50' } })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+      await waitFor(() => expect(onUpdateTariffSchedule).toHaveBeenCalledOnce())
+      const request = onUpdateTariffSchedule.mock.calls[0][0]
+      expect(request.periods).toHaveLength(2)
+      expect(request.periods[0]).toMatchObject({ tariffId: 'tariff-a', effectiveFrom: '2026-01-01', effectiveTo: '2026-09-30', rate: 7.47 })
+      expect(request.periods[0].electricityTiers).toEqual([
+        { id: tiersA[0].id, name: 'Ступень 1', upperBound: 100, rate: 7.47 },
+        { id: tiersA[1].id, name: 'Ступень 2', upperBound: undefined, rate: 10.5 },
+      ])
+      expect(request.periods[1]).toMatchObject({ tariffId: 'tariff-b', effectiveFrom: '2026-10-01', rate: 8.31 })
+      expect(request.periods[1].electricityTiers[0]).toMatchObject({ upperBound: 120, rate: 8.31 })
+      expect(onUpdateWithTariff).not.toHaveBeenCalled()
+    })
+
+    it('добавляет период с копией порогов и датой смены тарифа', async () => {
+      const user = userEvent.setup()
+      const { onUpdateTariffSchedule } = renderTiered()
+      fireEvent.click(screen.getByRole('button', { name: 'Добавить период тарифа' }))
+
+      expect(screen.getByRole('heading', { name: 'Пороги и тарифы' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Ступень 1: верхняя граница')).toHaveValue('120')
+      const startDates = screen.getAllByLabelText('Начальная дата тарифа')
+      await user.type(startDates[startDates.length - 1], '01.01.2027')
+      await user.type(screen.getAllByLabelText('Конечная дата тарифа')[1], '31.12.2026')
+      fireEvent.change(screen.getByLabelText('Ступень 1: верхняя граница'), { target: { value: '130' } })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+      await waitFor(() => expect(onUpdateTariffSchedule).toHaveBeenCalledOnce())
+      const request = onUpdateTariffSchedule.mock.calls[0][0]
+      expect(request.periods).toHaveLength(3)
+      expect(request.periods[2]).toMatchObject({ tariffId: null, effectiveFrom: '2027-01-01', effectiveTo: null })
+      expect(request.periods[2].electricityTiers[0]).toMatchObject({ id: undefined, upperBound: 130, rate: 8.31 })
+      expect(request.periods[1].electricityTiers[0].upperBound).toBe(120)
+    })
+
+    it('не отправляет период с некорректными порогами и называет период в сообщении', async () => {
+      const { onUpdateTariffSchedule } = renderTiered()
+      fireEvent.click(screen.getByRole('button', { name: 'Пороги периода с 01.01.2026' }))
+      fireEvent.change(screen.getByLabelText('Ступень 1: верхняя граница'), { target: { value: '' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Пороги периода с 01.10.2026' }))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+
+      expect(await screen.findByText('Период с 01.01.2026: В ступени 1 укажите верхнюю границу не меньше 0.')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Пороги и тарифы с 01.01.2026' })).toBeInTheDocument()
+      expect(onUpdateTariffSchedule).not.toHaveBeenCalled()
+    })
+
+    it('для нового порогового тарифа даёт выбрать дату начала действия', async () => {
+      const onCreateWithTariff = vi.fn().mockResolvedValue(undefined)
+      render(<AddServicePrototypeDialog
+        isSaving={false}
+        funds={[{ id: 'fund-1', name: 'Электроэнергия', allowOperations: true }]}
+        incomeTypes={[]}
+        measurementUnits={[]}
+        tariffs={[]}
+        onClose={vi.fn()}
+        onCreateWithTariff={onCreateWithTariff}
+      />)
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Регулярные платежи' }))
+      fireEvent.change(screen.getByLabelText('Наименование услуги'), { target: { value: 'Снег' } })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'По счетчику' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Пороговая тарификация' }))
+
+      const startDate = screen.getByLabelText('Ставка с')
+      const user = userEvent.setup()
+      await user.clear(startDate)
+      await user.type(startDate, '01.11.2026')
+
+      expect(startDate).toHaveValue('01.11.2026')
+    })
+  })
 })

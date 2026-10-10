@@ -18,6 +18,9 @@ import { isCompleteRussianPhone } from '../../shared/phoneNumber'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
+import { GarageMeterStartFields } from './GarageMeterStartFields'
+import { buildGarageMeterStartRequests, describeGarageMeterStartChanges, validateGarageMeterStartRows } from './garageMeterStartValues'
+import type { GarageMeterStartRow } from './garageMeterStartValues'
 import { GarageMeterReplacementDialog } from '../meterReadings/GarageMeterReplacementDialog'
 import { fitContextMenuToViewport, useCloseOnOutsidePointer, useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
@@ -128,6 +131,7 @@ type ContractorGarageRow = {
   overdueDebt: string
   initialWater: string
   initialElectricity: string
+  meterStartValues?: GarageMeterStartRow[]
   meters: string
   comment: string
   isDeleted: boolean
@@ -464,7 +468,7 @@ function parsePrototypeNullableNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-type GaragePrototypeField = 'number' | 'peopleCount' | 'floorCount' | 'phone' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity'
+type GaragePrototypeField = 'number' | 'peopleCount' | 'floorCount' | 'phone' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity' | `meter:${string}`
 type GaragePrototypeValidationErrors = Partial<Record<GaragePrototypeField, string>>
 
 function getGaragePrototypeValidationErrors(row: ContractorGarageRow, isCreate: boolean) {
@@ -514,6 +518,7 @@ function getGaragePrototypeValidationErrors(row: ContractorGarageRow, isCreate: 
       errors[meter[0]] = `${meter[1]} должно быть числом от 0 до 999 999 999.`
     }
   }
+  Object.assign(errors, validateGarageMeterStartRows(row.meterStartValues))
 
   return errors
 }
@@ -597,6 +602,7 @@ function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | 
     startingOverdueDebt: parsePrototypeMoney(row.startingOverdueDebt ?? ''),
     initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
     initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
+    ...(buildGarageMeterStartRequests(row.meterStartValues).length > 0 ? { meterStartValues: buildGarageMeterStartRequests(row.meterStartValues) } : {}),
     comment: row.comment.trim(),
     version: row.version,
   }
@@ -2952,7 +2958,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} canReplaceMeter={hasPermission(auth, permissions.paymentsWrite) && Boolean(financeClient.replaceMeterDevice)} suspended={Boolean(meterReplacementTarget)} onReplaceMeter={setMeterReplacementTarget} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} dictionaryClient={dictionaryClient} canAdjustOpeningData={canAdjustOpeningData} canReplaceMeter={hasPermission(auth, permissions.paymentsWrite) && Boolean(financeClient.replaceMeterDevice)} suspended={Boolean(meterReplacementTarget)} onReplaceMeter={setMeterReplacementTarget} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {meterReplacementTarget ? <GarageMeterReplacementDialog auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} garage={meterReplacementTarget}
         onClose={() => setMeterReplacementTarget(null)} onSaved={() => { setMeterReplacementTarget(null); setSectionReloadRevision((value) => value + 1) }} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={supplierServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
@@ -3388,6 +3394,7 @@ function getGaragePrototypeChanges(previous: ContractorGarageRow, next: Contract
     createPrototypeChangeEntry('Этажи', previous.floorCount, next.floorCount),
     createPrototypeChangeEntry('Стартовое значение счетчика воды', previous.initialWater, next.initialWater),
     createPrototypeChangeEntry('Стартовое значение счетчика электричества', previous.initialElectricity, next.initialElectricity),
+    ...describeGarageMeterStartChanges(next.meterStartValues),
     createPrototypeChangeEntry('Владелец', previous.owner, next.owner),
     createPrototypeChangeEntry('Телефоны', getGarageRowPhones(previous).join(', '), getGarageRowPhones(next).join(', ')),
     createPrototypeChangeEntry('Адрес', previous.address, next.address),
@@ -3761,7 +3768,7 @@ function ContractorDialogShell({ children, className = '', closeDisabled = false
   )
 }
 
-function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReplaceMeter, suspended, onReplaceMeter, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; canReplaceMeter: boolean; suspended: boolean; onReplaceMeter: (item: ContractorGarageRow) => void; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
+function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpeningData, canReplaceMeter, suspended, onReplaceMeter, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; dictionaryClient: DictionaryClient; canAdjustOpeningData: boolean; canReplaceMeter: boolean; suspended: boolean; onReplaceMeter: (item: ContractorGarageRow) => void; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
@@ -3772,6 +3779,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReplaceMe
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0 && !suspended)
   useEscapeKey(saveChanges.length === 0 && !saving && !financialReportOpen && !suspended, onClose)
+  const meterStartGarageId = item && isBackendDictionaryId(item.id) && dictionaryClient.getGarageMeterStartValues ? item.id : null
   const openingDataChanged = Boolean(item)
     && (parsePrototypeMoney(form.startingBalance ?? '') !== parsePrototypeMoney(item?.startingBalance ?? '')
       || parsePrototypeMoney(form.startingOverdueDebt ?? '') !== parsePrototypeMoney(item?.startingOverdueDebt ?? ''))
@@ -3863,7 +3871,7 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReplaceMe
           </div>
           <form ref={formRef} className="dictionary-modal-form contractors-modal-form" noValidate onSubmit={handleSubmit}>
             {saveError ? <FormError>{saveError}</FormError> : null}
-            <FormValidationSummary title="Проверьте данные гаража" items={Object.values(validationErrors)} />
+            <FormValidationSummary title="Проверьте данные гаража" items={Object.values(validationErrors).filter((message): message is string => Boolean(message))} />
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <div className="contractors-garage-form-identity">
@@ -3887,8 +3895,27 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, canReplaceMe
                 <FormField className="contractors-garage-form-meters" label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
-                <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
-                <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
+                {meterStartGarageId ? (
+                  <GarageMeterStartFields
+                    accessToken={accessToken}
+                    dictionaryClient={dictionaryClient}
+                    garageId={meterStartGarageId}
+                    rows={form.meterStartValues}
+                    errors={validationErrors}
+                    disabled={saving}
+                    onLoaded={(meterStartValues) => setForm((currentForm) => ({ ...currentForm, meterStartValues }))}
+                    onChange={(meterKind, value) => setForm((currentForm) => ({
+                      ...currentForm,
+                      meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, value } : row),
+                    }))}
+                    onFieldEdited={(fieldKey) => clearValidationError(fieldKey as GaragePrototypeField)}
+                  />
+                ) : (
+                  <>
+                    <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" aria-invalid={Boolean(validationErrors.initialWater)} data-garage-field="initialWater" value={form.initialWater} onChange={(event) => { clearValidationError('initialWater'); setForm({ ...form, initialWater: event.target.value }) }} /></FormField>
+                    <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" aria-invalid={Boolean(validationErrors.initialElectricity)} data-garage-field="initialElectricity" value={form.initialElectricity} onChange={(event) => { clearValidationError('initialElectricity'); setForm({ ...form, initialElectricity: event.target.value }) }} /></FormField>
+                  </>
+                )}
                 <FormField label="Начальный баланс" help={garageBalanceWithOverdueHelp}>
                   <MoneyTextInput aria-label="Начальный баланс гаража" aria-invalid={Boolean(validationErrors.startingBalance)} data-garage-field="startingBalance" readOnly={Boolean(item) && !canAdjustOpeningData} value={form.startingBalance ?? ''} onValueChange={(startingBalance) => { clearValidationError('startingBalance'); setForm({ ...form, startingBalance }) }} />
                 </FormField>
