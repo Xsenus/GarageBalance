@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -236,6 +237,43 @@ public sealed class DictionariesControllerTests
         Assert.Equal(2, dto.FloorCount);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(garageId, service.LastGarageId);
+    }
+
+    [Fact]
+    public async Task GetGarageMeterStartValues_ReturnsApplicableServiceValues()
+    {
+        var garageId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            GarageMeterStartValuesResult = DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Success(
+            [
+                new GarageMeterStartValueDto("water", "Вода", "м³", 10m, false),
+                new GarageMeterStartValueDto("service_0123456789abcdef0123456789abcdef", "Коммерческий тариф", "кВт·ч", null, true)
+            ])
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.GetGarageMeterStartValues(garageId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var values = Assert.IsAssignableFrom<IReadOnlyList<GarageMeterStartValueDto>>(ok.Value);
+        Assert.Equal(2, values.Count);
+        Assert.Equal(garageId, service.LastMeterStartValuesGarageId);
+    }
+
+    [Fact]
+    public async Task GetGarageMeterStartValues_ReturnsNotFoundForUnknownGarage()
+    {
+        var service = new FakeDictionaryService
+        {
+            GarageMeterStartValuesResult = DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Failure("garage_not_found", "Гараж не найден.")
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.GetGarageMeterStartValues(Guid.NewGuid(), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("garage_not_found", Assert.IsType<ProblemDetails>(notFound.Value).Title);
     }
 
     [Fact]
@@ -2171,6 +2209,17 @@ public sealed class DictionariesControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateGarageResult);
+        }
+
+        public DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>> GarageMeterStartValuesResult { get; init; } =
+            DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Failure("not_configured", "Not configured.");
+
+        public Guid? LastMeterStartValuesGarageId { get; private set; }
+
+        public Task<DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>> GetGarageMeterStartValuesAsync(Guid id, CancellationToken cancellationToken)
+        {
+            LastMeterStartValuesGarageId = id;
+            return Task.FromResult(GarageMeterStartValuesResult);
         }
 
         public Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)

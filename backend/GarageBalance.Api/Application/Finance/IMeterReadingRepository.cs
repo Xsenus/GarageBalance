@@ -44,6 +44,9 @@ public interface IMeterReadingRepository
     Task ReloadForUpdateAsync(MeterReading reading, CancellationToken cancellationToken);
     Task<MeterReading?> GetActiveAsync(Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterDevice>> GetDevicesAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+    Task<IReadOnlyList<MeterDevice>> GetDevicesForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, decimal>> GetLastReadingValuesByDeviceAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+    Task<MeterReading?> GetFirstActiveAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     Task<MeterDevice?> GetDeviceForDateForUpdateAsync(Guid garageId, string meterKind, DateOnly date, CancellationToken cancellationToken);
     Task<MeterDevice?> GetActiveDeviceForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterReading>> GetAllActiveForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);

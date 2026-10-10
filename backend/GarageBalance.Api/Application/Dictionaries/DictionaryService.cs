@@ -30,6 +30,7 @@ public sealed class DictionaryService(
     IOpeningBalanceAdjustmentRepository openingBalanceAdjustmentRepository,
     IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
     ITariffAccrualRecalculationService tariffAccrualRecalculationService,
+    IGarageMeterBaselineService garageMeterBaselineService,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     IBusinessDateProvider businessDateProvider) : IDictionaryService
@@ -427,8 +428,14 @@ public sealed class DictionaryService(
                 "garage_starting_overdue_debt_invalid",
                 "Начальная просроченная задолженность не может превышать общую начальную задолженность.");
         }
-        var initialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
-        var initialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
+        var requestedWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
+        var requestedElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
+        var listedWaterValue = request.MeterStartValues?.FirstOrDefault(item =>
+            item.MeterKind.Trim() == MeterKinds.Water && item.Value.HasValue)?.Value;
+        var listedElectricityValue = request.MeterStartValues?.FirstOrDefault(item =>
+            item.MeterKind.Trim() == MeterKinds.Electricity && item.Value.HasValue)?.Value;
+        var initialWaterMeterValue = listedWaterValue.HasValue ? MoneyMath.RoundMeterValue(listedWaterValue) : requestedWaterMeterValue;
+        var initialElectricityMeterValue = listedElectricityValue.HasValue ? MoneyMath.RoundMeterValue(listedElectricityValue) : requestedElectricityMeterValue;
         var comment = NormalizeOptional(request.Comment);
         var openingDataLock = await garageRepository.GetOpeningDataLockAsync(garage.Id, cancellationToken);
         if ((garage.StartingBalance != startingBalance || GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt) != startingOverdueDebt) && openingDataLock.HasFinancialHistory)
@@ -438,106 +445,160 @@ public sealed class DictionaryService(
                 "Стартовый баланс нельзя менять после появления начислений или платежей. Оформите отдельную финансовую корректировку.");
         }
 
-        if (garage.InitialWaterMeterValue != initialWaterMeterValue && openingDataLock.HasWaterMeterHistory)
+        var oldInitialWaterMeterValue = garage.InitialWaterMeterValue;
+        var oldInitialElectricityMeterValue = garage.InitialElectricityMeterValue;
+        var meterStartRequests = BuildMeterStartValueRequests(garage, initialWaterMeterValue, initialElectricityMeterValue, request.MeterStartValues);
+        GarageMeterStartValueApplyResult? meterStart = null;
+        try
         {
-            return DictionaryResult<GarageDto>.Failure(
-                "garage_initial_water_meter_locked",
-                "Стартовое показание воды нельзя менять после внесения показаний. Для нового прибора оформите замену счетчика.");
-        }
+            if (meterStartRequests.Count > 0)
+            {
+                var applied = await garageMeterBaselineService.ApplyStartValuesAsync(garage, meterStartRequests, actorUserId, cancellationToken);
+                if (!applied.Succeeded)
+                {
+                    return DictionaryResult<GarageDto>.Failure(applied.ErrorCode!, applied.ErrorMessage!);
+                }
 
-        if (garage.InitialElectricityMeterValue != initialElectricityMeterValue && openingDataLock.HasElectricityMeterHistory)
-        {
-            return DictionaryResult<GarageDto>.Failure(
-                "garage_initial_electricity_meter_locked",
-                "Стартовое показание электроэнергии нельзя менять после внесения показаний. Для нового прибора оформите замену счетчика.");
-        }
+                meterStart = applied.Value;
+            }
 
-        if (GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, startingOverdueDebt, initialWaterMeterValue, initialElectricityMeterValue, comment))
-        {
+            var meterStartChanges = meterStart?.Changes ?? [];
+            if (meterStartChanges.Count == 0 &&
+                GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, startingOverdueDebt, garage.InitialWaterMeterValue, garage.InitialElectricityMeterValue, comment))
+            {
+                return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
+            }
+
+            var peopleCountChanged = garage.PeopleCount != request.PeopleCount;
+            var peopleEffectiveFrom = businessDateProvider.Today;
+            if (peopleCountChanged)
+            {
+                var latestPeriod = await garageRepository.FindLatestPeopleCountPeriodAsync(garage.Id, cancellationToken);
+                if (latestPeriod is not null && latestPeriod.EffectiveFrom > peopleEffectiveFrom)
+                {
+                    return DictionaryResult<GarageDto>.Failure(
+                        "garage_people_count_date_before_history",
+                        "Рабочая дата раньше последнего изменения числа людей. Установите дату не раньше последнего изменения, чтобы сохранить историю расчётов.");
+                }
+
+                if (latestPeriod is null && peopleEffectiveFrom > DateOnly.MinValue)
+                {
+                    garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
+                    {
+                        GarageId = garage.Id,
+                        EffectiveFrom = DateOnly.MinValue,
+                        PeopleCount = garage.PeopleCount
+                    });
+                }
+
+                if (latestPeriod?.EffectiveFrom == peopleEffectiveFrom)
+                {
+                    latestPeriod.PeopleCount = request.PeopleCount;
+                }
+                else
+                {
+                    garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
+                    {
+                        GarageId = garage.Id,
+                        EffectiveFrom = peopleEffectiveFrom,
+                        PeopleCount = request.PeopleCount
+                    });
+                }
+            }
+
+            var oldValues = new Dictionary<string, object?>
+            {
+                ["number"] = garage.Number,
+                ["peopleCount"] = garage.PeopleCount,
+                ["floorCount"] = garage.FloorCount,
+                ["owner"] = garage.Owner?.FullName,
+                ["startingBalance"] = garage.StartingBalance,
+                ["startingOverdueDebt"] = garage.StartingOverdueDebt,
+                ["initialWaterMeterValue"] = oldInitialWaterMeterValue,
+                ["initialElectricityMeterValue"] = oldInitialElectricityMeterValue,
+                ["comment"] = garage.Comment
+            };
+            var newValues = new Dictionary<string, object?>
+            {
+                ["number"] = number,
+                ["peopleCount"] = request.PeopleCount,
+                ["floorCount"] = request.FloorCount,
+                ["owner"] = owner?.FullName,
+                ["startingBalance"] = startingBalance,
+                ["startingOverdueDebt"] = startingOverdueDebt,
+                ["initialWaterMeterValue"] = garage.InitialWaterMeterValue,
+                ["initialElectricityMeterValue"] = garage.InitialElectricityMeterValue,
+                ["comment"] = comment
+            };
+            foreach (var change in meterStartChanges.Where(item => item.MeterKind is not (MeterKinds.Water or MeterKinds.Electricity)))
+            {
+                oldValues[$"meterStartValue:{change.Label}"] = change.OldValue;
+                newValues[$"meterStartValue:{change.Label}"] = change.NewValue;
+            }
+
+            garage.Number = number;
+            if (peopleCountChanged)
+            {
+                newValues["peopleCountEffectiveFrom"] = peopleEffectiveFrom;
+            }
+            garage.PeopleCount = request.PeopleCount;
+            garage.FloorCount = request.FloorCount;
+            garage.StartingBalance = startingBalance;
+            garage.StartingOverdueDebt = startingOverdueDebt;
+            garage.OwnerId = request.OwnerId;
+            garage.Owner = owner;
+            garage.Comment = comment;
+            garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+            AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", oldValues: oldValues, newValues: newValues);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
         }
-
-        var peopleCountChanged = garage.PeopleCount != request.PeopleCount;
-        var peopleEffectiveFrom = businessDateProvider.Today;
-        if (peopleCountChanged)
+        finally
         {
-            var latestPeriod = await garageRepository.FindLatestPeopleCountPeriodAsync(garage.Id, cancellationToken);
-            if (latestPeriod is not null && latestPeriod.EffectiveFrom > peopleEffectiveFrom)
+            if (meterStart is not null)
             {
-                return DictionaryResult<GarageDto>.Failure(
-                    "garage_people_count_date_before_history",
-                    "Рабочая дата раньше последнего изменения числа людей. Установите дату не раньше последнего изменения, чтобы сохранить историю расчётов.");
-            }
-
-            if (latestPeriod is null && peopleEffectiveFrom > DateOnly.MinValue)
-            {
-                garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
-                {
-                    GarageId = garage.Id,
-                    EffectiveFrom = DateOnly.MinValue,
-                    PeopleCount = garage.PeopleCount
-                });
-            }
-
-            if (latestPeriod?.EffectiveFrom == peopleEffectiveFrom)
-            {
-                latestPeriod.PeopleCount = request.PeopleCount;
-            }
-            else
-            {
-                garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
-                {
-                    GarageId = garage.Id,
-                    EffectiveFrom = peopleEffectiveFrom,
-                    PeopleCount = request.PeopleCount
-                });
+                await meterStart.DisposeAsync();
             }
         }
+    }
 
-        var oldValues = new Dictionary<string, object?>
+    public async Task<DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>> GetGarageMeterStartValuesAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var garage = await garageRepository.FindActiveWithOwnerAsync(id, cancellationToken);
+        if (garage is null)
         {
-            ["number"] = garage.Number,
-            ["peopleCount"] = garage.PeopleCount,
-            ["floorCount"] = garage.FloorCount,
-            ["owner"] = garage.Owner?.FullName,
-            ["startingBalance"] = garage.StartingBalance,
-            ["startingOverdueDebt"] = garage.StartingOverdueDebt,
-            ["initialWaterMeterValue"] = garage.InitialWaterMeterValue,
-            ["initialElectricityMeterValue"] = garage.InitialElectricityMeterValue,
-            ["comment"] = garage.Comment
-        };
-        var newValues = new Dictionary<string, object?>
-        {
-            ["number"] = number,
-            ["peopleCount"] = request.PeopleCount,
-            ["floorCount"] = request.FloorCount,
-            ["owner"] = owner?.FullName,
-            ["startingBalance"] = startingBalance,
-            ["startingOverdueDebt"] = startingOverdueDebt,
-            ["initialWaterMeterValue"] = initialWaterMeterValue,
-            ["initialElectricityMeterValue"] = initialElectricityMeterValue,
-            ["comment"] = comment
-        };
-
-        garage.Number = number;
-        if (peopleCountChanged)
-        {
-            newValues["peopleCountEffectiveFrom"] = peopleEffectiveFrom;
+            return DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Failure("garage_not_found", "Гараж не найден.");
         }
-        garage.PeopleCount = request.PeopleCount;
-        garage.FloorCount = request.FloorCount;
-        garage.StartingBalance = startingBalance;
-        garage.StartingOverdueDebt = startingOverdueDebt;
-        garage.OwnerId = request.OwnerId;
-        garage.Owner = owner;
-        garage.InitialWaterMeterValue = initialWaterMeterValue;
-        garage.InitialElectricityMeterValue = initialElectricityMeterValue;
-        garage.Comment = comment;
-        garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", oldValues: oldValues, newValues: newValues);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
+        return DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Success(
+            await garageMeterBaselineService.GetStartValuesAsync(garage, cancellationToken));
+    }
+
+    private static List<UpsertGarageMeterStartValueRequest> BuildMeterStartValueRequests(
+        Garage garage,
+        decimal? water,
+        decimal? electricity,
+        IReadOnlyList<UpsertGarageMeterStartValueRequest>? listed)
+    {
+        var requests = new List<UpsertGarageMeterStartValueRequest>();
+        if (garage.InitialWaterMeterValue != water)
+        {
+            requests.Add(new UpsertGarageMeterStartValueRequest(MeterKinds.Water, water));
+        }
+
+        if (garage.InitialElectricityMeterValue != electricity)
+        {
+            requests.Add(new UpsertGarageMeterStartValueRequest(MeterKinds.Electricity, electricity));
+        }
+
+        // Values for water and electricity were merged above; only service meters remain.
+        requests.AddRange((listed ?? [])
+            .Where(item => item.Value.HasValue && item.MeterKind.Trim() is not (MeterKinds.Water or MeterKinds.Electricity))
+            .Select(item => item with { MeterKind = item.MeterKind.Trim() }));
+        return requests;
     }
 
     public async Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
@@ -2894,7 +2955,7 @@ public sealed class DictionaryService(
 
         // Resolve and validate every period before changing any tracked tariff.
         // A late conflict must not leave an earlier period dirty in the unit of work.
-        var planned = new List<(UpsertChargeServiceTariffPeriodRequest Period, DateOnly StartsOn, ChargeServiceTariffVersion? Exact, Tariff Source)>();
+        var planned = new List<(UpsertChargeServiceTariffPeriodRequest Period, DateOnly StartsOn, ChargeServiceTariffVersion? Exact, Tariff Source, ElectricityTierConfig? Tiers)>();
         foreach (var period in request.Periods.OrderBy(item => item.EffectiveFrom ?? OpenTariffScheduleStart))
         {
             var startsOn = period.EffectiveFrom ?? OpenTariffScheduleStart;
@@ -2915,9 +2976,24 @@ public sealed class DictionaryService(
                 return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(
                     "charge_service_individual_tariff_base_conflict",
                     "Тарифная сетка пересекается с индивидуальными назначениями с другой базой расчёта. Сначала ограничьте или отмените эти назначения.");
+            ElectricityTierConfig? periodTiers = null;
+            if (period.ElectricityTiers is { Count: > 0 })
+            {
+                if (!setting.HasTieredTariff || !IsMeterCalculationBase(source.CalculationBase))
+                    return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(
+                        "tariff_schedule_tiers_not_supported",
+                        "Пороги можно задавать только для услуги с пороговой тарификацией по счётчику.");
+                var tiersValidation = ValidateElectricityTiers(
+                    source.CalculationBase,
+                    new UpsertTariffRequest(setting.Name, source.CalculationBase, period.Rate, startsOn, null, ElectricityTiers: period.ElectricityTiers),
+                    source);
+                if (!tiersValidation.Succeeded)
+                    return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(tiersValidation.ErrorCode!, tiersValidation.ErrorMessage!);
+                periodTiers = tiersValidation.Value;
+            }
             // Snapshot terms now: later reuse must not alter another planned source.
             planned.Add((period, startsOn, exactExistingPeriod,
-                CloneTariffForSchedule(source, setting.Name, startsOn, source.Rate, request.ChangeReason)));
+                CloneTariffForSchedule(source, setting.Name, startsOn, source.Rate, request.ChangeReason), periodTiers));
         }
 
         if (request.Service is not null)
@@ -2937,7 +3013,7 @@ public sealed class DictionaryService(
 
         var replacements = new List<ChargeServiceTariffVersion>(request.Periods.Count);
         var usedTariffIds = new HashSet<Guid>();
-        foreach (var (period, startsOn, exactExistingPeriod, source) in planned)
+        foreach (var (period, startsOn, exactExistingPeriod, source, periodTiers) in planned)
         {
             var roundedRate = MoneyMath.RoundRate(period.Rate);
             var canReuse = exactExistingPeriod is not null && usedTariffIds.Add(exactExistingPeriod.TariffId)
@@ -2957,6 +3033,12 @@ public sealed class DictionaryService(
                     roundedRate,
                     startsOn,
                     NormalizeOptional(request.ChangeReason));
+            }
+            if (periodTiers is not null)
+            {
+                ApplyElectricityTiers(tariff, periodTiers);
+                tariff.Rate = periodTiers.Items[0].Rate;
+                tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
             }
             if (!canReuse)
             {
@@ -3112,7 +3194,12 @@ public sealed class DictionaryService(
         period.EffectiveFrom == OpenTariffScheduleStart ? null : period.EffectiveFrom,
         period.EffectiveTo,
         period.Tariff.Rate,
-        period.Tariff.Version);
+        period.Tariff.Version,
+        period.Tariff.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity
+            ? ReadElectricityTiers(period.Tariff)
+                .Select(tier => new ElectricityTariffTierDto(tier.Id, tier.Name, tier.UpperBound, tier.Rate, tier.IsCustom))
+                .ToArray()
+            : null);
 
     private async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> CreateChargeServiceTariffRateVersionAsync(
         ChargeServiceSetting setting,

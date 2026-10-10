@@ -12,7 +12,7 @@ using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Finance;
 
-public sealed class FinanceService(
+public sealed partial class FinanceService(
     IStaffMemberRepository staffMemberRepository,
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
@@ -6501,7 +6501,10 @@ public sealed class FinanceService(
         }
 
         var devices = await meterReadingRepository.GetDevicesAsync(garageId, normalizedKind, cancellationToken);
-        return devices.Select(ToDto).ToArray();
+        var lastReadings = await meterReadingRepository.GetLastReadingValuesByDeviceAsync(garageId, normalizedKind, cancellationToken);
+        return devices
+            .Select(device => ToDto(device) with { LastReadingValue = lastReadings.TryGetValue(device.Id, out var value) ? value : null })
+            .ToArray();
     }
 
     public async Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceMeterDeviceAsync(

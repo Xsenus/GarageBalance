@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -199,6 +200,15 @@ public sealed class DictionariesController(
     public async Task<ActionResult<GarageDto>> RestoreGarage(Guid id, CancellationToken cancellationToken)
     {
         var result = await dictionaryService.RestoreGarageAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpGet("garages/{id:guid}/meter-start-values")]
+    [ProducesResponseType<IReadOnlyList<GarageMeterStartValueDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<GarageMeterStartValueDto>>> GetGarageMeterStartValues(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.GetGarageMeterStartValuesAsync(id, cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 

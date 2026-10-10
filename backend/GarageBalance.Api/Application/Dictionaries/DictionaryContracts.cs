@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Settings;
 
 namespace GarageBalance.Api.Application.Dictionaries;
@@ -63,7 +64,8 @@ public sealed record UpsertGarageRequest(
     [Range(0, 999999999)] decimal? InitialElectricityMeterValue,
     [MaxLength(1000)] string? Comment,
     Guid? Version = null,
-    [Range(0, 999999999)] decimal? StartingOverdueDebt = null);
+    [Range(0, 999999999)] decimal? StartingOverdueDebt = null,
+    [MaxLength(50)] IReadOnlyList<UpsertGarageMeterStartValueRequest>? MeterStartValues = null);
 
 public sealed record InitialGarageAnnualPaymentRequest(
     Guid IncomeTypeId,
@@ -328,14 +330,16 @@ public sealed record ChargeServiceTariffPeriodDto(
     DateOnly? EffectiveFrom,
     DateOnly? EffectiveTo,
     decimal Rate,
-    Guid TariffVersion);
+    Guid TariffVersion,
+    IReadOnlyList<ElectricityTariffTierDto>? ElectricityTiers = null);
 
 public sealed record UpsertChargeServiceTariffPeriodRequest(
     Guid? TariffId,
     DateOnly? EffectiveFrom,
     DateOnly? EffectiveTo,
     [Range(0.0001, 999999999)] decimal Rate,
-    Guid? TariffVersion = null);
+    Guid? TariffVersion = null,
+    [MaxLength(20)] IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null);
 
 public sealed record UpsertChargeServiceTariffScheduleRequest(
     [Required, MinLength(1), MaxLength(120)] IReadOnlyList<UpsertChargeServiceTariffPeriodRequest> Periods,

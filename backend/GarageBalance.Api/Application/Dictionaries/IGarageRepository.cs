@@ -53,7 +53,4 @@ public sealed record GarageBalanceTotalsData(
     IReadOnlyDictionary<Guid, decimal> OverdueAccrualTotals,
     IReadOnlyDictionary<Guid, decimal> AllocatedIncomeTotals);
 
-public sealed record GarageOpeningDataLock(
-    bool HasFinancialHistory,
-    bool HasWaterMeterHistory,
-    bool HasElectricityMeterHistory);
+public sealed record GarageOpeningDataLock(bool HasFinancialHistory);

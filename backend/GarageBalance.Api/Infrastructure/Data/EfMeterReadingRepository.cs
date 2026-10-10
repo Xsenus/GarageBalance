@@ -502,6 +502,41 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .ThenByDescending(device => device.Id)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<MeterDevice>> GetDevicesForUpdateAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken) =>
+        await dbContext.MeterDevices
+            .Where(device => device.GarageId == garageId && device.MeterKind == meterKind)
+            .OrderBy(device => device.InstalledOn)
+            .ThenBy(device => device.Id)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, decimal>> GetLastReadingValuesByDeviceAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken)
+    {
+        var readings = await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading => !reading.IsCanceled && reading.GarageId == garageId &&
+                reading.MeterKind == meterKind && reading.MeterDeviceId != null)
+            .Select(reading => new { DeviceId = reading.MeterDeviceId!.Value, reading.AccountingMonth, reading.CurrentValue })
+            .ToListAsync(cancellationToken);
+        return readings
+            .GroupBy(reading => reading.DeviceId)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(reading => reading.AccountingMonth).First().CurrentValue);
+    }
+
+    public Task<MeterReading?> GetFirstActiveAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterReadings.AsNoTracking()
+            .Where(reading => !reading.IsCanceled && reading.GarageId == garageId && reading.MeterKind == meterKind)
+            .OrderBy(reading => reading.AccountingMonth)
+            .ThenBy(reading => reading.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task<MeterDevice?> GetDeviceForDateForUpdateAsync(
         Guid garageId,
         string meterKind,
