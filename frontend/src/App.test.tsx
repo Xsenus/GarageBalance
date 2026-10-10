@@ -3141,6 +3141,38 @@ describe('App', () => {
     })))
   }, 20000)
 
+  it('offers start values by service when creating a garage and sends only the filled ones', async () => {
+    const user = userEvent.setup()
+    const snowKind = 'service_f72bcb7b967c467bb99af9e2cc81d768'
+    const getMeterStartServicesForNewGarage = vi.fn(async () => [
+      { meterKind: 'water', serviceName: 'Холодная вода', unitName: 'м³', value: null, hasReadings: false },
+      { meterKind: snowKind, serviceName: 'Вывоз снега', unitName: 'м³', value: null, hasReadings: false },
+    ])
+    const createGarageSpy = vi.fn(async (_token: string, request: UpsertGarageRequest) => createGarage({ id: 'garage-new', number: request.number }))
+    const dictionaryClient = createDictionaryClient({ getMeterStartServicesForNewGarage, createGarage: createGarageSpy })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+
+    expect(await within(dialog).findByLabelText('Стартовое значение счётчика: Холодная вода')).toHaveValue('')
+    expect(within(dialog).queryByLabelText('Стартовое значение счетчика воды')).not.toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('Номер гаража'), '77')
+    await user.type(within(dialog).getByLabelText('Количество человек'), '2')
+    await user.type(within(dialog).getByLabelText('Этажи гаража'), '1')
+    await user.type(within(dialog).getByLabelText('Стартовое значение счётчика: Вывоз снега'), '340')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createGarageSpy).toHaveBeenCalledWith('token', expect.objectContaining({
+      number: '77',
+      meterStartValues: [{ meterKind: snowKind, value: 340 }],
+    })))
+  }, 20000)
+
   it('explains an invalid service start meter value and retries a failed start value load', async () => {
     const user = userEvent.setup()
     const garageId = '22222222-2222-4222-8222-222222222222'

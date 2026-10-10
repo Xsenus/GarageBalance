@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { DictionaryClient } from '../../services/dictionariesApi'
+import type { GarageMeterStartValueDto } from '../../services/dictionariesApi'
 import { AsyncErrorState, LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { getGarageMeterStartFieldKey, toGarageMeterStartRows } from './garageMeterStartValues'
@@ -7,10 +7,9 @@ import type { GarageMeterStartRow } from './garageMeterStartValues'
 
 type LoadState = { key: string; status: 'ready' | 'error' }
 
-export function GarageMeterStartFields({ accessToken, dictionaryClient, garageId, rows, errors, disabled, onLoaded, onChange, onFieldEdited }: {
-  accessToken: string
-  dictionaryClient: DictionaryClient
-  garageId: string
+export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, onLoaded, onChange, onFieldEdited }: {
+  loadKey: string
+  load: (signal: AbortSignal) => Promise<GarageMeterStartValueDto[]>
   rows: GarageMeterStartRow[] | undefined
   errors: Record<string, string | undefined>
   disabled: boolean
@@ -20,11 +19,11 @@ export function GarageMeterStartFields({ accessToken, dictionaryClient, garageId
 }) {
   const [retry, setRetry] = useState(0)
   const [loadState, setLoadState] = useState<LoadState | null>(null)
-  const requestKey = `${accessToken}|${garageId}|${retry}`
+  const requestKey = `${loadKey}|${retry}`
 
   useEffect(() => {
     const controller = new AbortController()
-    dictionaryClient.getGarageMeterStartValues?.(accessToken, garageId, controller.signal)
+    load(controller.signal)
       .then((values) => {
         if (controller.signal.aborted) return
         onLoaded(toGarageMeterStartRows(values))
@@ -36,7 +35,7 @@ export function GarageMeterStartFields({ accessToken, dictionaryClient, garageId
     return () => controller.abort()
     // onLoaded only stores the rows into the parent form; it must not restart the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, dictionaryClient, garageId, requestKey])
+  }, [requestKey])
 
   if (loadState?.key !== requestKey) {
     return <LoadingSkeleton className="contractors-garage-meter-start" label="Загружаем стартовые значения счётчиков" rows={2} />

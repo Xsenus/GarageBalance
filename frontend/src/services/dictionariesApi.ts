@@ -476,6 +476,7 @@ export type DictionaryClient = {
   updateGarageWithAnnualPayments(accessToken: string, id: string, request: UpdateGarageWithAnnualPaymentsRequest): Promise<GarageDto>
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
   getGarageMeterStartValues?(accessToken: string, id: string, signal?: AbortSignal): Promise<GarageMeterStartValueDto[]>
+  getMeterStartServicesForNewGarage?(accessToken: string, signal?: AbortSignal): Promise<GarageMeterStartValueDto[]>
   archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
   adjustGarageOpeningBalance?(accessToken: string, id: string, request: CreateOpeningBalanceAdjustmentRequest): Promise<unknown>
@@ -657,6 +658,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   updateGarage(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getMeterStartServicesForNewGarage(accessToken, signal) {
+    return requestJson(accessToken, '/api/dictionaries/garages/meter-start-services', { signal })
   },
   getGarageMeterStartValues(accessToken, id, signal) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}/meter-start-values`, { signal })

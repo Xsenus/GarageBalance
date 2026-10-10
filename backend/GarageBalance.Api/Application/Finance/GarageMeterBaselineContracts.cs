@@ -45,6 +45,9 @@ public interface IGarageMeterBaselineService
     /// <summary>Lists the start values of metered services that apply to the garage.</summary>
     Task<IReadOnlyList<GarageMeterStartValueDto>> GetStartValuesAsync(Garage garage, CancellationToken cancellationToken);
 
+    /// <summary>Lists metered services that apply to every garage, offered when a new garage is created.</summary>
+    Task<IReadOnlyList<GarageMeterStartValueDto>> GetStartServicesForNewGarageAsync(CancellationToken cancellationToken);
+
     /// <summary>
     /// Applies start values to the tracked garage, its baseline meter devices and dependent
     /// readings/accruals without saving. The caller saves the unit of work and disposes the result.

@@ -203,6 +203,11 @@ public sealed class DictionariesController(
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("garages/meter-start-services")]
+    [ProducesResponseType<IReadOnlyList<GarageMeterStartValueDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<GarageMeterStartValueDto>>> GetMeterStartServicesForNewGarage(CancellationToken cancellationToken) =>
+        Ok(await dictionaryService.GetMeterStartServicesForNewGarageAsync(cancellationToken));
+
     [HttpGet("garages/{id:guid}/meter-start-values")]
     [ProducesResponseType<IReadOnlyList<GarageMeterStartValueDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

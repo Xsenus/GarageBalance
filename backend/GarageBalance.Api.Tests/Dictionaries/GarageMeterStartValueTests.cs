@@ -104,6 +104,38 @@ public sealed class GarageMeterStartValueTests
     }
 
     [Fact]
+    public async Task NewGarage_OffersOnlyUnrestrictedMeteredServicesAndStoresTheirStartValues()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var other = Garage("9к");
+        context.Garages.Add(other);
+        AddMeteredService(context, "Вода", MeterKinds.Water, TariffCalculationBases.MeterWater);
+        var snow = AddMeteredService(context, "Вывоз снега", MeterKinds.ForService(Guid.NewGuid()), TariffCalculationBases.MeterWater);
+        var restricted = AddMeteredService(context, "Коммерческий тариф", MeterKinds.ForService(Guid.NewGuid()), TariffCalculationBases.MeterElectricity, restrictedTo: other.Id);
+        await context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(context, new DateOnly(2026, 10, 10));
+
+        var offered = await service.GetMeterStartServicesForNewGarageAsync(CancellationToken.None);
+        var created = await service.CreateGarageAsync(
+            new UpsertGarageRequest("20", 1, 1, null, 0m, null, null, null, MeterStartValues:
+                [new("water", 12m), new(snow.MeterKind!, 340m)]), null, CancellationToken.None);
+        var rejected = await service.CreateGarageAsync(
+            new UpsertGarageRequest("21", 1, 1, null, 0m, null, null, null, MeterStartValues: [new(restricted.MeterKind!, 5m)]), null, CancellationToken.None);
+
+        Assert.Equal(["Вода", "Вывоз снега"], offered.Select(item => item.ServiceName).ToArray());
+        Assert.All(offered, item => Assert.Null(item.Value));
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        context.ChangeTracker.Clear();
+        var stored = await context.Garages.AsNoTracking().SingleAsync(item => item.Number == "20");
+        Assert.Equal(12m, stored.InitialWaterMeterValue);
+        var device = await context.MeterDevices.AsNoTracking().SingleAsync(item => item.GarageId == stored.Id);
+        Assert.Equal((snow.MeterKind, 340m), (device.MeterKind, device.InitialValue));
+        Assert.Equal("meter_start_service_not_applicable", rejected.ErrorCode);
+        Assert.DoesNotContain(await context.Garages.AsNoTracking().ToListAsync(), item => item.Number == "21");
+    }
+
+    [Fact]
     public async Task UpdateGarage_RejectsServiceMeterNotApplicableToGarage()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();

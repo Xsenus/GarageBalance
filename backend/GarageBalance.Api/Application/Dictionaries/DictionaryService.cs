@@ -367,6 +367,8 @@ public sealed class DictionaryService(
         }
 
         var registeredOn = businessDateProvider.Today;
+        var listedWater = request.MeterStartValues?.FirstOrDefault(item => item.MeterKind.Trim() == MeterKinds.Water && item.Value.HasValue)?.Value;
+        var listedElectricity = request.MeterStartValues?.FirstOrDefault(item => item.MeterKind.Trim() == MeterKinds.Electricity && item.Value.HasValue)?.Value;
         var garage = new Garage
         {
             Number = number,
@@ -376,8 +378,8 @@ public sealed class DictionaryService(
             StartingOverdueDebt = startingOverdueDebt,
             OwnerId = request.OwnerId,
             Owner = owner,
-            InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue),
-            InitialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue),
+            InitialWaterMeterValue = MoneyMath.RoundMeterValue(listedWater ?? request.InitialWaterMeterValue),
+            InitialElectricityMeterValue = MoneyMath.RoundMeterValue(listedElectricity ?? request.InitialElectricityMeterValue),
             InitialMeterReadingMonth = MonthPeriod.Normalize(registeredOn).AddMonths(-1),
             RegisteredOn = registeredOn,
             Comment = NormalizeOptional(request.Comment)
@@ -391,8 +393,34 @@ public sealed class DictionaryService(
             PeopleCount = garage.PeopleCount
         });
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
+        var serviceStartValues = (request.MeterStartValues ?? [])
+            .Where(item => item.Value.HasValue && item.MeterKind.Trim() is not (MeterKinds.Water or MeterKinds.Electricity))
+            .Select(item => item with { MeterKind = item.MeterKind.Trim() })
+            .ToList();
+        GarageMeterStartValueApplyResult? meterStart = null;
+        try
+        {
+            if (serviceStartValues.Count > 0)
+            {
+                var applied = await garageMeterBaselineService.ApplyStartValuesAsync(garage, serviceStartValues, actorUserId, cancellationToken);
+                if (!applied.Succeeded)
+                {
+                    return DictionaryResult<GarageDto>.Failure(applied.ErrorCode!, applied.ErrorMessage!);
+                }
+
+                meterStart = applied.Value;
+            }
+
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
+        }
+        finally
+        {
+            if (meterStart is not null)
+            {
+                await meterStart.DisposeAsync();
+            }
+        }
     }
 
     public async Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -562,6 +590,9 @@ public sealed class DictionaryService(
             }
         }
     }
+
+    public Task<IReadOnlyList<GarageMeterStartValueDto>> GetMeterStartServicesForNewGarageAsync(CancellationToken cancellationToken) =>
+        garageMeterBaselineService.GetStartServicesForNewGarageAsync(cancellationToken);
 
     public async Task<DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>> GetGarageMeterStartValuesAsync(
         Guid id,

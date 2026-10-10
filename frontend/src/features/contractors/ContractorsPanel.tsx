@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { SupplierServiceDto, UpsertSupplierServiceRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
+import type { SupplierServiceDto, UpsertSupplierServiceRequest, DictionaryClient, GarageColumnFilters, GarageDto, GarageMeterStartValueDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
@@ -3779,7 +3779,10 @@ function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpening
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0 && !suspended)
   useEscapeKey(saveChanges.length === 0 && !saving && !financialReportOpen && !suspended, onClose)
-  const meterStartGarageId = item && isBackendDictionaryId(item.id) && dictionaryClient.getGarageMeterStartValues ? item.id : null
+  const existingGarageId = item && isBackendDictionaryId(item.id) ? item.id : null
+  const meterStartLoader: ((signal: AbortSignal) => Promise<GarageMeterStartValueDto[]>) | null = existingGarageId
+    ? (dictionaryClient.getGarageMeterStartValues ? (signal) => dictionaryClient.getGarageMeterStartValues!(accessToken, existingGarageId, signal) : null)
+    : (dictionaryClient.getMeterStartServicesForNewGarage ? (signal) => dictionaryClient.getMeterStartServicesForNewGarage!(accessToken, signal) : null)
   const openingDataChanged = Boolean(item)
     && (parsePrototypeMoney(form.startingBalance ?? '') !== parsePrototypeMoney(item?.startingBalance ?? '')
       || parsePrototypeMoney(form.startingOverdueDebt ?? '') !== parsePrototypeMoney(item?.startingOverdueDebt ?? ''))
@@ -3895,11 +3898,10 @@ function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpening
                 <FormField className="contractors-garage-form-meters" label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
-                {meterStartGarageId ? (
+                {meterStartLoader ? (
                   <GarageMeterStartFields
-                    accessToken={accessToken}
-                    dictionaryClient={dictionaryClient}
-                    garageId={meterStartGarageId}
+                    loadKey={`${accessToken}|${existingGarageId ?? 'new'}`}
+                    load={meterStartLoader}
                     rows={form.meterStartValues}
                     errors={validationErrors}
                     disabled={saving}

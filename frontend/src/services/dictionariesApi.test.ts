@@ -66,6 +66,16 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/dictionaries/garages/garage-1/meter-start-values')
   })
 
+  it('reads the metered services offered for a new garage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{ meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: null, hasReadings: false }]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const services = await dictionariesApi.getMeterStartServicesForNewGarage!('token', new AbortController().signal)
+
+    expect(services[0].serviceName).toBe('Вода')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/dictionaries/garages/meter-start-services')
+  })
+
   it('uses the independent supplier service contract and invalidates supplier names without invalidating tariffs', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'service', name: 'Уборка', version: 'v1', isArchived: false }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

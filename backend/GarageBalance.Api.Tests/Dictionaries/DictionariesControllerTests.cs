@@ -262,6 +262,18 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task GetMeterStartServicesForNewGarage_ReturnsServiceList()
+    {
+        var service = new FakeDictionaryService { NewGarageStartServices = [new GarageMeterStartValueDto("water", "Вода", "м³", null, false)] };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.GetMeterStartServicesForNewGarage(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Вода", Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<GarageMeterStartValueDto>>(ok.Value)).ServiceName);
+    }
+
+    [Fact]
     public async Task GetGarageMeterStartValues_ReturnsNotFoundForUnknownGarage()
     {
         var service = new FakeDictionaryService
@@ -2215,6 +2227,11 @@ public sealed class DictionariesControllerTests
             DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Failure("not_configured", "Not configured.");
 
         public Guid? LastMeterStartValuesGarageId { get; private set; }
+
+        public IReadOnlyList<GarageMeterStartValueDto> NewGarageStartServices { get; init; } = [];
+
+        public Task<IReadOnlyList<GarageMeterStartValueDto>> GetMeterStartServicesForNewGarageAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(NewGarageStartServices);
 
         public Task<DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>> GetGarageMeterStartValuesAsync(Guid id, CancellationToken cancellationToken)
         {

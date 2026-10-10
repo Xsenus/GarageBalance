@@ -33,6 +33,19 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         return values;
     }
 
+    public async Task<IReadOnlyList<GarageMeterStartValueDto>> GetStartServicesForNewGarageAsync(
+        CancellationToken cancellationToken)
+    {
+        var settings = await chargeServiceSettingRepository.GetListAsync(
+            null, false, true, true, MaxAutomaticMeteredServices, businessDateProvider.Today, cancellationToken);
+        return settings
+            .Where(setting => setting is { IsRegular: true, IsMetered: true, IsArchived: false, AppliesToSelectedGarages: false } &&
+                !string.IsNullOrWhiteSpace(setting.MeterKind) && MeterKinds.IsValid(setting.MeterKind))
+            .OrderBy(setting => setting.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(setting => new GarageMeterStartValueDto(setting.MeterKind!, setting.Name, setting.UnitName, null, false))
+            .ToList();
+    }
+
     public async Task<FinanceResult<GarageMeterStartValueApplyResult>> ApplyStartValuesAsync(
         Garage garage,
         IReadOnlyList<UpsertGarageMeterStartValueRequest> requested,
