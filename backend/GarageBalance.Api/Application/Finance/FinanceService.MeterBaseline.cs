@@ -308,8 +308,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             relatedGarageId: garage.Id.ToString(),
             relatedGarageNumber: garage.Number,
             metadata: new Dictionary<string, object?> { ["meterKind"] = meterKind },
-            oldValues: new Dictionary<string, object?> { ["startValue"] = oldValue },
-            newValues: new Dictionary<string, object?> { ["startValue"] = newValue });
+            oldValues: new Dictionary<string, object?> { ["startValue"] = oldValue?.ToString("0.###", CultureInfo.InvariantCulture) },
+            newValues: new Dictionary<string, object?> { ["startValue"] = newValue?.ToString("0.###", CultureInfo.InvariantCulture) });
         return Task.FromResult(new GarageMeterStartValueChange(meterKind, label, oldValue, newValue));
     }
 

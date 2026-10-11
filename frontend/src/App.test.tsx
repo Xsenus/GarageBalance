@@ -17921,7 +17921,12 @@ describe('App', () => {
     const rateConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(rateConfirmation).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(updateRate).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(within(panel).getByLabelText('Охрана: Тариф охраны: значение')).toHaveValue('125.00'))
+    await waitFor(() => {
+      const savedRateInput = within(panel).getByLabelText('Охрана: Тариф охраны: значение')
+      expect(savedRateInput).toHaveValue('125.00')
+      expect(savedRateInput).toBeEnabled()
+      expect(savedRateInput).toHaveFocus()
+    })
 
     const overdueInput = within(panel).getByLabelText('Охрана: Перенос долга в просроченный: значение')
     await user.clear(overdueInput)
@@ -17930,8 +17935,15 @@ describe('App', () => {
     await user.click(within(overdueConfirmation).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(updateSetting).toHaveBeenCalledTimes(1))
     expect(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' })).toBeDisabled()
+    expect(within(panel).getByLabelText('Охрана: оплата до: день')).toBeDisabled()
     releaseSettingSave?.()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
+    await waitFor(() => {
+      const savedOverdueInput = within(panel).getByLabelText('Охрана: Перенос долга в просроченный: значение')
+      expect(savedOverdueInput).toHaveValue('15')
+      expect(savedOverdueInput).toBeEnabled()
+      expect(savedOverdueInput).toHaveFocus()
+    })
 
     const dueDayInput = within(panel).getByLabelText('Охрана: оплата до: день')
     await user.clear(dueDayInput)
@@ -17942,6 +17954,12 @@ describe('App', () => {
     expect(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' })).toBeDisabled()
     releaseSettingSave?.()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
+    await waitFor(() => {
+      const savedDueDayInput = within(panel).getByLabelText('Охрана: оплата до: день')
+      expect(savedDueDayInput).toHaveValue('25')
+      expect(savedDueDayInput).toBeEnabled()
+      expect(savedDueDayInput).toHaveFocus()
+    })
 
     await user.click(within(panel).getByRole('button', { name: 'Изменить услугу Охрана' }))
     const card = await screen.findByRole('dialog', { name: 'Изменить услугу' })

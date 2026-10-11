@@ -13,6 +13,41 @@ public sealed class GarageMeterStartValueTests
     private static readonly DateOnly October = new(2026, 10, 1);
 
     [Fact]
+    public async Task StartValueChange_AuditsThousandthPrecision()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        await AssertThousandthPrecisionAuditAsync(database.Context);
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSql_StartValueChangeAuditsThousandthPrecision()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        await AssertThousandthPrecisionAuditAsync(context);
+    }
+
+    private static async Task AssertThousandthPrecisionAuditAsync(GarageBalanceDbContext context)
+    {
+        var garage = Garage("precision-audit");
+        garage.InitialWaterMeterValue = 10.101m;
+        context.Garages.Add(garage);
+        await context.SaveChangesAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(context).UpdateGarageAsync(
+            garage.Id, GarageRequest(garage, water: 10.102m), null, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        context.ChangeTracker.Clear();
+        Assert.Equal(10.102m, (await context.Garages.SingleAsync()).InitialWaterMeterValue);
+        var audit = Assert.Single(await context.AuditEvents.Where(item => item.Action == "finance.meter_start_value_changed").ToListAsync());
+        Assert.Equal(garage.Id.ToString(), audit.EntityId);
+        using var metadata = System.Text.Json.JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Contains("10.101", metadata.RootElement.GetProperty("oldValue").GetString(), StringComparison.Ordinal);
+        Assert.Contains("10.102", metadata.RootElement.GetProperty("newValue").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UpdateGarage_IgnoresCanceledReadingsWhenChangingStartValues()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
