@@ -17,7 +17,8 @@ internal static class DictionaryServiceTestFactory
     public static DictionaryService Create(
         GarageBalanceDbContext dbContext,
         DateOnly? businessDate = null,
-        ITariffAccrualRecalculationService? tariffAccrualRecalculationService = null) =>
+        ITariffAccrualRecalculationService? tariffAccrualRecalculationService = null,
+        IGarageMeterBaselineService? garageMeterBaselineService = null) =>
         new(
             new EfOwnerRepository(dbContext),
             new EfGarageRepository(dbContext),
@@ -38,6 +39,7 @@ internal static class DictionaryServiceTestFactory
             new EfOpeningBalanceAdjustmentRepository(dbContext),
             new EfAccrualPaymentAllocationRepository(dbContext),
             tariffAccrualRecalculationService ?? new NoOpTariffAccrualRecalculationService(),
+            garageMeterBaselineService ?? FinanceServiceTestFactory.Create(dbContext, businessDate: businessDate),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             new TestBusinessDateProvider(businessDate ?? DefaultBusinessDate));

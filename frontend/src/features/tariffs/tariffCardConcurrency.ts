@@ -9,6 +9,6 @@ export function sameTariffServiceSettings(left: ChargeServiceSettingDto, right: 
 }
 
 export function sameTariffScheduleTerms(left: ChargeServiceTariffPeriodDto[], right: ChargeServiceTariffPeriodDto[]) {
-  const key = (period: ChargeServiceTariffPeriodDto) => JSON.stringify([period.tariffId, period.effectiveFrom, period.effectiveTo, period.rate])
+  const key = (period: ChargeServiceTariffPeriodDto) => JSON.stringify([period.tariffId, period.effectiveFrom, period.effectiveTo, period.rate, period.electricityTiers?.map((tier) => [tier.upperBound, tier.rate]) ?? null])
   return JSON.stringify(left.map(key).sort()) === JSON.stringify(right.map(key).sort())
 }

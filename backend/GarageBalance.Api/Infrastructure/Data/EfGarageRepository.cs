@@ -345,9 +345,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             .Where(garage => garage.Id == id)
             .Select(garage => new GarageOpeningDataLock(
                 dbContext.Accruals.Any(accrual => accrual.GarageId == garage.Id)
-                    || dbContext.FinancialOperations.Any(operation => operation.GarageId == garage.Id),
-                dbContext.MeterReadings.Any(reading => reading.GarageId == garage.Id && reading.MeterKind == MeterKinds.Water),
-                dbContext.MeterReadings.Any(reading => reading.GarageId == garage.Id && reading.MeterKind == MeterKinds.Electricity)))
+                    || dbContext.FinancialOperations.Any(operation => operation.GarageId == garage.Id)))
             .SingleAsync(cancellationToken);
 
     public Task<bool> ActiveNumberExistsAsync(Guid? ignoredId, string number, CancellationToken cancellationToken) =>

@@ -10,7 +10,7 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlOpeningDataLockIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task OpeningDataLocks_DetectFinancialAndMeterHistoryOnPostgreSql()
+    public async Task OpeningDataLocks_DetectFinancialHistoryOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         var garage = new Garage
@@ -80,8 +80,6 @@ public sealed class PostgreSqlOpeningDataLockIntegrationTests
             .HasFinancialHistoryAsync(supplier.Id, CancellationToken.None);
 
         Assert.True(garageLock.HasFinancialHistory);
-        Assert.True(garageLock.HasWaterMeterHistory);
-        Assert.True(garageLock.HasElectricityMeterHistory);
         Assert.True(supplierLock);
     }
 

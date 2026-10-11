@@ -522,7 +522,8 @@ public sealed record MeterDeviceDto(
     DateOnly? RemovedOn,
     decimal InitialValue,
     decimal? FinalValue,
-    Guid Version);
+    Guid Version,
+    decimal? LastReadingValue = null);
 
 public sealed record ReplaceMeterDeviceRequest(
     Guid GarageId,

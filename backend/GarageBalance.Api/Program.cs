@@ -196,6 +196,8 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IPayoutMutationPolicy>()));
 builder.Services.AddScoped<IRegularAccrualRecalculationService>(services =>
     (IRegularAccrualRecalculationService)services.GetRequiredService<IFinanceService>());
+builder.Services.AddScoped<IGarageMeterBaselineService>(services =>
+    (IGarageMeterBaselineService)services.GetRequiredService<IFinanceService>());
 builder.Services.AddScoped<IGarageOnboardingService, GarageOnboardingService>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();

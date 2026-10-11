@@ -13,7 +13,8 @@ internal static class FinanceServiceTestFactory
         GarageBalanceDbContext dbContext,
         TimeProvider? timeProvider = null,
         IHistoricalMeterReadingCorrectionPolicy? historicalMeterReadingCorrectionPolicy = null,
-        IPayoutMutationPolicy? payoutMutationPolicy = null) =>
+        IPayoutMutationPolicy? payoutMutationPolicy = null,
+        DateOnly? businessDate = null) =>
         new(
             new EfStaffMemberRepository(dbContext),
             new EfGarageRepository(dbContext, TestBusinessDateProvider.From(timeProvider)),
@@ -50,7 +51,7 @@ internal static class FinanceServiceTestFactory
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             timeProvider ?? TimeProvider.System,
-            TestBusinessDateProvider.From(timeProvider),
+            businessDate.HasValue ? new TestBusinessDateProvider(businessDate.Value) : TestBusinessDateProvider.From(timeProvider),
             new EfGarageTariffAssignmentQuery(dbContext),
             payoutMutationPolicy);
 

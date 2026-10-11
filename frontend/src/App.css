@@ -2846,6 +2846,13 @@ h1 {
   padding-left: 18px;
 }
 
+.contractors-garage-meter-start {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .contractors-garage-form-identity,
 .contractors-garage-form-owner,
 .contractors-garage-form-notes {
@@ -2929,6 +2936,7 @@ h1 {
     min-height: 0;
   }
 
+  .contractors-garage-meter-start,
   .contractors-garage-form-columns,
   .contractors-garage-form-column--financial,
   .contractors-garage-form-identity,
@@ -3188,6 +3196,22 @@ h1 {
 .tariff-schedule-loading {
   color: #667085;
   font-size: 13px;
+}
+
+.tariff-schedule-tiers-button {
+  width: 100%;
+  min-height: 36px;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.tariff-schedule-tiers-button.is-active {
+  border-color: #1558e8;
+  background: #eef4ff;
+  color: #0b3aa8;
 }
 
 .tariff-schedule-message {

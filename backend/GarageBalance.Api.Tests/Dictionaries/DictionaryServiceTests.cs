@@ -853,7 +853,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task UpdateGarageAsync_LocksOpeningBalanceAndMeterBaselinesAfterHistoryExists()
+    public async Task UpdateGarageAsync_LocksOpeningBalanceButRecalculatesMeterBaselinesAfterHistoryExists()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -885,21 +885,26 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
         var water = await service.UpdateGarageAsync(
             garage.Id,
-            new UpsertGarageRequest("15", 1, 1, null, 100m, 11m, 20m, null),
+            new UpsertGarageRequest("15", 1, 1, null, 100m, 11m, 20m, null, Version: garage.Version),
             null,
             CancellationToken.None);
         var electricity = await service.UpdateGarageAsync(
             garage.Id,
-            new UpsertGarageRequest("15", 1, 1, null, 100m, 10m, 21m, null),
+            new UpsertGarageRequest("15", 1, 1, null, 100m, 11m, 21m, null, Version: garage.Version),
             null,
             CancellationToken.None);
 
         Assert.Equal("garage_starting_balance_locked", balance.ErrorCode);
-        Assert.Equal("garage_initial_water_meter_locked", water.ErrorCode);
-        Assert.Equal("garage_initial_electricity_meter_locked", electricity.ErrorCode);
+        Assert.True(water.Succeeded);
+        Assert.True(electricity.Succeeded);
         Assert.Equal(100m, garage.StartingBalance);
-        Assert.Equal(10m, garage.InitialWaterMeterValue);
-        Assert.Equal(20m, garage.InitialElectricityMeterValue);
+        Assert.Equal(11m, garage.InitialWaterMeterValue);
+        Assert.Equal(21m, garage.InitialElectricityMeterValue);
+        var readings = await database.Context.MeterReadings.AsNoTracking().ToListAsync();
+        var waterReading = Assert.Single(readings, item => item.MeterKind == MeterKinds.Water);
+        var electricityReading = Assert.Single(readings, item => item.MeterKind == MeterKinds.Electricity);
+        Assert.Equal((11m, 1m), (waterReading.PreviousValue, waterReading.Consumption));
+        Assert.Equal((21m, 4m), (electricityReading.PreviousValue, electricityReading.Consumption));
     }
 
     [Fact]

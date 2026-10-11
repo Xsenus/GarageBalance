@@ -8,6 +8,17 @@ describe('financeApi', () => {
     vi.unstubAllGlobals()
   })
 
+  it('reads the meter devices of one garage and meter kind with the last reading', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([{ id: 'device', serialNumber: '1', lastReadingValue: 12 }]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const devices = await financeApi.getMeterDevices!('token', 'garage-5', 'service_abc', controller.signal)
+
+    expect(devices).toEqual([{ id: 'device', serialNumber: '1', lastReadingValue: 12 }])
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/finance/meter-devices?garageId=garage-5&meterKind=service_abc')
+  })
+
   it('passes counterparty filters to finance page endpoints', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       items: [],
