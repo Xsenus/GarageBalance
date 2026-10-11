@@ -49,7 +49,9 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const requestKey = JSON.stringify([auth.accessToken, garage.id, garage.number, kind, month, retry])
   const loading = canWrite && loaded?.key !== requestKey && loadError?.key !== requestKey
   const loadedForRequest = loaded?.key === requestKey ? loaded : null
-  const defaultFinal = typeof loadedForRequest?.reading?.currentValue === 'number' ? String(loadedForRequest.reading.currentValue) : ''
+  const savedFinal = loadedForRequest?.reading?.currentValue
+    ?? loadedForRequest?.activeDevice?.lastReadingValue ?? loadedForRequest?.activeDevice?.initialValue
+  const defaultFinal = typeof savedFinal === 'number' ? String(savedFinal) : ''
   const finalText = finalTouched ? final : defaultFinal
   const consumptionBaseline = loadedForRequest?.reading
     ? loadedForRequest.reading.previousValue

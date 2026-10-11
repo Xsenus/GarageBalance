@@ -574,6 +574,23 @@ describe('редактор тарифной сетки услуги', () => {
       expect(onUpdateTariffSchedule).not.toHaveBeenCalled()
     })
 
+    it('сохраняет отредактированные пороги выбранного периода при смене базы расчёта', async () => {
+      const { onUpdateTariffSchedule, onUpdateWithTariff } = renderTiered()
+      fireEvent.change(screen.getByLabelText('Ступень 1: верхняя граница'), { target: { value: '140' } })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'По счетчику' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'По счетчику' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Пороговая тарификация' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Сохранить', exact: true }))
+
+      await waitFor(() => expect(onUpdateWithTariff).toHaveBeenCalledOnce())
+      expect(onUpdateWithTariff).toHaveBeenCalledWith(expect.objectContaining({ rate: 8.31,
+        calculationBase: 'meter_electricity', electricityTiers: [
+          expect.objectContaining({ upperBound: 140, rate: 8.31 }),
+          expect.objectContaining({ upperBound: undefined, rate: 11.7 }),
+        ] }))
+      expect(onUpdateTariffSchedule).not.toHaveBeenCalled()
+    })
+
     it('для нового порогового тарифа даёт выбрать дату начала действия', async () => {
       const onCreateWithTariff = vi.fn().mockResolvedValue(undefined)
       render(<AddServicePrototypeDialog

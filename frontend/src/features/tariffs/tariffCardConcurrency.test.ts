@@ -2,6 +2,23 @@ import { expect, it } from 'vitest'
 import type { ChargeServiceSettingDto } from '../../services/dictionariesApi'
 import { sameTariffScheduleTerms, sameTariffServiceSettings } from './tariffCardConcurrency'
 
+it('detects competing threshold and step-rate changes even when the base rate and dates match', () => {
+  const period = { tariffId: 'tariff', tariffVersion: 'v1', effectiveFrom: '2026-01-01', effectiveTo: null, rate: 5,
+    electricityTiers: [
+      { id: 'a', name: 'Первая', upperBound: 100, rate: 5, isCustom: true },
+      { id: 'b', name: 'Последняя', upperBound: null, rate: 7, isCustom: true },
+    ] }
+  expect(sameTariffScheduleTerms([period], [{ ...period, tariffVersion: 'v2' }])).toBe(true)
+  expect(sameTariffScheduleTerms([period], [{ ...period, electricityTiers: [
+    { ...period.electricityTiers[0], upperBound: 120 }, period.electricityTiers[1],
+  ] }])).toBe(false)
+  expect(sameTariffScheduleTerms([period], [{ ...period, electricityTiers: [
+    period.electricityTiers[0], { ...period.electricityTiers[1], rate: 8 },
+  ] }])).toBe(false)
+  expect(sameTariffScheduleTerms([period], [{ ...period, electricityTiers: null }])).toBe(false)
+  expect(sameTariffScheduleTerms([{ ...period, electricityTiers: undefined }], [{ ...period, electricityTiers: null }])).toBe(true)
+})
+
 it('allows a version-only retry but never overwrites someone else’s garage scope or service edits', () => {
   const original = { name: 'Охрана', version: 'v1' } as ChargeServiceSettingDto
   expect(sameTariffServiceSettings(original, { ...original, version: 'v2', appliesToSelectedGarages: false, garageIds: [] })).toBe(true)

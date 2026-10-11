@@ -14,7 +14,7 @@ const dto = (overrides = {}) => ({ meterKind: 'water', serviceName: 'Вода', 
 describe('garage meter start values', () => {
   it('formats and parses Russian number text', () => {
     expect(formatMeterStartValue(null)).toBe('')
-    expect(parseMeterStartValue(formatMeterStartValue(119153))).toBe(119153)
+    expect(parseMeterStartValue(formatMeterStartValue(1000))).toBe(1000)
     expect(parseMeterStartValue('1 234,567')).toBe(1234.567)
     expect(parseMeterStartValue('')).toBeNull()
     expect(parseMeterStartValue('abc')).toBeNull()

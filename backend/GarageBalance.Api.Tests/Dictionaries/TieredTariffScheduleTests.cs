@@ -110,6 +110,24 @@ public sealed class TieredTariffScheduleTests
         Assert.Equal("tariff_schedule_tiers_not_supported", result.ErrorCode);
     }
 
+    [Fact]
+    public async Task Schedule_RejectsExplicitEmptyThresholdsWithoutChangingData()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var service = await CreateTieredServiceAsync(database, tiered: true);
+        var dictionary = DictionaryServiceTestFactory.Create(database.Context, new DateOnly(2026, 10, 10));
+        var before = (await dictionary.GetChargeServiceTariffScheduleAsync(service.Id, CancellationToken.None)).Value!.Single();
+
+        var result = await dictionary.UpdateChargeServiceTariffScheduleAsync(service.Id,
+            new([new(before.TariffId, Start, null, before.Rate, before.TariffVersion, [])], true, null, service.Version), null, CancellationToken.None);
+
+        Assert.Equal("tariff_electricity_tier_count_invalid", result.ErrorCode);
+        database.Context.ChangeTracker.Clear();
+        var after = (await dictionary.GetChargeServiceTariffScheduleAsync(service.Id, CancellationToken.None)).Value!.Single();
+        Assert.Equal(before.ElectricityTiers, after.ElectricityTiers);
+        Assert.Equal(before.TariffVersion, after.TariffVersion);
+    }
+
     private static void context_ClearAndAssert(SqliteTestDatabase database, Guid serviceId, int expectedPeriods)
     {
         database.Context.ChangeTracker.Clear();

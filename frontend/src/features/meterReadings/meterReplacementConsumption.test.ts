@@ -3,7 +3,7 @@ import { getMeterReplacementConsumption } from './meterReplacementConsumption'
 
 describe('getMeterReplacementConsumption', () => {
   it('splits the month consumption between the removed and the new meter', () => {
-    expect(getMeterReplacementConsumption(119153, 124626, 0, 10)).toEqual({ oldMeter: 5473, newMeter: 10 })
+    expect(getMeterReplacementConsumption(1000, 1200, 0, 10)).toEqual({ oldMeter: 200, newMeter: 10 })
   })
 
   it('reports negative parts instead of hiding invalid input and rounds to three decimals', () => {

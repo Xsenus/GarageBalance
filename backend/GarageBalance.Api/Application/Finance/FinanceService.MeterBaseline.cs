@@ -56,22 +56,31 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         var transferred = false;
         try
         {
-            var kinds = requested.Select(item => item.MeterKind.Trim()).ToList();
+            var kinds = requested.Select(item => item?.MeterKind?.Trim()).ToList();
+            if (kinds.Any(kind => !MeterKinds.IsValid(kind)))
+            {
+                return StartValueFailure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
+            }
+
+            if (requested.Any(item => item.Value is < 0m or > 999999999m))
+            {
+                return StartValueFailure("meter_start_value_invalid", "Стартовое показание должно быть числом от 0 до 999 999 999.");
+            }
+
             if (kinds.Count != kinds.Distinct(StringComparer.Ordinal).Count())
             {
                 return StartValueFailure("meter_start_kind_duplicate", "Стартовое значение одного счётчика указано дважды.");
             }
 
+            // Acquire the whole set in the repository's stable order, independently of field order.
+            locks.Add(await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                kinds.Select(kind => GetMeterChainLockKey(garage.Id, kind!)).ToArray(),
+                cancellationToken));
             IReadOnlyList<ChargeServiceSetting>? settings = null;
             var changes = new List<GarageMeterStartValueChange>();
             foreach (var item in requested)
             {
                 var meterKind = item.MeterKind.Trim();
-                if (!MeterKinds.IsValid(meterKind))
-                {
-                    return StartValueFailure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
-                }
-
                 settings ??= await GetStartValueSettingsAsync(garage, cancellationToken);
                 var setting = settings.FirstOrDefault(candidate => candidate.MeterKind == meterKind);
                 var isLegacyKind = meterKind is MeterKinds.Water or MeterKinds.Electricity;
@@ -82,9 +91,6 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                         "Услуга со счётчиком не применяется к этому гаражу. Обновите карточку и повторите действие.");
                 }
 
-                locks.Add(await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-                    [GetMeterChainLockKey(garage.Id, meterKind)],
-                    cancellationToken));
                 var label = setting?.Name ?? (meterKind == MeterKinds.Water ? "Вода" : "Электроэнергия");
                 var step = await ApplyStartValueAsync(garage, meterKind, label, item.Value, actorUserId, locks, cancellationToken);
                 if (!step.Succeeded)
@@ -253,7 +259,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             garage.Id,
             meterKind,
             readings[0].AccountingMonth,
-            chainPlan.Value!,
+            chainPlan.Value!.Where(change => change.Changed).ToArray(),
             missingReadingMonth: null,
             cancellationToken);
         var allocationKeys = accrualRecalculations

@@ -4162,7 +4162,7 @@ export function AddServicePrototypeDialog({
     const parsedDueDay = Number(paymentDueDay)
     const parsedOverdueDays = Number(overdueGraceDays)
     const parsedRegularRate = parsePrototypeAmount(regularRate)
-    const effectiveRate = isTiered ? tariffTiers[0]?.rate ?? null : parsedRegularRate
+    const effectiveRate = isTiered ? activeTiers[0]?.rate ?? null : parsedRegularRate
     const dueMonthOption = isMonthly
       ? null
       : contractorTariffMonthOptions.find((month) => month.value === paymentDueMonth)
@@ -4195,7 +4195,7 @@ export function AddServicePrototypeDialog({
       }
 
       if (isTiered && !savesSchedule) {
-        const tiersError = validateTariffTiers(tariffTiers)
+        const tiersError = validateTariffTiers(activeTiers)
         if (tiersError) {
           setError(tiersError)
           return
@@ -4277,8 +4277,8 @@ export function AddServicePrototypeDialog({
           incomeFundId,
           tariffMode: isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular',
           calculationBase: effectiveCalculationBase,
-          electricityTiers: isTiered && tariffTiers.length >= 2
-            ? tariffTiers.map(({ id, name, upperBound, rate }) => ({
+          electricityTiers: isTiered && activeTiers.length >= 2
+            ? activeTiers.map(({ id, name, upperBound, rate }) => ({
               id: persistedGuidPattern.test(id) ? id : undefined,
               name,
               upperBound: upperBound ?? undefined,
@@ -4300,8 +4300,8 @@ export function AddServicePrototypeDialog({
           tariffVersion: selectedTariff?.version,
           ...(tariffStructureChanged ? {
             tariffMode,
-            electricityTiers: isTiered && tariffTiers.length >= 2
-              ? tariffTiers.map(({ id, name, upperBound, rate }) => ({
+            electricityTiers: isTiered && activeTiers.length >= 2
+              ? activeTiers.map(({ id, name, upperBound, rate }) => ({
                 id: persistedGuidPattern.test(id) ? id : undefined,
                 name,
                 upperBound: upperBound ?? undefined,

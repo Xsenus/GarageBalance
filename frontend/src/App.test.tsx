@@ -3104,9 +3104,9 @@ describe('App', () => {
   it('shows start meter values only for metered services that apply to the garage and saves a changed commercial value', async () => {
     const user = userEvent.setup()
     const garageId = '11111111-1111-4111-8111-111111111111'
-    const commercialKind = 'service_5ea942591f7e441e89ccfa27f4e8a493'
+    const commercialKind = 'service_55555555555545558555555555555555'
     const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 (900) 000-00-00' })
-    const garage = createGarage({ id: garageId, number: '1к', ownerId: owner.id, ownerName: owner.fullName, initialElectricityMeterValue: 53547 })
+    const garage = createGarage({ id: garageId, number: '1к', ownerId: owner.id, ownerName: owner.fullName, initialElectricityMeterValue: 500 })
     const getGarageMeterStartValues = vi.fn(async () => [
       { meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: 10, hasReadings: false },
       { meterKind: commercialKind, serviceName: 'Коммерческий тариф', unitName: 'кВт·ч', value: null, hasReadings: true },
@@ -3178,8 +3178,9 @@ describe('App', () => {
     const garageId = '22222222-2222-4222-8222-222222222222'
     const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 (900) 000-00-00' })
     const garage = createGarage({ id: garageId, number: '7', ownerId: owner.id, ownerName: owner.fullName })
+    let rejectFirstLoad!: (error: Error) => void
     const getGarageMeterStartValues = vi.fn<NonNullable<DictionaryClient['getGarageMeterStartValues']>>()
-      .mockRejectedValueOnce(new Error('offline'))
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectFirstLoad = reject }))
       .mockResolvedValue([{ meterKind: 'water', serviceName: 'Вода', unitName: 'м³', value: 1, hasReadings: false }])
     const updateGarage = vi.fn()
     const dictionaryClient = createDictionaryClient({ getOwners: async () => [owner], getGarages: async () => [garage], getGarageMeterStartValues, updateGarage })
@@ -3192,9 +3193,16 @@ describe('App', () => {
     await user.dblClick((await within(contractorsPanel).findByText('Иванов Иван')).closest('[role="row"]') as HTMLElement)
     const dialog = await screen.findByRole('dialog', { name: 'Гараж 7' })
 
+    expect(within(dialog).getByRole('status', { name: 'Загружаем стартовые значения счётчиков' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Сохранить', exact: true })).toBeDisabled()
+    fireEvent.submit(within(dialog).getByRole('button', { name: 'Сохранить', exact: true }).closest('form')!)
+    expect(updateGarage).not.toHaveBeenCalled()
+    await act(async () => rejectFirstLoad(new Error('offline')))
     expect(await within(dialog).findByText('Не удалось загрузить стартовые значения счётчиков.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Сохранить', exact: true })).toBeDisabled()
     await user.click(within(dialog).getByRole('button', { name: 'Повторить загрузку' }))
     const water = await within(dialog).findByLabelText('Стартовое значение счётчика: Вода')
+    expect(within(dialog).getByRole('button', { name: 'Сохранить', exact: true })).toBeEnabled()
     await user.clear(water)
     await user.type(water, '-5')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))

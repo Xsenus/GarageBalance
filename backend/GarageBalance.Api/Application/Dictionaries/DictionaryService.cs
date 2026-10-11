@@ -342,6 +342,11 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateGarageMeterStartValues(request.MeterStartValues) is { } meterValidation)
+        {
+            return meterValidation;
+        }
+
         var number = request.Number.Trim();
         if (await garageRepository.ActiveNumberExistsAsync(null, number, cancellationToken))
         {
@@ -425,6 +430,11 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateGarageMeterStartValues(request.MeterStartValues) is { } meterValidation)
+        {
+            return meterValidation;
+        }
+
         var garage = await garageRepository.FindActiveWithOwnerAsync(id, cancellationToken);
         if (garage is null)
         {
@@ -492,6 +502,8 @@ public sealed class DictionaryService(
 
             var meterStartChanges = meterStart?.Changes ?? [];
             if (meterStartChanges.Count == 0 &&
+                oldInitialWaterMeterValue == garage.InitialWaterMeterValue &&
+                oldInitialElectricityMeterValue == garage.InitialElectricityMeterValue &&
                 GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, startingOverdueDebt, garage.InitialWaterMeterValue, garage.InitialElectricityMeterValue, comment))
             {
                 return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
@@ -606,6 +618,32 @@ public sealed class DictionaryService(
 
         return DictionaryResult<IReadOnlyList<GarageMeterStartValueDto>>.Success(
             await garageMeterBaselineService.GetStartValuesAsync(garage, cancellationToken));
+    }
+
+    private static DictionaryResult<GarageDto>? ValidateGarageMeterStartValues(
+        IReadOnlyList<UpsertGarageMeterStartValueRequest>? values)
+    {
+        var kinds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in values ?? [])
+        {
+            var kind = item?.MeterKind?.Trim();
+            if (item is null || !MeterKinds.IsValid(kind))
+            {
+                return DictionaryResult<GarageDto>.Failure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
+            }
+
+            if (!kinds.Add(kind!))
+            {
+                return DictionaryResult<GarageDto>.Failure("meter_start_kind_duplicate", "Стартовое значение одного счётчика указано дважды.");
+            }
+
+            if (item.Value is < 0m or > 999999999m)
+            {
+                return DictionaryResult<GarageDto>.Failure("meter_start_value_invalid", "Стартовое показание должно быть числом от 0 до 999 999 999.");
+            }
+        }
+
+        return null;
     }
 
     private static List<UpsertGarageMeterStartValueRequest> BuildMeterStartValueRequests(
@@ -3008,7 +3046,7 @@ public sealed class DictionaryService(
                     "charge_service_individual_tariff_base_conflict",
                     "Тарифная сетка пересекается с индивидуальными назначениями с другой базой расчёта. Сначала ограничьте или отмените эти назначения.");
             ElectricityTierConfig? periodTiers = null;
-            if (period.ElectricityTiers is { Count: > 0 })
+            if (period.ElectricityTiers is not null)
             {
                 if (!setting.HasTieredTariff || !IsMeterCalculationBase(source.CalculationBase))
                     return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(

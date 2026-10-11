@@ -3783,6 +3783,9 @@ function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpening
   const meterStartLoader: ((signal: AbortSignal) => Promise<GarageMeterStartValueDto[]>) | null = existingGarageId
     ? (dictionaryClient.getGarageMeterStartValues ? (signal) => dictionaryClient.getGarageMeterStartValues!(accessToken, existingGarageId, signal) : null)
     : (dictionaryClient.getMeterStartServicesForNewGarage ? (signal) => dictionaryClient.getMeterStartServicesForNewGarage!(accessToken, signal) : null)
+  const meterStartLoadKey = `${accessToken}|${existingGarageId ?? 'new'}`
+  const [meterStartLoadedKey, setMeterStartLoadedKey] = useState<string | null>(null)
+  const meterStartReady = !meterStartLoader || meterStartLoadedKey === meterStartLoadKey
   const openingDataChanged = Boolean(item)
     && (parsePrototypeMoney(form.startingBalance ?? '') !== parsePrototypeMoney(item?.startingBalance ?? '')
       || parsePrototypeMoney(form.startingOverdueDebt ?? '') !== parsePrototypeMoney(item?.startingOverdueDebt ?? ''))
@@ -3827,6 +3830,7 @@ function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpening
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (saving || !meterStartReady) return
 
     const nextValidationErrors = getGaragePrototypeValidationErrors(form, !item)
     setValidationErrors(nextValidationErrors)
@@ -3900,12 +3904,15 @@ function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpening
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 {meterStartLoader ? (
                   <GarageMeterStartFields
-                    loadKey={`${accessToken}|${existingGarageId ?? 'new'}`}
+                    loadKey={meterStartLoadKey}
                     load={meterStartLoader}
                     rows={form.meterStartValues}
                     errors={validationErrors}
                     disabled={saving}
-                    onLoaded={(meterStartValues) => setForm((currentForm) => ({ ...currentForm, meterStartValues }))}
+                    onLoaded={(meterStartValues) => {
+                      setForm((currentForm) => ({ ...currentForm, meterStartValues }))
+                      setMeterStartLoadedKey(meterStartLoadKey)
+                    }}
                     onChange={(meterKind, value) => setForm((currentForm) => ({
                       ...currentForm,
                       meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, value } : row),
@@ -3947,7 +3954,7 @@ function GaragePrototypeDialog({ accessToken, dictionaryClient, canAdjustOpening
                   <span>Открыть фин. отчет</span>
                 </button>
               ) : null}
-              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>
+              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving || !meterStartReady}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>
               <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
             </div>
           </form>
