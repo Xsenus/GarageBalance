@@ -4692,6 +4692,42 @@ describe('App', () => {
     expect(financeClient.replaceMeterDevice).not.toHaveBeenCalled()
   })
 
+  it('opens device history from the garage card, cancels a replacement and preserves unsaved fields', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-history-card', number: '125' })
+    const device = { id: 'meter-new', garageId: garage.id, meterKind: 'water', serviceName: 'Вода', serialNumber: 'W-2',
+      installedOn: '2026-06-10', removedOn: null, initialValue: 5, finalValue: null, version: 'dv', replacedDeviceId: 'old',
+      replacementAccountingMonth: '2026-06-01', replacementReadingVersion: 'rv' }
+    const cancel = vi.fn().mockResolvedValue({})
+    const load = vi.fn().mockResolvedValue({ items: [device], totalCount: 1, offset: 0, limit: 25 })
+    const dictionaryClient = createDictionaryClient({ getGarages: async () => [garage] })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient}
+      financeClient={createFinanceClient({ getMeterDeviceHistory: load, cancelMeterDeviceReplacement: cancel })}
+      fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()}
+      releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(await within(panel).findByRole('button', { name: 'Изменить гараж 125' }))
+    const card = await screen.findByRole('dialog', { name: 'Гараж 125' })
+    await user.type(within(card).getByLabelText('Комментарий гаража'), 'Несохранённое уточнение')
+    await user.click(within(card).getByRole('button', { name: 'История приборов' }))
+    const history = await screen.findByRole('dialog', { name: 'История приборов' })
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(within(history).getByRole('button', { name: 'Закрыть историю приборов' })).toHaveFocus()
+    await user.click(await within(history).findByRole('button', { name: 'Отменить замену на прибор W-2' }))
+    await user.type(within(history).getByLabelText('Причина отмены замены'), 'Ошибка регистрации')
+    await user.click(within(history).getByRole('button', { name: 'Подтвердить отмену' }))
+    await waitFor(() => expect(cancel).toHaveBeenCalledWith('token', device.id, {
+      expectedDeviceVersion: 'dv', expectedReadingVersion: 'rv', accountingMonth: '2026-06-01', reason: 'Ошибка регистрации',
+    }))
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    await user.click(within(history).getByRole('button', { name: 'Закрыть историю приборов' }))
+    expect(within(await screen.findByRole('dialog', { name: 'Гараж 125' })).getByLabelText('Комментарий гаража')).toHaveValue('Несохранённое уточнение')
+    expect(within(await screen.findByRole('dialog', { name: 'Гараж 125' })).getByRole('button', { name: 'История приборов' })).toHaveFocus()
+  })
+
   it('adjusts the garage opening balance and overdue part independently', async () => {
     const user = userEvent.setup()
     let garage = createGarage({ id: 'garage-opening-adjustment', number: '125', startingBalance: 125, startingOverdueDebt: 40, balance: 125, overdueDebt: 40 })

@@ -8,7 +8,7 @@ import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { LocalizedDatePicker, monthNames } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
@@ -18,20 +18,9 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEdi
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { getMeterReadingDateForMonth } from './meterReadingPeriod'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
-const meterReadingMonths = [
-  { key: '01', label: 'Январь', shortLabel: 'Янв' },
-  { key: '02', label: 'Февраль', shortLabel: 'Фев' },
-  { key: '03', label: 'Март', shortLabel: 'Мар' },
-  { key: '04', label: 'Апрель', shortLabel: 'Апр' },
-  { key: '05', label: 'Май', shortLabel: 'Май' },
-  { key: '06', label: 'Июнь', shortLabel: 'Июн' },
-  { key: '07', label: 'Июль', shortLabel: 'Июл' },
-  { key: '08', label: 'Август', shortLabel: 'Авг' },
-  { key: '09', label: 'Сентябрь', shortLabel: 'Сен' },
-  { key: '10', label: 'Октябрь', shortLabel: 'Окт' },
-  { key: '11', label: 'Ноябрь', shortLabel: 'Ноя' },
-  { key: '12', label: 'Декабрь', shortLabel: 'Дек' },
-]
+const meterReadingMonths = monthNames.map((label, index) => ({
+  key: String(index + 1).padStart(2, '0'), label,
+}))
 
 type MeterReadingTypeId = string
 type MeterReadingTypeOption = { id: MeterReadingTypeId; label: string; unit: string }
@@ -134,7 +123,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
           {meterReadingMonths.map((month) => (
             <span role="columnheader" aria-label={`${month.label}${selectedMeterType.unit}`} key={month.key}>
               <strong className="meter-readings-month-full" aria-hidden="true">{month.label}</strong>
-              <strong className="meter-readings-month-short" aria-hidden="true">{month.shortLabel}</strong>
+              <strong className="meter-readings-month-short" aria-hidden="true">{month.label.slice(0, 3)}</strong>
               <small>{selectedMeterType.unit}</small>
             </span>
           ))}

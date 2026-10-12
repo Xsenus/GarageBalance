@@ -44,6 +44,9 @@ public interface IMeterReadingRepository
     Task ReloadForUpdateAsync(MeterReading reading, CancellationToken cancellationToken);
     Task<MeterReading?> GetActiveAsync(Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterDevice>> GetDevicesAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+    Task<MeterDevicePageData> GetDeviceHistoryPageAsync(Guid garageId, string? meterKind, int offset, int limit, CancellationToken cancellationToken);
+    Task<MeterDevice?> FindDeviceAsync(Guid deviceId, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, Guid>> GetActiveReadingVersionsAsync(IReadOnlyCollection<Guid> readingIds, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterDevice>> GetDevicesForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<Guid, decimal>> GetLastReadingValuesByDeviceAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     Task<MeterReading?> GetFirstActiveAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
@@ -55,6 +58,8 @@ public interface IMeterReadingRepository
 }
 
 public sealed record MeterReadingPageData(IReadOnlyList<MeterReading> Items, int TotalCount);
+
+public sealed record MeterDevicePageData(IReadOnlyList<MeterDevice> Items, int TotalCount);
 
 public sealed record MeterReadingYearGarageData(Guid Id, string Number, DateOnly? InitialReadingMonth = null, decimal? InitialReadingValue = null);
 

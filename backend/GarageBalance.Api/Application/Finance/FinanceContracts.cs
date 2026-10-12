@@ -523,7 +523,26 @@ public sealed record MeterDeviceDto(
     decimal InitialValue,
     decimal? FinalValue,
     Guid Version,
-    decimal? LastReadingValue = null);
+    decimal? LastReadingValue = null,
+    Guid? ReplacedDeviceId = null,
+    DateOnly? ReplacementAccountingMonth = null,
+    Guid? ReplacementReadingId = null,
+    string? ReplacementReason = null,
+    bool IsCanceled = false,
+    string? CancellationReason = null,
+    DateTimeOffset? CanceledAtUtc = null,
+    bool RequiresRestoredValue = false,
+    Guid? ReplacementReadingVersion = null,
+    string? ServiceName = null);
+
+public sealed record CancelMeterDeviceReplacementRequest(
+    Guid ExpectedDeviceVersion,
+    Guid ExpectedReadingVersion,
+    DateOnly AccountingMonth,
+    [ActionComment, MaxLength(500)] string Reason,
+    [Range(0, 999999999)] decimal? RestoredCurrentValue = null);
+
+public sealed record MeterDeviceReplacementCancellationDto(MeterDeviceDto RestoredDevice, MeterReadingDto Reading);
 
 public sealed record ReplaceMeterDeviceRequest(
     Guid GarageId,

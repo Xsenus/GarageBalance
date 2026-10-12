@@ -1786,6 +1786,13 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("CanceledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1796,6 +1803,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<Guid>("GarageId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("HasReplacementSnapshot")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal>("InitialValue")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -1803,13 +1813,32 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<DateOnly>("InstalledOn")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IsCanceled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("MeterKind")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<string>("PreviousReadingSnapshotJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<DateOnly?>("RemovedOn")
                         .HasColumnType("date");
+
+                    b.Property<Guid?>("ReplacedDeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("ReplacementAccountingMonth")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("ReplacementReadingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReplacementReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("SerialNumber")
                         .IsRequired()
@@ -1825,14 +1854,17 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ReplacedDeviceId");
+
                     b.HasIndex("GarageId", "MeterKind")
                         .IsUnique()
-                        .HasFilter("\"RemovedOn\" IS NULL");
+                        .HasFilter("\"RemovedOn\" IS NULL AND \"IsCanceled\" = false");
 
                     b.HasIndex("GarageId", "MeterKind", "InstalledOn");
 
                     b.HasIndex("GarageId", "MeterKind", "SerialNumber")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"IsCanceled\" = false");
 
                     b.ToTable("meter_devices", (string)null);
                 });
@@ -3442,6 +3474,11 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasForeignKey("GarageId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("GarageBalance.Api.Domain.Finance.MeterDevice", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacedDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Garage");
                 });

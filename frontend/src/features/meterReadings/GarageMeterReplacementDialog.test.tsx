@@ -22,6 +22,22 @@ function fill() {
   fireEvent.change(screen.getByLabelText('Причина замены счетчика'), { target: { value: ' Замена неисправного прибора ' } })
 }
 
+it('includes earlier devices in a repeated replacement and transfers the final value only on an explicit action', async () => {
+  const { props, reading, getPage, replace } = fixture()
+  getPage.mockResolvedValue({ items: [{ ...reading, isMeterReplacement: true, currentValue: 7, previousValue: 5, previousDeviceConsumption: 10 }], totalCount: 1 })
+  render(<GarageMeterReplacementDialog {...props} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
+  fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '9' } })
+  fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '20' } })
+  fireEvent.change(screen.getByLabelText('Текущее показание нового счетчика'), { target: { value: '23' } })
+  expect(screen.getByText(/Расход за месяц: 17/)).toHaveTextContent('ранее снятые приборы 10')
+  expect(replace).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Перенести конечное в начальное' }))
+  expect(screen.getByLabelText('Начальное показание нового счетчика')).toHaveValue('9')
+  expect(screen.getByLabelText('Текущее показание нового счетчика')).toHaveValue('23')
+  expect(screen.getByText(/Расход за месяц: 28/)).toBeInTheDocument()
+})
+
 it('checks the current reading, validates required fields and saves exact garage and reading versions', async () => {
   const { props, replace } = fixture()
   render(<GarageMeterReplacementDialog {...props} />)

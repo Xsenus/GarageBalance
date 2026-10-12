@@ -8,23 +8,14 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { AsyncErrorState, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { FormError } from '../../shared/formFeedback'
-import { getLocalDateInputValue } from '../../shared/formatters'
+import { formatNullableNumber as formatAmount, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
-import { getMeterReplacementConsumption } from './meterReplacementConsumption'
+import { getMeterReplacementConsumption, parseReplacementValue as parseValue } from './meterReplacementConsumption'
 import { SelectControl } from '../../shared/SelectControl'
 
 const defaultOptions = [{ value: 'electricity', label: 'Электроэнергия' }, { value: 'water', label: 'Вода' }]
-function parseValue(value: string) {
-  const normalized = value.trim().replace(',', '.')
-  return /^\d+(?:\.\d{1,3})?$/.test(normalized) && Number(normalized) <= 999999999 ? Number(normalized) : null
-}
-
-function formatAmount(value: number) {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(Math.round(value * 1000) / 1000)
-}
-
 export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeClient, garage, onClose, onSaved }: {
   auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; garage: { id: string; number: string }
   onClose: () => void; onSaved: () => void
@@ -56,8 +47,9 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const consumptionBaseline = loadedForRequest?.reading
     ? loadedForRequest.reading.previousValue
     : loadedForRequest?.activeDevice ? loadedForRequest.activeDevice.lastReadingValue ?? loadedForRequest.activeDevice.initialValue : null
+  const earlierConsumption = loadedForRequest?.reading?.isMeterReplacement ? loadedForRequest.reading.previousDeviceConsumption ?? 0 : 0
   const consumption = getMeterReplacementConsumption(
-    typeof consumptionBaseline === 'number' ? consumptionBaseline : null, parseValue(finalText), parseValue(initial), parseValue(current))
+    typeof consumptionBaseline === 'number' ? consumptionBaseline : null, parseValue(finalText), parseValue(initial), parseValue(current), earlierConsumption)
   const ref = useFocusTrap<HTMLElement>(true)
   useRestoreFocusOnClose(true)
   useEscapeKey(!saving, onClose)
@@ -138,16 +130,17 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
         {loading ? <TableLoadingState label="Проверяем показания счётчика" rows={2} columns={2} /> : loadError?.key === requestKey ? <AsyncErrorState message={loadError.message} onRetry={() => setRetry((value) => value + 1)} /> : null}
         <FormField label="Номер нового счётчика"><input aria-label="Номер нового счетчика" required maxLength={100} value={serial} disabled={disabled} onChange={(event) => setSerial(event.target.value)} /></FormField>
         <FormField label="Конечное показание старого счётчика" help="Последнее значение снимаемого счётчика. Расход до замены сохраняется в начислении этого месяца."><MeterReadingInput aria-label="Конечное показание старого счетчика" required value={finalText} disabled={disabled} onChange={(event) => { setFinalTouched(true); setFinal(event.target.value) }} /></FormField>
-        <FormField label="Начальное показание нового счётчика"><MeterReadingInput aria-label="Начальное показание нового счетчика" required value={initial} disabled={disabled} onChange={(event) => setInitial(event.target.value)} /></FormField>
+        <FormField label="Начальное показание нового счётчика" help="Старт в карточке гаража не меняется."><MeterReadingInput aria-label="Начальное показание нового счетчика" required value={initial} disabled={disabled} onChange={(event) => setInitial(event.target.value)} /></FormField>
+        <button type="button" className="ghost-button" disabled={disabled || parseValue(finalText) === null} onClick={() => setInitial(finalText)}>Перенести конечное в начальное</button>
         <FormField label="Текущее показание нового счётчика"><MeterReadingInput aria-label="Текущее показание нового счетчика" required value={current} disabled={disabled} onChange={(event) => setCurrent(event.target.value)} /></FormField>
         {consumption ? <p className={`form-hint${consumption.oldMeter < 0 || consumption.newMeter < 0 ? ' form-hint--warning' : ''}`} role="status" aria-live="polite">
           {consumption.oldMeter < 0
             ? `Конечное показание старого счётчика меньше его последнего показания (${formatAmount(consumptionBaseline as number)}).`
             : consumption.newMeter < 0
               ? 'Текущее показание нового счётчика меньше его начального показания.'
-              : `Расход за месяц: ${formatAmount(consumption.oldMeter + consumption.newMeter)} (старый счётчик ${formatAmount(consumption.oldMeter)}, новый ${formatAmount(consumption.newMeter)}).`}
+              : `Расход за месяц: ${formatAmount(consumption.total)} (${earlierConsumption ? `ранее снятые приборы ${formatAmount(earlierConsumption)}, ` : ''}старый счётчик ${formatAmount(consumption.oldMeter)}, новый ${formatAmount(consumption.newMeter)}).`}
         </p> : null}
-        <FormField label="Причина замены" help="Замена и пересчёт записываются в историю гаража."><textarea aria-label="Причина замены счетчика" required={reasonRequired} maxLength={1000} value={reason} disabled={disabled} onChange={(event) => setReason(event.target.value)} /></FormField>
+        <FormField label="Причина замены счетчика"><textarea required={reasonRequired} maxLength={500} value={reason} disabled={disabled} onChange={(event) => setReason(event.target.value)} /></FormField>
         <div className="detail-dialog-actions"><button type="submit" className="secondary-button" disabled={disabled || loading || loaded?.key !== requestKey || !financeClient.replaceMeterDevice} aria-busy={saving}>{saving ? <LoaderCircle size={17} className="financial-report-button__spinner" /> : <Save size={17} />}<span>Сохранить замену</span></button>
           <button type="button" className="ghost-button" disabled={saving} onClick={onClose}>Отмена</button></div>
       </form>

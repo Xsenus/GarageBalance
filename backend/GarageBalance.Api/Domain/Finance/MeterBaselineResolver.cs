@@ -51,9 +51,26 @@ public static class MeterBaselineResolver
 
         // A replacement reading consumes the removed device up to its final value, so the removed
         // device's initial value is part of the first reading's consumption.
-        return firstActiveReading.IsMeterReplacement && anchorIndex > 0
-            ? devicesAscending[anchorIndex - 1]
-            : devicesAscending[anchorIndex];
+        if (!firstActiveReading.IsMeterReplacement || anchorIndex == 0)
+        {
+            return devicesAscending[anchorIndex];
+        }
+
+        var baseline = devicesAscending[anchorIndex];
+        var visited = new HashSet<Guid> { baseline.Id };
+        do
+        {
+            var predecessor = MeterReplacementSegments.FindPredecessor(baseline, devicesAscending);
+            // Preserve compatibility with old records without an explicit predecessor/date boundary.
+            predecessor ??= devicesAscending.Take(anchorIndex).LastOrDefault(device => !device.IsCanceled);
+            if (predecessor is null || !visited.Add(predecessor.Id)) break;
+            baseline = predecessor;
+            anchorIndex = devicesAscending.ToList().IndexOf(baseline);
+        }
+        while (anchorIndex > 0 && !IsRestartBoundary(baseline) && baseline.InstalledOn.Year == firstActiveReading.AccountingMonth.Year &&
+            baseline.InstalledOn.Month == firstActiveReading.AccountingMonth.Month);
+
+        return baseline;
     }
 
     public static bool IsRestartBoundary(MeterDevice device) =>

@@ -7292,7 +7292,7 @@ input.meter-readings-control {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
-  padding: 0 9px;
+  padding: 0;
 }
 
 .pagination-size:hover:not(:disabled),

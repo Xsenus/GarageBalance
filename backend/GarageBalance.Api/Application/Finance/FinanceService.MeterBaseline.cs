@@ -247,7 +247,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             }
         }
 
-        var chainPlan = PlanMeterReadingChain(garage, meterKind, null, readings);
+        var chainPlan = await PlanMeterReadingChainAsync(garage, meterKind, null, readings, cancellationToken, devices);
         if (!chainPlan.Succeeded)
         {
             return FinanceResult<bool>.Failure(

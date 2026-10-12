@@ -4,6 +4,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FinanceApiError, financeApi } from './financeApi'
 
 describe('financeApi', () => {
+  it('loads a bounded garage device history and sends exact cancellation versions and reason', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    await financeApi.getMeterDeviceHistory!('token', 'garage', { meterKind: 'water', offset: 25, limit: 25 }, controller.signal)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/finance/meter-devices/history?garageId=garage&meterKind=water&offset=25&limit=25')
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+    const request = { expectedDeviceVersion: 'dv', expectedReadingVersion: 'rv', accountingMonth: '2026-06-01', reason: 'Ошибочная замена', restoredCurrentValue: 123.456 }
+    await financeApi.cancelMeterDeviceReplacement!('token', 'device', request)
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/finance/meter-devices/device/cancel-replacement')
+    expect(fetchMock.mock.calls[1][1].method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual(request)
+  })
   afterEach(() => {
     vi.unstubAllGlobals()
   })

@@ -516,7 +516,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         string meterKind,
         CancellationToken cancellationToken) =>
         await dbContext.MeterDevices.AsNoTracking()
-            .Where(device => device.GarageId == garageId && device.MeterKind == meterKind)
+            .Where(device => device.GarageId == garageId && device.MeterKind == meterKind && !device.IsCanceled)
             .OrderByDescending(device => device.InstalledOn)
             .ThenByDescending(device => device.Id)
             .ToListAsync(cancellationToken);
@@ -526,7 +526,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         string meterKind,
         CancellationToken cancellationToken) =>
         await dbContext.MeterDevices
-            .Where(device => device.GarageId == garageId && device.MeterKind == meterKind)
+            .Where(device => device.GarageId == garageId && device.MeterKind == meterKind && !device.IsCanceled)
             .OrderBy(device => device.InstalledOn)
             .ThenBy(device => device.Id)
             .ToListAsync(cancellationToken);
@@ -570,6 +570,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .Where(device =>
                 device.GarageId == garageId &&
                 device.MeterKind == meterKind &&
+                !device.IsCanceled &&
                 device.InstalledOn <= date &&
                 (!device.RemovedOn.HasValue || device.RemovedOn.Value >= date))
             .OrderByDescending(device => device.InstalledOn)
@@ -581,7 +582,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         string meterKind,
         CancellationToken cancellationToken) =>
         dbContext.MeterDevices.SingleOrDefaultAsync(
-            device => device.GarageId == garageId && device.MeterKind == meterKind && !device.RemovedOn.HasValue,
+            device => device.GarageId == garageId && device.MeterKind == meterKind && !device.RemovedOn.HasValue && !device.IsCanceled,
             cancellationToken);
 
     public async Task<IReadOnlyList<MeterReading>> GetAllActiveForUpdateAsync(
@@ -589,6 +590,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         string meterKind,
         CancellationToken cancellationToken) =>
         await dbContext.MeterReadings
+            .Include(reading => reading.Garage).ThenInclude(garage => garage.Owner)
             .Include(reading => reading.MeterDevice)
             .Where(reading => !reading.IsCanceled && reading.GarageId == garageId && reading.MeterKind == meterKind)
             .OrderBy(reading => reading.AccountingMonth)
@@ -596,6 +598,29 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .ToListAsync(cancellationToken);
 
     public void Add(MeterReading reading) => dbContext.MeterReadings.Add(reading);
+
+    public Task<MeterDevice?> FindDeviceAsync(Guid deviceId, CancellationToken cancellationToken) =>
+        dbContext.MeterDevices.AsNoTracking().SingleOrDefaultAsync(device => device.Id == deviceId, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, Guid>> GetActiveReadingVersionsAsync(
+        IReadOnlyCollection<Guid> readingIds, CancellationToken cancellationToken) =>
+        await dbContext.MeterReadings.AsNoTracking().Where(reading => readingIds.Contains(reading.Id) && !reading.IsCanceled)
+            .ToDictionaryAsync(reading => reading.Id, reading => reading.Version, cancellationToken);
+
+    public async Task<MeterDevicePageData> GetDeviceHistoryPageAsync(
+        Guid garageId, string? meterKind, int offset, int limit, CancellationToken cancellationToken)
+    {
+        var query = dbContext.MeterDevices.AsNoTracking().Where(device => device.GarageId == garageId);
+        if (meterKind is not null)
+        {
+            query = query.Where(device => device.MeterKind == meterKind);
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query.OrderByDescending(device => device.InstalledOn)
+            .ThenByDescending(device => device.Id).Skip(offset).Take(limit).ToListAsync(cancellationToken);
+        return new MeterDevicePageData(items, total);
+    }
 
     public void Add(MeterDevice device) => dbContext.MeterDevices.Add(device);
 

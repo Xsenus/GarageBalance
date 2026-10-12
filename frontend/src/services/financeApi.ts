@@ -263,9 +263,28 @@ export type MeterDeviceDto = {
   finalValue: number | null
   version: string
   lastReadingValue?: number | null
+    replacedDeviceId?: string | null
+    replacementAccountingMonth?: string | null
+    replacementReadingId?: string | null
+    replacementReadingVersion?: string | null
+    replacementReason?: string | null
+    isCanceled?: boolean
+    cancellationReason?: string | null
+    canceledAtUtc?: string | null
+    requiresRestoredValue?: boolean
+    serviceName?: string | null
 }
 
 export type MeterDeviceReplacementDto = { device: MeterDeviceDto; reading: MeterReadingDto }
+export type MeterDeviceReplacementCancellationDto = { restoredDevice: MeterDeviceDto; reading: MeterReadingDto }
+
+export type CancelMeterDeviceReplacementRequest = {
+  expectedDeviceVersion: string
+  expectedReadingVersion: string
+  accountingMonth: string
+  reason: string
+  restoredCurrentValue?: number
+}
 
 export type MeterReadingYearGarageDto = {
   id: string
@@ -939,6 +958,8 @@ export type FinanceClient = {
   restoreMeterReading(accessToken: string, meterReadingId: string): Promise<MeterReadingDto>
   replaceMeterDevice?(accessToken: string, request: ReplaceMeterDeviceRequest): Promise<MeterDeviceReplacementDto>
   getMeterDevices?(accessToken: string, garageId: string, meterKind: string, signal?: AbortSignal): Promise<MeterDeviceDto[]>
+  getMeterDeviceHistory?(accessToken: string, garageId: string, query: { meterKind?: string; offset: number; limit: number }, signal?: AbortSignal): Promise<FinancePagedResult<MeterDeviceDto>>
+  cancelMeterDeviceReplacement?(accessToken: string, deviceId: string, request: CancelMeterDeviceReplacementRequest): Promise<MeterDeviceReplacementCancellationDto>
 }
 
 const defaultFinanceListLimit = 50
@@ -1294,5 +1315,11 @@ export const financeApi: FinanceClient = {
   },
   getMeterDevices(accessToken, garageId, meterKind, signal) {
     return requestJson(accessToken, withQuery('/api/finance/meter-devices', { garageId, meterKind }), { signal })
+  },
+  getMeterDeviceHistory(accessToken, garageId, query, signal) {
+    return requestJson(accessToken, withQuery('/api/finance/meter-devices/history', { garageId, ...query }), { signal })
+  },
+  cancelMeterDeviceReplacement(accessToken, deviceId, request) {
+    return requestJson(accessToken, `/api/finance/meter-devices/${encodeURIComponent(deviceId)}/cancel-replacement`, { method: 'POST', body: JSON.stringify(request) })
   },
 }

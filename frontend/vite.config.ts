@@ -28,6 +28,9 @@ export default defineConfig({
   plugins: [react()],
   build: {
     cssMinify: 'lightningcss',
+    // Shared form/table styles dominate the stylesheet; one CSS asset avoids
+    // repeating their compression dictionary in small workspace stylesheets.
+    cssCodeSplit: false,
     modulePreload: false,
     rollupOptions: {
       output: {

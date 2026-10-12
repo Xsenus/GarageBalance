@@ -19,7 +19,7 @@ using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Tests.Finance;
 
-public sealed class FinanceServiceTests
+public sealed partial class FinanceServiceTests
 {
     private const decimal SeededBankAmount = 1000000m;
 

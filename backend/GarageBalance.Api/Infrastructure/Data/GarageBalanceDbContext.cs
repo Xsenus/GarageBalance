@@ -894,12 +894,17 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(device => device.SerialNumber).HasMaxLength(100).IsRequired();
             entity.Property(device => device.InitialValue).HasPrecision(18, 3);
             entity.Property(device => device.FinalValue).HasPrecision(18, 3);
+            entity.Property(device => device.PreviousReadingSnapshotJson).HasColumnType("jsonb");
+            entity.Property(device => device.ReplacementReason).HasMaxLength(500);
+            entity.Property(device => device.CancellationReason).HasMaxLength(500);
             entity.Property(device => device.Version).IsConcurrencyToken();
+            entity.HasOne<MeterDevice>().WithMany().HasForeignKey(device => device.ReplacedDeviceId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(device => new { device.GarageId, device.MeterKind, device.InstalledOn });
-            entity.HasIndex(device => new { device.GarageId, device.MeterKind, device.SerialNumber }).IsUnique();
+            entity.HasIndex(device => new { device.GarageId, device.MeterKind, device.SerialNumber }).IsUnique().HasFilter("\"IsCanceled\" = false");
             entity.HasIndex(device => new { device.GarageId, device.MeterKind })
                 .IsUnique()
-                .HasFilter("\"RemovedOn\" IS NULL");
+                .HasFilter("\"RemovedOn\" IS NULL AND \"IsCanceled\" = false");
             entity.HasOne(device => device.Garage)
                 .WithMany()
                 .HasForeignKey(device => device.GarageId)

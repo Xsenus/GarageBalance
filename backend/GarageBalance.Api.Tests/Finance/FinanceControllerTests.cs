@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace GarageBalance.Api.Tests.Finance;
 
-public sealed class FinanceControllerTests
+public sealed partial class FinanceControllerTests
 {
     [Fact]
     public async Task GetFinancialReportPeriod_ReturnsValueAndPassesTargetToService()
@@ -3161,6 +3161,26 @@ public sealed class FinanceControllerTests
             LastMeterDevicesGarageId = garageId;
             LastMeterDevicesKind = meterKind;
             return Task.FromResult(MeterDevices);
+        }
+
+        public FinanceResult<MeterDeviceReplacementCancellationDto> CancelReplacementResult { get; init; } =
+            FinanceResult<MeterDeviceReplacementCancellationDto>.Failure("not_configured", "Not configured.");
+        public CancelMeterDeviceReplacementRequest? LastCancelReplacementRequest { get; private set; }
+        public Guid? LastCanceledDeviceId { get; private set; }
+        public (Guid GarageId, string? Kind, int Offset, int Limit)? LastDeviceHistoryRequest { get; private set; }
+
+        public Task<FinancePagedResult<MeterDeviceDto>> GetMeterDeviceHistoryAsync(Guid garageId, string? meterKind, int offset, int limit, CancellationToken cancellationToken)
+        {
+            LastDeviceHistoryRequest = (garageId, meterKind, offset, limit);
+            return Task.FromResult(new FinancePagedResult<MeterDeviceDto>(MeterDevices, MeterDevices.Count, offset, limit));
+        }
+
+        public Task<FinanceResult<MeterDeviceReplacementCancellationDto>> CancelMeterDeviceReplacementAsync(Guid deviceId, CancelMeterDeviceReplacementRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastCanceledDeviceId = deviceId;
+            LastCancelReplacementRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(CancelReplacementResult);
         }
 
         public Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceMeterDeviceAsync(ReplaceMeterDeviceRequest request, Guid? actorUserId, CancellationToken cancellationToken)

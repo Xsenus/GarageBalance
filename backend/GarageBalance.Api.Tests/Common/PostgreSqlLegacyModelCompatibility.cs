@@ -9,6 +9,15 @@ internal static class PostgreSqlLegacyModelCompatibility
     private static readonly ConcurrentDictionary<string, string[]> AddedColumnRemovals = new(StringComparer.Ordinal);
     private static readonly (string Add, string Remove)[] CurrentModelColumnStatements =
     [
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"CanceledAtUtc\" timestamp with time zone NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"CanceledAtUtc\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"CancellationReason\" character varying(500) NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"CancellationReason\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"HasReplacementSnapshot\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"HasReplacementSnapshot\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"IsCanceled\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"IsCanceled\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"PreviousReadingSnapshotJson\" jsonb NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"PreviousReadingSnapshotJson\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"ReplacedDeviceId\" uuid NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"ReplacedDeviceId\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"ReplacementAccountingMonth\" date NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"ReplacementAccountingMonth\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"ReplacementReadingId\" uuid NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"ReplacementReadingId\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"ReplacementReason\" character varying(500) NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"ReplacementReason\""),
         ("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"RegisteredOn\" date NULL", "ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"RegisteredOn\""),
         ("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"InitialMeterReadingMonth\" date NULL", "ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"InitialMeterReadingMonth\""),
         ("ALTER TABLE IF EXISTS tariffs ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS tariffs DROP COLUMN IF EXISTS \"Version\""),

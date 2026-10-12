@@ -10,6 +10,10 @@ public sealed class TransactionBoundaryGuardTests
         // One batch must commit or roll back all financial writes together. The runner
         // starts after account locks and is covered by PostgreSQL rollback/cancellation tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfExpenseBatchTransactionRunner.cs: BeginTransactionAsync(",
+        // Meter cancellation vacates one filtered active-device index before restoring
+        // its predecessor and saving financial/audit changes. This transaction contains
+        // only the bounded write; PostgreSQL rollback, cancellation and race tests cover it.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfApplicationUnitOfWork.cs: BeginTransactionAsync(",
         // Creating a garage with its historical annual payments must be atomic and is
         // covered by PostgreSQL commit, rollback, cancellation and conflict tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfGarageOnboardingTransactionRunner.cs: BeginTransactionAsync(",

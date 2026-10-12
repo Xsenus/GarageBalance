@@ -3,7 +3,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useCloseOnOutsidePointer } from './focusHooks'
 import { datePickerPosition } from './datePickerPosition'
 
-const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+// eslint-disable-next-line react-refresh/only-export-components
+export const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const weekDayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
 export function LocalizedDatePicker({
