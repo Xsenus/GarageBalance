@@ -453,6 +453,23 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {\n  flex: 0 0 auto;')
   })
 
+  it('wraps the shared pagination status without shrinking or separating its primary controls in narrow panels', () => {
+    const paginationRules = normalizedAppCss.match(/(?:^|\n)\.dictionary-pagination\s*\{([^}]+)\}/)?.[1]
+    const primaryRules = normalizedAppCss.match(/(?:^|\n)\.pagination-primary\s*\{([^}]+)\}/)?.[1]
+    const sizeRules = normalizedAppCss.match(/(?:^|\n)\.pagination-size\s*\{([^}]+)\}/)?.[1]
+    const metaRules = normalizedAppCss.match(/(?:^|\n)\.pagination-meta\s*\{([^}]+)\}/)?.[1]
+    expect(paginationRules).toMatch(/display:\s*flex;/)
+    expect(paginationRules).toMatch(/flex-wrap:\s*wrap;/)
+    expect(paginationRules).toMatch(/flex-shrink:\s*0;/)
+    expect(primaryRules).toMatch(/flex:\s*1 1 320px;/)
+    expect(sizeRules).toMatch(/width:\s*34px;/)
+    expect(sizeRules).toMatch(/flex:\s*0 0 34px;/)
+    expect(metaRules).toMatch(/max-width:\s*100%;/)
+    expect(tariffsPanel).not.toContain('compactPageSizeSelect')
+    expect(normalizedAppCss).not.toContain('.dictionary-pagination--compact')
+    expect(normalizedAppCss).toContain('.dictionary-pagination {\n    flex-direction: column;\n    flex-wrap: nowrap;\n    height: max-content;')
+  })
+
   it('scrolls long reports inside the viewport while keeping report choices in one fitted row', () => {
     expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
     expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;\n  overflow-x: hidden;\n  overflow-y: auto;')

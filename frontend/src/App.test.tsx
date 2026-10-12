@@ -1085,10 +1085,9 @@ describe('App', () => {
       const pagination = within(tariffsPanel).getByRole('navigation', { name: paginationName })
       expect(pagination.firstElementChild).toHaveClass('pagination-primary')
       expect(within(pagination).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
-      if (paginationName === 'Пагинация тарифов и услуг') {
-        expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
-      } else {
-        expect(within(pagination).getByRole('combobox')).toBeInTheDocument()
+      expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
+      for (const size of ['10', '25', '50', '100']) {
+        expect(within(pagination).getByRole('button', { name: size, exact: true })).toBeInTheDocument()
       }
     }
     expect(within(tariffsPanel).queryByText('x')).not.toBeInTheDocument()
@@ -1578,7 +1577,7 @@ describe('App', () => {
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Не удалось сохранить ширину таблиц.')
   })
 
-  it('keeps compact lower pagination on one line and saves resizable column widths', async () => {
+  it('keeps shared lower pagination controls and saves resizable column widths', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -1591,10 +1590,17 @@ describe('App', () => {
     const irregularPagination = within(irregularSection).getByRole('navigation', { name: 'Пагинация нерегулярных платежей' })
     const feePagination = within(feeSection).getByRole('navigation', { name: 'Пагинация объявленных сборов' })
 
-    expect(irregularPagination).toHaveClass('dictionary-pagination--compact')
-    expect(feePagination).toHaveClass('dictionary-pagination--compact')
-    expect(within(irregularPagination).getByRole('combobox', { name: 'Количество строк нерегулярных платежей' })).toBeInTheDocument()
-    expect(within(feePagination).getByRole('combobox', { name: 'Количество строк объявленных сборов' })).toBeInTheDocument()
+    expect(within(irregularPagination).getByRole('group', { name: 'Количество строк нерегулярных платежей' })).toBeInTheDocument()
+    expect(within(feePagination).getByRole('group', { name: 'Количество строк объявленных сборов' })).toBeInTheDocument()
+    for (const pagination of [irregularPagination, feePagination]) {
+      expect(pagination).toHaveClass('dictionary-pagination')
+      expect(within(pagination).queryByRole('combobox')).not.toBeInTheDocument()
+      for (const size of ['10', '25', '50', '100']) expect(within(pagination).getByRole('button', { name: size, exact: true })).toBeInTheDocument()
+      expect(within(pagination).getByRole('status')).toHaveTextContent('Показано 0-0 из 0')
+      expect(within(pagination).getByText('Страница 1 из 1 · Найдено: 0')).toBeInTheDocument()
+      await user.click(within(pagination).getByRole('button', { name: '50', exact: true }))
+      expect(within(pagination).getByRole('button', { name: '50', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    }
 
     const irregularTable = within(irregularSection).getByRole('table', { name: 'Таблица нерегулярных платежей' })
     const feeTable = within(feeSection).getByRole('table', { name: 'Таблица объявленных сборов' })
@@ -8617,12 +8623,15 @@ describe('App', () => {
       getChargeServiceSettings: async () => [
         createChargeServiceSetting({ id: 'meter-electricity-setting', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', unitName: 'Вт·ч' }),
         createChargeServiceSetting({ id: 'meter-water-setting', isRegular: true, isMetered: true, tariffId: waterTariff.id, tariffCalculationBase: 'meter_water', unitName: 'гал.' }),
-        createChargeServiceSetting({ id: 'meter-security-setting', name: 'Охрана', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', meterKind: securityMeterKind, unitName: 'моточасы' }),
+        createChargeServiceSetting({ id: 'meter-security-setting', name: 'Охрана', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', meterKind: securityMeterKind, unitName: 'моточасы', appliesToSelectedGarages: true, garageIds: ['garage-27'] }),
       ],
     })
     const financeClient = createFinanceClient({
       getMeterReadingYearPage: async (_token, params) => {
         meterReadingYearPageRequests.push(params)
+        if (params.meterKind === securityMeterKind) {
+          return { garages: [{ id: 'garage-27', number: '27' }], readings: [], totalCount: 1, offset: 0, limit: 25 }
+        }
         if (params.meterKind === 'water') {
           return {
             garages: [{ id: 'garage-12', number: '12' }],
@@ -8838,11 +8847,16 @@ describe('App', () => {
     await user.click(within(readingsPanel).getByRole('option', { name: 'Охрана, моточасы' }))
     await waitFor(() => expect(meterReadingYearPageRequests.at(-1)).toEqual({ year: 2026, meterKind: securityMeterKind, offset: 0, limit: 25 }))
     expect(within(readingsPanel).getByRole('columnheader', { name: /Сентябрьмоточасы/i })).toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 27, Январь, показание')).toBeInTheDocument()
+    expect(within(readingsPanel).queryByLabelText('Гараж 12, Январь, показание')).not.toBeInTheDocument()
+    expect(within(readingsPanel).getByText('Показано 1-1 из 1')).toBeInTheDocument()
 
     await user.click(meterTypeSelect)
     await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, гал.' }))
     await waitFor(() => expect(meterReadingYearPageRequests.at(-1)).toEqual({ year: 2026, meterKind: 'water', offset: 0, limit: 25 }))
     expect(within(readingsPanel).getByRole('columnheader', { name: /Январьгал\./i })).toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')).toBeInTheDocument()
+    expect(within(readingsPanel).queryByLabelText('Гараж 27, Январь, показание')).not.toBeInTheDocument()
   })
 
   it('keeps the confirmed meter reading page visible while the next page loads', async () => {

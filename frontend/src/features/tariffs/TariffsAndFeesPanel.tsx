@@ -3341,7 +3341,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 visibleCount={oneTimePage.items.length}
                 disabled={oneTimeLoading}
                 pageSizeLabel="Количество строк нерегулярных платежей"
-                compactPageSizeSelect
                 onPageChange={setOneTimePageNumber}
                 onPageSizeChange={(limit) => {
                   setOneTimePageNumber(1)
@@ -3469,7 +3468,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 visibleCount={feeCampaignPage.items.length}
                 disabled={feeCampaignsLoading}
                 pageSizeLabel="Количество строк объявленных сборов"
-                compactPageSizeSelect
                 onPageChange={setFeeCampaignPageNumber}
                 onPageSizeChange={(limit) => {
                   setFeeCampaignPageNumber(1)

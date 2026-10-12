@@ -139,7 +139,11 @@ public sealed class FrontendFeatureModuleTests
         Assert.DoesNotContain("Доначислить", featureText, StringComparison.Ordinal);
         Assert.Contains("fee-campaign-table-scroll", featureText, StringComparison.Ordinal);
         Assert.Contains("useColumnResize", featureText, StringComparison.Ordinal);
-        Assert.Contains("compactPageSizeSelect", featureText, StringComparison.Ordinal);
+        Assert.Contains("<TablePagination", featureText, StringComparison.Ordinal);
+        Assert.Contains("ariaLabel=\"Пагинация нерегулярных платежей\"", featureText, StringComparison.Ordinal);
+        Assert.Contains("ariaLabel=\"Пагинация объявленных сборов\"", featureText, StringComparison.Ordinal);
+        Assert.DoesNotContain("compactPageSizeSelect", featureText, StringComparison.Ordinal);
+        Assert.DoesNotContain("dictionary-pagination--compact", stylesText, StringComparison.Ordinal);
         Assert.Contains(".fee-campaign-table-scroll", stylesText, StringComparison.Ordinal);
         Assert.Contains("var(--fee-campaign-col-name, 220px)", stylesText, StringComparison.Ordinal);
         Assert.Contains("overflow-x: auto;", stylesText, StringComparison.Ordinal);

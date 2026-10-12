@@ -198,8 +198,12 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             return await GetPostgresYearPageAsync(year, meterKind, offset, limit, cancellationToken);
         }
 
+        var settingsQuery = dbContext.ChargeServiceSettings.AsNoTracking()
+            .Where(setting => !setting.IsArchived && setting.IsRegular && setting.IsMetered && setting.MeterKind == meterKind);
         var garageQuery = dbContext.Garages.AsNoTracking()
-            .Where(garage => !garage.IsArchived);
+            .Where(garage => !garage.IsArchived)
+            .Where(garage => !settingsQuery.Any() || settingsQuery.Any(setting =>
+                !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garage.Id)));
         var totalCount = await garageQuery.CountAsync(cancellationToken);
         var garages = await garageQuery
             .OrderBy(garage => garage.Number.Length)
@@ -254,7 +258,23 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         var monthFrom = new DateOnly(year, 1, 1);
         var monthTo = new DateOnly(year, 12, 1);
         var rows = await dbContext.Database.SqlQuery<MeterReadingYearPageRow>($$"""
-            WITH paged_garages AS (
+            WITH applicable_garages AS (
+                SELECT garage."Id", garage."Number", garage."InitialMeterReadingMonth",
+                       garage."InitialWaterMeterValue", garage."InitialElectricityMeterValue"
+                FROM garages AS garage
+                WHERE garage."IsArchived" = FALSE
+                  AND (
+                    NOT EXISTS (
+                        SELECT 1 FROM charge_service_settings AS setting
+                        WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                          AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{meterKind}})
+                    OR EXISTS (
+                        SELECT 1 FROM charge_service_settings AS setting
+                        WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                          AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{meterKind}}
+                          AND (setting."AppliesToSelectedGarages" = FALSE OR garage."Id" = ANY(setting."GarageIds")))
+                  )
+            ), paged_garages AS (
                 SELECT
                     garage."Id" AS "GarageId",
                     garage."Number" AS "GarageNumber",
@@ -265,8 +285,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                     ROW_NUMBER() OVER (
                         ORDER BY LENGTH(garage."Number"), garage."Number", garage."Id") AS "GarageOrdinal",
                     COUNT(*) OVER () AS "TotalCount"
-                FROM garages AS garage
-                WHERE garage."IsArchived" = FALSE
+                FROM applicable_garages AS garage
                 ORDER BY LENGTH(garage."Number"), garage."Number", garage."Id"
                 OFFSET {{offset}}
                 LIMIT {{limit}}
@@ -313,7 +332,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 NULL::uuid AS "MeterDeviceId",
                 NULL::text AS "MeterDeviceSerialNumber",
                 FALSE AS "IsMeterReplacement",
-                (SELECT COUNT(*) FROM garages AS garage WHERE garage."IsArchived" = FALSE) AS "TotalCount"
+                (SELECT COUNT(*) FROM applicable_garages) AS "TotalCount"
             WHERE NOT EXISTS (SELECT 1 FROM paged_garages)
             ORDER BY "Category", "GarageOrdinal", "AccountingMonth", "ReadingId"
             """).ToListAsync(cancellationToken);

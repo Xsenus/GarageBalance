@@ -78,6 +78,10 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
         }
         else
         {
+            var waterSettings = dbContext.ChargeServiceSettings.AsNoTracking()
+                .Where(setting => !setting.IsArchived && setting.IsRegular && setting.IsMetered && setting.MeterKind == MeterKinds.Water);
+            var electricitySettings = dbContext.ChargeServiceSettings.AsNoTracking()
+                .Where(setting => !setting.IsArchived && setting.IsRegular && setting.IsMetered && setting.MeterKind == MeterKinds.Electricity);
             var garagesQuery = dbContext.Garages.AsNoTracking()
                 .Where(garage => !garage.IsArchived)
                 .Where(garage =>
@@ -91,6 +95,7 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
                         reading.GarageId == garage.Id &&
                         reading.AccountingMonth == accountingMonth &&
                         reading.MeterKind == MeterKinds.Electricity)));
+            // An inapplicable meter is treated as satisfied so it cannot become a missing-reading result.
             var candidateQuery = garagesQuery
                 .OrderBy(garage => garage.Number)
                 .Select(garage => new MissingMeterCandidate(
@@ -103,13 +108,18 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
                         !reading.IsCanceled &&
                         reading.GarageId == garage.Id &&
                         reading.AccountingMonth == accountingMonth &&
-                        reading.MeterKind == MeterKinds.Water),
+                        reading.MeterKind == MeterKinds.Water) ||
+                        waterSettings.Any() && !waterSettings.Any(setting =>
+                            !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garage.Id)),
                     dbContext.MeterReadings.Any(reading =>
                         !reading.IsCanceled &&
                         reading.GarageId == garage.Id &&
                         reading.AccountingMonth == accountingMonth &&
-                        reading.MeterKind == MeterKinds.Electricity)));
+                        reading.MeterKind == MeterKinds.Electricity) ||
+                        electricitySettings.Any() && !electricitySettings.Any(setting =>
+                            !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garage.Id))));
             candidates = (await candidateQuery.ToListAsync(cancellationToken))
+                .Where(candidate => includeWater && !candidate.HasWaterReading || includeElectricity && !candidate.HasElectricityReading)
                 .Where(candidate => normalizedSearch is null || CandidateMatchesSearch(candidate, normalizedSearch))
                 .Take(limit)
                 .ToList();
@@ -134,8 +144,12 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
         int limit,
         CancellationToken cancellationToken)
     {
+        var settingsQuery = dbContext.ChargeServiceSettings.AsNoTracking()
+            .Where(setting => !setting.IsArchived && setting.IsRegular && setting.IsMetered && setting.MeterKind == meterKind);
         var query = dbContext.Garages.AsNoTracking()
             .Where(garage => !garage.IsArchived)
+            .Where(garage => !settingsQuery.Any() || settingsQuery.Any(setting =>
+                !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garage.Id)))
             .Where(garage => !dbContext.MeterReadings.Any(reading =>
                 !reading.IsCanceled &&
                 reading.GarageId == garage.Id &&
@@ -217,6 +231,17 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             INNER JOIN matching_garages AS matching ON matching."Id" = garage."Id"
             LEFT JOIN owners AS owner ON owner."Id" = garage."OwnerId"
             WHERE garage."IsArchived" = FALSE
+              AND (
+                NOT EXISTS (
+                    SELECT 1 FROM charge_service_settings AS setting
+                    WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                      AND setting."IsMetered" = TRUE AND setting."MeterKind" = requested."MeterKind")
+                OR EXISTS (
+                    SELECT 1 FROM charge_service_settings AS setting
+                    WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                      AND setting."IsMetered" = TRUE AND setting."MeterKind" = requested."MeterKind"
+                      AND (setting."AppliesToSelectedGarages" = FALSE OR garage."Id" = ANY(setting."GarageIds")))
+              )
               AND NOT EXISTS (
                     SELECT 1
                     FROM meter_readings AS reading
@@ -259,15 +284,38 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             ? null
             : PostgresLikeSearch.ContainsPattern(normalizedSearch);
         var rows = await dbContext.Database.SqlQuery<MissingMeterCandidateRow>($$"""
+            WITH scoped_garages AS (
+                SELECT garage."Id", garage."Number", garage."OwnerId",
+                    (NOT EXISTS (
+                        SELECT 1 FROM charge_service_settings AS setting
+                        WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                          AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{MeterKinds.Water}})
+                    OR EXISTS (
+                        SELECT 1 FROM charge_service_settings AS setting
+                        WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                          AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{MeterKinds.Water}}
+                          AND (setting."AppliesToSelectedGarages" = FALSE OR garage."Id" = ANY(setting."GarageIds")))) AS "IncludesWater",
+                    (NOT EXISTS (
+                        SELECT 1 FROM charge_service_settings AS setting
+                        WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                          AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{MeterKinds.Electricity}})
+                    OR EXISTS (
+                        SELECT 1 FROM charge_service_settings AS setting
+                        WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
+                          AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{MeterKinds.Electricity}}
+                          AND (setting."AppliesToSelectedGarages" = FALSE OR garage."Id" = ANY(setting."GarageIds")))) AS "IncludesElectricity"
+                FROM garages AS garage
+                WHERE garage."IsArchived" = FALSE
+            )
             SELECT
                 garage."Id" AS "GarageId",
                 garage."Number" AS "GarageNumber",
                 owner."LastName" AS "OwnerLastName",
                 owner."FirstName" AS "OwnerFirstName",
                 owner."MiddleName" AS "OwnerMiddleName",
-                COALESCE(reading_status."HasWaterReading", FALSE) AS "HasWaterReading",
-                COALESCE(reading_status."HasElectricityReading", FALSE) AS "HasElectricityReading"
-            FROM garages AS garage
+                (COALESCE(reading_status."HasWaterReading", FALSE) OR NOT garage."IncludesWater") AS "HasWaterReading",
+                (COALESCE(reading_status."HasElectricityReading", FALSE) OR NOT garage."IncludesElectricity") AS "HasElectricityReading"
+            FROM scoped_garages AS garage
             LEFT JOIN owners AS owner ON owner."Id" = garage."OwnerId"
             LEFT JOIN (
                 SELECT
@@ -280,10 +328,9 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
                   AND reading."MeterKind" IN ({{MeterKinds.Water}}, {{MeterKinds.Electricity}})
                 GROUP BY reading."GarageId"
             ) AS reading_status ON reading_status."GarageId" = garage."Id"
-            WHERE garage."IsArchived" = FALSE
-              AND (
-                    ({{includeWater}} AND NOT COALESCE(reading_status."HasWaterReading", FALSE))
-                 OR ({{includeElectricity}} AND NOT COALESCE(reading_status."HasElectricityReading", FALSE))
+            WHERE (
+                    ({{includeWater}} AND garage."IncludesWater" AND NOT COALESCE(reading_status."HasWaterReading", FALSE))
+                 OR ({{includeElectricity}} AND garage."IncludesElectricity" AND NOT COALESCE(reading_status."HasElectricityReading", FALSE))
               )
               AND (
                     {{searchPattern}}::text IS NULL

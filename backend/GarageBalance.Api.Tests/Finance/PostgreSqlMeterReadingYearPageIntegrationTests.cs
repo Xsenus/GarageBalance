@@ -234,7 +234,8 @@ public sealed class PostgreSqlMeterReadingYearPageIntegrationTests
     private static void AssertSingleCombinedCommand(ReaderCommandCapture capture)
     {
         var command = Assert.Single(capture.Commands);
-        Assert.Contains("WITH paged_garages AS", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WITH applicable_garages AS", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("paged_garages AS", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COUNT(*) OVER ()", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LEFT JOIN meter_readings", command, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("UNION ALL", command, StringComparison.OrdinalIgnoreCase);
