@@ -29,6 +29,9 @@ public interface IMeterReadingRepository
         CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<Guid, MeterReading>> GetActiveByGarageIdsAsync(IReadOnlyCollection<Guid> garageIds, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<MeterAccrualPeriodData> GetAccrualPeriodDataAsync(
+        IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds,
+        DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterReading>> GetActiveForGaragePeriodAsync(
         Guid garageId,
         DateOnly monthFrom,
@@ -55,13 +58,31 @@ public interface IMeterReadingRepository
     Task<IReadOnlyList<MeterReading>> GetAllActiveForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     void Add(MeterReading reading);
     void Add(MeterDevice device);
+    Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(Guid garageId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds, CancellationToken cancellationToken);
+    Task<GarageMeterConnection?> GetConnectionForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+    void Add(GarageMeterConnection connection);
+    Task<IMeterConnectionWriteScope> BeginConnectionWriteAsync(CancellationToken cancellationToken);
+    IReadOnlyList<GarageMeterConnectionAccrualChange> GetPendingConnectionAccrualChanges(Guid garageId);
+    Task<bool> ExistsConnectionAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
 }
 
 public sealed record MeterReadingPageData(IReadOnlyList<MeterReading> Items, int TotalCount);
 
+public sealed record MeterAccrualPeriodData(
+    IReadOnlyList<MeterReading> Readings, IReadOnlyList<GarageMeterConnection> Connections);
+
 public sealed record MeterDevicePageData(IReadOnlyList<MeterDevice> Items, int TotalCount);
 
-public sealed record MeterReadingYearGarageData(Guid Id, string Number, DateOnly? InitialReadingMonth = null, decimal? InitialReadingValue = null);
+public sealed record MeterReadingYearGarageData(
+    Guid Id,
+    string Number,
+    DateOnly? InitialReadingMonth = null,
+    decimal? InitialReadingValue = null,
+    DateOnly? ConnectedOn = null,
+    bool RequiresStartValue = false,
+    bool RequiresConnectionDate = false,
+    DateOnly? ClosedOn = null);
 
 public sealed record MeterReadingYearValueData(
     Guid Id,

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
@@ -252,7 +253,8 @@ public sealed partial class FinanceService(
             normalizedLimit,
             cancellationToken);
         var result = new MeterReadingYearPageDto(
-            page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue)).ToList(),
+            page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue,
+                garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn)).ToList(),
             page.Readings.Select(reading => new MeterReadingYearValueDto(
                 reading.Id,
                 reading.GarageId,
@@ -978,6 +980,8 @@ public sealed partial class FinanceService(
             .Where(item => item.AccountingYear == year && item.Basis is null && !item.FeeCampaignId.HasValue && !item.IrregularPaymentId.HasValue)
             .GroupBy(item => item.IncomeTypeId)
             .ToDictionary(group => group.Key, group => group.First());
+        var meterConnections = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
+            .ToDictionary(connection => connection.MeterKind);
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
         foreach (var definition in dueDefinitions)
         {
@@ -1028,7 +1032,8 @@ public sealed partial class FinanceService(
                 definition.AccountingMonth,
                 meterReading,
                 segments,
-                peoplePeriods);
+                peoplePeriods,
+                meterKind is null ? null : meterConnections.GetValueOrDefault(meterKind));
             if (!calculation.Succeeded || calculation.Amount <= 0m)
             {
                 continue;
@@ -1176,13 +1181,6 @@ public sealed partial class FinanceService(
             .Append(MeterKinds.Electricity)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var meterReadings = (await meterReadingRepository.GetActiveForGaragePeriodAsync(
-                garage.Id,
-                calculationMonthFrom,
-                monthTo,
-                meterKinds,
-                cancellationToken))
-            .ToDictionary(reading => (reading.AccountingMonth, reading.MeterKind));
         var existingRegularIncomeTypeIds = await accrualRepository.GetActiveRegularIncomeTypeIdsAsync(
             garage.Id,
             monthFrom,
@@ -1198,6 +1196,16 @@ public sealed partial class FinanceService(
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             allocationKeys,
             cancellationToken);
+
+        // Connection corrections save readings and accruals under these same locks.
+        // Read their calculation inputs after waiting, so a completed correction cannot
+        // be overwritten using a connection date or consumption read before the lock.
+        var meterData = await meterReadingRepository.GetAccrualPeriodDataAsync(
+            [garage.Id], meterKinds, calculationMonthFrom, monthTo, cancellationToken);
+        var meterReadings = meterData.Readings
+            .ToDictionary(reading => (reading.AccountingMonth, reading.MeterKind));
+        var meterConnections = meterData.Connections
+            .ToDictionary(connection => connection.MeterKind);
 
         // Read the mutable accrual set only after taking the same per-garage locks used by
         // batch generation. Otherwise both workflows can observe a missing accrual and the
@@ -1334,7 +1342,8 @@ public sealed partial class FinanceService(
                     peopleCountPeriods ??= await garageRepository.GetPeopleCountPeriodsAsync(
                         [garage.Id], monthFrom, monthTo.AddMonths(1).AddDays(-1), cancellationToken);
                 }
-                var calculation = RegularAccrualCalculator.Calculate(garage, month, meterReading, segments, peopleCountPeriods);
+                var calculation = RegularAccrualCalculator.Calculate(garage, month, meterReading, segments, peopleCountPeriods,
+                    meterKind is null ? null : meterConnections.GetValueOrDefault(meterKind));
                 if (!calculation.Succeeded)
                 {
                     // Missing calculation inputs (for example, a meter reading) must not erase an
@@ -5477,9 +5486,12 @@ public sealed partial class FinanceService(
                 TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
                 _ => null
             };
-        var meterReadings = meterKind is null
-            ? new Dictionary<Guid, MeterReading>()
-            : await meterReadingRepository.GetActiveByGarageIdsAsync(pendingGarageIds, meterKind, month, cancellationToken);
+        var meterData = meterKind is null
+            ? new MeterAccrualPeriodData([], [])
+            : await meterReadingRepository.GetAccrualPeriodDataAsync(pendingGarageIds, [meterKind], month, month, cancellationToken);
+        var meterReadings = meterData.Readings.ToDictionary(reading => reading.GarageId);
+        var meterConnections = meterData.Connections
+            .ToDictionary(connection => connection.GarageId);
         var peopleCountPeriodsByGarage = (calculationSegments.Any(segment => segment.CalculationBase == TariffCalculationBases.People)
             ? await garageRepository.GetPeopleCountPeriodsAsync(pendingGarageIds, month, month.AddMonths(1).AddDays(-1), cancellationToken)
             : []).ToLookup(period => period.GarageId);
@@ -5506,7 +5518,7 @@ public sealed partial class FinanceService(
             meterReadings.TryGetValue(garage.Id, out var meterReading);
             var garageSegments = ApplyGarageTariffPeriods(month, matchingSetting, tariff, calculationSegments, individualPeriods[garage.Id]);
             var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, garageSegments,
-                peopleCountPeriodsByGarage[garage.Id].ToArray());
+                peopleCountPeriodsByGarage[garage.Id].ToArray(), meterConnections.GetValueOrDefault(garage.Id));
             if (!amountResult.Succeeded)
             {
                 skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage}");
@@ -5948,6 +5960,10 @@ public sealed partial class FinanceService(
                 month,
                 cancellationToken);
         var rows = new List<RegularAccrualRecalculationRowDto>(accruals.Count);
+        var meterConnections = (meterKind is null
+            ? []
+            : await meterReadingRepository.GetConnectionsAsync(accruals.Select(accrual => accrual.GarageId).Distinct().ToArray(), [meterKind], cancellationToken))
+            .ToDictionary(connection => connection.GarageId);
         var peopleCountPeriodsByGarage = (segments.Any(segment => segment.CalculationBase == TariffCalculationBases.People)
             ? await garageRepository.GetPeopleCountPeriodsAsync(
                 accruals.Select(accrual => accrual.GarageId).Distinct().ToArray(), month, month.AddMonths(1).AddDays(-1), cancellationToken)
@@ -5978,7 +5994,7 @@ public sealed partial class FinanceService(
             readings.TryGetValue(accrual.GarageId, out var reading);
             var garageSegments = ApplyGarageTariffPeriods(month, setting, tariff, segments, individualPeriods[accrual.GarageId]);
             var calculation = RegularAccrualCalculator.Calculate(accrual.Garage, month, reading, garageSegments,
-                peopleCountPeriodsByGarage[accrual.GarageId].ToArray());
+                peopleCountPeriodsByGarage[accrual.GarageId].ToArray(), meterConnections.GetValueOrDefault(accrual.GarageId));
             if (!calculation.Succeeded || calculation.Details is null)
             {
                 rows.Add(new RegularAccrualRecalculationRowDto(
@@ -6561,20 +6577,14 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterDeviceReplacementDto>.Failure("garage_not_found", "Гараж для замены счетчика не найден.");
         }
 
-        if (IsBeforeMeterBaseline(garage, meterKind, MonthPeriod.Normalize(request.AccountingMonth)))
-        {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_before_baseline", "Показание должно относиться к месяцу после начального показания из карточки гаража.");
-        }
-
-        if (meterKind is not (MeterKinds.Water or MeterKinds.Electricity) &&
-            !(await GetStartValueSettingsAsync(garage, cancellationToken)).Any(setting => setting.MeterKind == meterKind))
-        {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_start_service_not_applicable", "Эта счётчиковая услуга не применяется к гаражу.");
-        }
-
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [GetMeterChainLockKey(garage.Id, meterKind)],
             cancellationToken);
+        var connectionContext = await ValidateMeterConnectionAsync(garage, meterKind, accountingMonth, request.ReplacementDate, true, cancellationToken);
+        if (!connectionContext.Succeeded)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure(connectionContext.ErrorCode!, connectionContext.ErrorMessage!);
+        }
         var allReadings = (await meterReadingRepository.GetAllActiveForUpdateAsync(garage.Id, meterKind, cancellationToken)).ToList();
         var activeDevice = await meterReadingRepository.GetActiveDeviceForUpdateAsync(garage.Id, meterKind, cancellationToken);
         var registerLegacyDevice = false;
@@ -6588,7 +6598,7 @@ public sealed partial class FinanceService(
                 MeterKind = meterKind,
                 SerialNumber = "Без номера",
                 InstalledOn = firstReading?.ReadingDate ?? accountingMonth.AddDays(-1),
-                InitialValue = firstReading?.PreviousValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m
+                InitialValue = firstReading?.PreviousValue ?? connectionContext.Value!.InitialValue
             };
             registerLegacyDevice = true;
         }
@@ -6882,14 +6892,16 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
-        if (IsBeforeMeterBaseline(garage, meterKind, month))
-        {
-            return FinanceResult<MeterReadingDto>.Failure("meter_reading_before_baseline", "Показание должно относиться к месяцу после начального показания из карточки гаража.");
-        }
-
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [GetMeterChainLockKey(garage.Id, meterKind)],
             cancellationToken);
+
+        var connectionContext = await ValidateMeterConnectionAsync(garage, meterKind, month, request.ReadingDate, true, cancellationToken);
+        if (!connectionContext.Succeeded)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(connectionContext.ErrorCode!, connectionContext.ErrorMessage!);
+        }
+        var meterConnection = connectionContext.Value!.Connection;
 
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(null, garage.Id, meterKind, month, cancellationToken))
         {
@@ -6901,6 +6913,7 @@ public sealed partial class FinanceService(
             meterKind,
             request.ReadingDate,
             cancellationToken);
+        meterDevice ??= meterConnection?.BaselineMeterDevice;
         var registerMeterDevice = false;
         var adjustMeterDeviceInstalledOn = false;
         if (meterDevice is null)
@@ -6909,18 +6922,12 @@ public sealed partial class FinanceService(
             if (activeDevice is not null && string.Equals(activeDevice.SerialNumber, "Без номера", StringComparison.Ordinal))
             {
                 meterDevice = activeDevice;
-                adjustMeterDeviceInstalledOn = true;
+                adjustMeterDeviceInstalledOn = meterConnection is null;
             }
         }
 
         if (meterDevice is null)
         {
-            var initialValue = GetInitialMeterValue(garage, meterKind);
-            if (!initialValue.HasValue && meterKind == MeterKinds.Water)
-            {
-                return WaterMeterReadingBaselineRequired();
-            }
-
             meterDevice = new MeterDevice
             {
                 GarageId = garage.Id,
@@ -6928,7 +6935,7 @@ public sealed partial class FinanceService(
                 MeterKind = meterKind,
                 SerialNumber = "Без номера",
                 InstalledOn = request.ReadingDate,
-                InitialValue = MoneyMath.RoundMeterValue(initialValue ?? 0m)
+                InitialValue = MoneyMath.RoundMeterValue(connectionContext.Value.InitialValue)
             };
             registerMeterDevice = true;
         }
@@ -6944,7 +6951,7 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
         }
 
-        var hasGapWarning = HasGapWarning(garage, meterKind, month, previousReading);
+        var hasGapWarning = HasMeterGapWarning(garage, meterKind, month, previousReading, meterConnection);
         var reading = new MeterReading
         {
             GarageId = garage.Id,
@@ -7218,9 +7225,10 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
-        if (IsBeforeMeterBaseline(garage, meterKind, month))
+        var connectionContext = await ValidateMeterConnectionAsync(garage, meterKind, month, request.ReadingDate, false, cancellationToken);
+        if (!connectionContext.Succeeded)
         {
-            return FinanceResult<MeterReadingDto>.Failure("meter_reading_before_baseline", "Показание должно относиться к месяцу после начального показания из карточки гаража.");
+            return FinanceResult<MeterReadingDto>.Failure(connectionContext.ErrorCode!, connectionContext.ErrorMessage!);
         }
 
         if (garage.Id != reading.GarageId || !string.Equals(meterKind, reading.MeterKind, StringComparison.Ordinal))
@@ -7228,6 +7236,15 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure(
                 "meter_reading_identity_immutable",
                 "Гараж и тип счетчика существующего показания менять нельзя. Отмените ошибочную запись и создайте новую.");
+        }
+
+        if (reading.MeterDevice is { } readingDevice &&
+            (connectionContext.Value!.Connection is not null || readingDevice.ReplacedDeviceId.HasValue || readingDevice.RemovedOn.HasValue) &&
+            (request.ReadingDate < readingDevice.InstalledOn || readingDevice.RemovedOn is { } removedOn && request.ReadingDate > removedOn))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_outside_device_period",
+                "Дата показания должна входить в период работы указанного прибора. Проверьте историю замен.");
         }
 
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(reading.Id, garage.Id, meterKind, month, cancellationToken))
@@ -7241,7 +7258,10 @@ public sealed partial class FinanceService(
             string.Equals(reading.MeterKind, meterKind, StringComparison.Ordinal)
                 ? reading.PreviousValue
                 : (decimal?)null;
-        var previousMeterValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? storedPreviousValue;
+        var previousMeterValue = MeterDevicesMatch(previousReading, reading)
+            ? previousReading!.CurrentValue
+            : reading.MeterDevice?.InitialValue ?? connectionContext.Value!.Connection?.BaselineMeterDevice?.InitialValue
+                ?? GetInitialMeterValue(garage, meterKind) ?? storedPreviousValue;
         if (!previousMeterValue.HasValue && meterKind == MeterKinds.Water)
         {
             return WaterMeterReadingBaselineRequired();
@@ -7255,12 +7275,12 @@ public sealed partial class FinanceService(
         }
 
         var nextReading = await meterReadingRepository.GetNextActiveAsync(reading.Id, garage.Id, meterKind, month, cancellationToken);
-        if (nextReading is not null && currentValue > nextReading.CurrentValue)
+        if (nextReading is not null && MeterDevicesMatch(reading, nextReading) && currentValue > nextReading.CurrentValue)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_sequence_invalid", "Показание не может быть больше следующего внесенного месяца.");
         }
 
-        var hasGapWarning = HasGapWarning(garage, meterKind, month, previousReading);
+        var hasGapWarning = HasMeterGapWarning(garage, meterKind, month, previousReading, connectionContext.Value!.Connection);
         var comment = NormalizeOptional(request.Comment);
         var primaryMatches = MeterReadingMatches(reading, garage.Id, meterKind, month, request.ReadingDate, currentValue, previousValue, consumption, hasGapWarning, comment);
 
@@ -7708,13 +7728,19 @@ public sealed partial class FinanceService(
         CancellationToken cancellationToken,
         IReadOnlyList<MeterDevice>? devices = null)
     {
+        if (readings.Count == 0)
+        {
+            return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Success([]);
+        }
+        var meterConnection = await meterReadingRepository.GetConnectionForUpdateAsync(garage.Id, meterKind, cancellationToken);
         devices ??= await meterReadingRepository.GetDevicesForUpdateAsync(garage.Id, meterKind, cancellationToken);
         var changes = new List<MeterReadingChainChange>(readings.Count);
         var firstReading = readings.OrderBy(item => item.AccountingMonth).ThenBy(item => item.Id).FirstOrDefault();
         var sameDeviceAsFirst = firstReading is not null && MeterDevicesMatch(previousReading, firstReading);
         var previousValue = sameDeviceAsFirst
             ? previousReading!.CurrentValue
-            : firstReading?.MeterDevice?.InitialValue ?? GetInitialMeterValue(garage, meterKind);
+            : firstReading?.MeterDevice?.InitialValue ?? meterConnection?.BaselineMeterDevice?.InitialValue
+                ?? GetInitialMeterValue(garage, meterKind) ?? firstReading?.PreviousValue;
         if (!previousValue.HasValue && meterKind == MeterKinds.Water)
         {
             return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Failure(
@@ -7726,7 +7752,7 @@ public sealed partial class FinanceService(
         {
             if (previousReading is not null && !MeterDevicesMatch(previousReading, reading))
             {
-                previousValue = reading.MeterDevice?.InitialValue ?? GetInitialMeterValue(garage, meterKind);
+                previousValue = reading.MeterDevice?.InitialValue ?? GetInitialMeterValue(garage, meterKind) ?? reading.PreviousValue;
             }
 
             var normalizedPreviousValue = MoneyMath.RoundMeterValue(previousValue ?? 0m);
@@ -7745,7 +7771,7 @@ public sealed partial class FinanceService(
                     $"Показание за {reading.AccountingMonth:MM.yyyy} меньше предыдущего активного показания. Проверьте последовательность или оформите замену счетчика.");
             }
 
-            var hasGapWarning = HasGapWarning(garage, meterKind, reading.AccountingMonth, previousReading);
+            var hasGapWarning = HasMeterGapWarning(garage, meterKind, reading.AccountingMonth, previousReading, meterConnection);
             changes.Add(new MeterReadingChainChange(
                 reading,
                 normalizedPreviousValue,
@@ -7794,8 +7820,12 @@ public sealed partial class FinanceService(
         DateOnly accountingMonth,
         IReadOnlyList<MeterReadingChainChange> chainChanges,
         DateOnly? missingReadingMonth,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        GarageMeterConnection? connectionOverride = null,
+        List<string>? validationErrors = null)
     {
+        var meterConnection = connectionOverride ?? (await meterReadingRepository.GetConnectionsAsync(garageId, cancellationToken))
+            .FirstOrDefault(connection => connection.MeterKind == meterKind);
         var readingByMonth = chainChanges.ToDictionary(change => change.Reading.AccountingMonth);
         var accruals = await accrualRepository.GetActiveMeteredFromForUpdateAsync(
             garageId,
@@ -7807,6 +7837,7 @@ public sealed partial class FinanceService(
         {
             decimal? newAmount = null;
             AccrualCalculationDetailsDto? newDetails = null;
+            decimal? newConsumption = null;
             if (missingReadingMonth.HasValue && accrual.AccountingMonth == missingReadingMonth.Value)
             {
                 newAmount = 0m;
@@ -7826,22 +7857,69 @@ public sealed partial class FinanceService(
                     HasGapWarning = change.HasGapWarning
                 };
                 var previousDetails = RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson);
-                var calculation = previousDetails is null || previousDetails.Version == 0
-                    ? CalculateLegacyRegularAccrual(change.Reading.Garage, accrual, prospectiveReading)
-                    : RegularAccrualCalculator.Calculate(
+                RegularAccrualCalculationResult calculation;
+                if (connectionOverride is not null &&
+                    (previousDetails?.MeterConnectedOn > accrual.AccountingMonth || connectionOverride.ConnectedOn > accrual.AccountingMonth) &&
+                    previousDetails?.MeterConnectedOn != connectionOverride.ConnectedOn)
+                {
+                    // A previously clipped snapshot has no price for newly included days. Resolve
+                    // the dated tariff history explicitly instead of silently dropping those days.
+                    var setting = (await GetApplicableMeteredSettingsAsync(meterKind, accrual.AccountingMonth, cancellationToken))
+                        .FirstOrDefault(item => item.IncomeTypeId == accrual.IncomeTypeId && item.AppliesToGarage(garageId));
+                    var tariff = setting is null ? null : SelectTariffForMonth(setting, accrual.AccountingMonth);
+                    calculation = setting is null || tariff is null
+                        ? RegularAccrualCalculationResult.Failure("Не найден тариф для пересчёта периода подключения услуги.")
+                        : RegularAccrualCalculator.Calculate(change.Reading.Garage, accrual.AccountingMonth, prospectiveReading,
+                            await BuildGarageRegularAccrualSegmentsAsync(garageId, accrual.AccountingMonth, setting, tariff, cancellationToken),
+                            meterConnection: meterConnection);
+                }
+                else
+                {
+                    calculation = previousDetails is null || previousDetails.Version == 0
+                        ? CalculateLegacyRegularAccrual(change.Reading.Garage, accrual, prospectiveReading, meterConnection)
+                        : RegularAccrualCalculator.Calculate(
                         change.Reading.Garage,
                         accrual.AccountingMonth,
                         prospectiveReading,
-                        RegularAccrualCalculator.FromSnapshot(previousDetails));
+                        RegularAccrualCalculator.FromSnapshot(previousDetails), meterConnection: meterConnection);
+                }
                 if (calculation.Succeeded)
                 {
                     newAmount = calculation.Amount;
                     newDetails = calculation.Details;
+                    newConsumption = calculation.Details?.MeterConsumption;
+                    if (connectionOverride is not null && previousDetails is not null && newDetails is not null &&
+                        JsonNode.DeepEquals(JsonNode.Parse(RegularAccrualCalculator.Serialize(previousDetails)),
+                            JsonNode.Parse(RegularAccrualCalculator.Serialize(newDetails with
+                            {
+                                Version = previousDetails.Version,
+                                MeterConnectedOn = previousDetails.MeterConnectedOn,
+                                MeterClosedOn = previousDetails.MeterClosedOn
+                            }))))
+                    {
+                        // Correcting a connection must not rewrite financially unchanged history,
+                        // including paid months after the first accounting interval.
+                        newDetails = null;
+                    }
+                    else if (connectionOverride is not null && (previousDetails is null || previousDetails.Version == 0) &&
+                        newDetails is not null && accrual.Amount == newAmount &&
+                        accrual.RequiresMeterReading == newDetails.RequiresMeter &&
+                        change.Reading.PreviousValue == change.PreviousValue &&
+                        change.Reading.Consumption == change.Consumption)
+                    {
+                        // Older accruals may have no detailed snapshot. Attaching a dated service
+                        // must not invent one when both the financial result and meter quantity remain unchanged.
+                        newDetails = null;
+                    }
+                }
+                else if (connectionOverride is not null)
+                {
+                    validationErrors?.Add(calculation.ErrorMessage ?? "Не удалось пересчитать начисление после изменения подключения.");
                 }
             }
 
             var newComment = newAmount.HasValue
-                ? MeteredAccrualComments.Refresh(accrual.Comment, newDetails?.MeterConsumption)
+                ? MeteredAccrualComments.Refresh(accrual.Comment, newConsumption)
                 : accrual.Comment;
             if (newAmount.HasValue && (accrual.Amount != newAmount.Value || newDetails is not null || newComment != accrual.Comment))
             {
@@ -7920,7 +7998,8 @@ public sealed partial class FinanceService(
     private static RegularAccrualCalculationResult CalculateLegacyRegularAccrual(
         Garage garage,
         Accrual accrual,
-        MeterReading meterReading)
+        MeterReading meterReading,
+        GarageMeterConnection? meterConnection = null)
     {
         var tariff = accrual.Tariff!;
         var segment = CreateTariffSegment(
@@ -7930,7 +8009,7 @@ public sealed partial class FinanceService(
             TariffCalculationBases.GetUnitName(tariff.CalculationBase),
             UsesTieredElectricitySnapshot(accrual));
 
-        return RegularAccrualCalculator.Calculate(garage, accrual.AccountingMonth, meterReading, [segment]);
+        return RegularAccrualCalculator.Calculate(garage, accrual.AccountingMonth, meterReading, [segment], meterConnection: meterConnection);
     }
 
     private async Task<ILookup<Guid, GarageTariffAssignment>> LoadIndividualTariffPeriodsAsync(
@@ -8488,6 +8567,8 @@ public sealed partial class FinanceService(
         }
 
         var processedIncomeTypeIds = new HashSet<Guid>();
+        var meterConnection = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
+            .FirstOrDefault(connection => connection.MeterKind == reading.MeterKind);
         IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null;
         foreach (var setting in settings)
         {
@@ -8527,7 +8608,8 @@ public sealed partial class FinanceService(
                 reading.AccountingMonth,
                 reading,
                 calculationSegments,
-                peopleCountPeriods);
+                peopleCountPeriods,
+                meterConnection);
             if (!calculation.Succeeded || calculation.Amount <= 0m)
             {
                 continue;
@@ -9087,7 +9169,7 @@ public sealed partial class FinanceService(
         {
             MeterKinds.Water => garage.InitialWaterMeterValue,
             MeterKinds.Electricity => garage.InitialElectricityMeterValue,
-            _ => 0m
+            _ => null
         };
     }
 
@@ -9099,7 +9181,8 @@ public sealed partial class FinanceService(
     }
 
     private static bool IsBeforeMeterBaseline(Garage garage, string meterKind, DateOnly month) =>
-        GetInitialMeterValue(garage, meterKind).HasValue && garage.InitialMeterReadingMonth.HasValue && month <= garage.InitialMeterReadingMonth.Value;
+        (meterKind is not (MeterKinds.Water or MeterKinds.Electricity) || GetInitialMeterValue(garage, meterKind).HasValue) &&
+        garage.InitialMeterReadingMonth.HasValue && month <= garage.InitialMeterReadingMonth.Value;
 
     private async Task<IReadOnlyList<FinancialOperationDto>> ToOperationDtosAsync(IReadOnlyList<FinancialOperation> operations, CancellationToken cancellationToken)
     {

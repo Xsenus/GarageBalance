@@ -63,12 +63,12 @@ public sealed class EfApplicationUnitOfWork(GarageBalanceDbContext dbContext) : 
             }
         }
         catch (DbUpdateConcurrencyException exception) when (
-            exception.Entries.Any(entry => entry.Entity is MeterReading or MeterDevice or StaffSalaryAdjustment))
+            exception.Entries.Any(entry => entry.Entity is MeterReading or MeterDevice or GarageMeterConnection or StaffSalaryAdjustment))
         {
             throw new ApplicationConcurrencyException(exception);
         }
         catch (DbUpdateException exception) when (
-            exception.Entries.Any(entry => entry.Entity is MeterDevice || entry.Entity is MeterReading && entry.State == EntityState.Added))
+            exception.Entries.Any(entry => entry.Entity is MeterDevice or GarageMeterConnection || entry.Entity is MeterReading && entry.State == EntityState.Added))
         {
             throw new ApplicationPersistenceConflictException(exception);
         }

@@ -4,6 +4,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FinanceApiError, financeApi } from './financeApi'
 
 describe('financeApi', () => {
+  it('posts atomic service connections and previews exact baseline changes with cancellation', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const batch = { meterKind: 'water', connectedOn: '2026-09-10', items: [{ garageId: 'g1', value: 0 }, { garageId: 'g2', value: null }] }
+    await financeApi.connectMeterServicesBatch!('token', batch)
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/meter-connections/batch', expect.objectContaining({ method: 'POST', body: JSON.stringify(batch) }))
+    const preview = { garageId: 'g1', garageVersion: 'gv', values: [{ meterKind: 'water', connectedOn: '2026-09-10', value: 250, connectionVersion: 'cv', reason: 'Акт' }] }
+    const controller = new AbortController()
+    await financeApi.previewMeterConnections!('token', preview, controller.signal)
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/meter-connections/preview', expect.objectContaining({ method: 'POST', body: JSON.stringify(preview), signal: expect.any(AbortSignal) }))
+  })
   it('loads a bounded garage device history and sends exact cancellation versions and reason', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)

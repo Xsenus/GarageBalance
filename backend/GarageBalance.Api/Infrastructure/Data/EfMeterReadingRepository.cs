@@ -2,6 +2,7 @@ using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -83,6 +84,70 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .OrderBy(reading => reading.AccountingMonth)
             .ThenBy(reading => reading.MeterKind)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<MeterAccrualPeriodData> GetAccrualPeriodDataAsync(
+        IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds,
+        DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (garageIds.Count == 0 || meterKinds.Count == 0 || monthFrom > monthTo) return new([], []);
+
+        // Both branches are restricted before materialization. UNION ALL keeps connections
+        // without readings and gives the calculation one snapshot with no extra round trip.
+        var readings = dbContext.MeterReadings.AsNoTracking()
+            .Where(reading => !reading.IsCanceled && garageIds.Contains(reading.GarageId) &&
+                meterKinds.Contains(reading.MeterKind) && reading.AccountingMonth >= monthFrom && reading.AccountingMonth <= monthTo)
+            .Select(reading => new
+            {
+                IsConnection = false,
+                reading.Id,
+                reading.GarageId,
+                reading.MeterKind,
+                PeriodDate = reading.AccountingMonth,
+                OtherDate = (DateOnly?)reading.ReadingDate,
+                reading.PreviousValue,
+                reading.CurrentValue,
+                reading.Consumption,
+                BaselineId = (Guid?)null
+            });
+        var connections = dbContext.GarageMeterConnections.AsNoTracking()
+            .Where(connection => connection.ClosedOn == null && garageIds.Contains(connection.GarageId) && meterKinds.Contains(connection.MeterKind))
+            .Select(connection => new
+            {
+                IsConnection = true,
+                connection.Id,
+                connection.GarageId,
+                connection.MeterKind,
+                PeriodDate = connection.ConnectedOn,
+                OtherDate = connection.ClosedOn,
+                PreviousValue = 0m,
+                CurrentValue = 0m,
+                Consumption = 0m,
+                BaselineId = connection.BaselineMeterDeviceId
+            });
+        var rows = await readings.Concat(connections).ToListAsync(cancellationToken);
+        return new(
+            rows.Where(row => !row.IsConnection).Select(row => new MeterReading
+            {
+                Id = row.Id,
+                GarageId = row.GarageId,
+                MeterKind = row.MeterKind,
+                AccountingMonth = row.PeriodDate,
+                ReadingDate = row.OtherDate!.Value,
+                PreviousValue = row.PreviousValue,
+                CurrentValue = row.CurrentValue,
+                Consumption = row.Consumption
+            }).ToArray(),
+            rows.Where(row => row.IsConnection).Select(row => new GarageMeterConnection
+            {
+                Id = row.Id,
+                GarageId = row.GarageId,
+                MeterKind = row.MeterKind,
+                ConnectedOn = row.PeriodDate,
+                ClosedOn = row.OtherDate,
+                BaselineMeterDeviceId = row.BaselineId
+            }).ToArray());
     }
 
     private async Task<MeterReadingPageData> GetPostgresPageAsync(
@@ -200,10 +265,19 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
 
         var settingsQuery = dbContext.ChargeServiceSettings.AsNoTracking()
             .Where(setting => !setting.IsArchived && setting.IsRegular && setting.IsMetered && setting.MeterKind == meterKind);
+        var monthFrom = new DateOnly(year, 1, 1);
+        var monthTo = new DateOnly(year, 12, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
+        var connections = dbContext.GarageMeterConnections.AsNoTracking().Where(connection => connection.MeterKind == meterKind);
         var garageQuery = dbContext.Garages.AsNoTracking()
             .Where(garage => !garage.IsArchived)
-            .Where(garage => !settingsQuery.Any() || settingsQuery.Any(setting =>
-                !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garage.Id)));
+            .Where(garage => dbContext.MeterReadings.Any(reading => reading.GarageId == garage.Id && reading.MeterKind == meterKind &&
+                    !reading.IsCanceled && reading.AccountingMonth >= monthFrom && reading.AccountingMonth <= monthTo) ||
+                (connections.Any(connection => connection.GarageId == garage.Id)
+                ? connections.Any(connection => connection.GarageId == garage.Id && connection.ConnectedOn <= yearEnd &&
+                    (!connection.ClosedOn.HasValue || connection.ClosedOn >= monthFrom))
+                : !settingsQuery.Any() || settingsQuery.Any(setting =>
+                    !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garage.Id))));
         var totalCount = await garageQuery.CountAsync(cancellationToken);
         var garages = await garageQuery
             .OrderBy(garage => garage.Number.Length)
@@ -211,17 +285,48 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .ThenBy(garage => garage.Id)
             .Skip(offset)
             .Take(limit)
-            .Select(garage => new MeterReadingYearGarageData(garage.Id, garage.Number, garage.InitialMeterReadingMonth,
-                meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : meterKind == MeterKinds.Electricity ? garage.InitialElectricityMeterValue : null))
+            .Select(garage => new
+            {
+                garage.Id,
+                garage.Number,
+                garage.InitialMeterReadingMonth,
+                InitialReadingValue = meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : meterKind == MeterKinds.Electricity ? garage.InitialElectricityMeterValue : null,
+                HasConnection = connections.Any(connection => connection.GarageId == garage.Id),
+                ConnectedOn = connections.Where(connection => connection.GarageId == garage.Id)
+                    .OrderByDescending(connection => connection.ConnectedOn <= yearEnd)
+                    .ThenByDescending(connection => connection.ConnectedOn)
+                    .Select(connection => (DateOnly?)connection.ConnectedOn)
+                    .FirstOrDefault(),
+                ClosedOn = connections.Where(connection => connection.GarageId == garage.Id)
+                    .OrderByDescending(connection => connection.ConnectedOn <= yearEnd)
+                    .ThenByDescending(connection => connection.ConnectedOn)
+                    .Select(connection => connection.ClosedOn)
+                    .FirstOrDefault(),
+                BaselineMeterDeviceId = connections.Where(connection => connection.GarageId == garage.Id)
+                    .OrderByDescending(connection => connection.ConnectedOn <= yearEnd)
+                    .ThenByDescending(connection => connection.ConnectedOn)
+                    .Select(connection => connection.BaselineMeterDeviceId)
+                    .FirstOrDefault(),
+                HasLegacyBase = (meterKind == MeterKinds.Water && garage.InitialWaterMeterValue.HasValue) ||
+                    (meterKind == MeterKinds.Electricity && garage.InitialElectricityMeterValue.HasValue) ||
+                    dbContext.MeterDevices.Any(device => device.GarageId == garage.Id && device.MeterKind == meterKind && !device.IsCanceled) ||
+                    dbContext.MeterReadings.Any(reading => reading.GarageId == garage.Id && reading.MeterKind == meterKind && !reading.IsCanceled)
+            })
             .ToListAsync(cancellationToken);
+        var garageData = garages.Select(garage => new MeterReadingYearGarageData(
+            garage.Id, garage.Number,
+            !garage.HasConnection ? garage.InitialMeterReadingMonth : null,
+            !garage.HasConnection ? garage.InitialReadingValue : null,
+            garage.ConnectedOn,
+            garage.HasConnection ? !garage.BaselineMeterDeviceId.HasValue : !garage.HasLegacyBase,
+            !garage.HasConnection && !garage.HasLegacyBase,
+            garage.ClosedOn)).ToList();
 
         if (garages.Count == 0)
         {
-            return new MeterReadingYearPageData(garages, [], totalCount);
+            return new MeterReadingYearPageData(garageData, [], totalCount);
         }
 
-        var monthFrom = new DateOnly(year, 1, 1);
-        var monthTo = new DateOnly(year, 12, 1);
         var garageIds = garages.Select(garage => garage.Id).ToArray();
         var readings = await dbContext.MeterReadings.AsNoTracking()
             .Where(reading =>
@@ -245,7 +350,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading.IsMeterReplacement))
             .ToListAsync(cancellationToken);
 
-        return new MeterReadingYearPageData(garages, readings, totalCount);
+        return new MeterReadingYearPageData(garageData, readings, totalCount);
     }
 
     private async Task<MeterReadingYearPageData> GetPostgresYearPageAsync(
@@ -257,13 +362,41 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
     {
         var monthFrom = new DateOnly(year, 1, 1);
         var monthTo = new DateOnly(year, 12, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
         var rows = await dbContext.Database.SqlQuery<MeterReadingYearPageRow>($$"""
             WITH applicable_garages AS (
-                SELECT garage."Id", garage."Number", garage."InitialMeterReadingMonth",
-                       garage."InitialWaterMeterValue", garage."InitialElectricityMeterValue"
+                SELECT garage."Id", garage."Number",
+                       CASE WHEN connection."Id" IS NULL THEN garage."InitialMeterReadingMonth" ELSE NULL END AS "InitialMeterReadingMonth",
+                       CASE WHEN connection."Id" IS NULL THEN garage."InitialWaterMeterValue" ELSE NULL END AS "InitialWaterMeterValue",
+                       CASE WHEN connection."Id" IS NULL THEN garage."InitialElectricityMeterValue" ELSE NULL END AS "InitialElectricityMeterValue",
+                       connection."ConnectedOn", connection."ClosedOn",
+                       CASE WHEN connection."Id" IS NOT NULL THEN connection."BaselineMeterDeviceId" IS NULL
+                            ELSE NOT legacy."HasBase" END AS "RequiresStartValue",
+                       connection."Id" IS NULL AND NOT legacy."HasBase" AS "RequiresConnectionDate"
                 FROM garages AS garage
+                LEFT JOIN LATERAL (
+                    SELECT candidate."Id", candidate."ConnectedOn", candidate."ClosedOn", candidate."BaselineMeterDeviceId"
+                    FROM garage_meter_connections AS candidate
+                    WHERE candidate."GarageId" = garage."Id" AND candidate."MeterKind" = {{meterKind}}
+                    ORDER BY (candidate."ConnectedOn" <= {{yearEnd}}) DESC, candidate."ConnectedOn" DESC
+                    LIMIT 1
+                ) AS connection ON TRUE
+                CROSS JOIN LATERAL (
+                    SELECT ({{meterKind}} = 'water' AND garage."InitialWaterMeterValue" IS NOT NULL)
+                        OR ({{meterKind}} = 'electricity' AND garage."InitialElectricityMeterValue" IS NOT NULL)
+                        OR EXISTS (SELECT 1 FROM meter_devices AS device WHERE device."GarageId" = garage."Id"
+                            AND device."MeterKind" = {{meterKind}} AND device."IsCanceled" = FALSE)
+                        OR EXISTS (SELECT 1 FROM meter_readings AS historical WHERE historical."GarageId" = garage."Id"
+                            AND historical."MeterKind" = {{meterKind}} AND historical."IsCanceled" = FALSE) AS "HasBase"
+                ) AS legacy
                 WHERE garage."IsArchived" = FALSE
-                  AND (
+                  AND (EXISTS (SELECT 1 FROM meter_readings AS historical WHERE historical."GarageId" = garage."Id"
+                        AND historical."MeterKind" = {{meterKind}} AND historical."IsCanceled" = FALSE
+                        AND historical."AccountingMonth" >= {{monthFrom}} AND historical."AccountingMonth" <= {{monthTo}})
+                  OR (connection."Id" IS NOT NULL AND (
+                    (connection."ConnectedOn" <= {{yearEnd}} AND (connection."ClosedOn" IS NULL OR connection."ClosedOn" >= {{monthFrom}}))
+                    ))
+                  OR (connection."Id" IS NULL AND (
                     NOT EXISTS (
                         SELECT 1 FROM charge_service_settings AS setting
                         WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
@@ -273,7 +406,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                         WHERE setting."IsArchived" = FALSE AND setting."IsRegular" = TRUE
                           AND setting."IsMetered" = TRUE AND setting."MeterKind" = {{meterKind}}
                           AND (setting."AppliesToSelectedGarages" = FALSE OR garage."Id" = ANY(setting."GarageIds")))
-                  )
+                  )))
             ), paged_garages AS (
                 SELECT
                     garage."Id" AS "GarageId",
@@ -282,6 +415,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                     CASE WHEN {{meterKind}} = 'water' THEN garage."InitialWaterMeterValue"
                          WHEN {{meterKind}} = 'electricity' THEN garage."InitialElectricityMeterValue"
                          ELSE NULL END AS "InitialReadingValue",
+                    garage."ConnectedOn", garage."ClosedOn", garage."RequiresStartValue", garage."RequiresConnectionDate",
                     ROW_NUMBER() OVER (
                         ORDER BY LENGTH(garage."Number"), garage."Number", garage."Id") AS "GarageOrdinal",
                     COUNT(*) OVER () AS "TotalCount"
@@ -296,6 +430,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 paged_garage."GarageNumber",
                 paged_garage."InitialReadingMonth",
                 paged_garage."InitialReadingValue",
+                paged_garage."ConnectedOn", paged_garage."ClosedOn", paged_garage."RequiresStartValue", paged_garage."RequiresConnectionDate",
                 paged_garage."GarageOrdinal",
                 reading."Id" AS "ReadingId",
                 reading."AccountingMonth",
@@ -324,6 +459,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 NULL::text AS "GarageNumber",
                 NULL::date AS "InitialReadingMonth",
                 NULL::numeric AS "InitialReadingValue",
+                NULL::date AS "ConnectedOn", NULL::date AS "ClosedOn", FALSE AS "RequiresStartValue", FALSE AS "RequiresConnectionDate",
                 NULL::bigint AS "GarageOrdinal",
                 NULL::uuid AS "ReadingId",
                 NULL::date AS "AccountingMonth",
@@ -340,9 +476,10 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         var totalCount = checked((int)(rows.FirstOrDefault()?.TotalCount ?? 0));
         var garages = rows
             .Where(row => row.Category == 1)
-            .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal, row.InitialReadingMonth, row.InitialReadingValue })
+            .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal, row.InitialReadingMonth, row.InitialReadingValue, row.ConnectedOn, row.ClosedOn, row.RequiresStartValue, row.RequiresConnectionDate })
             .OrderBy(group => group.Key.GarageOrdinal)
-            .Select(group => new MeterReadingYearGarageData(group.Key.GarageId!.Value, group.Key.GarageNumber!, group.Key.InitialReadingMonth, group.Key.InitialReadingValue))
+            .Select(group => new MeterReadingYearGarageData(group.Key.GarageId!.Value, group.Key.GarageNumber!, group.Key.InitialReadingMonth, group.Key.InitialReadingValue,
+                group.Key.ConnectedOn, group.Key.RequiresStartValue, group.Key.RequiresConnectionDate, group.Key.ClosedOn))
             .ToList();
         var readings = rows
             .Where(row => row.Category == 1 && row.ReadingId is not null)
@@ -368,6 +505,10 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         public string? GarageNumber { get; set; }
         public DateOnly? InitialReadingMonth { get; set; }
         public decimal? InitialReadingValue { get; set; }
+        public DateOnly? ConnectedOn { get; set; }
+        public DateOnly? ClosedOn { get; set; }
+        public bool RequiresStartValue { get; set; }
+        public bool RequiresConnectionDate { get; set; }
         public long? GarageOrdinal { get; set; }
         public Guid? ReadingId { get; set; }
         public DateOnly? AccountingMonth { get; set; }
@@ -623,6 +764,115 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
     }
 
     public void Add(MeterDevice device) => dbContext.MeterDevices.Add(device);
+
+    public async Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(Guid garageId, CancellationToken cancellationToken) =>
+        await dbContext.GarageMeterConnections.AsNoTracking().Include(connection => connection.BaselineMeterDevice)
+            .Where(connection => connection.GarageId == garageId && connection.ClosedOn == null)
+            .OrderBy(connection => connection.MeterKind).ToListAsync(cancellationToken);
+
+    public Task<GarageMeterConnection?> GetConnectionForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // A new connection and its baseline are planned together before the caller commits.
+        // SQL cannot see that pending boundary while rebuilding the existing meter chain.
+        var pending = dbContext.GarageMeterConnections.Local.FirstOrDefault(connection =>
+            connection.GarageId == garageId && connection.MeterKind == meterKind && connection.ClosedOn == null &&
+            dbContext.Entry(connection).State == EntityState.Added);
+        return pending is not null
+            ? Task.FromResult<GarageMeterConnection?>(pending)
+            : dbContext.GarageMeterConnections.Include(connection => connection.BaselineMeterDevice)
+                .SingleOrDefaultAsync(connection => connection.GarageId == garageId && connection.MeterKind == meterKind && connection.ClosedOn == null,
+                    cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(
+        IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds, CancellationToken cancellationToken) =>
+        await dbContext.GarageMeterConnections.AsNoTracking().Include(connection => connection.BaselineMeterDevice)
+            .Where(connection => garageIds.Contains(connection.GarageId) && meterKinds.Contains(connection.MeterKind) && connection.ClosedOn == null)
+            .OrderBy(connection => connection.GarageId).ThenBy(connection => connection.MeterKind).ToListAsync(cancellationToken);
+
+    public void Add(GarageMeterConnection connection) => dbContext.GarageMeterConnections.Add(connection);
+
+    public async Task<IMeterConnectionWriteScope> BeginConnectionWriteAsync(CancellationToken cancellationToken)
+    {
+        // Keep the same physical session alive after commit/rollback until advisory leases
+        // have been released. Otherwise EF can return a locked connection to the pool.
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            return new MeterConnectionWriteScope(dbContext, await dbContext.Database.BeginTransactionAsync(cancellationToken));
+        }
+        catch
+        {
+            await dbContext.Database.CloseConnectionAsync();
+            throw;
+        }
+    }
+
+    public Task<bool> ExistsConnectionAsync(Guid garageId, string meterKind, CancellationToken cancellationToken) =>
+        dbContext.GarageMeterConnections.AsNoTracking()
+            .AnyAsync(connection => connection.GarageId == garageId && connection.MeterKind == meterKind, cancellationToken);
+
+    public IReadOnlyList<GarageMeterConnectionAccrualChange> GetPendingConnectionAccrualChanges(Guid garageId)
+    {
+        dbContext.ChangeTracker.DetectChanges();
+        return dbContext.ChangeTracker.Entries<Accrual>()
+            .Where(entry => entry.Entity.GarageId == garageId && entry.State == EntityState.Modified)
+            .OrderBy(entry => entry.Entity.AccountingMonth).ThenBy(entry => entry.Entity.Id)
+            .Select(entry => new GarageMeterConnectionAccrualChange(
+                entry.Entity.Id, entry.Entity.AccountingMonth, entry.Entity.CalculationMeterKind,
+                entry.OriginalValues.GetValue<decimal>(nameof(Accrual.Amount)), entry.Entity.Amount,
+                entry.OriginalValues.GetValue<bool>(nameof(Accrual.RequiresMeterReading)), entry.Entity.RequiresMeterReading))
+            .ToArray();
+    }
+
+    private sealed class MeterConnectionWriteScope(GarageBalanceDbContext context, IDbContextTransaction transaction) : IMeterConnectionWriteScope
+    {
+        private bool committed;
+        private bool rolledBack;
+        private bool disposed;
+
+        public async Task CommitAsync(CancellationToken cancellationToken)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            committed = true;
+        }
+
+        public async Task RollbackAsync()
+        {
+            if (committed || rolledBack) return;
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            finally
+            {
+                rolledBack = true;
+                context.ChangeTracker.Clear();
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed) return;
+            disposed = true;
+            try
+            {
+                await RollbackAsync();
+            }
+            finally
+            {
+                try
+                {
+                    await transaction.DisposeAsync();
+                }
+                finally
+                {
+                    await context.Database.CloseConnectionAsync();
+                }
+            }
+        }
+    }
 
     private IQueryable<MeterReading> QueryActive() =>
         dbContext.MeterReadings.AsNoTracking()

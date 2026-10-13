@@ -76,13 +76,21 @@ public sealed class GarageInitialMeterReadingTests
         await using var database = await SqliteTestDatabase.CreateAsync();
         var context = database.Context;
         var created = await DictionaryServiceTestFactory.Create(context, new DateOnly(2026, 1, 20))
-            .CreateGarageAsync(new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+            .CreateGarageAsync(new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, null, 5, null), null, CancellationToken.None);
         Assert.True(created.Succeeded, created.ErrorMessage);
         var finance = FinanceServiceTestFactory.Create(context);
         var empty = await finance.GetMeterReadingYearPageAsync(new MeterReadingYearRequest(2025, MeterKinds.Water), CancellationToken.None);
         Assert.Null(Assert.Single(empty.Value!.Garages).InitialReadingValue);
-        var updated = await DictionaryServiceTestFactory.Create(context, new DateOnly(2026, 3, 1))
+        var dictionaries = DictionaryServiceTestFactory.Create(context, new DateOnly(2026, 3, 1));
+        var undatedWater = await dictionaries
             .UpdateGarageAsync(created.Value!.Id, new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, 0, 10, null), null, CancellationToken.None);
+        Assert.Equal("meter_connection_date_required", undatedWater.ErrorCode);
+        context.ChangeTracker.Clear();
+        var afterRejection = await context.Garages.SingleAsync();
+        Assert.Null(afterRejection.InitialWaterMeterValue);
+        Assert.Equal(5m, afterRejection.InitialElectricityMeterValue);
+        var updated = await dictionaries
+            .UpdateGarageAsync(created.Value.Id, new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, null, 10, null), null, CancellationToken.None);
         Assert.True(updated.Succeeded, updated.ErrorMessage);
         context.ChangeTracker.Clear();
         Assert.Equal(new DateOnly(2025, 12, 1), (await context.Garages.SingleAsync()).InitialMeterReadingMonth);
@@ -90,5 +98,7 @@ public sealed class GarageInitialMeterReadingTests
         var page = await finance.GetMeterReadingYearPageAsync(new MeterReadingYearRequest(2025, MeterKinds.Electricity), CancellationToken.None);
         Assert.Equal(10, Assert.Single(page.Value!.Garages).InitialReadingValue);
         Assert.Empty(page.Value.Readings);
+        Assert.Null((await context.Garages.SingleAsync()).InitialWaterMeterValue);
+        Assert.Empty(await context.GarageMeterConnections.ToListAsync());
     }
 }

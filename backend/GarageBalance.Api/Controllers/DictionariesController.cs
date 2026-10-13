@@ -106,6 +106,7 @@ public sealed class DictionariesController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<GarageDto>> CreateGarage(UpsertGarageRequest request, CancellationToken cancellationToken)
     {
+        if (ValidateMeterConnectionPermission(request) is { } permissionError) return permissionError;
         var result = await dictionaryService.CreateGarageAsync(request, GetActorUserId(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -125,6 +126,7 @@ public sealed class DictionariesController(
         CreateGarageWithAnnualPaymentsRequest request,
         CancellationToken cancellationToken)
     {
+        if (ValidateMeterConnectionPermission(request.Garage) is { } permissionError) return permissionError;
         if (garageOnboardingService is null)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
@@ -145,6 +147,7 @@ public sealed class DictionariesController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<GarageDto>> UpdateGarage(Guid id, UpsertGarageRequest request, CancellationToken cancellationToken)
     {
+        if (ValidateMeterConnectionPermission(request) is { } permissionError) return permissionError;
         var result = await dictionaryService.UpdateGarageAsync(id, request, GetActorUserId(), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
@@ -162,6 +165,7 @@ public sealed class DictionariesController(
         UpdateGarageWithAnnualPaymentsRequest request,
         CancellationToken cancellationToken)
     {
+        if (ValidateMeterConnectionPermission(request.Garage) is { } permissionError) return permissionError;
         if (garageOnboardingService is null)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
@@ -1120,6 +1124,18 @@ public sealed class DictionariesController(
     {
         var result = await dictionaryService.RestoreFeeCampaignAsync(id, GetActorUserId(), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    private ActionResult<GarageDto>? ValidateMeterConnectionPermission(UpsertGarageRequest request)
+    {
+        if (request.MeterStartValues?.Any(value => value?.ConnectedOn.HasValue == true) != true ||
+            User.HasClaim("permission", SystemPermissions.OpeningDataAdjust) && User.HasClaim("permission", SystemPermissions.PaymentsWrite))
+        {
+            return null;
+        }
+        return StatusCode(StatusCodes.Status403Forbidden, ApiProblemDetails.Create(
+            "meter_connection_permission_denied", "Для подключения услуги и изменения её начальных данных нужны права на корректировку начальных данных и запись платежей.",
+            StatusCodes.Status403Forbidden));
     }
 
     private Guid? GetActorUserId()

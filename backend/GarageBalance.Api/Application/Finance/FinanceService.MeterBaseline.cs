@@ -12,6 +12,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         CancellationToken cancellationToken)
     {
         var settings = await GetStartValueSettingsAsync(garage, cancellationToken);
+        var connections = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
+            .ToDictionary(connection => connection.MeterKind, StringComparer.Ordinal);
         var values = new List<GarageMeterStartValueDto>(settings.Count);
         foreach (var setting in settings)
         {
@@ -22,12 +24,22 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 .ToList();
             var firstReading = await meterReadingRepository.GetFirstActiveAsync(garage.Id, meterKind, cancellationToken);
             var baseline = MeterBaselineResolver.FindBaselineDevice(devices, firstReading);
+            connections.TryGetValue(meterKind, out var connection);
+            var value = connection is null
+                ? baseline?.InitialValue ?? GetGarageStartValueColumn(garage, meterKind)
+                : connection.BaselineMeterDevice?.InitialValue;
+            var hasLegacyHistory = baseline is not null || firstReading is not null || value.HasValue;
             values.Add(new GarageMeterStartValueDto(
                 meterKind,
                 setting.Name,
                 setting.UnitName,
-                baseline?.InitialValue ?? GetGarageStartValueColumn(garage, meterKind),
-                firstReading is not null));
+                value,
+                firstReading is not null,
+                connection?.ConnectedOn,
+                connection is not null && !value.HasValue,
+                connection is null && !hasLegacyHistory,
+                connection?.Version,
+                connection is not null && await RequiresConnectionTariffAsync(garage.Id, setting.Id, connection, cancellationToken)));
         }
 
         return values;
@@ -42,7 +54,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             .Where(setting => setting is { IsRegular: true, IsMetered: true, IsArchived: false, AppliesToSelectedGarages: false } &&
                 !string.IsNullOrWhiteSpace(setting.MeterKind) && MeterKinds.IsValid(setting.MeterKind))
             .OrderBy(setting => setting.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(setting => new GarageMeterStartValueDto(setting.MeterKind!, setting.Name, setting.UnitName, null, false))
+            .Select(setting => new GarageMeterStartValueDto(setting.MeterKind!, setting.Name, setting.UnitName, null, false,
+                RequiresConnectionDate: true))
             .ToList();
     }
 
@@ -67,6 +80,11 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 return StartValueFailure("meter_start_value_invalid", "Стартовое показание должно быть числом от 0 до 999 999 999.");
             }
 
+            if (requested.Any(item => item.Reason?.Trim().Length > 1000))
+            {
+                return StartValueFailure("meter_connection_reason_invalid", "Причина изменения не должна превышать 1000 символов.");
+            }
+
             if (kinds.Count != kinds.Distinct(StringComparer.Ordinal).Count())
             {
                 return StartValueFailure("meter_start_kind_duplicate", "Стартовое значение одного счётчика указано дважды.");
@@ -84,7 +102,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 settings ??= await GetStartValueSettingsAsync(garage, cancellationToken);
                 var setting = settings.FirstOrDefault(candidate => candidate.MeterKind == meterKind);
                 var isLegacyKind = meterKind is MeterKinds.Water or MeterKinds.Electricity;
-                if (setting is null && !isLegacyKind)
+                if (setting is null && (!isLegacyKind || item.ConnectedOn.HasValue))
                 {
                     return StartValueFailure(
                         "meter_start_service_not_applicable",
@@ -92,7 +110,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 }
 
                 var label = setting?.Name ?? (meterKind == MeterKinds.Water ? "Вода" : "Электроэнергия");
-                var step = await ApplyStartValueAsync(garage, meterKind, label, item.Value, actorUserId, locks, cancellationToken);
+                var step = await ApplyStartValueAsync(garage, meterKind, label, item, actorUserId, locks, cancellationToken);
                 if (!step.Succeeded)
                 {
                     return FinanceResult<GarageMeterStartValueApplyResult>.Failure(step.ErrorCode!, step.ErrorMessage!);
@@ -123,7 +141,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         Garage garage,
         string meterKind,
         string label,
-        decimal? requestedValue,
+        UpsertGarageMeterStartValueRequest request,
         Guid? actorUserId,
         List<IAsyncDisposable> locks,
         CancellationToken cancellationToken)
@@ -133,7 +151,21 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         var column = GetGarageStartValueColumn(garage, meterKind);
         var isLegacyKind = meterKind is MeterKinds.Water or MeterKinds.Electricity;
         var baseline = MeterBaselineResolver.FindBaselineDevice(devices, readings.FirstOrDefault());
+        var connection = await meterReadingRepository.GetConnectionForUpdateAsync(garage.Id, meterKind, cancellationToken);
+        if (connection is not null || request.ConnectedOn.HasValue)
+        {
+            return await ApplyConnectionStartValueAsync(garage, meterKind, label, request, connection,
+                baseline, devices, readings, actorUserId, locks, cancellationToken);
+        }
+
+        var requestedValue = request.Value;
         var oldValue = baseline?.InitialValue ?? column;
+
+        if (!oldValue.HasValue && baseline is null && readings.Count == 0 && requestedValue.HasValue)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_date_required", $"Для услуги «{label}» укажите дату подключения и стартовое показание.");
+        }
 
         if (!requestedValue.HasValue)
         {
@@ -207,6 +239,174 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             await AddStartValueChangeAsync(garage, meterKind, label, oldValue, value, actorUserId));
     }
 
+    private async Task<FinanceResult<GarageMeterStartValueChange?>> ApplyConnectionStartValueAsync(
+        Garage garage,
+        string meterKind,
+        string label,
+        UpsertGarageMeterStartValueRequest request,
+        GarageMeterConnection? connection,
+        MeterDevice? legacyBaseline,
+        List<MeterDevice> devices,
+        List<MeterReading> readings,
+        Guid? actorUserId,
+        List<IAsyncDisposable> locks,
+        CancellationToken cancellationToken)
+    {
+        if (request.ConnectedOn is not { } connectedOn)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_date_required", $"Укажите дату подключения услуги «{label}».");
+        }
+
+        if (connectedOn.Year < 1900)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_date_invalid", "Дата подключения должна быть не раньше 01.01.1900.");
+        }
+
+        if (connection is not null)
+        {
+            if (!request.ConnectionVersion.HasValue)
+            {
+                return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                    "meter_connection_version_required", "Обновите карточку гаража перед изменением подключения услуги.");
+            }
+
+            OptimisticConcurrencyGuard.EnsureCurrent(request.ConnectionVersion, connection);
+        }
+        else if (request.ConnectionVersion.HasValue)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_changed", "Подключение услуги изменилось. Обновите карточку гаража.");
+        }
+
+        var baseline = connection is null ? legacyBaseline : connection.BaselineMeterDevice;
+        var oldValue = connection is null ? baseline?.InitialValue ?? GetGarageStartValueColumn(garage, meterKind) : baseline?.InitialValue;
+        var oldConnectedOn = connection?.ConnectedOn;
+        var value = MoneyMath.RoundMeterValue(request.Value);
+        if (connection is not null && oldConnectedOn == connectedOn && oldValue == value)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Success(null);
+        }
+
+        if ((connection is not null || readings.Count > 0 || legacyBaseline is not null || oldValue.HasValue) &&
+            string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_reason_required", "Укажите причину изменения даты подключения или стартового показания.");
+        }
+
+        if (readings.Any(reading => reading.ReadingDate < connectedOn || reading.AccountingMonth < MonthPeriod.Normalize(connectedOn)))
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_date_after_history", "Дата подключения не может исключать уже внесённые показания. Сначала исправьте соответствующие показания.");
+        }
+
+        if (!value.HasValue && (readings.Count > 0 || devices.Any(device => device.RemovedOn.HasValue)))
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_start_value_required", "Нельзя удалить стартовое показание услуги с показаниями или историей замен.");
+        }
+
+        // A date belongs to the service accounting period, not to the physical installation.
+        // In particular, adding a connection must not rewrite the garage's legacy opening columns.
+        baseline ??= legacyBaseline;
+        if (baseline?.FinalValue is { } finalValue && value > finalValue)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_start_above_final",
+                $"Стартовое показание «{label}» не может быть больше конечного показания снятого счётчика ({FormatMeterValue(finalValue)}).");
+        }
+
+        if (baseline?.RemovedOn is { } removedOn && connectedOn > removedOn)
+        {
+            return FinanceResult<GarageMeterStartValueChange?>.Failure(
+                "meter_connection_date_after_history", "Дата подключения не может быть позже снятия первого прибора.");
+        }
+
+        if (connection is null)
+        {
+            connection = new GarageMeterConnection
+            {
+                GarageId = garage.Id,
+                Garage = garage,
+                MeterKind = meterKind,
+                ConnectedOn = connectedOn,
+                CreatedAtUtc = timeProvider.GetUtcNow(),
+                UpdatedAtUtc = timeProvider.GetUtcNow()
+            };
+            meterReadingRepository.Add(connection);
+        }
+
+        connection.ConnectedOn = connectedOn;
+        connection.Version = Guid.NewGuid();
+        connection.UpdatedAtUtc = timeProvider.GetUtcNow();
+        if (value.HasValue)
+        {
+            if (baseline is null)
+            {
+                baseline = new MeterDevice
+                {
+                    GarageId = garage.Id,
+                    Garage = garage,
+                    MeterKind = meterKind,
+                    SerialNumber = MeterBaselineResolver.UnnumberedDeviceSerial,
+                    InstalledOn = connectedOn,
+                    InitialValue = value.Value
+                };
+                meterReadingRepository.Add(baseline);
+                devices.Insert(0, baseline);
+            }
+            else
+            {
+                baseline.InitialValue = value.Value;
+                if (baseline.SerialNumber == MeterBaselineResolver.UnnumberedDeviceSerial &&
+                    (baseline.InstalledOn == oldConnectedOn ||
+                        connection.BaselineMeterDeviceId is null && readings.Count == 0 && baseline.RemovedOn is null))
+                {
+                    // This unnumbered device was created as the logical opening boundary.
+                    // A dated correction must keep that boundary usable for the earlier days too.
+                    baseline.InstalledOn = connectedOn;
+                }
+                baseline.Version = Guid.NewGuid();
+                baseline.UpdatedAtUtc = timeProvider.GetUtcNow();
+            }
+
+            connection.BaselineMeterDevice = baseline;
+            connection.BaselineMeterDeviceId = baseline.Id;
+            foreach (var reading in readings.Where(reading => reading.MeterDeviceId is null))
+            {
+                reading.MeterDevice = baseline;
+                reading.MeterDeviceId = baseline.Id;
+            }
+
+            if (readings.Count > 0)
+            {
+                var rebuild = await RebuildChainAfterStartValueChangeAsync(garage, meterKind, label, value.Value,
+                    baseline, devices, readings, actorUserId, locks, cancellationToken, connection,
+                    oldConnectedOn != connectedOn);
+                if (!rebuild.Succeeded)
+                {
+                    return FinanceResult<GarageMeterStartValueChange?>.Failure(rebuild.ErrorCode!, rebuild.ErrorMessage!);
+                }
+            }
+        }
+        else
+        {
+            connection.BaselineMeterDevice = null;
+            connection.BaselineMeterDeviceId = null;
+        }
+
+        AddAudit(actorUserId, "finance.meter_connection_changed", "garage", garage.Id,
+            $"Изменено подключение услуги «{label}» в гараже {garage.Number}: {connectedOn:dd.MM.yyyy}, стартовое показание {FormatMeterValue(value)}.",
+            reason: request.Reason?.Trim(), relatedGarageId: garage.Id.ToString(), relatedGarageNumber: garage.Number,
+            metadata: new Dictionary<string, object?> { ["meterKind"] = meterKind },
+            oldValues: new Dictionary<string, object?> { ["connectedOn"] = oldConnectedOn?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ["startValue"] = oldValue?.ToString("0.###", CultureInfo.InvariantCulture) },
+            newValues: new Dictionary<string, object?> { ["connectedOn"] = connectedOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ["startValue"] = value?.ToString("0.###", CultureInfo.InvariantCulture) });
+        return FinanceResult<GarageMeterStartValueChange?>.Success(
+            new GarageMeterStartValueChange(meterKind, label, oldValue, value, oldConnectedOn, connectedOn));
+    }
+
     private async Task<FinanceResult<bool>> RebuildChainAfterStartValueChangeAsync(
         Garage garage,
         string meterKind,
@@ -217,7 +417,9 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         List<MeterReading> readings,
         Guid? actorUserId,
         List<IAsyncDisposable> locks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        GarageMeterConnection? connectionOverride = null,
+        bool connectionDateChanged = false)
     {
         if (baseline is not null)
         {
@@ -255,13 +457,20 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 $"Стартовое показание {FormatMeterValue(value)} («{label}») не подходит к уже внесённым показаниям. {chainPlan.ErrorMessage}");
         }
 
+        var calculationErrors = new List<string>();
         var accrualRecalculations = await PlanMeteredAccrualRecalculationsAsync(
             garage.Id,
             meterKind,
             readings[0].AccountingMonth,
-            chainPlan.Value!.Where(change => change.Changed).ToArray(),
+            chainPlan.Value!.Where(change => change.Changed || connectionDateChanged).ToArray(),
             missingReadingMonth: null,
-            cancellationToken);
+            cancellationToken,
+            connectionOverride,
+            calculationErrors);
+        if (calculationErrors.Count > 0)
+        {
+            return FinanceResult<bool>.Failure("meter_connection_calculation_invalid", calculationErrors[0]);
+        }
         var allocationKeys = accrualRecalculations
             .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
             .Distinct()

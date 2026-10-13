@@ -9,17 +9,27 @@ public sealed record GarageMeterStartValueDto(
     string ServiceName,
     string? UnitName,
     decimal? Value,
-    bool HasReadings);
+    bool HasReadings,
+    DateOnly? ConnectedOn = null,
+    bool RequiresStartValue = false,
+    bool RequiresConnectionDate = false,
+    Guid? ConnectionVersion = null,
+    bool RequiresTariff = false);
 
 public sealed record UpsertGarageMeterStartValueRequest(
     [Required, MaxLength(40)] string MeterKind,
-    [Range(0, 999999999)] decimal? Value);
+    [Range(0, 999999999)] decimal? Value,
+    DateOnly? ConnectedOn = null,
+    Guid? ConnectionVersion = null,
+    [MaxLength(1000)] string? Reason = null);
 
 public sealed record GarageMeterStartValueChange(
     string MeterKind,
     string Label,
     decimal? OldValue,
-    decimal? NewValue);
+    decimal? NewValue,
+    DateOnly? OldConnectedOn = null,
+    DateOnly? NewConnectedOn = null);
 
 /// <summary>
 /// Outcome of applying start values. Disposing it releases the meter chain locks that
@@ -51,7 +61,8 @@ public interface IGarageMeterBaselineService
     /// <summary>
     /// Applies start values to the tracked garage, its baseline meter devices and dependent
     /// readings/accruals without saving. The caller saves the unit of work and disposes the result.
-    /// A null value never overwrites an existing start value once devices or readings exist.
+    /// Legacy null values preserve dependent baselines. An explicit connection may wait without
+    /// a start value until readings or replacements depend on that value.
     /// </summary>
     Task<FinanceResult<GarageMeterStartValueApplyResult>> ApplyStartValuesAsync(
         Garage garage,

@@ -38,7 +38,7 @@ public sealed partial class FinanceServiceTests
         Assert.Equal("meter_start_service_not_applicable", rejected.ErrorCode);
         Assert.Empty(await database.Context.MeterDevices.ToArrayAsync());
         var baseline = await service.ApplyStartValuesAsync(fixtures.Garage,
-            [new(setting.MeterKind, 10)], null, default);
+            [new(setting.MeterKind, 10, new DateOnly(2026, 6, 1))], null, default);
         Assert.True(baseline.Succeeded, baseline.ErrorMessage);
         await database.Context.SaveChangesAsync(); // The garage-card caller commits baseline changes.
         var before = await service.CreateMeterReadingAsync(new(fixtures.Garage.Id, setting.MeterKind,

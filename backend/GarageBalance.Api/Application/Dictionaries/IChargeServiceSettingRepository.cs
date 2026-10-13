@@ -4,6 +4,9 @@ namespace GarageBalance.Api.Application.Dictionaries;
 
 public interface IChargeServiceSettingRepository
 {
+    // Unconfigured legacy water/electricity remain available; configured services enforce garage scope.
+    Task<bool> IsRegularMeterKindApplicableAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<ChargeServiceSetting>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,

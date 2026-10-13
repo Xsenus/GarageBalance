@@ -19,6 +19,7 @@ import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatM
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
 import { GarageMeterStartFields } from './GarageMeterStartFields'
+import { GarageMeterConnectionPreview } from './GarageMeterConnectionPreview'
 import { buildGarageMeterStartRequests, describeGarageMeterStartChanges, validateGarageMeterStartRows } from './garageMeterStartValues'
 import type { GarageMeterStartRow } from './garageMeterStartValues'
 import { GarageMeterReplacementDialog } from '../meterReadings/GarageMeterReplacementDialog'
@@ -2960,7 +2961,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} dictionaryClient={dictionaryClient} canAdjustOpeningData={canAdjustOpeningData} canReplaceMeter={hasPermission(auth, permissions.paymentsWrite) && Boolean(financeClient.replaceMeterDevice)} canReadMeterHistory={hasPermission(auth, permissions.paymentsRead) && Boolean(financeClient.getMeterDeviceHistory)} onOpenMeterHistory={setMeterHistoryTarget} suspended={Boolean(meterReplacementTarget || meterHistoryTarget)} onReplaceMeter={setMeterReplacementTarget} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog financeClient={financeClient} canManageMeterConnections={canAdjustOpeningData && hasPermission(auth, permissions.paymentsWrite)} accessToken={auth.accessToken} dictionaryClient={dictionaryClient} canAdjustOpeningData={canAdjustOpeningData} canReplaceMeter={hasPermission(auth, permissions.paymentsWrite) && Boolean(financeClient.replaceMeterDevice)} canReadMeterHistory={hasPermission(auth, permissions.paymentsRead) && Boolean(financeClient.getMeterDeviceHistory)} onOpenMeterHistory={setMeterHistoryTarget} suspended={Boolean(meterReplacementTarget || meterHistoryTarget)} onReplaceMeter={setMeterReplacementTarget} financialReportOpen={Boolean(garageFinancialReportTarget)} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {meterHistoryTarget ? <GarageMeterHistoryDialog auth={auth} financeClient={financeClient} garage={meterHistoryTarget} onClose={() => setMeterHistoryTarget(null)} onChanged={() => setSectionReloadRevision((value) => value + 1)} /> : null}
       {meterReplacementTarget ? <GarageMeterReplacementDialog auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} garage={meterReplacementTarget}
         onClose={() => setMeterReplacementTarget(null)} onSaved={() => { setMeterReplacementTarget(null); setSectionReloadRevision((value) => value + 1) }} /> : null}
@@ -3437,6 +3438,8 @@ function PrototypeChangeConfirmationDialog({
   onCancel,
   onConfirm,
   saving = false,
+  confirmDisabled = false,
+  children,
   title,
 }: {
   changes: PrototypeChangeEntry[]
@@ -3444,6 +3447,8 @@ function PrototypeChangeConfirmationDialog({
   onCancel: () => void
   onConfirm: () => void
   saving?: boolean
+  confirmDisabled?: boolean
+  children?: ReactNode
   title: string
 }) {
   useRestoreFocusOnClose(true)
@@ -3462,9 +3467,10 @@ function PrototypeChangeConfirmationDialog({
             </div>
           ))}
         </dl>
+        {children}
         <div className="detail-dialog-actions contractors-dialog-actions">
           <button ref={cancelRef} className="ghost-button" type="button" disabled={saving} onClick={onCancel}>Отмена</button>
-          <button className="secondary-button" type="button" aria-busy={saving} disabled={saving} onClick={onConfirm}>
+          <button className="secondary-button" type="button" aria-busy={saving} disabled={saving || confirmDisabled} onClick={onConfirm}>
             {saving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Save size={16} />}
             <span>{saving ? 'Сохраняем…' : 'Сохранить'}</span>
           </button>
@@ -3771,7 +3777,7 @@ function ContractorDialogShell({ children, className = '', closeDisabled = false
   )
 }
 
-function GaragePrototypeDialog({ canReadMeterHistory, onOpenMeterHistory, accessToken, dictionaryClient, canAdjustOpeningData, canReplaceMeter, suspended, onReplaceMeter, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { canReadMeterHistory: boolean; onOpenMeterHistory: (item: ContractorGarageRow) => void; accessToken: string; dictionaryClient: DictionaryClient; canAdjustOpeningData: boolean; canReplaceMeter: boolean; suspended: boolean; onReplaceMeter: (item: ContractorGarageRow) => void; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
+function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canReadMeterHistory, onOpenMeterHistory, accessToken, dictionaryClient, canAdjustOpeningData, canReplaceMeter, suspended, onReplaceMeter, financialReportOpen, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { financeClient: FinanceClient; canManageMeterConnections: boolean; canReadMeterHistory: boolean; onOpenMeterHistory: (item: ContractorGarageRow) => void; accessToken: string; dictionaryClient: DictionaryClient; canAdjustOpeningData: boolean; canReplaceMeter: boolean; suspended: boolean; onReplaceMeter: (item: ContractorGarageRow) => void; financialReportOpen: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [saving, setSaving] = useState(false)
@@ -3788,6 +3794,9 @@ function GaragePrototypeDialog({ canReadMeterHistory, onOpenMeterHistory, access
     : (dictionaryClient.getMeterStartServicesForNewGarage ? (signal) => dictionaryClient.getMeterStartServicesForNewGarage!(accessToken, signal) : null)
   const meterStartLoadKey = `${accessToken}|${existingGarageId ?? 'new'}`
   const [meterStartLoadedKey, setMeterStartLoadedKey] = useState<string | null>(null)
+  const [meterPreviewReady, setMeterPreviewReady] = useState(false)
+  const changedMeterStarts = buildGarageMeterStartRequests(form.meterStartValues)
+  const requiresMeterPreview = Boolean(existingGarageId && financeClient.previewMeterConnections && changedMeterStarts.some((value) => value.connectedOn))
   const meterStartReady = !meterStartLoader || meterStartLoadedKey === meterStartLoadKey
   const openingDataChanged = Boolean(item)
     && (parsePrototypeMoney(form.startingBalance ?? '') !== parsePrototypeMoney(item?.startingBalance ?? '')
@@ -3834,13 +3843,15 @@ function GaragePrototypeDialog({ canReadMeterHistory, onOpenMeterHistory, access
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (saving || !meterStartReady) return
+    setMeterPreviewReady(false)
 
     const nextValidationErrors = getGaragePrototypeValidationErrors(form, !item)
     setValidationErrors(nextValidationErrors)
     setSaveError(null)
     const firstInvalidField = Object.keys(nextValidationErrors)[0]
     if (firstInvalidField) {
-      formRef.current?.querySelector<HTMLElement>(`[data-garage-field="${firstInvalidField}"]`)?.focus()
+      const target = formRef.current?.querySelector<HTMLElement>(`[data-garage-field="${firstInvalidField}"]`)
+      ;(target?.querySelector<HTMLElement>('input, textarea, button') ?? target)?.focus()
       return
     }
 
@@ -3910,6 +3921,7 @@ function GaragePrototypeDialog({ canReadMeterHistory, onOpenMeterHistory, access
                     loadKey={meterStartLoadKey}
                     load={meterStartLoader}
                     rows={form.meterStartValues}
+                    canManageConnections={canManageMeterConnections}
                     errors={validationErrors}
                     disabled={saving}
                     onLoaded={(meterStartValues) => {
@@ -3919,6 +3931,14 @@ function GaragePrototypeDialog({ canReadMeterHistory, onOpenMeterHistory, access
                     onChange={(meterKind, value) => setForm((currentForm) => ({
                       ...currentForm,
                       meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, value } : row),
+                    }))}
+                    onConnectionDateChange={(meterKind, connectedOn) => setForm((currentForm) => ({
+                      ...currentForm,
+                      meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, connectedOn } : row),
+                    }))}
+                    onReasonChange={(meterKind, reason) => setForm((currentForm) => ({
+                      ...currentForm,
+                      meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, reason } : row),
                     }))}
                     onFieldEdited={(fieldKey) => clearValidationError(fieldKey as GaragePrototypeField)}
                   />
@@ -3966,7 +3986,9 @@ function GaragePrototypeDialog({ canReadMeterHistory, onOpenMeterHistory, access
       </div>
 
       {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} saving={saving} onCancel={() => { setSaveChanges([]); setContinueWithOpeningAdjustment(false) }} onConfirm={() => void saveAndClose()} title="Подтвердить изменения гаража" />
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} saving={saving} confirmDisabled={requiresMeterPreview && !meterPreviewReady} onCancel={() => { setSaveChanges([]); setContinueWithOpeningAdjustment(false) }} onConfirm={() => void saveAndClose()} title="Подтвердить изменения гаража">
+          {requiresMeterPreview ? <GarageMeterConnectionPreview accessToken={accessToken} financeClient={financeClient} garageId={existingGarageId!} garageVersion={item.version ?? ''} values={changedMeterStarts} onReady={setMeterPreviewReady} /> : null}
+        </PrototypeChangeConfirmationDialog>
       ) : null}
     </>
   )

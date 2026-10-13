@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import { LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
+import { LoaderCircle, PlugZap, RefreshCw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
@@ -16,8 +16,9 @@ import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEditableInputOnBlur } from '../../shared/prototypeEditing'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { getMeterReadingDateForMonth } from './meterReadingPeriod'
+import { getMeterReadingConnectionStatus, getMeterReadingDateForMonth } from './meterReadingPeriod'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
 const meterReadingMonths = monthNames.map((label, index) => ({
   key: String(index + 1).padStart(2, '0'), label,
 }))
@@ -141,12 +142,13 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             <span role="rowheader">Гараж {garage.number}</span>
             {meterReadingMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
-              const baselineMonth = garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
+              const baselineMonth = !garage.connectedOn && garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
               const initialReading = baselineMonth === `${appliedYear}-${month.key}`
               const beforeInitialReading = !!baselineMonth && `${appliedYear}-${month.key}` < baselineMonth
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
               const outsideCurrentMonth = `${appliedYear}-${month.key}` !== currentMonth
               const hasSavedReading = !!savedReadings[cellKey]?.trim()
+              const connectionStatus = !hasSavedReading ? getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`) : null
               const outsideMonthUnavailable = (futureMonth && !canEditOutsideCurrentMonth) ||
                 (outsideCurrentMonth && hasSavedReading && !historicalCorrectionEnabled)
               const replacementSerial = savedReadingReplacements[cellKey]
@@ -165,18 +167,19 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
                     readOnly={initialReading}
-                    disabled={loading || !yearIsValid || beforeInitialReading || (!initialReading && outsideMonthUnavailable) || savingReadingKey === cellKey}
-                    title={initialReading ? 'Начальное показание из карточки гаража. Расход за этот месяц не начисляется.' : beforeInitialReading ? 'Месяц предшествует начальному показанию.' : outsideMonthUnavailable
+                    disabled={loading || !yearIsValid || Boolean(connectionStatus) || beforeInitialReading || (!initialReading && outsideMonthUnavailable) || savingReadingKey === cellKey}
+                    placeholder={connectionStatus ? '—' : undefined}
+                    title={connectionStatus ?? (initialReading ? 'Начальное показание из карточки гаража. Расход за этот месяц не начисляется.' : beforeInitialReading ? 'Месяц предшествует начальному показанию.' : outsideMonthUnavailable
                       ? !canEditOutsideCurrentMonth
                         ? 'Нет права на работу с показаниями за другие месяцы.'
                         : 'Изменение существующих показаний за другие месяцы отключено в настройках.'
-                      : undefined}
+                      : undefined)}
                     value={initialReading ? formatMeterReadingInputValue(garage.initialReadingValue!) : draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                     onBlur={(event) => {
-                      if (!initialReading && !loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
+                      if (!connectionStatus && !initialReading && !loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
                     }}
                     onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
-                    onKeyDown={(event) => { if (!initialReading) handleEditableInputKeyDown(event, () => onCommitReading(garage, month)) }}
+                    onKeyDown={(event) => { if (!connectionStatus && !initialReading) handleEditableInputKeyDown(event, () => onCommitReading(garage, month)) }}
                   />
                 </span>
               )
@@ -219,6 +222,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [configurationReloadRevision, setConfigurationReloadRevision] = useState(0)
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
   const [historicalCorrectionEnabled, setHistoricalCorrectionEnabled] = useState(false)
+  const [connectingService, setConnectingService] = useState(false)
+  const canConnectService = hasPermission(auth, permissions.openingDataAdjust) && hasPermission(auth, permissions.paymentsWrite) && hasPermission(auth, permissions.dictionariesWrite)
 
   const selectedMeterType = availableMeterTypes?.find((item) => item.id === meterType)
     ?? meterReadingTypes.find((item) => item.id === meterType)
@@ -467,11 +472,12 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       return
     }
 
+    const garage = garages.find((item) => item.id === garageId)
     const request: CreateMeterReadingRequest = {
       garageId,
       meterKind: meterType,
       accountingMonth: `${appliedYear}-${monthKey}-01`,
-      readingDate: getMeterReadingDateForMonth(appliedYear, monthKey, currentMonth, getLocalDateInputValue()),
+      readingDate: getMeterReadingDateForMonth(appliedYear, monthKey, currentMonth, getLocalDateInputValue(), garage?.connectedOn, garage?.closedOn),
       currentValue: parsedValue,
       comment: 'Ввод из годовой таблицы показаний',
       expectedVersion: readingVersion,
@@ -512,7 +518,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     } finally {
       setSavingReadingKey(null)
     }
-  }, [appliedYear, auth.accessToken, currentMonth, financeClient, meterType])
+  }, [appliedYear, auth.accessToken, currentMonth, financeClient, garages, meterType])
 
   const changeDraftReading = useCallback((cellKey: string, value: string) => {
     setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: value }))
@@ -530,6 +536,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
 
     const nextValue = draftReadings[cellKey] ?? ''
     const previousValue = savedReadings[cellKey] ?? ''
+
+    if (!previousValue.trim() && getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`)) return
 
     if (nextValue.trim() === previousValue.trim()) {
       return
@@ -602,6 +610,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           <h1>Показания</h1>
         </div>
         <div className="meter-readings-controls" role="group" aria-label="Параметры показаний">
+          {financeClient.connectMeterServicesBatch ? <button className="secondary-button create-action-button" type="button" disabled={!canConnectService || loading || !availableMeterTypes?.length} title={!canConnectService ? 'Нужны права изменения справочников, стартовых данных и платежей.' : undefined} onClick={() => setConnectingService(true)}><PlugZap size={17} /><span>Подключить услугу</span></button> : null}
           <FormField label="Год">
             <input
               aria-label="Год показаний"
@@ -677,6 +686,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         onPageSizeChange={(limit) => { setPageSize(limit); setPageOffset(0) }}
       /> : null}
 
+      {connectingService ? <MeterConnectionBatchDialog accessToken={auth.accessToken} financeClient={financeClient} meterKind={meterType} serviceName={selectedMeterType.label} year={appliedYear} onClose={() => setConnectingService(false)} onSaved={() => { setConnectingService(false); setReloadRevision((value) => value + 1) }} /> : null}
       {pendingReadingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>
           <section ref={readingChangeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="meter-reading-change-title" aria-describedby="meter-reading-change-description" onMouseDown={(event) => event.stopPropagation()}>

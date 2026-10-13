@@ -2853,6 +2853,46 @@ h1 {
   gap: 7px;
 }
 
+.contractors-garage-meter-service {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.contractors-garage-meter-status {
+  margin: 0;
+}
+
+.meter-connection-dialog {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
+.meter-connection-table {
+  display: grid;
+  gap: 4px;
+}
+
+.meter-connection-table > [role="row"] {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(160px, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.meter-connection-table input[type="checkbox"] {
+  width: auto;
+  margin-right: 6px;
+}
+
+.meter-connection-table label[role="cell"] {
+  display: flex;
+  align-items: center;
+}
+
 .contractors-garage-form-identity,
 .contractors-garage-form-owner,
 .contractors-garage-form-notes {

@@ -128,14 +128,14 @@ public sealed class GarageMeterStartValueTests
         await context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(context);
 
-        var saved = await service.UpdateGarageAsync(garage.Id, GarageRequest(garage, startValues: [new(commercial.MeterKind!, 5000m)]), null, CancellationToken.None);
+        var saved = await service.UpdateGarageAsync(garage.Id, GarageRequest(garage, startValues: [new(commercial.MeterKind!, 5000m, October)]), null, CancellationToken.None);
         var values = await service.GetGarageMeterStartValuesAsync(garage.Id, CancellationToken.None);
 
         Assert.True(saved.Succeeded, saved.ErrorMessage);
         var device = await context.MeterDevices.AsNoTracking().SingleAsync();
         Assert.Equal((commercial.MeterKind, 5000m), (device.MeterKind, device.InitialValue));
         Assert.Equal(5000m, Assert.Single(values.Value!).Value);
-        Assert.Contains(await context.AuditEvents.AsNoTracking().ToListAsync(), item => item.Action == "finance.meter_start_value_changed");
+        Assert.Contains(await context.AuditEvents.AsNoTracking().ToListAsync(), item => item.Action == "finance.meter_connection_changed");
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class GarageMeterStartValueTests
         var offered = await service.GetMeterStartServicesForNewGarageAsync(CancellationToken.None);
         var created = await service.CreateGarageAsync(
             new UpsertGarageRequest("20", 1, 1, null, 0m, null, null, null, MeterStartValues:
-                [new("water", 12m), new(snow.MeterKind!, 340m)]), null, CancellationToken.None);
+                [new("water", 12m, October), new(snow.MeterKind!, 340m, October)]), null, CancellationToken.None);
         var rejected = await service.CreateGarageAsync(
             new UpsertGarageRequest("21", 1, 1, null, 0m, null, null, null, MeterStartValues: [new(restricted.MeterKind!, 5m)]), null, CancellationToken.None);
 
@@ -163,8 +163,9 @@ public sealed class GarageMeterStartValueTests
         Assert.True(created.Succeeded, created.ErrorMessage);
         context.ChangeTracker.Clear();
         var stored = await context.Garages.AsNoTracking().SingleAsync(item => item.Number == "20");
-        Assert.Equal(12m, stored.InitialWaterMeterValue);
-        var device = await context.MeterDevices.AsNoTracking().SingleAsync(item => item.GarageId == stored.Id);
+        Assert.Null(stored.InitialWaterMeterValue);
+        Assert.Equal(12m, (await context.MeterDevices.AsNoTracking().SingleAsync(item => item.GarageId == stored.Id && item.MeterKind == MeterKinds.Water)).InitialValue);
+        var device = await context.MeterDevices.AsNoTracking().SingleAsync(item => item.GarageId == stored.Id && item.MeterKind == snow.MeterKind);
         Assert.Equal((snow.MeterKind, 340m), (device.MeterKind, device.InitialValue));
         Assert.Equal("meter_start_service_not_applicable", rejected.ErrorCode);
         Assert.DoesNotContain(await context.Garages.AsNoTracking().ToListAsync(), item => item.Number == "21");
@@ -463,6 +464,8 @@ public sealed class GarageMeterStartValueTests
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var firstContext = database.CreateContext();
         var garage = Garage("locks");
+        garage.InitialWaterMeterValue = 1m;
+        garage.InitialElectricityMeterValue = 1m;
         firstContext.Add(garage);
         await firstContext.SaveChangesAsync();
         var first = FinanceServiceTestFactory.Create(firstContext);

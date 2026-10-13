@@ -54,7 +54,9 @@ public sealed record AccrualCalculationDetailsDto(
     decimal TotalAmount,
     decimal? AverageRate = null,
     string? RateAveragingRule = null,
-    string? MonthlyCalculationFormula = null);
+    string? MonthlyCalculationFormula = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? MeterConnectedOn = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateOnly? MeterClosedOn = null);
 
 public sealed record RegularAccrualCalculationResult(
     bool Succeeded,
@@ -78,16 +80,32 @@ public static class RegularAccrualCalculator
         DateOnly accountingMonth,
         MeterReading? meterReading,
         IReadOnlyList<RegularAccrualSegmentDefinition> definitions,
-        IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null)
+        IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null,
+        GarageMeterConnection? meterConnection = null)
     {
         var month = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);
         var monthEnd = month.AddMonths(1).AddDays(-1);
         var monthDays = monthEnd.Day;
+        var meteredPeriod = meterConnection is not null;
+        var periodFrom = meteredPeriod && meterConnection!.ConnectedOn > month ? meterConnection.ConnectedOn : month;
+        var periodTo = meteredPeriod && meterConnection!.ClosedOn is { } closedOn && closedOn < monthEnd ? closedOn : monthEnd;
+        if (meteredPeriod && (periodFrom > periodTo || meterConnection!.BaselineMeterDeviceId is null))
+        {
+            return RegularAccrualCalculationResult.Failure(periodFrom > periodTo
+                ? "услуга не подключена в выбранном месяце."
+                : "требуется стартовое показание услуги.");
+        }
+        if (meteredPeriod)
+        {
+            // The recorded consumption already excludes days before connection. Allocate all of it
+            // across the active days instead of reducing it a second time by calendar-month length.
+            monthDays = periodTo.DayNumber - periodFrom.DayNumber + 1;
+        }
         var ordered = definitions
             .Select(definition => definition with
             {
-                EffectiveFrom = definition.EffectiveFrom < month ? month : definition.EffectiveFrom,
-                EffectiveTo = definition.EffectiveTo > monthEnd ? monthEnd : definition.EffectiveTo
+                EffectiveFrom = definition.EffectiveFrom < periodFrom ? periodFrom : definition.EffectiveFrom,
+                EffectiveTo = definition.EffectiveTo > periodTo ? periodTo : definition.EffectiveTo
             })
             .Where(definition => definition.EffectiveFrom <= definition.EffectiveTo)
             .OrderBy(definition => definition.EffectiveFrom)
@@ -99,6 +117,10 @@ public static class RegularAccrualCalculator
         if (ordered.Zip(ordered.Skip(1), (left, right) => left.EffectiveTo >= right.EffectiveFrom).Any(overlaps => overlaps))
         {
             return RegularAccrualCalculationResult.Failure("тарифные периоды внутри месяца пересекаются.");
+        }
+        if (meteredPeriod && (activeDefinitions.Sum(item => item.Definition.EffectiveTo.DayNumber - item.Definition.EffectiveFrom.DayNumber + 1) != monthDays))
+        {
+            return RegularAccrualCalculationResult.Failure("тариф не задан на весь период подключённой услуги.");
         }
         var calculationBases = activeDefinitions
             .Select(item => item.Definition.CalculationBase!)
@@ -209,7 +231,7 @@ public static class RegularAccrualCalculator
         }
 
         var details = new AccrualCalculationDetailsDto(
-            4,
+            meteredPeriod ? 5 : 4,
             month,
             meterReading?.PreviousValue,
             meterReading?.CurrentValue,
@@ -236,7 +258,9 @@ public static class RegularAccrualCalculator
                     activeDefinitions,
                     monthDays,
                     usesTieredTariff)
-                : null);
+                : null,
+            meteredPeriod ? meterConnection!.ConnectedOn : null,
+            meteredPeriod ? meterConnection!.ClosedOn : null);
         return RegularAccrualCalculationResult.Success(details);
     }
 

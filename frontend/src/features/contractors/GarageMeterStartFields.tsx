@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react'
 import type { GarageMeterStartValueDto } from '../../services/dictionariesApi'
-import { AsyncErrorState, LoadingSkeleton } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
-import { getGarageMeterStartFieldKey, toGarageMeterStartRows } from './garageMeterStartValues'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { getGarageMeterConnectionFieldKey, getGarageMeterConnectionStatus, getGarageMeterStartFieldKey, requiresGarageMeterConnectionReason, toGarageMeterStartRows } from './garageMeterStartValues'
 import type { GarageMeterStartRow } from './garageMeterStartValues'
 
 type LoadState = { key: string; status: 'ready' | 'error' }
 
-export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, onLoaded, onChange, onFieldEdited }: {
+export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, canManageConnections = true, onLoaded, onChange, onConnectionDateChange, onReasonChange, onFieldEdited }: {
   loadKey: string
   load: (signal: AbortSignal) => Promise<GarageMeterStartValueDto[]>
   rows: GarageMeterStartRow[] | undefined
   errors: Record<string, string | undefined>
   disabled: boolean
+  canManageConnections?: boolean
   onLoaded: (rows: GarageMeterStartRow[]) => void
   onChange: (meterKind: string, value: string) => void
+  onConnectionDateChange: (meterKind: string, value: string) => void
+  onReasonChange: (meterKind: string, value: string) => void
   onFieldEdited: (fieldKey: string) => void
 }) {
   const [retry, setRetry] = useState(0)
@@ -49,9 +53,11 @@ export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, 
     <div className="contractors-garage-meter-start" role="group" aria-label="Стартовые значения счётчиков">
       {(rows ?? []).map((row) => {
         const fieldKey = getGarageMeterStartFieldKey(row.meterKind)
+        const dateFieldKey = getGarageMeterConnectionFieldKey(row.meterKind)
+        const status = getGarageMeterConnectionStatus(row)
         return (
+          <div className="contractors-garage-meter-service" key={row.meterKind} role="group" aria-label={`Учёт услуги: ${row.label}`}>
           <FormField
-            key={row.meterKind}
             label={`Старт. зн. сч.: ${row.label}`}
             help={row.hasReadings
               ? 'По счётчику уже есть показания: при изменении расход и неоплаченные начисления будут пересчитаны.'
@@ -61,7 +67,7 @@ export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, 
               aria-label={`Стартовое значение счётчика: ${row.label}`}
               aria-invalid={Boolean(errors[fieldKey])}
               data-garage-field={fieldKey}
-              disabled={disabled}
+              disabled={disabled || !canManageConnections && Boolean(row.connectedOn || row.requiresConnectionDate)}
               value={row.value}
               onChange={(event) => {
                 onFieldEdited(fieldKey)
@@ -69,8 +75,35 @@ export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, 
               }}
             />
           </FormField>
+          <FormField label="Дата подключения" help="Фактическая дата начала этой услуги. Стартовое показание задаёт базу расхода первого расчётного месяца. Общая история гаража сохраняется.">
+            <div data-garage-field={dateFieldKey}>
+              <LocalizedDatePicker
+                ariaLabel={`Дата подключения услуги: ${row.label}`}
+                mode="date"
+                value={row.connectedOn}
+                disabled={disabled || !canManageConnections}
+                aria-invalid={Boolean(errors[dateFieldKey])}
+                onChange={(value) => {
+                  onFieldEdited(dateFieldKey)
+                  onConnectionDateChange(row.meterKind, value)
+                }}
+              />
+            </div>
+          </FormField>
+          {status ? <span className="hint contractors-garage-meter-status" role="status" aria-live="polite">{status}</span> : null}
+          {row.requiresTariff && row.connectedOn === row.initialConnectedOn ? <span className="form-error" role="status">Нет тарифа на весь первый месяц подключения: начисление не рассчитано.</span> : null}
+          {row.connectedOn && row.connectedOn !== row.initialConnectedOn ? <span className="hint" role="status">Тариф будет проверен после сохранения.</span> : null}
+          {requiresGarageMeterConnectionReason(row) ? (
+            <FormField label="Причина изменения" help="Причина сохранится в истории исправления даты подключения или стартового показания.">
+              <input aria-label={`Причина изменения учёта: ${row.label}`} data-garage-field={`meter:${row.meterKind}:reason`}
+                aria-invalid={Boolean(errors[`meter:${row.meterKind}:reason`])} disabled={disabled || !canManageConnections} maxLength={1000} required value={row.reason}
+                onChange={(event) => { onFieldEdited(`meter:${row.meterKind}:reason`); onReasonChange(row.meterKind, event.target.value) }} />
+            </FormField>
+          ) : null}
+          </div>
         )
       })}
+      {rows?.length === 0 ? <EmptyState>Нет применимых услуг со счётчиком.</EmptyState> : null}
     </div>
   )
 }

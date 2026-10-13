@@ -8,6 +8,18 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbContext) : IChargeServiceSettingRepository
 {
+    public async Task<bool> IsRegularMeterKindApplicableAsync(Guid garageId, string meterKind, CancellationToken cancellationToken)
+    {
+        // Project one scalar from indexed kind candidates. Any applicable setting wins;
+        // null distinguishes an unconfigured legacy meter from an explicitly excluded garage.
+        var applies = await dbContext.ChargeServiceSettings.AsNoTracking()
+            .Where(setting => !setting.IsArchived && setting.IsRegular && setting.IsMetered && setting.MeterKind == meterKind)
+            .OrderByDescending(setting => !setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garageId))
+            .Select(setting => (bool?)(!setting.AppliesToSelectedGarages || setting.GarageIds.Contains(garageId)))
+            .FirstOrDefaultAsync(cancellationToken);
+        return applies ?? meterKind is MeterKinds.Water or MeterKinds.Electricity;
+    }
+
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
@@ -348,7 +360,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                  setting.IsMetered &&
                  setting.Tariff != null &&
                  !setting.Tariff.IsArchived &&
-                 setting.Tariff.EffectiveFrom <= accountingMonth &&
+                 setting.Tariff.EffectiveFrom <= monthEnd &&
                  (calculationBase == null || setting.Tariff.CalculationBase == calculationBase)))
             .OrderBy(setting => setting.Name)
             .Take(limit)
@@ -362,7 +374,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Select(row => row.Setting.Id)
             .ToHashSet();
 
-        await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken, servicesWithVersions);
+        await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken, servicesWithVersions, monthEnd);
         foreach (var setting in settings)
         {
             setting.MeterKind ??= setting.IncomeType?.Code switch
@@ -529,6 +541,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Take(1)
             .Concat(serviceVersions
                 .Where(item => item.EffectiveFrom == effectiveFrom)
+                .OrderBy(item => item.EffectiveFrom)
                 .Take(1))
             .Concat(activeVersions
                 .Where(item => item.EffectiveFrom > effectiveFrom)
@@ -634,7 +647,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         IReadOnlyCollection<ChargeServiceSetting> settings,
         DateOnly accountingMonth,
         CancellationToken cancellationToken,
-        IReadOnlySet<Guid>? loadedServiceIdsWithVersions = null)
+        IReadOnlySet<Guid>? loadedServiceIdsWithVersions = null,
+        DateOnly? directTariffThrough = null)
     {
         if (settings.Count == 0)
         {
@@ -669,7 +683,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                     ApplyTariffMode(setting, tariff);
                 }
             }
-            else if (servicesWithVersions.Contains(setting.Id) || setting.Tariff?.EffectiveFrom > accountingMonth)
+            else if (servicesWithVersions.Contains(setting.Id) || setting.Tariff?.EffectiveFrom > (directTariffThrough ?? accountingMonth))
             {
                 setting.TariffId = null;
                 setting.Tariff = null;

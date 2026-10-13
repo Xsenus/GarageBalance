@@ -669,7 +669,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             MeterKinds.Electricity => TariffCalculationBases.MeterElectricity,
             _ => null
         };
-        if (calculationBase is null)
+        if (!MeterKinds.IsValid(meterKind))
         {
             return [];
         }
@@ -682,7 +682,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 accrual.AccountingMonth == accountingMonth &&
                 accrual.Source == AccrualSources.Regular &&
                 ((accrual.RequiresMeterReading && accrual.CalculationMeterKind == meterKind) ||
-                 (!accrual.RequiresMeterReading && accrual.Tariff != null && accrual.Tariff.CalculationBase == calculationBase)))
+                 (calculationBase != null && !accrual.RequiresMeterReading && accrual.Tariff != null && accrual.Tariff.CalculationBase == calculationBase)))
             .OrderBy(accrual => accrual.IncomeTypeId)
             .ThenBy(accrual => accrual.Id)
             .ToListAsync(cancellationToken);
@@ -700,7 +700,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             MeterKinds.Electricity => TariffCalculationBases.MeterElectricity,
             _ => null
         };
-        if (calculationBase is null)
+        if (!MeterKinds.IsValid(meterKind))
         {
             return [];
         }
@@ -713,7 +713,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 accrual.AccountingMonth >= accountingMonth &&
                 accrual.Source == AccrualSources.Regular &&
                 ((accrual.RequiresMeterReading && accrual.CalculationMeterKind == meterKind) ||
-                 (!accrual.RequiresMeterReading && accrual.Tariff != null && accrual.Tariff.CalculationBase == calculationBase)))
+                 (calculationBase != null && !accrual.RequiresMeterReading && accrual.Tariff != null && accrual.Tariff.CalculationBase == calculationBase)))
             .OrderBy(accrual => accrual.AccountingMonth)
             .ThenBy(accrual => accrual.IncomeTypeId)
             .ThenBy(accrual => accrual.Id)

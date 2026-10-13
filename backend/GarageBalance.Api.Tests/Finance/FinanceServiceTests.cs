@@ -81,7 +81,9 @@ public sealed partial class FinanceServiceTests
         {
             var reading = await service.SavePaymentFormMeterReadingAsync(new SavePaymentFormMeterReadingRequest(excluded.Id, MeterKinds.Water,
                 new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 11m, null), null, CancellationToken.None);
-            Assert.True(reading.Succeeded, reading.ErrorMessage);
+            Assert.False(reading.Succeeded);
+            Assert.Equal("meter_start_service_not_applicable", reading.ErrorCode);
+            Assert.DoesNotContain(database.Context.MeterReadings, item => item.GarageId == excluded.Id);
         }
         Assert.Single(database.Context.Accruals);
         Assert.DoesNotContain(database.Context.Accruals, item => item.GarageId == excluded.Id);
@@ -10517,6 +10519,14 @@ public sealed partial class FinanceServiceTests
             database.Context,
             new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
 
+        var connected = await service.ApplyStartValuesAsync(fixtures.Garage,
+            [new(setting.MeterKind, 0m, new DateOnly(2026, 6, 1))], null, CancellationToken.None);
+        Assert.True(connected.Succeeded, connected.ErrorMessage);
+        await using (var connectionLease = connected.Value!)
+        {
+            await database.Context.SaveChangesAsync();
+        }
+
         var result = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(
                 fixtures.Garage.Id,
@@ -12523,7 +12533,7 @@ public sealed partial class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
-        var secondGarage = new Garage { Number = "13", PeopleCount = 2, FloorCount = 1, Owner = secondOwner };
+        var secondGarage = new Garage { Number = "13", PeopleCount = 2, FloorCount = 1, Owner = secondOwner, InitialWaterMeterValue = 0, InitialElectricityMeterValue = 0 };
         var archivedGarage = new Garage { Number = "14", PeopleCount = 1, FloorCount = 1, IsArchived = true };
         database.Context.AddRange(secondOwner, secondGarage, archivedGarage);
         await database.Context.SaveChangesAsync();
@@ -12575,7 +12585,7 @@ public sealed partial class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var secondGarage = new Garage { Number = "13", PeopleCount = 1, FloorCount = 1 };
+        var secondGarage = new Garage { Number = "13", PeopleCount = 1, FloorCount = 1, InitialWaterMeterValue = 0, InitialElectricityMeterValue = 0 };
         database.Context.Garages.Add(secondGarage);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -12611,6 +12621,8 @@ public sealed partial class FinanceServiceTests
                 Number = $"G-{index:D3}",
                 PeopleCount = 1,
                 FloorCount = 1,
+                InitialWaterMeterValue = 0,
+                InitialElectricityMeterValue = 0,
                 Owner = fixtures.Garage.Owner
             });
         }

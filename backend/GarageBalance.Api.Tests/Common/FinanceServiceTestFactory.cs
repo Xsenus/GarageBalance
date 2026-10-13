@@ -14,7 +14,8 @@ internal static class FinanceServiceTestFactory
         TimeProvider? timeProvider = null,
         IHistoricalMeterReadingCorrectionPolicy? historicalMeterReadingCorrectionPolicy = null,
         IPayoutMutationPolicy? payoutMutationPolicy = null,
-        DateOnly? businessDate = null) =>
+        DateOnly? businessDate = null,
+        IAccrualPaymentAllocationRepository? allocationRepository = null) =>
         new(
             new EfStaffMemberRepository(dbContext),
             new EfGarageRepository(dbContext, TestBusinessDateProvider.From(timeProvider)),
@@ -29,7 +30,7 @@ internal static class FinanceServiceTestFactory
             new EfMeterReadingRepository(dbContext),
             new EfFinancialOperationRepository(dbContext),
             new EfAccrualRepository(dbContext),
-            new EfAccrualPaymentAllocationRepository(dbContext),
+            allocationRepository ?? new EfAccrualPaymentAllocationRepository(dbContext),
             new EfSupplierAccrualRepository(dbContext),
             new EfStaffSalaryAdjustmentRepository(dbContext),
             new EfCashBankTransferRepository(dbContext),

@@ -84,7 +84,11 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             await seedContext.SaveChangesAsync();
         }
 
-        await using (var context = database.CreateContext())
+        var orderedOptions = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseNpgsql(database.ConnectionString)
+            .ConfigureWarnings(warnings => warnings.Throw(CoreEventId.RowLimitingOperationWithoutOrderByWarning))
+            .Options;
+        await using (var context = new GarageBalanceDbContext(orderedOptions))
         {
             var repository = new EfChargeServiceSettingRepository(context);
             var services = await repository.GetActiveRegularMeteredAsync(

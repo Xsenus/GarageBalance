@@ -1780,6 +1780,55 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.ToTable("fund_operations", (string)null);
                 });
 
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.GarageMeterConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BaselineMeterDeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("ClosedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("ConnectedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GarageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MeterKind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BaselineMeterDeviceId");
+
+                    b.HasIndex("GarageId", "MeterKind")
+                        .IsUnique()
+                        .HasFilter("\"ClosedOn\" IS NULL");
+
+                    b.HasIndex("GarageId", "MeterKind", "ConnectedOn");
+
+                    b.ToTable("garage_meter_connections", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_garage_meter_connections_period", "\"ClosedOn\" IS NULL OR \"ClosedOn\" >= \"ConnectedOn\"");
+                        });
+                });
+
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.MeterDevice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3465,6 +3514,24 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Navigation("Fund");
 
                     b.Navigation("SourceFinancialOperation");
+                });
+
+            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.GarageMeterConnection", b =>
+                {
+                    b.HasOne("GarageBalance.Api.Domain.Finance.MeterDevice", "BaselineMeterDevice")
+                        .WithMany()
+                        .HasForeignKey("BaselineMeterDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("GarageBalance.Api.Domain.Dictionaries.Garage", "Garage")
+                        .WithMany()
+                        .HasForeignKey("GarageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BaselineMeterDevice");
+
+                    b.Navigation("Garage");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.MeterDevice", b =>

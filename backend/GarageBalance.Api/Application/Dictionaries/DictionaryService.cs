@@ -372,8 +372,8 @@ public sealed class DictionaryService(
         }
 
         var registeredOn = businessDateProvider.Today;
-        var listedWater = request.MeterStartValues?.FirstOrDefault(item => item.MeterKind.Trim() == MeterKinds.Water && item.Value.HasValue)?.Value;
-        var listedElectricity = request.MeterStartValues?.FirstOrDefault(item => item.MeterKind.Trim() == MeterKinds.Electricity && item.Value.HasValue)?.Value;
+        var listedWater = request.MeterStartValues?.FirstOrDefault(item => item.MeterKind.Trim() == MeterKinds.Water);
+        var listedElectricity = request.MeterStartValues?.FirstOrDefault(item => item.MeterKind.Trim() == MeterKinds.Electricity);
         var garage = new Garage
         {
             Number = number,
@@ -383,8 +383,8 @@ public sealed class DictionaryService(
             StartingOverdueDebt = startingOverdueDebt,
             OwnerId = request.OwnerId,
             Owner = owner,
-            InitialWaterMeterValue = MoneyMath.RoundMeterValue(listedWater ?? request.InitialWaterMeterValue),
-            InitialElectricityMeterValue = MoneyMath.RoundMeterValue(listedElectricity ?? request.InitialElectricityMeterValue),
+            InitialWaterMeterValue = listedWater is null ? MoneyMath.RoundMeterValue(request.InitialWaterMeterValue) : null,
+            InitialElectricityMeterValue = listedElectricity is null ? MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue) : null,
             InitialMeterReadingMonth = MonthPeriod.Normalize(registeredOn).AddMonths(-1),
             RegisteredOn = registeredOn,
             Comment = NormalizeOptional(request.Comment)
@@ -399,7 +399,7 @@ public sealed class DictionaryService(
         });
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
         var serviceStartValues = (request.MeterStartValues ?? [])
-            .Where(item => item.Value.HasValue && item.MeterKind.Trim() is not (MeterKinds.Water or MeterKinds.Electricity))
+            .Where(item => item.Value.HasValue || item.ConnectedOn.HasValue)
             .Select(item => item with { MeterKind = item.MeterKind.Trim() })
             .ToList();
         GarageMeterStartValueApplyResult? meterStart = null;
@@ -468,12 +468,8 @@ public sealed class DictionaryService(
         }
         var requestedWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
         var requestedElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
-        var listedWaterValue = request.MeterStartValues?.FirstOrDefault(item =>
-            item.MeterKind.Trim() == MeterKinds.Water && item.Value.HasValue)?.Value;
-        var listedElectricityValue = request.MeterStartValues?.FirstOrDefault(item =>
-            item.MeterKind.Trim() == MeterKinds.Electricity && item.Value.HasValue)?.Value;
-        var initialWaterMeterValue = listedWaterValue.HasValue ? MoneyMath.RoundMeterValue(listedWaterValue) : requestedWaterMeterValue;
-        var initialElectricityMeterValue = listedElectricityValue.HasValue ? MoneyMath.RoundMeterValue(listedElectricityValue) : requestedElectricityMeterValue;
+        var initialWaterMeterValue = requestedWaterMeterValue;
+        var initialElectricityMeterValue = requestedElectricityMeterValue;
         var comment = NormalizeOptional(request.Comment);
         var openingDataLock = await garageRepository.GetOpeningDataLockAsync(garage.Id, cancellationToken);
         if ((garage.StartingBalance != startingBalance || GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt) != startingOverdueDebt) && openingDataLock.HasFinancialHistory)
@@ -570,10 +566,12 @@ public sealed class DictionaryService(
                 ["initialElectricityMeterValue"] = garage.InitialElectricityMeterValue,
                 ["comment"] = comment
             };
-            foreach (var change in meterStartChanges.Where(item => item.MeterKind is not (MeterKinds.Water or MeterKinds.Electricity)))
+            foreach (var change in meterStartChanges)
             {
                 oldValues[$"meterStartValue:{change.Label}"] = change.OldValue;
                 newValues[$"meterStartValue:{change.Label}"] = change.NewValue;
+                oldValues[$"meterConnectedOn:{change.Label}"] = change.OldConnectedOn;
+                newValues[$"meterConnectedOn:{change.Label}"] = change.NewConnectedOn;
             }
 
             garage.Number = number;
@@ -652,21 +650,17 @@ public sealed class DictionaryService(
         decimal? electricity,
         IReadOnlyList<UpsertGarageMeterStartValueRequest>? listed)
     {
-        var requests = new List<UpsertGarageMeterStartValueRequest>();
-        if (garage.InitialWaterMeterValue != water)
+        var requests = (listed ?? []).Select(item => item with { MeterKind = item.MeterKind.Trim() }).ToList();
+        if (garage.InitialWaterMeterValue != water && requests.All(item => item.MeterKind != MeterKinds.Water))
         {
             requests.Add(new UpsertGarageMeterStartValueRequest(MeterKinds.Water, water));
         }
 
-        if (garage.InitialElectricityMeterValue != electricity)
+        if (garage.InitialElectricityMeterValue != electricity && requests.All(item => item.MeterKind != MeterKinds.Electricity))
         {
             requests.Add(new UpsertGarageMeterStartValueRequest(MeterKinds.Electricity, electricity));
         }
 
-        // Values for water and electricity were merged above; only service meters remain.
-        requests.AddRange((listed ?? [])
-            .Where(item => item.Value.HasValue && item.MeterKind.Trim() is not (MeterKinds.Water or MeterKinds.Electricity))
-            .Select(item => item with { MeterKind = item.MeterKind.Trim() }));
         return requests;
     }
 

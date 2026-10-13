@@ -25,6 +25,21 @@ public sealed class PostgreSqlStagingWorkingDataResetIntegrationTests
 
         var seeder = new ShowcaseDataSeeder(context);
         Assert.True((await seeder.PrepareAsync(CancellationToken.None)).IsReady);
+        var meter = new MeterDevice
+        {
+            GarageId = await context.Garages.Select(item => item.Id).FirstAsync(),
+            MeterKind = MeterKinds.ForService(Guid.NewGuid()),
+            SerialNumber = "reset-connection",
+            InstalledOn = new DateOnly(2026, 9, 10)
+        };
+        context.MeterDevices.Add(meter);
+        context.GarageMeterConnections.Add(new GarageMeterConnection
+        {
+            GarageId = meter.GarageId,
+            MeterKind = meter.MeterKind,
+            ConnectedOn = meter.InstalledOn,
+            BaselineMeterDeviceId = meter.Id
+        });
         var batch = new ExpensePaymentBatch
         {
             Id = Guid.NewGuid(),
@@ -112,6 +127,7 @@ public sealed class PostgreSqlStagingWorkingDataResetIntegrationTests
         Assert.Empty(await context.StaffEmploymentPeriods.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.StaffSalaryRatePeriods.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.MeterDevices.AsNoTracking().ToArrayAsync());
+        Assert.Empty(await context.GarageMeterConnections.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.MeterReadings.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.Accruals.AsNoTracking().ToArrayAsync());
         Assert.Empty(await context.AccrualPaymentAllocations.AsNoTracking().ToArrayAsync());

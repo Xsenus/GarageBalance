@@ -29,6 +29,7 @@ public sealed class MeterReadingGarageScopeTests
     private static async Task VerifyScopeAsync(GarageBalanceDbContext context, string kind)
     {
         context.MeterReadings.RemoveRange(context.MeterReadings);
+        context.MeterDevices.RemoveRange(context.MeterDevices);
         context.Garages.RemoveRange(context.Garages);
         context.ChargeServiceSettings.RemoveRange(context.ChargeServiceSettings);
         await context.SaveChangesAsync();
@@ -47,6 +48,14 @@ public sealed class MeterReadingGarageScopeTests
             GarageIds = [second.Id, third.Id, archived.Id]
         };
         context.Garages.AddRange(first, second, third, archived);
+        context.MeterDevices.Add(new MeterDevice
+        {
+            Garage = third,
+            MeterKind = kind,
+            SerialNumber = "SCOPE-BASE",
+            InstalledOn = month,
+            InitialValue = 0
+        });
         context.ChargeServiceSettings.AddRange(setting,
             new ChargeServiceSetting { Name = "Другая услуга", IsRegular = true, IsMetered = true, MeterKind = "service_22222222222222222222222222222222" },
             new ChargeServiceSetting { Name = "Архивная услуга", IsRegular = true, IsMetered = true, MeterKind = kind, IsArchived = true },
@@ -61,15 +70,15 @@ public sealed class MeterReadingGarageScopeTests
         var missingQuery = new EfMissingMeterReadingQuery(context);
 
         var page = await repository.GetYearPageAsync(2045, kind, 0, 1, CancellationToken.None);
-        Assert.Equal(2, page.TotalCount);
-        Assert.Equal(second.Id, Assert.Single(page.Garages).Id);
-        Assert.Equal(second.Id, Assert.Single(page.Readings).GarageId);
-        var finalPage = await repository.GetYearPageAsync(2045, kind, 1, 1, CancellationToken.None);
-        Assert.Equal(2, finalPage.TotalCount);
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal(first.Id, Assert.Single(page.Garages).Id);
+        Assert.Equal(first.Id, Assert.Single(page.Readings).GarageId);
+        var finalPage = await repository.GetYearPageAsync(2045, kind, 2, 1, CancellationToken.None);
+        Assert.Equal(3, finalPage.TotalCount);
         Assert.Equal(third.Id, Assert.Single(finalPage.Garages).Id);
         Assert.Empty(finalPage.Readings);
         var beyondEnd = await repository.GetYearPageAsync(2045, kind, 20, 1, CancellationToken.None);
-        Assert.Equal(2, beyondEnd.TotalCount);
+        Assert.Equal(3, beyondEnd.TotalCount);
         Assert.Empty(beyondEnd.Garages);
         Assert.Empty(beyondEnd.Readings);
         Assert.Equal(third.Id, Assert.Single(await missingQuery.GetMissingAsync(month, [kind], null, 10, CancellationToken.None)).GarageId);
@@ -78,9 +87,9 @@ public sealed class MeterReadingGarageScopeTests
         setting.GarageIds = [];
         await context.SaveChangesAsync();
         var empty = await repository.GetYearPageAsync(2045, kind, 0, 10, CancellationToken.None);
-        Assert.Equal(0, empty.TotalCount);
-        Assert.Empty(empty.Garages);
-        Assert.Empty(empty.Readings);
+        Assert.Equal(2, empty.TotalCount);
+        Assert.Equal([first.Id, second.Id], empty.Garages.Select(garage => garage.Id));
+        Assert.Equal(2, empty.Readings.Count);
         Assert.Empty(await missingQuery.GetMissingAsync(month, [kind], null, 10, CancellationToken.None));
 
         setting.AppliesToSelectedGarages = false;
@@ -95,8 +104,8 @@ public sealed class MeterReadingGarageScopeTests
         setting.GarageIds = [first.Id];
         await context.SaveChangesAsync();
         var changed = await repository.GetYearPageAsync(2045, kind, 0, 10, CancellationToken.None);
-        Assert.Equal(1, changed.TotalCount);
-        Assert.Equal(first.Id, Assert.Single(changed.Garages).Id);
-        Assert.Equal(first.Id, Assert.Single(changed.Readings).GarageId);
+        Assert.Equal(2, changed.TotalCount);
+        Assert.Equal([first.Id, second.Id], changed.Garages.Select(garage => garage.Id));
+        Assert.Equal(2, changed.Readings.Count);
     }
 }

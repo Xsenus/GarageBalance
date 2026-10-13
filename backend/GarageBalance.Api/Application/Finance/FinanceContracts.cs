@@ -559,7 +559,15 @@ public sealed record ReplaceMeterDeviceRequest(
 
 public sealed record MeterDeviceReplacementDto(MeterDeviceDto Device, MeterReadingDto Reading);
 
-public sealed record MeterReadingYearGarageDto(Guid Id, string Number, DateOnly? InitialReadingMonth = null, decimal? InitialReadingValue = null);
+public sealed record MeterReadingYearGarageDto(
+    Guid Id,
+    string Number,
+    DateOnly? InitialReadingMonth = null,
+    decimal? InitialReadingValue = null,
+    DateOnly? ConnectedOn = null,
+    bool RequiresStartValue = false,
+    bool RequiresConnectionDate = false,
+    DateOnly? ClosedOn = null);
 
 public sealed record MeterReadingYearValueDto(
     Guid Id,

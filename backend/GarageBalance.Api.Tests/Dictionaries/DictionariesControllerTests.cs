@@ -11,6 +11,63 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 
 public sealed class DictionariesControllerTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task DatedMeterStartValues_CannotBypassDedicatedPermissionsThroughGarageEndpoints(bool opening, bool payments)
+    {
+        var fake = new FakeDictionaryService();
+        var onboarding = new FakeGarageOnboardingService();
+        var controller = CreateController(fake, onboardingService: onboarding);
+        var claims = new List<Claim>();
+        if (opening) claims.Add(new Claim("permission", SystemPermissions.OpeningDataAdjust));
+        if (payments) claims.Add(new Claim("permission", SystemPermissions.PaymentsWrite));
+        controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+        var request = new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null,
+            MeterStartValues: [new("water", 0, new DateOnly(2026, 9, 10))]);
+        var results = new[]
+        {
+            await controller.CreateGarage(request, CancellationToken.None),
+            await controller.UpdateGarage(Guid.NewGuid(), request, CancellationToken.None),
+            await controller.CreateGarageWithAnnualPayments(new(request, 2026, []), CancellationToken.None),
+            await controller.UpdateGarageWithAnnualPayments(Guid.NewGuid(), new(request, 2026, []), CancellationToken.None)
+        };
+        Assert.All(results, result =>
+        {
+            var denied = Assert.IsType<ObjectResult>(result.Result);
+            Assert.Equal(StatusCodes.Status403Forbidden, denied.StatusCode);
+            Assert.Equal("meter_connection_permission_denied", Assert.IsType<ProblemDetails>(denied.Value).Extensions["code"]);
+        });
+        Assert.Null(onboarding.LastRequest);
+        Assert.Null(onboarding.LastUpdateRequest);
+        Assert.Null(fake.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task DatedMeterStartValues_ReachAllGarageEndpointsWithBothPermissions()
+    {
+        var dto = new GarageDto(Guid.NewGuid(), "12", 1, 1, null, null, 0, null, null, null, false);
+        var fake = new FakeDictionaryService
+        {
+            CreateGarageResult = DictionaryResult<GarageDto>.Success(dto),
+            UpdateGarageResult = DictionaryResult<GarageDto>.Success(dto)
+        };
+        var onboarding = new FakeGarageOnboardingService { Result = DictionaryResult<GarageDto>.Success(dto) };
+        var actor = Guid.NewGuid();
+        var controller = CreateController(fake, actor, onboarding);
+        ((ClaimsIdentity)controller.User.Identity!).AddClaims([
+            new Claim("permission", SystemPermissions.OpeningDataAdjust), new Claim("permission", SystemPermissions.PaymentsWrite)]);
+        var request = new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null,
+            MeterStartValues: [new("water", 0, new DateOnly(2026, 9, 10))]);
+        Assert.IsType<CreatedAtActionResult>((await controller.CreateGarage(request, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.UpdateGarage(dto.Id, request, CancellationToken.None)).Result);
+        Assert.IsType<CreatedAtActionResult>((await controller.CreateGarageWithAnnualPayments(new(request, 2026, []), CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.UpdateGarageWithAnnualPayments(dto.Id, new(request, 2026, []), CancellationToken.None)).Result);
+        Assert.Equal(actor, fake.LastActorUserId);
+        Assert.Equal(actor, onboarding.LastActorUserId);
+    }
+
     [Fact]
     public void OpeningBalanceAdjustments_RequireDictionaryWriteAndDedicatedPermission()
     {

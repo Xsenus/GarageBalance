@@ -76,6 +76,15 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/dictionaries/garages/meter-start-services')
   })
 
+  it('preserves individual connection date, nullable baseline, version and reason in garage updates', async () => {
+    const request = { number: '7', peopleCount: 0, floorCount: 1, startingBalance: 0,
+      meterStartValues: [{ meterKind: 'water', value: null, connectedOn: '2026-09-10', connectionVersion: 'v1', reason: 'Акт подключения' }] }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'garage-7', number: '7' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await dictionariesApi.updateGarage('token', 'garage-7', request)
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/garage-7', expect.objectContaining({ method: 'PUT', body: JSON.stringify(request) }))
+  })
+
   it('uses the independent supplier service contract and invalidates supplier names without invalidating tariffs', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ id: 'service', name: 'Уборка', version: 'v1', isArchived: false }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

@@ -25,6 +25,17 @@ public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
         await using (var setupContext = database.CreateContext())
         {
             setupContext.Garages.AddRange(firstGarage, secondGarage, completeGarage);
+            foreach (var garage in new[] { firstGarage, secondGarage, completeGarage })
+            {
+                setupContext.MeterDevices.AddRange(new[] { firstKind, secondKind, thirdKind }.Select(kind => new MeterDevice
+                {
+                    Garage = garage,
+                    MeterKind = kind,
+                    SerialNumber = "CUSTOM-BASE",
+                    InstalledOn = month,
+                    InitialValue = 0
+                }));
+            }
             setupContext.MeterReadings.AddRange(
                 CreateReading(firstGarage, month, firstKind),
                 CreateReading(secondGarage, month, secondKind),
@@ -71,7 +82,9 @@ public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
         {
             Assert.Contains("unnest(@meter_kinds::text[]) WITH ORDINALITY", command, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("NOT EXISTS", command, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal(1, CountOccurrences(command, "FROM meter_readings"));
+            Assert.Equal(2, CountOccurrences(command, "FROM meter_readings"));
+            Assert.Contains("historical.\"GarageId\" = garage.\"Id\"", command, StringComparison.Ordinal);
+            Assert.Contains("historical.\"MeterKind\" = requested.\"MeterKind\"", command, StringComparison.Ordinal);
             Assert.Contains("LIMIT @limit", command, StringComparison.OrdinalIgnoreCase);
         });
         Assert.Contains("ILIKE @search ESCAPE '\\'", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
@@ -144,7 +157,8 @@ public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
         Assert.Equal(2, capture.Commands.Count);
         Assert.All(capture.Commands, command =>
         {
-            Assert.Equal(1, CountOccurrences(command, "FROM meter_readings"));
+            Assert.Equal(3, CountOccurrences(command, "FROM meter_readings"));
+            Assert.Equal(2, CountOccurrences(command, "historical.\"GarageId\" = garage.\"Id\""));
             Assert.Contains("LEFT JOIN", command, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("GROUP BY", command, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
@@ -160,6 +174,8 @@ public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
             Number = number,
             PeopleCount = 1,
             FloorCount = 1,
+            InitialWaterMeterValue = 0,
+            InitialElectricityMeterValue = 0,
             IsArchived = isArchived
         };
 

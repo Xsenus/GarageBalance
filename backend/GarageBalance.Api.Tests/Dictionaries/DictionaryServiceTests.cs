@@ -837,7 +837,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var ownerResult = await service.CreateOwnerAsync(new UpsertOwnerRequest("Кузнецов", "Олег", null, null, null, null), null, CancellationToken.None);
-        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, null, null, null), null, CancellationToken.None);
+        var garageResult = await service.CreateGarageAsync(new UpsertGarageRequest("15", 1, 1, null, 0, 1m, 9m, null), null, CancellationToken.None);
 
         var result = await service.UpdateGarageAsync(
             garageResult.Value!.Id,
@@ -845,11 +845,13 @@ public sealed class DictionaryServiceTests
             null,
             CancellationToken.None);
 
-        Assert.True(result.Succeeded);
+        Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.Equal("15A", result.Value!.Number);
         Assert.Equal("Кузнецов Олег", result.Value.OwnerName);
         Assert.Equal(3, result.Value.PeopleCount);
         Assert.Equal(250m, result.Value.StartingBalance);
+        Assert.Equal(1.5m, result.Value.InitialWaterMeterValue);
+        Assert.Equal(9.75m, result.Value.InitialElectricityMeterValue);
     }
 
     [Fact]
@@ -7016,14 +7018,21 @@ public sealed class DictionaryServiceTests
         commandCounter.Reset();
         var effectiveFrom = new DateOnly(2030, 6, 15);
 
-        await new EfChargeServiceSettingRepository(database.Context).SetTariffVersionAsync(
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseSqlite(database.Context.Database.GetDbConnection())
+            .AddInterceptors(commandCounter)
+            .ConfigureWarnings(warnings => warnings.Throw(CoreEventId.RowLimitingOperationWithoutOrderByWarning))
+            .Options;
+        await using var orderedContext = new GarageBalanceDbContext(options);
+
+        await new EfChargeServiceSettingRepository(orderedContext).SetTariffVersionAsync(
             setting.Id,
             tariff.Id,
             effectiveFrom,
             CancellationToken.None);
 
         Assert.Equal(1, commandCounter.Count);
-        var trackedVersions = database.Context.ChangeTracker.Entries<ChargeServiceTariffVersion>()
+        var trackedVersions = orderedContext.ChangeTracker.Entries<ChargeServiceTariffVersion>()
             .Select(entry => entry.Entity)
             .OrderBy(version => version.EffectiveFrom)
             .ToList();
@@ -7092,14 +7101,21 @@ public sealed class DictionaryServiceTests
         database.Context.ChangeTracker.Clear();
         commandCounter.Reset();
 
-        await new EfChargeServiceSettingRepository(database.Context).SetTariffVersionAsync(
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseSqlite(database.Context.Database.GetDbConnection())
+            .AddInterceptors(commandCounter)
+            .ConfigureWarnings(warnings => warnings.Throw(CoreEventId.RowLimitingOperationWithoutOrderByWarning))
+            .Options;
+        await using var orderedContext = new GarageBalanceDbContext(options);
+
+        await new EfChargeServiceSettingRepository(orderedContext).SetTariffVersionAsync(
             setting.Id,
             newTariff.Id,
             new DateOnly(2026, 6, 15),
             CancellationToken.None);
 
         Assert.Equal(1, commandCounter.Count);
-        var trackedVersions = database.Context.ChangeTracker.Entries<ChargeServiceTariffVersion>()
+        var trackedVersions = orderedContext.ChangeTracker.Entries<ChargeServiceTariffVersion>()
             .Select(entry => entry.Entity)
             .OrderBy(version => version.EffectiveFrom)
             .ToList();

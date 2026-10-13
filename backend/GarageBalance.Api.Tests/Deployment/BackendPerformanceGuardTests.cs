@@ -365,7 +365,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".ThenBy(garage => garage.Number)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
-        Assert.Contains("new MeterReadingYearGarageData(garage.Id, garage.Number, garage.InitialMeterReadingMonth,", source, StringComparison.Ordinal);
+        Assert.Contains("new MeterReadingYearGarageData(", source, StringComparison.Ordinal);
+        Assert.Contains("!garage.HasConnection ? garage.InitialMeterReadingMonth : null", source, StringComparison.Ordinal);
+        Assert.Contains("connections.Any(connection => connection.GarageId == garage.Id", source, StringComparison.Ordinal);
         Assert.Contains("new MeterReadingYearValueData(", source, StringComparison.Ordinal);
         Assert.Contains("garageIds.Contains(reading.GarageId)", source, StringComparison.Ordinal);
         Assert.Contains("GetPostgresYearPageAsync(year, meterKind, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
@@ -788,7 +790,7 @@ public sealed class BackendPerformanceGuardTests
             BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Include\(setting => setting\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= monthEnd[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, servicesWithVersions\)"),
             source);
         Assert.Matches(
-            BoundedQueryRegex(@"GetActiveRegularMeteredCoreAsync[\s\S]*?Include\(setting => setting\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= monthEnd[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, servicesWithVersions\)"),
+            BoundedQueryRegex(@"GetActiveRegularMeteredCoreAsync[\s\S]*?Include\(setting => setting\.TariffVersions\.Where[\s\S]*?version\.EffectiveFrom <= monthEnd[\s\S]*?Take\(limit\)[\s\S]*?ToListAsync\(cancellationToken\)[\s\S]*?HasTariffVersions[\s\S]*?ApplyTariffsForMonthAsync\(settings, accountingMonth, cancellationToken, servicesWithVersions, monthEnd\)"),
             source);
         Assert.DoesNotContain(
             "(await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken))",

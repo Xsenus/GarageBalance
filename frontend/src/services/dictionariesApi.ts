@@ -249,11 +249,19 @@ export type GarageMeterStartValueDto = {
   unitName: string | null
   value: number | null
   hasReadings: boolean
+  connectedOn?: string | null
+  requiresStartValue?: boolean
+  requiresTariff?: boolean
+  requiresConnectionDate?: boolean
+  connectionVersion?: string | null
 }
 
 export type UpsertGarageMeterStartValueRequest = {
   meterKind: string
-  value: number
+  value: number | null
+  connectedOn?: string | null
+  connectionVersion?: string | null
+  reason?: string
 }
 
 export type UpsertGarageRequest = {

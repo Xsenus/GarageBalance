@@ -55,6 +55,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<OpeningBalanceAdjustment> OpeningBalanceAdjustments => Set<OpeningBalanceAdjustment>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<MeterDevice> MeterDevices => Set<MeterDevice>();
+    public DbSet<GarageMeterConnection> GarageMeterConnections => Set<GarageMeterConnection>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
     public DbSet<GarageReportQuickList> GarageReportQuickLists => Set<GarageReportQuickList>();
@@ -883,6 +884,22 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(accrual => accrual.SourceFinancialOperation)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.SourceFinancialOperationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GarageMeterConnection>(entity =>
+        {
+            entity.ToTable("garage_meter_connections", table => table.HasCheckConstraint(
+                "CK_garage_meter_connections_period", "\"ClosedOn\" IS NULL OR \"ClosedOn\" >= \"ConnectedOn\""));
+            entity.HasKey(connection => connection.Id);
+            entity.Property(connection => connection.MeterKind).HasMaxLength(40).IsRequired();
+            entity.Property(connection => connection.Version).IsConcurrencyToken();
+            entity.HasIndex(connection => new { connection.GarageId, connection.MeterKind })
+                .IsUnique().HasFilter("\"ClosedOn\" IS NULL");
+            entity.HasIndex(connection => new { connection.GarageId, connection.MeterKind, connection.ConnectedOn });
+            entity.HasOne(connection => connection.Garage).WithMany().HasForeignKey(connection => connection.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(connection => connection.BaselineMeterDevice).WithMany().HasForeignKey(connection => connection.BaselineMeterDeviceId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
