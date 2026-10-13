@@ -3327,13 +3327,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 }
 
 function createEmptyGaragePrototype(): ContractorGarageRow {
-  const currentMonth = getLocalDateInputValue().slice(0, 7)
   return {
     id: `garage-${Date.now()}`,
     ownerId: null,
     number: '',
-    accountingStartMonth: currentMonth,
-    originalAccountingStartMonth: currentMonth,
+    accountingStartMonth: undefined,
+    originalAccountingStartMonth: undefined,
     peopleCount: '',
     floorCount: '',
     owner: '',
@@ -3931,7 +3930,7 @@ function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canRe
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 <FormField label="Учитывать с" help={garageAccountingStartHelp}>
-                  <div data-garage-field="accountingStartMonth"><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={form.accountingStartMonth ?? ''} required disabled={saving || !canManageMeterConnections} aria-invalid={Boolean(validationErrors.accountingStartMonth)} onChange={(accountingStartMonth) => { clearValidationError('accountingStartMonth'); setForm({ ...form, accountingStartMonth }) }} /></div>
+                  <div data-garage-field="accountingStartMonth"><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={form.accountingStartMonth ?? ''} required={Boolean(item) || form.accountingStartMonth !== undefined} disabled={saving || !canManageMeterConnections} aria-invalid={Boolean(validationErrors.accountingStartMonth)} onChange={(accountingStartMonth) => { clearValidationError('accountingStartMonth'); setForm({ ...form, accountingStartMonth }) }} /></div>
                   {validationErrors.accountingStartMonth ? <span className="form-field-error">{validationErrors.accountingStartMonth}</span> : null}
                 </FormField>
                 {item && form.accountingStartMonth !== item.accountingStartMonth ? <FormField label="Причина исправления начала учёта"><textarea aria-label="Причина исправления начала учёта" data-garage-field="accountingStartReason" aria-invalid={Boolean(validationErrors.accountingStartReason)} required maxLength={1000} disabled={saving || !canManageMeterConnections} value={form.accountingStartReason ?? ''} onChange={(event) => { clearValidationError('accountingStartReason'); setForm({ ...form, accountingStartReason: event.target.value }) }} />{validationErrors.accountingStartReason ? <span className="form-field-error">{validationErrors.accountingStartReason}</span> : null}</FormField> : null}

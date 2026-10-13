@@ -1,5 +1,5 @@
 import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto } from '../services/dictionariesApi'
-import { formatMoney, getCurrentMonthInputValue } from './formatters'
+import { formatMoney } from './formatters'
 import type { OwnerGarageLinkForm } from './validation'
 import { garageBalanceSignHelp, toDisplayedGarageStartingBalance } from './garageOpeningBalance'
 
@@ -185,10 +185,9 @@ export function createOwnerFormFromDto(owner: OwnerDto): DictionaryOwnerFormStat
 }
 
 export function createEmptyGarageForm(): DictionaryGarageFormState {
-  const currentMonth = getCurrentMonthInputValue()
   return {
-    accountingStartMonth: currentMonth,
-    originalAccountingStartMonth: currentMonth,
+    accountingStartMonth: undefined,
+    originalAccountingStartMonth: undefined,
     number: '',
     peopleCount: 1,
     floorCount: 1,
@@ -233,6 +232,8 @@ export function createAccountingTypeFormFromDto(type: AccountingTypeDto): Dictio
 
 export function createEmptyOwnerGarageLinkForm(): OwnerGarageLinkForm {
   return {
+    accountingStartMonth: undefined,
+    originalAccountingStartMonth: undefined,
     existingGarageId: '',
     newGarageNumber: '',
     peopleCount: 1,

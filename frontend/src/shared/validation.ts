@@ -11,8 +11,11 @@ import type {
 } from '../services/financeApi'
 import { getCurrentMonthInputValue } from './formatters'
 import { isCompleteRussianPhone } from './phoneNumber'
+import { validateGarageAccountingMonth } from './garageAccountingStart'
 
 export type OwnerGarageLinkForm = {
+  accountingStartMonth?: string
+  originalAccountingStartMonth?: string
   existingGarageId: string
   newGarageNumber: string
   peopleCount: number
@@ -154,6 +157,7 @@ export function getOwnerGarageLinkValidationErrors(form: OwnerGarageLinkForm) {
   const errors: string[] = []
   const hasNewGarageDetails =
     Boolean(form.newGarageNumber.trim()) ||
+    form.accountingStartMonth !== form.originalAccountingStartMonth ||
     form.peopleCount !== 1 ||
     form.floorCount !== 1 ||
     form.startingBalance !== 0 ||
@@ -166,6 +170,8 @@ export function getOwnerGarageLinkValidationErrors(form: OwnerGarageLinkForm) {
   }
 
   if (form.newGarageNumber.trim()) {
+    const monthError = validateGarageAccountingMonth(form.accountingStartMonth)
+    if (monthError) errors.push(monthError)
     errors.push(...getGarageValidationErrors({
       number: form.newGarageNumber,
       peopleCount: form.peopleCount,

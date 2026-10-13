@@ -749,6 +749,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     if (ownerGarageLinkForm.newGarageNumber.trim()) {
       await dictionaryClient.createGarage(auth.accessToken, {
         number: ownerGarageLinkForm.newGarageNumber,
+        ...buildGarageAccountingStartRequest(ownerGarageLinkForm.accountingStartMonth, ownerGarageLinkForm.originalAccountingStartMonth),
         peopleCount: ownerGarageLinkForm.peopleCount,
         floorCount: ownerGarageLinkForm.floorCount,
         ownerId,
@@ -986,6 +987,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
     if (section === 'owners') {
       const newGarageNumberRequired =
+        ownerGarageLinkForm.accountingStartMonth !== ownerGarageLinkForm.originalAccountingStartMonth ||
         ownerGarageLinkForm.peopleCount !== 1 ||
         ownerGarageLinkForm.floorCount !== 1 ||
         ownerGarageLinkForm.startingBalance !== 0 ||
@@ -1092,6 +1094,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               {dictionaryField('ownerNewGaragePeopleCount', <input aria-label={fieldMeta('ownerNewGaragePeopleCount').ariaLabel} type="number" min="0" value={ownerGarageLinkForm.peopleCount} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, peopleCount: Number(event.target.value) })} />)}
               {dictionaryField('ownerNewGarageFloorCount', <input aria-label={fieldMeta('ownerNewGarageFloorCount').ariaLabel} type="number" min="0" value={ownerGarageLinkForm.floorCount} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, floorCount: Number(event.target.value) })} />)}
             </div>
+            <FormField label="Учитывать новый гараж с" help={garageAccountingStartHelp}><LocalizedDatePicker ariaLabel="Учитывать новый гараж с" mode="month" value={ownerGarageLinkForm.accountingStartMonth ?? ''} disabled={!ownerGarageLinkForm.newGarageNumber.trim() || !hasPermission(auth, permissions.openingDataAdjust) || !hasPermission(auth, permissions.paymentsWrite)} required={Boolean(ownerGarageLinkForm.newGarageNumber.trim())} onChange={(accountingStartMonth) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, accountingStartMonth })} /></FormField>
             <div className="inline-fields">
               {dictionaryField('ownerNewGarageStartingBalance', <MoneyInput aria-label={fieldMeta('ownerNewGarageStartingBalance').ariaLabel} value={ownerGarageLinkForm.startingBalance} onValueChange={(startingBalance) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, startingBalance })} />, { help: garageBalanceSignHelp })}
               {dictionaryField('ownerNewGarageInitialWaterMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialWaterMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialWaterMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialWaterMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика воды на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
@@ -1106,7 +1109,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return (
         <>
           {dictionaryField('garageNumber', <input aria-label={fieldMeta('garageNumber').ariaLabel} placeholder={fieldMeta('garageNumber').placeholder} value={garageForm.number} onChange={(event) => setGarageForm({ ...garageForm, number: event.target.value })} required />)}
-          <FormField label="Учитывать с" help={garageAccountingStartHelp}><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={garageForm.accountingStartMonth ?? ''} disabled={!hasPermission(auth, permissions.openingDataAdjust) || !hasPermission(auth, permissions.paymentsWrite)} required onChange={(accountingStartMonth) => setGarageForm({ ...garageForm, accountingStartMonth })} /></FormField>
+          <FormField label="Учитывать с" help={garageAccountingStartHelp}><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={garageForm.accountingStartMonth ?? ''} disabled={!hasPermission(auth, permissions.openingDataAdjust) || !hasPermission(auth, permissions.paymentsWrite)} required={editor?.mode === 'edit' || garageForm.accountingStartMonth !== undefined} onChange={(accountingStartMonth) => setGarageForm({ ...garageForm, accountingStartMonth })} /></FormField>
           {editor?.mode === 'edit' && garageForm.accountingStartMonth !== garageForm.originalAccountingStartMonth ? <FormField label="Причина исправления начала учёта"><textarea aria-label="Причина исправления начала учёта" maxLength={1000} required value={garageForm.accountingStartReason ?? ''} onChange={(event) => setGarageForm({ ...garageForm, accountingStartReason: event.target.value })} /></FormField> : null}
           <div className="inline-fields">
             {dictionaryField('garagePeopleCount', <input aria-label={fieldMeta('garagePeopleCount').ariaLabel} type="number" min="0" required value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />)}

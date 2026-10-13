@@ -1,6 +1,6 @@
 import type { UpsertGarageRequest } from '../services/dictionariesApi'
 
-export const garageAccountingStartHelp = 'Первый месяц начислений и показаний гаража. Годовой взнос начисляется полностью даже при начале учёта в декабре. Дата подключения каждой услуги учитывается отдельно. Исправление пересчитывает неоплаченные начисления; оплаченная история сохраняется.'
+export const garageAccountingStartHelp = 'Первый месяц начислений и показаний гаража. Если месяц не выбран, используется рабочий месяц регистрации на сервере. Годовой взнос начисляется полностью даже при начале учёта в декабре. Дата подключения каждой услуги учитывается отдельно. Исправление пересчитывает неоплаченные начисления; оплаченная история сохраняется.'
 
 export function validateGarageAccountingMonth(value: string | undefined) {
   if (value === undefined) return undefined // Compatibility with clients without this field.
