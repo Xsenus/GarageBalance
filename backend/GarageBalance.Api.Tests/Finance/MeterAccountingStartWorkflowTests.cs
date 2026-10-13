@@ -174,6 +174,117 @@ public sealed class MeterAccountingStartWorkflowTests
         Assert.Empty(await context.AuditEvents.Where(row => row.Action == "finance.legacy_meter_opening_date_adjusted").ToListAsync());
     }
 
+    [Theory]
+    [InlineData(MeterKinds.Water)]
+    [InlineData(MeterKinds.Electricity)]
+    public async Task CorrectedFirstMonth_MultipleReplacementsTransferBaselineCancelAndKeepHistory(string kind)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        await AssertFirstMonthReplacementChainAsync(database.Context, kind);
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSql_CorrectedFirstMonthReplacementChain()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        await AssertFirstMonthReplacementChainAsync(context, MeterKinds.Electricity);
+    }
+
+    private static async Task AssertFirstMonthReplacementChainAsync(GarageBalanceDbContext context, string kind)
+    {
+        var garage = await SeedAsync(context, kind, 100);
+        var income = await context.IncomeTypes.SingleOrDefaultAsync(row => row.Code == kind);
+        if (income is null)
+        {
+            income = new IncomeType { Name = "Синтетическая счётчиковая услуга", Code = kind };
+            context.IncomeTypes.Add(income);
+        }
+        var setting = await context.ChargeServiceSettings.Include(row => row.Tariff)
+            .SingleOrDefaultAsync(row => row.IncomeTypeId == income.Id && !row.IsArchived);
+        if (setting is null)
+        {
+            setting = new ChargeServiceSetting { Name = income.Name, IncomeType = income };
+            context.ChargeServiceSettings.Add(setting);
+        }
+        setting.IsRegular = true;
+        setting.IsMetered = true;
+        setting.MeterKind = kind;
+        setting.PeriodicityMonths = 1;
+        setting.AccrualStartMonth = 1;
+        if (setting.Tariff is null)
+        {
+            setting.Tariff = new Tariff
+            {
+                Name = "Синтетический тариф",
+                CalculationBase = kind == MeterKinds.Water
+                ? TariffCalculationBases.MeterWater : TariffCalculationBases.MeterElectricity
+            };
+            context.Tariffs.Add(setting.Tariff);
+        }
+        setting.HasTieredTariff = false;
+        setting.Tariff.Rate = 50;
+        setting.Tariff.EffectiveFrom = new(2026, 1, 1);
+        await context.SaveChangesAsync();
+        await CorrectAsync(context, garage);
+        var service = FinanceServiceTestFactory.Create(context, businessDate: October);
+        var before = await service.CreateMeterReadingAsync(new(garage.Id, kind, September, September.AddDays(4), 105, "До замен"), null, default);
+        Assert.True(before.Succeeded, before.ErrorMessage);
+        var first = await service.ReplaceMeterDeviceAsync(new(garage.Id, kind, September, September.AddDays(9), "FIRST", 5, 6, 107,
+            "Первая замена", before.Value!.Id, before.Value.Version), null, default);
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        var second = await service.ReplaceMeterDeviceAsync(new(garage.Id, kind, September, September.AddDays(19), "SECOND", 20, 23, 8,
+            "Вторая замена", first.Value!.Reading.Id, first.Value.Reading.Version), null, default);
+        Assert.True(second.Succeeded, second.ErrorMessage);
+        Assert.Equal(13m, second.Value!.Reading.Consumption);
+        Assert.Equal(650m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+
+        var dictionary = DictionaryServiceTestFactory.Create(context, October);
+        var corrected = await dictionary.UpdateGarageAsync(garage.Id, Request(garage) with
+        {
+            InitialWaterMeterValue = kind == MeterKinds.Water ? 102 : null,
+            InitialElectricityMeterValue = kind == MeterKinds.Electricity ? 102 : null,
+            MeterStartValues = [new(kind, 102, Reason: "Исправление синтетической базы после замен")]
+        }, null, default);
+        Assert.True(corrected.Succeeded, corrected.ErrorMessage);
+        Assert.Equal(102m, (await dictionary.GetGarageMeterStartValuesAsync(garage.Id, default)).Value!.Single(row => row.MeterKind == kind).Value);
+        Assert.Equal(550m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+        var page = await service.GetMeterReadingYearPageAsync(new(2026, kind), default);
+        var yearGarage = Assert.Single(page.Value!.Garages, row => row.Id == garage.Id);
+        Assert.Equal(102m, yearGarage.StartValue);
+
+        var history = await service.GetMeterDeviceHistoryAsync(garage.Id, kind, 0, 25, default);
+        Assert.Equal(3, history.TotalCount);
+        var latest = Assert.Single(history.Items, row => row.Id == second.Value.Device.Id);
+        var cancellation = new CancelMeterDeviceReplacementRequest(latest.Version, latest.ReplacementReadingVersion!.Value, September, "Отмена второй");
+        var payment = await service.CreateIncomeAsync(new(garage.Id, income.Id, September.AddDays(24), September, 50, "SYNTHETIC-PAID", null), null, default);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+        var denied = await service.CancelMeterDeviceReplacementAsync(latest.Id, cancellation, null, default);
+        Assert.Equal("meter_reading_accrual_paid", denied.ErrorCode);
+        Assert.False(await context.MeterDevices.AnyAsync(row => row.GarageId == garage.Id && row.IsCanceled));
+        Assert.Equal(550m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+        var undonePayment = await service.CancelOperationAsync(payment.Value!.Id, new("Отмена синтетического платежа"), null, default);
+        Assert.True(undonePayment.Succeeded, undonePayment.ErrorMessage);
+        var canceledSecond = await service.CancelMeterDeviceReplacementAsync(latest.Id,
+            cancellation, null, default);
+        Assert.True(canceledSecond.Succeeded, canceledSecond.ErrorMessage);
+        Assert.Equal(6m, canceledSecond.Value!.Reading.Consumption);
+        Assert.Equal(300m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+        var canceledFirst = await service.CancelMeterDeviceReplacementAsync(first.Value.Device.Id,
+            new(canceledSecond.Value.RestoredDevice.Version, canceledSecond.Value.Reading.Version, September, "Отмена первой"), null, default);
+        Assert.True(canceledFirst.Succeeded, canceledFirst.ErrorMessage);
+        Assert.Equal(3m, canceledFirst.Value!.Reading.Consumption);
+        Assert.Equal(105m, canceledFirst.Value.Reading.CurrentValue);
+        Assert.Equal("До замен", canceledFirst.Value.Reading.Comment);
+        Assert.False(canceledFirst.Value.Reading.IsMeterReplacement);
+        Assert.Equal(150m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+        var persistedHistory = await service.GetMeterDeviceHistoryAsync(garage.Id, kind, 0, 25, default);
+        Assert.Equal(3, persistedHistory.TotalCount);
+        Assert.Equal(2, persistedHistory.Items.Count(row => row.IsCanceled));
+        Assert.Equal(102m, Assert.Single(await service.GetMeterDevicesAsync(garage.Id, kind, default)).InitialValue);
+        Assert.Equal(2, await context.AuditEvents.CountAsync(row => row.Action == "finance.meter_device_replacement_canceled"));
+    }
+
     private static async Task<Garage> SeedAsync(GarageBalanceDbContext context, string kind, decimal? baseline)
     {
         var garage = new Garage
