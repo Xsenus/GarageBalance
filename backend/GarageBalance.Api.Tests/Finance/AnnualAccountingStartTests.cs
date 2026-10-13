@@ -13,6 +13,128 @@ public sealed class AnnualAccountingStartTests
     private static readonly DateOnly October = new(2026, 10, 1);
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnnualCard_UsesTariffAtSelectedStartInsteadOfOriginalJanuary(bool individual)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        await AssertDatedAnnualAsync(database.Context, individual);
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSql_AnnualCardUsesTariffAtSelectedStart()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        await AssertDatedAnnualAsync(context, true);
+    }
+
+    private static async Task AssertDatedAnnualAsync(GarageBalanceDbContext context, bool individual)
+    {
+        var (garage, setting) = await SeedAsync(context, September);
+        var septemberTariff = new Tariff { Name = "Synthetic September annual", CalculationBase = TariffCalculationBases.Fixed, Rate = 1800, EffectiveFrom = September };
+        context.AddRange(
+            new ChargeServiceTariffVersion { ChargeServiceSetting = setting, Tariff = setting.Tariff!, EffectiveFrom = new(2026, 1, 1), EffectiveTo = September.AddDays(-1) },
+            new ChargeServiceTariffVersion { ChargeServiceSetting = setting, Tariff = septemberTariff, EffectiveFrom = September });
+        if (individual)
+        {
+            context.Add(new GarageTariffAssignment
+            {
+                Garage = garage,
+                ChargeServiceSetting = setting,
+                Tariff = new Tariff { Name = "Synthetic September individual", CalculationBase = TariffCalculationBases.Fixed, Rate = 2100, EffectiveFrom = September },
+                EffectiveFrom = September
+            });
+        }
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context, businessDate: October);
+        var plan = await service.GetGarageAnnualPaymentsAsync(garage.Id, 2026, CancellationToken.None);
+        Assert.True(plan.Succeeded, plan.ErrorMessage);
+        var planned = Assert.Single(plan.Value!.Items);
+        Assert.Equal(September, planned.AccountingMonth);
+        Assert.Equal(individual ? 2100m : 1800m, planned.Amount);
+        Assert.Empty(await context.Accruals.ToListAsync());
+        var calculated = await service.CalculateGarageAnnualPaymentsAsync(garage.Id, 2026, null, CancellationToken.None);
+        Assert.True(calculated.Succeeded, calculated.ErrorMessage);
+        var accrual = await context.Accruals.SingleAsync();
+        Assert.Equal(individual ? 2100m : 1800m, accrual.Amount);
+        Assert.Equal(September, accrual.AccountingMonth);
+        Assert.Equal(septemberTariff.Id, accrual.TariffId);
+        var details = RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson!);
+        Assert.NotNull(details);
+        Assert.Equal(September, details.AccountingMonth);
+        var worksheet = await service.CalculateGarageIncomeWorksheetAsync(garage.Id, new(September, October), null, CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal(accrual.Id, (await context.Accruals.SingleAsync()).Id);
+        Assert.Equal(individual ? 2100m : 1800m, (await context.Accruals.SingleAsync()).Amount);
+    }
+
+    [Fact]
+    public async Task AnnualCard_DoesNotUseJanuaryTariffInExplicitSeptemberGap()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var (garage, setting) = await SeedAsync(context, September);
+        context.Add(new ChargeServiceTariffVersion
+        {
+            ChargeServiceSetting = setting,
+            Tariff = setting.Tariff!,
+            EffectiveFrom = new(2026, 1, 1),
+            EffectiveTo = September.AddDays(-1)
+        });
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context, businessDate: October);
+        var plan = await service.GetGarageAnnualPaymentsAsync(garage.Id, 2026, CancellationToken.None);
+        Assert.True(plan.Succeeded, plan.ErrorMessage);
+        Assert.Null(Assert.Single(plan.Value!.Items).Amount);
+        var result = await service.CalculateGarageAnnualPaymentsAsync(garage.Id, 2026, null, CancellationToken.None);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Empty(await context.Accruals.ToListAsync());
+        Assert.Null(Assert.Single(result.Value!.Items).Amount);
+    }
+
+    [Theory]
+    [InlineData(TariffCalculationBases.People, true)]
+    [InlineData(TariffCalculationBases.MeterElectricity, true)]
+    [InlineData(TariffCalculationBases.MeterElectricity, false)]
+    public async Task AnnualCalculation_UsesPeopleOrReadingFromActualBillingMonth(string calculationBase, bool hasInput)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var (garage, setting) = await SeedAsync(context, September);
+        setting.Tariff!.CalculationBase = calculationBase;
+        setting.Tariff.Rate = 100;
+        garage.PeopleCount = 2;
+        if (calculationBase == TariffCalculationBases.People)
+        {
+            context.AddRange(
+                new GaragePeopleCountPeriod { GarageId = garage.Id, EffectiveFrom = new(2026, 1, 1), PeopleCount = 1 },
+                new GaragePeopleCountPeriod { GarageId = garage.Id, EffectiveFrom = September, PeopleCount = 2 });
+        }
+        else
+        {
+            setting.IsMetered = true;
+            setting.MeterKind = MeterKinds.Electricity;
+            context.Add(new MeterReading { Garage = garage, MeterKind = MeterKinds.Electricity, AccountingMonth = new(2026, 1, 1), ReadingDate = new(2026, 1, 31), Consumption = 1, CurrentValue = 1 });
+            if (hasInput)
+                context.Add(new MeterReading { Garage = garage, MeterKind = MeterKinds.Electricity, AccountingMonth = September, ReadingDate = September.AddDays(29), PreviousValue = 1, CurrentValue = 3, Consumption = 2 });
+        }
+        await context.SaveChangesAsync();
+        var result = await FinanceServiceTestFactory.Create(context, businessDate: October)
+            .CalculateGarageAnnualPaymentsAsync(garage.Id, 2026, null, CancellationToken.None);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        if (!hasInput)
+        {
+            Assert.Empty(await context.Accruals.ToListAsync());
+            return;
+        }
+        var accrual = await context.Accruals.SingleAsync();
+        Assert.Equal(200m, accrual.Amount);
+        Assert.Equal(September, accrual.AccountingMonth);
+        Assert.Equal(September, RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson)!.AccountingMonth);
+    }
+
+    [Theory]
     [InlineData(9, 2027)]
     [InlineData(12, 2027)]
     public async Task ExplicitStart_UsesBillingMonthForAnnualDeadline(int month, int dueYear)

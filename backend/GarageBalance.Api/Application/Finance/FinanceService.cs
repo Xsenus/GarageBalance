@@ -840,7 +840,7 @@ public sealed partial class FinanceService(
             return FinanceResult<GarageAnnualPaymentsDto>.Failure("garage_not_found", "Гараж для годовых платежей не найден.");
         }
 
-        var definitions = (await GetAnnualServiceDefinitionsAsync(year, cancellationToken))
+        var definitions = (await GetGarageAnnualServiceDefinitionsAsync(garage, year, cancellationToken))
             .Where(item => item.Setting.AppliesToGarage(garageId)).ToArray();
         var yearFrom = new DateOnly(year, 1, 1);
         var yearTo = new DateOnly(year, 12, 1);
@@ -958,7 +958,7 @@ public sealed partial class FinanceService(
             return FinanceResult<GarageAnnualPaymentsDto>.Failure("garage_not_found", "Гараж для годовых платежей не найден.");
         }
 
-        var definitions = await GetAnnualServiceDefinitionsAsync(year, cancellationToken);
+        var definitions = await GetGarageAnnualServiceDefinitionsAsync(garage, year, cancellationToken);
         var currentMonth = GetCurrentAccountingMonth();
         var dueDefinitions = definitions
             .Where(item => item.AccountingMonth <= currentMonth && GetGarageAccrualStartMonth(garage) <= currentMonth &&
@@ -1000,8 +1000,8 @@ public sealed partial class FinanceService(
             var accrualMonth = definition.AccountingMonth < GetGarageAccrualStartMonth(garage)
                 ? GetGarageAccrualStartMonth(garage)
                 : definition.AccountingMonth;
-            var segments = ApplyGarageTariffPeriods(definition.AccountingMonth, definition.Setting, definition.Tariff,
-                BuildRegularAccrualSegments(definition.AccountingMonth, definition.Setting, definition.Tariff), individualPeriodsByService[definition.Setting.Id]);
+            var segments = ApplyGarageTariffPeriods(accrualMonth, definition.Setting, definition.Tariff,
+                BuildRegularAccrualSegments(accrualMonth, definition.Setting, definition.Tariff), individualPeriodsByService[definition.Setting.Id]);
             var meteredBase = segments.Select(segment => segment.CalculationBase)
                 .FirstOrDefault(value => value is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
             var meterKind = MeterKinds.IsValid(definition.Setting.MeterKind)
@@ -1017,8 +1017,8 @@ public sealed partial class FinanceService(
             {
                 meterReading = (await meterReadingRepository.GetActiveForGaragePeriodAsync(
                         garage.Id,
-                        definition.AccountingMonth,
-                        definition.AccountingMonth,
+                        accrualMonth,
+                        accrualMonth,
                         [meterKind],
                         cancellationToken))
                     .FirstOrDefault();
@@ -1029,14 +1029,14 @@ public sealed partial class FinanceService(
             {
                 peoplePeriods = await garageRepository.GetPeopleCountPeriodsAsync(
                     [garage.Id],
-                    definition.AccountingMonth,
-                    definition.AccountingMonth.AddMonths(1).AddDays(-1),
+                    accrualMonth,
+                    accrualMonth.AddMonths(1).AddDays(-1),
                     cancellationToken);
             }
 
             var calculation = RegularAccrualCalculator.Calculate(
                 garage,
-                definition.AccountingMonth,
+                accrualMonth,
                 meterReading,
                 segments,
                 peoplePeriods,
@@ -7479,6 +7479,36 @@ public sealed partial class FinanceService(
         return year < 2000 || year > currentYear + 1
             ? ("annual_payment_year_invalid", $"Год годовых платежей должен быть от 2000 до {currentYear + 1}.")
             : null;
+    }
+
+    private async Task<IReadOnlyList<AnnualServiceDefinition>> GetGarageAnnualServiceDefinitionsAsync(
+        Garage garage,
+        int year,
+        CancellationToken cancellationToken)
+    {
+        var definitions = await GetAnnualServiceDefinitionsAsync(year, cancellationToken);
+        if (garage.AccountingStartMonth is not { } start || start.Year != year ||
+            !definitions.Any(definition => definition.AccountingMonth < start))
+        {
+            return definitions;
+        }
+
+        // Annual definitions are snapshots of their scheduled month. A moved first
+        // annual charge must resolve the applicable terms again, rather than use
+        // January's filtered tariff versions for the selected accounting start.
+        var settingsAtStart = (await chargeServiceSettingRepository.GetActiveRegularAsync(start, cancellationToken))
+            .ToDictionary(setting => setting.Id);
+        return definitions.Select(definition =>
+        {
+            if (definition.AccountingMonth >= start) return definition;
+            var setting = settingsAtStart.GetValueOrDefault(definition.Setting.Id);
+            return definition with
+            {
+                AccountingMonth = start,
+                Setting = setting ?? definition.Setting,
+                Tariff = setting is null ? null : SelectTariffForMonth(setting, start)
+            };
+        }).ToArray();
     }
 
     private async Task<IReadOnlyList<AnnualServiceDefinition>> GetAnnualServiceDefinitionsAsync(
