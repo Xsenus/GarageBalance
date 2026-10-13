@@ -804,8 +804,14 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
 
     public void Add(GarageMeterConnection connection) => dbContext.GarageMeterConnections.Add(connection);
 
-    public async Task<IMeterConnectionWriteScope> BeginConnectionWriteAsync(CancellationToken cancellationToken)
+    public async Task<IMeterConnectionWriteScope> BeginConnectionWriteAsync(CancellationToken cancellationToken, bool allowExistingTransaction = false)
     {
+        if (allowExistingTransaction && dbContext.Database.CurrentTransaction is { } outerTransaction)
+        {
+            var name = $"gb_accounting_{Guid.NewGuid():N}";
+            await outerTransaction.CreateSavepointAsync(name, cancellationToken);
+            return new AccountingSavepointScope(dbContext, outerTransaction, name);
+        }
         // Keep the same physical session alive after commit/rollback until advisory leases
         // have been released. Otherwise EF can return a locked connection to the pool.
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
@@ -835,6 +841,34 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 entry.OriginalValues.GetValue<decimal>(nameof(Accrual.Amount)), entry.Entity.Amount,
                 entry.OriginalValues.GetValue<bool>(nameof(Accrual.RequiresMeterReading)), entry.Entity.RequiresMeterReading))
             .ToArray();
+    }
+
+    private sealed class AccountingSavepointScope(GarageBalanceDbContext context, IDbContextTransaction transaction, string name) : IMeterConnectionWriteScope
+    {
+        private bool completed;
+
+        public async Task CommitAsync(CancellationToken cancellationToken)
+        {
+            await transaction.ReleaseSavepointAsync(name, cancellationToken);
+            completed = true;
+        }
+
+        public async Task RollbackAsync()
+        {
+            if (completed) return;
+            try
+            {
+                await transaction.RollbackToSavepointAsync(name, CancellationToken.None);
+                await transaction.ReleaseSavepointAsync(name, CancellationToken.None);
+            }
+            finally
+            {
+                completed = true;
+                context.ChangeTracker.Clear();
+            }
+        }
+
+        public async ValueTask DisposeAsync() => await RollbackAsync();
     }
 
     private sealed class MeterConnectionWriteScope(GarageBalanceDbContext context, IDbContextTransaction transaction) : IMeterConnectionWriteScope

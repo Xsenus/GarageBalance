@@ -219,7 +219,7 @@ public sealed class GarageOnboardingServiceTests
     private sealed class ImmediateTransactionRunner : IGarageOnboardingTransactionRunner
     {
         public int ExecutionCount { get; private set; }
-        public async Task<DictionaryResult<T>> ExecuteAsync<T>(Func<CancellationToken, Task<DictionaryResult<T>>> action, CancellationToken cancellationToken)
+        public async Task<DictionaryResult<T>> ExecuteAsync<T>(Func<CancellationToken, Task<DictionaryResult<T>>> action, CancellationToken cancellationToken, Guid? garageId = null)
         {
             ExecutionCount++;
             return await action(cancellationToken);

@@ -63,7 +63,7 @@ public interface IMeterReadingRepository
     Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds, CancellationToken cancellationToken);
     Task<GarageMeterConnection?> GetConnectionForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     void Add(GarageMeterConnection connection);
-    Task<IMeterConnectionWriteScope> BeginConnectionWriteAsync(CancellationToken cancellationToken);
+    Task<IMeterConnectionWriteScope> BeginConnectionWriteAsync(CancellationToken cancellationToken, bool allowExistingTransaction = false);
     IReadOnlyList<GarageMeterConnectionAccrualChange> GetPendingConnectionAccrualChanges(Guid garageId);
     Task<bool> ExistsConnectionAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
 }

@@ -204,7 +204,7 @@ public sealed class GarageOnboardingService(
                     limit: 10))
                 .SingleOrDefault(item => item.Id == garageId) ?? garageResult.Value;
             return DictionaryResult<GarageDto>.Success(refreshedGarage);
-        }, cancellationToken);
+        }, cancellationToken, garageId);
     }
 
     private static DictionaryResult<GarageDto> FromFinanceFailure<TFinance>(FinanceResult<TFinance> result) =>

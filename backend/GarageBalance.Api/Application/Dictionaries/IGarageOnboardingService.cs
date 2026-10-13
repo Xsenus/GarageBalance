@@ -18,5 +18,6 @@ public interface IGarageOnboardingTransactionRunner
 {
     Task<DictionaryResult<T>> ExecuteAsync<T>(
         Func<CancellationToken, Task<DictionaryResult<T>>> action,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? garageId = null);
 }

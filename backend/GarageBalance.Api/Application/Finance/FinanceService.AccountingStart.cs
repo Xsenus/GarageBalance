@@ -14,7 +14,7 @@ public sealed partial class FinanceService : IGarageAccountingStartService
         if (!GarageAccountingPeriod.IsValidStartMonth(month))
             return AccountingStartFailure("garage_accounting_start_invalid", "Выберите месяц начала учёта не раньше января 1900 года.");
 
-        var transaction = await meterReadingRepository.BeginConnectionWriteAsync(cancellationToken);
+        var transaction = await meterReadingRepository.BeginConnectionWriteAsync(cancellationToken, allowExistingTransaction: true);
         var locks = new List<IAsyncDisposable>();
         var transferred = false;
         try
