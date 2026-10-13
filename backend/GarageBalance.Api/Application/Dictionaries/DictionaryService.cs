@@ -5611,7 +5611,7 @@ public sealed class DictionaryService(
             GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt),
             garage.AccountingStartMonth ?? (garage.RegisteredOn is { } registration
                 ? MonthPeriod.Normalize(registration)
-                : garage.CreatedAtUtc == default ? null : MonthPeriod.Normalize(businessDateProvider.ToBusinessDate(garage.CreatedAtUtc))));
+                : garage.CreatedAtUtc is { } createdAt && createdAt != default ? MonthPeriod.Normalize(businessDateProvider.ToBusinessDate(createdAt)) : null));
 
     private static decimal GetStartingOverdueDebt(decimal startingBalance, decimal? startingOverdueDebt) =>
         startingOverdueDebt ?? Math.Max(startingBalance, 0m);

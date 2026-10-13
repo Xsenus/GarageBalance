@@ -19,6 +19,7 @@ public sealed class PostgreSqlLegacyModelCompatibilityTests
                 await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(context);
                 Assert.True(await HasColumn(context, "application_settings", "Version"));
                 Assert.True(await HasColumn(context, "garages", "RegisteredOn"));
+                Assert.True(await HasColumn(context, "garages", "AccountingStartMonth"));
             }
 
             await using var restoredContext = database.CreateContext();
@@ -26,6 +27,7 @@ public sealed class PostgreSqlLegacyModelCompatibilityTests
             await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(restoredContext);
             Assert.Equal(versionExisted, await HasColumn(restoredContext, "application_settings", "Version"));
             Assert.False(await HasColumn(restoredContext, "garages", "RegisteredOn"));
+            Assert.False(await HasColumn(restoredContext, "garages", "AccountingStartMonth"));
             await restoredContext.Database.MigrateAsync();
             Assert.True(await HasColumn(restoredContext, "application_settings", "JsonValue"));
         }

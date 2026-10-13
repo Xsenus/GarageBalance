@@ -19,6 +19,7 @@ public sealed class PostgreSqlPeopleCountHistoryTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync("20260905113309_AddGarageBusinessRegistrationDate");
         await using var context = database.CreateContext();
+        await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(context);
         var garage = new Garage { Number = "MIGRATION-PEOPLE", PeopleCount = 2 };
         var archived = new Garage { Number = "MIGRATION-ZERO", PeopleCount = 0, IsArchived = true };
         var income = new IncomeType { Name = "История мусора", Code = "history_migration_test" };
@@ -38,6 +39,7 @@ public sealed class PostgreSqlPeopleCountHistoryTests
         var auditIdsBeforeMigration = await context.AuditEvents.OrderBy(item => item.Id).Select(item => item.Id).ToArrayAsync();
         // Isolate the migration under test: later fund migrations intentionally add audit events.
         var migrator = context.GetService<IMigrator>();
+        await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(context);
         await migrator.MigrateAsync("20260905122505_AddGaragePeopleCountHistory");
         await migrator.MigrateAsync("20260905122505_AddGaragePeopleCountHistory");
         context.ChangeTracker.Clear();

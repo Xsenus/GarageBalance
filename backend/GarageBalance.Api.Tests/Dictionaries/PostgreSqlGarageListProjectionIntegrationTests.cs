@@ -201,9 +201,20 @@ public sealed class PostgreSqlGarageListProjectionIntegrationTests
             Assert.Contains("FirstName", command, StringComparison.Ordinal);
             Assert.DoesNotContain("Address", command, StringComparison.Ordinal);
             Assert.DoesNotContain("MeterNotes", command, StringComparison.Ordinal);
-            Assert.DoesNotContain("CreatedAtUtc", command, StringComparison.Ordinal);
+            // The garage timestamp supplies the legacy accounting-start fallback;
+            // owner timestamps and other owner fields must remain outside this projection.
+            Assert.Contains("g.\"CreatedAtUtc\"", command, StringComparison.Ordinal);
+            Assert.DoesNotContain("o.\"CreatedAtUtc\"", command, StringComparison.Ordinal);
             Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void GarageListContract_KeepsOptionalTimestampAbsentAndDoesNotExposeItInHttpDto()
+    {
+        var projection = new GarageListItemData(Guid.NewGuid(), "SYNTHETIC", 1, 1, null, null, null, 0, null, null, null, null, false, Guid.NewGuid());
+        Assert.Null(projection.CreatedAtUtc);
+        Assert.DoesNotContain(typeof(GarageDto).GetProperties(), property => property.Name is "CreatedAtUtc" or "UpdatedAtUtc" or "Address" or "MeterNotes");
     }
 
     private sealed class SelectCommandCapture : DbCommandInterceptor
@@ -233,7 +244,8 @@ public sealed class PostgreSqlGarageListProjectionIntegrationTests
         Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Address", command, StringComparison.Ordinal);
         Assert.DoesNotContain("MeterNotes", command, StringComparison.Ordinal);
-        Assert.DoesNotContain("CreatedAtUtc", command, StringComparison.Ordinal);
+        Assert.Contains("g.\"CreatedAtUtc\"", command, StringComparison.Ordinal);
+        Assert.DoesNotContain("o.\"CreatedAtUtc\"", command, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedAtUtc", command, StringComparison.Ordinal);
         return command;
     }

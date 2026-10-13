@@ -15,6 +15,7 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync("20260908135423_PreserveGeneratedFinancialComments");
         await using var context = database.CreateContext();
+        await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(context);
         var garage = new AccountingTestDataBuilder().BuildGarage(number: "IRR-MIGRATION");
         var template = new IrregularPayment { Name = "Основание миграции", Amount = 100m };
         var destination = await context.IncomeTypes.SingleAsync(item => item.Code == "other_payments");
@@ -36,6 +37,7 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
         context.AddRange(manual, regular);
         await context.SaveChangesAsync();
 
+        await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(context);
         await context.Database.MigrateAsync();
 
         var preserved = await context.Accruals.AsNoTracking().Where(item => item.GarageId == garage.Id).ToListAsync();

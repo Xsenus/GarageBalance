@@ -106,8 +106,17 @@ public static class AccountingCleanupCommands
                 await output!.FlushAsync(cancellationToken);
                 output.Flush(flushToDisk: true);
                 reportComplete = true;
-                Console.WriteLine(JsonSerializer.Serialize(new { dryRun = true, plan.PlanId, plan.TotalArchived, plan.TotalEligible,
-                    selected = plan.EligibleGarages.Count, protectedShown = plan.ProtectedGarages.Count, plan.HasMoreEligible, plan.Fingerprint }, JsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(new
+                {
+                    dryRun = true,
+                    plan.PlanId,
+                    plan.TotalArchived,
+                    plan.TotalEligible,
+                    selected = plan.EligibleGarages.Count,
+                    protectedShown = plan.ProtectedGarages.Count,
+                    plan.HasMoreEligible,
+                    plan.Fingerprint
+                }, JsonOptions));
                 return 0;
             }
             var clients = await db.Database.SqlQuery<int>($"""

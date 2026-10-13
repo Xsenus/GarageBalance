@@ -19,10 +19,15 @@ public sealed class ArchivedGarageCleanupEngine(GarageBalanceDbContext db, IAcco
     private static readonly JsonSerializerOptions CanonicalJson = new(JsonSerializerDefaults.Web);
     private static readonly IReadOnlyDictionary<string, string> ExpectedDeleteRules = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["public.accruals"] = "r", ["public.financial_operations"] = "r", ["public.fee_campaign_garages"] = "c",
-        ["public.garage_meter_connections"] = "r", ["public.garage_people_count_periods"] = "c",
-        ["public.garage_report_quick_list_garages"] = "r", ["public.garage_tariff_assignments"] = "r",
-        ["public.meter_devices"] = "r", ["public.meter_readings"] = "r"
+        ["public.accruals"] = "r",
+        ["public.financial_operations"] = "r",
+        ["public.fee_campaign_garages"] = "c",
+        ["public.garage_meter_connections"] = "r",
+        ["public.garage_people_count_periods"] = "c",
+        ["public.garage_report_quick_list_garages"] = "r",
+        ["public.garage_tariff_assignments"] = "r",
+        ["public.meter_devices"] = "r",
+        ["public.meter_readings"] = "r"
     };
 
     public async Task<ArchivedGarageCleanupPlan> PreviewAsync(int maximumGarages, CancellationToken cancellationToken)
@@ -100,8 +105,13 @@ public sealed class ArchivedGarageCleanupEngine(GarageBalanceDbContext db, IAcco
                 writer.Add(new(null, "dictionary.garage_purged_without_financial_history", "garage", garage.Id.ToString(),
                     $"Окончательно удалён архивный гараж {garage.Number} без финансовой истории.",
                     ActionKind: "delete", EntityDisplayName: $"Гараж {garage.Number}", Reason: reason.Trim(),
-                    Metadata: new Dictionary<string, object?> { ["planId"] = plan.PlanId, ["fingerprint"] = plan.Fingerprint,
-                        ["operator"] = identity.Operator, ["backupSha256"] = backup.Sha256 },
+                    Metadata: new Dictionary<string, object?>
+                    {
+                        ["planId"] = plan.PlanId,
+                        ["fingerprint"] = plan.Fingerprint,
+                        ["operator"] = identity.Operator,
+                        ["backupSha256"] = backup.Sha256
+                    },
                     RelatedGarageId: garage.Id.ToString(), RelatedGarageNumber: garage.Number));
             await db.SaveChangesAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -121,12 +131,20 @@ public sealed class ArchivedGarageCleanupEngine(GarageBalanceDbContext db, IAcco
 
     public static string ComputeFingerprint(ArchivedGarageCleanupPlan plan) => Hash(JsonSerializer.Serialize(new
     {
-        plan.FormatVersion, plan.PlanId, CreatedAtUtc = plan.CreatedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture), plan.Source,
+        plan.FormatVersion,
+        plan.PlanId,
+        CreatedAtUtc = plan.CreatedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+        plan.Source,
         Garages = plan.EligibleGarages.OrderBy(row => row.GarageId).Select(row => new
         {
-            row.GarageId, row.GarageNumber, row.GarageVersion,
-            Reasons = row.ProtectionReasons.Order(StringComparer.Ordinal), row.MeterDeviceCount, row.MeterConnectionCount,
-            row.PeoplePeriodCount, row.QuickListLinkCount
+            row.GarageId,
+            row.GarageNumber,
+            row.GarageVersion,
+            Reasons = row.ProtectionReasons.Order(StringComparer.Ordinal),
+            row.MeterDeviceCount,
+            row.MeterConnectionCount,
+            row.PeoplePeriodCount,
+            row.QuickListLinkCount
         })
     }, CanonicalJson));
 
@@ -144,7 +162,9 @@ public sealed class ArchivedGarageCleanupEngine(GarageBalanceDbContext db, IAcco
     private IQueryable<CandidateRow> CandidateQuery() => db.Garages.AsNoTracking().Where(garage => garage.IsArchived)
         .Select(garage => new CandidateRow
         {
-            Id = garage.Id, Number = garage.Number, Version = garage.Version,
+            Id = garage.Id,
+            Number = garage.Number,
+            Version = garage.Version,
             HasBalance = garage.StartingBalance != 0m || (garage.StartingOverdueDebt ?? 0m) != 0m,
             HasOperations = db.FinancialOperations.Any(operation => operation.GarageId == garage.Id),
             HasAccruals = db.Accruals.Any(accrual => accrual.GarageId == garage.Id),

@@ -340,8 +340,13 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .Where(device => garageIds.Contains(device.GarageId) && device.MeterKind == meterKind && !device.IsCanceled)
             .Select(device => new MeterDevice
             {
-                Id = device.Id, GarageId = device.GarageId, MeterKind = device.MeterKind, SerialNumber = device.SerialNumber,
-                InstalledOn = device.InstalledOn, RemovedOn = device.RemovedOn, InitialValue = device.InitialValue,
+                Id = device.Id,
+                GarageId = device.GarageId,
+                MeterKind = device.MeterKind,
+                SerialNumber = device.SerialNumber,
+                InstalledOn = device.InstalledOn,
+                RemovedOn = device.RemovedOn,
+                InitialValue = device.InitialValue,
                 ReplacedDeviceId = device.ReplacedDeviceId
             }).ToListAsync(cancellationToken);
         var firstReadings = await dbContext.MeterReadings.AsNoTracking()
@@ -350,15 +355,20 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .Select(group => group.OrderBy(reading => reading.AccountingMonth).ThenBy(reading => reading.Id)
                 .Select(reading => new MeterReading
                 {
-                    Id = reading.Id, GarageId = reading.GarageId, MeterKind = reading.MeterKind,
-                    AccountingMonth = reading.AccountingMonth, MeterDeviceId = reading.MeterDeviceId, IsMeterReplacement = reading.IsMeterReplacement
+                    Id = reading.Id,
+                    GarageId = reading.GarageId,
+                    MeterKind = reading.MeterKind,
+                    AccountingMonth = reading.AccountingMonth,
+                    MeterDeviceId = reading.MeterDeviceId,
+                    IsMeterReplacement = reading.IsMeterReplacement
                 }).First()).ToListAsync(cancellationToken);
         var devicesByGarage = devices.ToLookup(device => device.GarageId);
         var firstByGarage = firstReadings.ToDictionary(reading => reading.GarageId);
         var connectionDevices = garages.ToDictionary(garage => garage.Id, garage => garage.BaselineMeterDeviceId);
         garageData = garageData.Select(garage => ApplyYearPageStartValue(garage, new MeterYearStartSnapshot
         {
-            Devices = devicesByGarage[garage.Id].ToList(), FirstReading = firstByGarage.GetValueOrDefault(garage.Id),
+            Devices = devicesByGarage[garage.Id].ToList(),
+            FirstReading = firstByGarage.GetValueOrDefault(garage.Id),
             ConnectionBaselineDeviceId = connectionDevices[garage.Id]
         })).ToList();
         var readings = await dbContext.MeterReadings.AsNoTracking()

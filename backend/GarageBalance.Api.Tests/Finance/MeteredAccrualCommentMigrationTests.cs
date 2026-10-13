@@ -14,6 +14,7 @@ public sealed class MeteredAccrualCommentMigrationTests
         const string previousMigration = "20260907064334_AddGarageQuickListConcurrencyVersion";
         await using var database = await PostgreSqlTestDatabase.CreateAsync(previousMigration);
         await using var context = database.CreateContext();
+        await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(context);
         var original = new string('я', 1000);
         var accrual = new Accrual
         {
@@ -27,6 +28,7 @@ public sealed class MeteredAccrualCommentMigrationTests
         };
         context.Accruals.Add(accrual);
         await context.SaveChangesAsync();
+        await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(context);
         await context.Database.MigrateAsync();
         Assert.Equal(original, await context.Accruals.AsNoTracking().Where(item => item.Id == accrual.Id).Select(item => item.Comment).SingleAsync());
         accrual.Comment = original + "; показание отменено";

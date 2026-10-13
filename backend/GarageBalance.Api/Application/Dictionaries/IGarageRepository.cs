@@ -50,7 +50,7 @@ public sealed record GarageListItemData(
     Guid Version,
     DateOnly? AccountingStartMonth = null,
     DateOnly? RegisteredOn = null,
-    DateTimeOffset CreatedAtUtc = default);
+    DateTimeOffset? CreatedAtUtc = null);
 
 public sealed record GarageBalanceTotalsData(
     IReadOnlyDictionary<Guid, decimal> AccrualTotals,

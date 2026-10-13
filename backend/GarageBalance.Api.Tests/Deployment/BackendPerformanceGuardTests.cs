@@ -283,7 +283,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(postgresPage, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("garage.Owner.Address", postgresPage, StringComparison.Ordinal);
         Assert.DoesNotContain("garage.Owner.MeterNotes", postgresPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("garage.CreatedAtUtc", postgresPage, StringComparison.Ordinal);
+        Assert.Contains("garage.CreatedAtUtc", postgresPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("garage.Owner.CreatedAtUtc", postgresPage, StringComparison.Ordinal);
         Assert.DoesNotContain("garage.UpdatedAtUtc", postgresPage, StringComparison.Ordinal);
         var balanceMethod = source[
             source.IndexOf("public async Task<GarageBalanceTotalsData> GetBalanceTotalsAsync", StringComparison.Ordinal)..source.IndexOf("public Task<Garage?> FindActiveWithOwnerAsync", StringComparison.Ordinal)];

@@ -14,6 +14,10 @@ public sealed class TransactionBoundaryGuardTests
         // its predecessor and saving financial/audit changes. This transaction contains
         // only the bounded write; PostgreSQL rollback, cancellation and race tests cover it.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfApplicationUnitOfWork.cs: BeginTransactionAsync(",
+        // Tariff changes and their affected accruals share one atomic write after funds
+        // locks. Caller transactions use a savepoint; PostgreSQL tariff rollback and
+        // cancellation tests protect ownership, tracking restoration and lock disposal.
+        $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfApplicationWriteScope.cs: BeginTransactionAsync(",
         // Creating a garage with its historical annual payments must be atomic and is
         // covered by PostgreSQL commit, rollback, cancellation and conflict tests.
         $"Infrastructure{Path.DirectorySeparatorChar}Data{Path.DirectorySeparatorChar}EfGarageOnboardingTransactionRunner.cs: BeginTransactionAsync(",

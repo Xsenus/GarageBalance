@@ -1,7 +1,18 @@
+using System.Reflection;
+using System.Reflection.Emit;
+using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Domain.Dictionaries;
+using Microsoft.EntityFrameworkCore;
+
 namespace GarageBalance.Api.Tests.Deployment;
 
 public sealed class DatabaseMigrationPolicyTests
 {
+    private static readonly IReadOnlyDictionary<ushort, OpCode> OpCodeLookup = typeof(OpCodes)
+        .GetFields(BindingFlags.Public | BindingFlags.Static)
+        .Where(field => field.FieldType == typeof(OpCode)).Select(field => (OpCode)field.GetValue(null)!)
+        .ToDictionary(opcode => unchecked((ushort)opcode.Value));
+
     [Fact]
     public void ProductionBackendCode_DoesNotCreateOrDeleteSchemaOutsideMigrations()
     {
@@ -64,7 +75,6 @@ public sealed class DatabaseMigrationPolicyTests
         var migrationRoot = Path.Combine(apiRoot, "Infrastructure", "Data", "Migrations");
         var forbiddenDeletePatterns = new[]
         {
-            ".Remove(",
             ".RemoveRange(",
             "ExecuteDelete(",
             "ExecuteDeleteAsync(",
@@ -84,6 +94,64 @@ public sealed class DatabaseMigrationPolicyTests
             .ToArray();
 
         Assert.Empty(offenders);
+        // Inspect the actual call target: Dictionary.Remove only edits a local index,
+        // whereas DbSet.Remove/DbContext.Remove physically deletes persisted entities.
+        var entityDeletes = typeof(HealthController).Assembly.GetTypes()
+            .Where(type => type.Namespace?.StartsWith("GarageBalance.Api", StringComparison.Ordinal) == true &&
+                type.Namespace?.StartsWith("GarageBalance.Api.Infrastructure.Data.Migrations", StringComparison.Ordinal) != true)
+            .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Cast<MethodBase>().Concat(type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)))
+            .Where(CallsEntityRemoval)
+            .Select(method => $"{method.DeclaringType!.FullName}.{method.Name}");
+        Assert.Empty(entityDeletes);
+    }
+
+    [Theory]
+    [InlineData(nameof(RemoveFromDictionary), false)]
+    [InlineData(nameof(RemoveFromDbSet), true)]
+    [InlineData(nameof(RemoveFromDbContext), true)]
+    [InlineData(nameof(RemoveFromNavigationCollection), true)]
+    public void PhysicalDeletionGuard_DistinguishesLocalIndexesFromEntityRemoval(string method, bool expected)
+    {
+        var target = typeof(DatabaseMigrationPolicyTests).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal(expected, CallsEntityRemoval(target));
+    }
+
+    private static void RemoveFromDictionary(Dictionary<Guid, Garage> index, Garage garage) => index.Remove(garage.Id);
+    private static void RemoveFromDbSet(DbSet<Garage> entities, Garage garage) => entities.Remove(garage);
+    private static void RemoveFromDbContext(DbContext context, Garage garage) => context.Remove(garage);
+    private static void RemoveFromNavigationCollection(ICollection<Garage> entities, Garage garage) => entities.Remove(garage);
+
+    private static bool CallsEntityRemoval(MethodBase method)
+    {
+        var body = method.GetMethodBody()?.GetILAsByteArray();
+        if (body is null) return false;
+        for (var position = 0; position < body.Length;)
+        {
+            ushort value = body[position++];
+            if (value == 0xfe) value = (ushort)(0xfe00 | body[position++]);
+            var opcode = OpCodeLookup[value];
+            if (opcode.OperandType == OperandType.InlineMethod)
+            {
+                var called = method.Module.ResolveMethod(BitConverter.ToInt32(body, position),
+                    method.DeclaringType?.GetGenericArguments(), method.IsGenericMethod ? method.GetGenericArguments() : null)!;
+                // Navigation removal can also trigger orphan/cascade deletion. Only a
+                // concrete Dictionary call is proven to change an in-memory key index.
+                if (called.Name is "Remove" or "RemoveRange" &&
+                    !(called.DeclaringType is { IsGenericType: true } declaring && declaring.GetGenericTypeDefinition() == typeof(Dictionary<,>)))
+                    return true;
+            }
+            position += opcode.OperandType switch
+            {
+                OperandType.InlineNone => 0,
+                OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+                OperandType.InlineVar => 2,
+                OperandType.InlineI8 or OperandType.InlineR => 8,
+                OperandType.InlineSwitch => 4 + BitConverter.ToInt32(body, position) * 4,
+                _ => 4
+            };
+        }
+        return false;
     }
 
     [Fact]

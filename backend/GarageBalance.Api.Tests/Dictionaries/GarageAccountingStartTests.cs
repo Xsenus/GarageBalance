@@ -14,6 +14,28 @@ public sealed class GarageAccountingStartTests
     private static readonly DateOnly September = new(2026, 9, 1);
 
     [Theory]
+    [InlineData("creation", "2026-08-01")]
+    [InlineData("registration", "2026-08-01")]
+    [InlineData("explicit", "2026-07-01")]
+    [InlineData("unknown", null)]
+    public async Task GarageList_ResolvesStartWithoutExposingInternalTimestamp(string source, string? expected)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var garage = new Garage
+        {
+            Number = "SYNTHETIC-LIST",
+            CreatedAtUtc = source == "unknown" ? default : new DateTimeOffset(2026, 8, 31, 22, 30, 0, TimeSpan.Zero),
+            RegisteredOn = source is "registration" or "explicit" ? new(2026, 8, 19) : null,
+            AccountingStartMonth = source == "explicit" ? new(2026, 7, 1) : null
+        };
+        database.Context.Garages.Add(garage);
+        await database.Context.SaveChangesAsync();
+        var rows = await DictionaryServiceTestFactory.Create(database.Context, October).GetGaragesAsync(null, default);
+        var result = Assert.Single(rows);
+        Assert.Equal(expected is null ? null : DateOnly.ParseExact(expected, "yyyy-MM-dd"), result.AccountingStartMonth);
+    }
+
+    [Theory]
     [InlineData(2026, 9, 1)]
     [InlineData(2026, 12, 1)]
     [InlineData(2027, 1, 1)]
