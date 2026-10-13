@@ -32,6 +32,7 @@ import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
 import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
+import { selectServiceViewRecords } from './serviceViewRecords'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageKeys } from '../../shared/workspaceViewState'
 import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
@@ -2720,10 +2721,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const tariffPaginationLabel = chargeServiceView === 'deleted' ? 'Пагинация удалённых услуг' : 'Пагинация тарифов и услуг'
   const tariffPageSizeLabel = chargeServiceView === 'deleted' ? 'Количество строк удалённых услуг' : 'Количество строк тарифов и услуг'
   const tariffPage = createClientPage(visibleTariffRows, tariffPageNumber, tariffPageSize)
-  const oneTimePage = createClientPage(oneTimeRows, oneTimePageNumber, oneTimePageSize)
+  const visibleOneTimeRows = selectServiceViewRecords(oneTimeRows, chargeServiceView, (row) => row.isDeleted)
+  const visibleFeeCampaigns = selectServiceViewRecords(feeCampaigns, chargeServiceView, (row) => row.isArchived)
+  const oneTimePage = createClientPage(visibleOneTimeRows, oneTimePageNumber, oneTimePageSize)
   const currentBusinessDate = getLocalDateInputValue()
   const feeCampaignPage = createClientPage(
-    [...feeCampaigns].sort((left, right) => getFeeCampaignDisplayRank(left, currentBusinessDate) - getFeeCampaignDisplayRank(right, currentBusinessDate)),
+    visibleFeeCampaigns.sort((left, right) => getFeeCampaignDisplayRank(left, currentBusinessDate) - getFeeCampaignDisplayRank(right, currentBusinessDate)),
     feeCampaignPageNumber,
     feeCampaignPageSize,
   )
@@ -2777,6 +2780,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               onClick={() => {
                 setChargeServiceView('active')
                 setTariffPageNumber(1)
+                setOneTimePageNumber(1)
+                setFeeCampaignPageNumber(1)
               }}
             >
               Действующие услуги ({backendChargeServices.length - archivedServiceCount})
@@ -2789,6 +2794,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               onClick={() => {
                 setChargeServiceView('deleted')
                 setTariffPageNumber(1)
+                setOneTimePageNumber(1)
+                setFeeCampaignPageNumber(1)
               }}
             >
               Удалённые услуги ({archivedServiceCount})
@@ -3331,7 +3338,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     </span>
                   </div>
                 ))}
-                {oneTimeRows.length === 0 && oneTimeLoaded && !oneTimeLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
+                {visibleOneTimeRows.length === 0 && oneTimeLoaded && !oneTimeLoading ? <EmptyState>{chargeServiceView === 'deleted' ? 'Удалённых нерегулярных платежей нет.' : 'Нерегулярные платежи пока не настроены.'}</EmptyState> : null}
               </div>
               <TablePagination
                 ariaLabel="Пагинация нерегулярных платежей"
@@ -3458,7 +3465,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   </div>
                   )
                 })}
-                {feeCampaigns.length === 0 && feeCampaignsLoaded && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
+                {visibleFeeCampaigns.length === 0 && feeCampaignsLoaded && !feeCampaignsLoading ? <EmptyState>{chargeServiceView === 'deleted' ? 'Удалённых сборов нет.' : 'Объявленные сборы пока не настроены.'}</EmptyState> : null}
               </div>
               <TablePagination
                 ariaLabel="Пагинация объявленных сборов"

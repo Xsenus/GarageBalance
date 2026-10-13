@@ -1343,12 +1343,17 @@ describe('App', () => {
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
     const activeCampaignName = await within(feeCampaignsSection).findByText('Сбор на ворота')
     expect(activeCampaignName.tagName).toBe('SPAN')
+    expect(within(feeCampaignsSection).queryByText('Старый сбор')).not.toBeInTheDocument()
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ }))
     expect(within(feeCampaignsSection).getByText('Старый сбор')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByText('Сбор на ворота')).not.toBeInTheDocument()
+    expect(within(feeCampaignsSection).getAllByText('Членские взносы')).toHaveLength(1)
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Действующие услуги/ }))
     expect(within(feeCampaignsSection).queryByText('Прочие доходы')).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByText('Ремонт ворот')).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('Фонд')).toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('Собрано')).toBeInTheDocument()
-    expect(within(feeCampaignsSection).getAllByText('Членские взносы')).toHaveLength(2)
+    expect(within(feeCampaignsSection).getAllByText('Членские взносы')).toHaveLength(1)
     expect(within(feeCampaignsSection).getAllByText('275.00').every((cell) => cell.classList.contains('contractors-fee-money-cell'))).toBe(true)
     expect(within(feeCampaignsSection).getAllByText('500.00').length).toBeGreaterThan(0)
 
@@ -1903,6 +1908,8 @@ describe('App', () => {
       { id: 'fee-campaign-closed', reason: 'Сбор закрыт' },
     ])
 
+    expect(within(feeCampaignsSection).queryByText('Закрытый сбор')).not.toBeInTheDocument()
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ }))
     const archivedCampaignRow = within(feeCampaignsSection).getByText('Старый сбор').closest('.contractors-mini-row')
     expect(archivedCampaignRow).not.toBeNull()
     const restoreCampaignButton = within(archivedCampaignRow as HTMLElement).getByRole('button', { name: 'Вернуть' })
@@ -2060,6 +2067,107 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByText('Старая охрана')).not.toBeInTheDocument()
   })
 
+  it.each([true, false])('filters irregular payments and fee campaigns with the service view when management is %s', async (canManage) => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getChargeServiceSettings: async () => [],
+      getIrregularPayments: async () => [
+        createIrregularPayment({ id: 'view-active', name: 'Действующий разовый платёж' }),
+        createIrregularPayment({ id: 'view-disabled', name: 'Отключённый разовый платёж', isActive: false }),
+        createIrregularPayment({ id: 'view-deleted', name: 'Удалённый разовый платёж', isArchived: true }),
+      ],
+      getFeeCampaigns: async () => [
+        createFeeCampaign({ id: 'view-active-fee', name: 'Действующий сбор' }),
+        createFeeCampaign({ id: 'view-deleted-fee', name: 'Удалённый сбор', isArchived: true }),
+      ],
+    })
+    const authClient = canManage ? createAuthClient() : createAuthClient({
+      login: async () => createAuthResponse({ user: { roles: ['reports_viewer'], permissions: ['dictionaries.read'] } }),
+    })
+    render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const irregular = within(panel).getByRole('region', { name: 'Нерегулярные платежи' })
+    const fees = within(panel).getByRole('region', { name: 'Объявленные сборы' })
+    expect(await within(irregular).findByText('Действующий разовый платёж')).toBeInTheDocument()
+    expect(within(irregular).getByText('Отключённый разовый платёж')).toBeInTheDocument()
+    expect(within(irregular).queryByText('Удалённый разовый платёж')).not.toBeInTheDocument()
+    expect(await within(fees).findByText('Действующий сбор')).toBeInTheDocument()
+    expect(within(fees).queryByText('Удалённый сбор')).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('tab', { name: /Удалённые услуги/ }))
+    expect(within(irregular).getByText('Удалённый разовый платёж')).toBeInTheDocument()
+    expect(within(irregular).queryByText('Действующий разовый платёж')).not.toBeInTheDocument()
+    expect(within(irregular).queryByText('Отключённый разовый платёж')).not.toBeInTheDocument()
+    expect(within(fees).getByText('Удалённый сбор')).toBeInTheDocument()
+    expect(within(fees).queryByText('Действующий сбор')).not.toBeInTheDocument()
+    expect(within(irregular).getByRole('button', { name: 'Вернуть' }).hasAttribute('disabled')).toBe(!canManage)
+    expect(within(fees).getByRole('button', { name: 'Вернуть' }).hasAttribute('disabled')).toBe(!canManage)
+    await user.click(within(panel).getByRole('tab', { name: /Действующие услуги/ }))
+    expect(within(irregular).getByText('Действующий разовый платёж')).toBeInTheDocument()
+    expect(within(fees).getByText('Действующий сбор')).toBeInTheDocument()
+    expect(within(irregular).queryByText('Удалённый разовый платёж')).not.toBeInTheDocument()
+    expect(within(fees).queryByText('Удалённый сбор')).not.toBeInTheDocument()
+  })
+
+  it('resets both auxiliary table pages when switching the service view', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getIrregularPayments: async () => [
+        ...Array.from({ length: 30 }, (_, index) => createIrregularPayment({ id: `page-irregular-${index}`, name: `Разовый платёж ${index + 1}` })),
+        createIrregularPayment({ id: 'page-irregular-deleted', name: 'Удалённый разовый платёж страницы', isArchived: true }),
+      ],
+      getFeeCampaigns: async () => [
+        ...Array.from({ length: 30 }, (_, index) => createFeeCampaign({ id: `page-fee-${index}`, name: `Сбор ${index + 1}` })),
+        createFeeCampaign({ id: 'page-fee-deleted', name: 'Удалённый сбор страницы', isArchived: true }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const irregular = within(panel).getByRole('region', { name: 'Нерегулярные платежи' })
+    const fees = within(panel).getByRole('region', { name: 'Объявленные сборы' })
+    await within(irregular).findByText('Разовый платёж 1')
+    await within(fees).findByText('Сбор 1')
+    await user.click(within(irregular).getByRole('button', { name: 'Страница 2' }))
+    await user.click(within(fees).getByRole('button', { name: 'Страница 2' }))
+    expect(within(irregular).getByRole('button', { name: 'Страница 2' })).toHaveAttribute('aria-current', 'page')
+    expect(within(fees).getByRole('button', { name: 'Страница 2' })).toHaveAttribute('aria-current', 'page')
+    await user.click(within(panel).getByRole('tab', { name: /Удалённые услуги/ }))
+    expect(within(irregular).getByText('Удалённый разовый платёж страницы')).toBeInTheDocument()
+    expect(within(fees).getByText('Удалённый сбор страницы')).toBeInTheDocument()
+    expect(within(irregular).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+    expect(within(fees).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+    await user.click(within(panel).getByRole('tab', { name: /Действующие услуги/ }))
+    expect(within(irregular).getByText('Разовый платёж 1')).toBeInTheDocument()
+    expect(within(fees).getByText('Сбор 1')).toBeInTheDocument()
+    expect(within(irregular).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+    expect(within(fees).getByRole('button', { name: 'Страница 1' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('shows empty deleted auxiliary tables instead of active records', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getIrregularPayments: async () => [createIrregularPayment({ name: 'Только действующий платёж' })],
+      getFeeCampaigns: async () => [createFeeCampaign({ name: 'Только действующий сбор' })],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await within(panel).findByText('Только действующий платёж')
+    await within(panel).findByText('Только действующий сбор')
+    await user.click(within(panel).getByRole('tab', { name: /Удалённые услуги/ }))
+    expect(within(panel).getByText('Удалённых нерегулярных платежей нет.')).toBeInTheDocument()
+    expect(within(panel).getByText('Удалённых сборов нет.')).toBeInTheDocument()
+    expect(within(panel).queryByText('Только действующий платёж')).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Только действующий сбор')).not.toBeInTheDocument()
+  })
+
   it('restores a charge service into the editable active list and keeps the dialog open after an API error', async () => {
     const user = userEvent.setup()
     const incomeType = createAccountingType({ id: 'income-service-restore', name: 'Охрана', code: 'other_income' })
@@ -2189,6 +2297,7 @@ describe('App', () => {
       { id: activePayment.id, reason: 'Услуга прекращена' },
     ])
 
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ }))
     const archivedRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Старый пропуск')
     await user.click(within(archivedRow).getByRole('button', { name: 'Вернуть' }))
     const restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
@@ -2749,6 +2858,7 @@ describe('App', () => {
     expect(within(tariffsPanel).getAllByRole('button', { name: 'Добавить услугу' })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })).toHaveLength(1)
 
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ }))
     const archivedPaymentRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Архивный штраф')
     const restoreArchivedButton = within(archivedPaymentRow).getByRole('button', { name: 'Вернуть' })
     await user.click(restoreArchivedButton)
@@ -2766,8 +2876,12 @@ describe('App', () => {
     const reopenedRestoreArchivedDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
     await user.click(within(reopenedRestoreArchivedDialog).getByRole('button', { name: 'Вернуть' }))
     await waitFor(() => expect(restoredIrregularPaymentIds).toEqual(['irregular-archived']))
-    expect(within(archivedPaymentRow).getByLabelText('Сумма: Архивный штраф')).toBeEnabled()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
+    expect(within(oneTimeTable).queryByLabelText('Нерегулярный платеж Архивный штраф')).not.toBeInTheDocument()
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Действующие услуги/ }))
+    expect(within(oneTimeTable).getByLabelText('Сумма: Архивный штраф')).toBeEnabled()
 
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ }))
     const conflictPaymentRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Архивный дубль')
     await user.click(within(conflictPaymentRow).getByRole('button', { name: 'Вернуть' }))
     const conflictRestoreDialog = await screen.findByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })
@@ -2777,6 +2891,7 @@ describe('App', () => {
     await user.click(within(conflictRestoreDialog).getByRole('button', { name: 'Отмена' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть нерегулярный платеж?' })).not.toBeInTheDocument())
 
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Действующие услуги/ }))
     const usedPaymentRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Вступительный взнос')
     fireEvent.contextMenu(usedPaymentRow)
     const usedPaymentMenu = await screen.findByRole('menu', { name: 'Действия нерегулярного платежа Вступительный взнос' })
@@ -2784,6 +2899,7 @@ describe('App', () => {
     expect(await within(oneTimeTable).findByRole('alert')).toHaveTextContent('Удаление недоступно')
     expect(screen.queryByRole('dialog', { name: 'Удалить нерегулярный платеж?' })).not.toBeInTheDocument()
 
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Действующие услуги/ }))
     const fineThatRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Штраф за то')
     const fineThatInput = within(fineThatRow).getByLabelText('Сумма: Штраф за то')
     expect(fineThatInput).toBeEnabled()
@@ -2827,7 +2943,11 @@ describe('App', () => {
     expect(within(reopenedDeleteFineDialog).getByRole('button', { name: 'Удалить' })).toBeDisabled()
     await user.type(within(reopenedDeleteFineDialog).getByLabelText('Причина удаления нерегулярного платежа'), 'Больше не используется')
     await user.click(within(reopenedDeleteFineDialog).getByRole('button', { name: 'Удалить' }))
-    await waitFor(() => expect(within(fineThisRow).getByRole('button', { name: 'Вернуть' })).toBeEnabled())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить нерегулярный платеж?' })).not.toBeInTheDocument())
+    expect(within(oneTimeTable).queryByLabelText('Нерегулярный платеж Штраф за это')).not.toBeInTheDocument()
+    await user.click(within(tariffsPanel).getByRole('tab', { name: /Удалённые услуги/ }))
+    const deletedFineRow = within(oneTimeTable).getByLabelText('Нерегулярный платеж Штраф за это')
+    expect(within(deletedFineRow).getByRole('button', { name: 'Вернуть' })).toBeEnabled()
 
     expect(within(tariffsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
