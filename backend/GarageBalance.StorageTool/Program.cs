@@ -35,6 +35,10 @@ GarageBalance.StorageTool commands:
   resume-reconciliation --execute --reason <operator-explanation>
   recovery-canary | recovery-publish | recovery-fetch | restore-drill [--execute]
   backup-layout | backup-layout-prune [--execute --checkpoint <private-json-path>]
+  archived-garages-plan --output <private-json-path> [--max-garages N]
+  archived-garages-cleanup [--execute --plan <private-json-path> --confirm <fingerprint>
+    --backup-receipt <private-json-path> --expected-database <exact-name>
+    --service <stopped-service> --reason <operator-explanation>]
 Options: --checkpoint <private-json-path> --page-size N --max-jobs N --output <private-json-path>
 Mutating commands are dry-run by default. copy creates a checkpoint; resume continues it;
 delta-sync extends it with new files. Only backup-layout-prune removes old cloud paths after verification.
@@ -47,6 +51,8 @@ See docs/storage-migration-cli.md for migration gates and docs/disaster-recovery
             {
                 var configuration = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
                     .AddJsonFile("appsettings.json", optional: true).AddEnvironmentVariables().Build();
+                if (AccountingCleanupCommands.CanHandle(command))
+                    return await AccountingCleanupCommands.RunAsync(args, configuration, cancellationToken);
                 if (DisasterRecoveryCommands.CanHandle(command))
                     return await DisasterRecoveryCommands.RunAsync(args, configuration, cancellationToken);
                 var options = MigrationCommandOptions.Parse(args);
