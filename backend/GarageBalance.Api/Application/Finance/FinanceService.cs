@@ -1283,6 +1283,8 @@ public sealed partial class FinanceService(
             .GroupBy(accrual => (AccountingYear: accrual.AccountingYear!.Value, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
 
+        var calculationIssues = new Dictionary<(DateOnly Month, Guid IncomeTypeId), string>();
+
         for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
         {
             foreach (var setting in settings)
@@ -1298,12 +1300,6 @@ public sealed partial class FinanceService(
                     continue;
                 }
 
-                var tariff = SelectTariffForMonth(setting, month);
-                if (tariff is null)
-                {
-                    continue;
-                }
-
                 var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(
                     incomeType.Code,
                     month,
@@ -1314,6 +1310,13 @@ public sealed partial class FinanceService(
                     : accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
                 if (existing is not null && paidAccrualIds.Contains(existing.Id))
                 {
+                    continue;
+                }
+
+                var tariff = SelectTariffForMonth(setting, month);
+                if (tariff is null)
+                {
+                    calculationIssues[(month, incomeType.Id)] = "Не задан тариф на этот месяц. Добавьте соответствующий тарифный период.";
                     continue;
                 }
 
@@ -1342,6 +1345,7 @@ public sealed partial class FinanceService(
                     meterKind is null ? null : meterConnections.GetValueOrDefault(meterKind));
                 if (!calculation.Succeeded)
                 {
+                    calculationIssues[(month, incomeType.Id)] = calculation.ErrorMessage!;
                     // Missing calculation inputs (for example, a meter reading) must not erase an
                     // already issued unpaid obligation. Keep it visible until a successful
                     // recalculation can replace the amount.
@@ -1470,6 +1474,10 @@ public sealed partial class FinanceService(
         }
 
         var rows = worksheet.Value.Rows.ToList();
+        var rowIndexes = rows.Select((row, index) => new { Row = row, Index = index })
+            .Where(item => !item.Row.FeeCampaignId.HasValue && !item.Row.IrregularPaymentId.HasValue)
+            .GroupBy(item => (item.Row.AccountingMonth, item.Row.IncomeTypeId))
+            .ToDictionary(group => group.Key, group => group.First().Index);
         for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
         {
             foreach (var setting in settings)
@@ -1485,25 +1493,24 @@ public sealed partial class FinanceService(
                     continue;
                 }
 
-                var tariff = SelectTariffForMonth(setting, month);
-                if (tariff is null)
+                var issue = calculationIssues.GetValueOrDefault((month, incomeType.Id));
+                if (rowIndexes.TryGetValue((month, incomeType.Id), out var rowIndex))
                 {
+                    if (issue is not null) rows[rowIndex] = rows[rowIndex] with { CalculationIssue = issue };
                     continue;
                 }
-
-                var segments = ApplyGarageTariffPeriods(month, setting, tariff, BuildRegularAccrualSegments(month, setting, tariff), individualPeriodsByService[setting.Id]);
+                var tariff = SelectTariffForMonth(setting, month);
+                var segments = tariff is null ? [] : ApplyGarageTariffPeriods(month, setting, tariff, BuildRegularAccrualSegments(month, setting, tariff), individualPeriodsByService[setting.Id]);
                 var meteredBase = segments
                     .Select(segment => segment.CalculationBase)
                     .FirstOrDefault(calculationBase =>
                         calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
-                if (meteredBase is null || rows.Any(row =>
-                        row.AccountingMonth == month &&
-                        row.IncomeTypeId == incomeType.Id))
+                if (meteredBase is null && issue is null)
                 {
                     continue;
                 }
 
-                var meterKind = MeterKinds.IsValid(setting.MeterKind)
+                var meterKind = meteredBase is null ? null : MeterKinds.IsValid(setting.MeterKind)
                     ? setting.MeterKind
                     : meteredBase switch
                     {
@@ -1526,7 +1533,9 @@ public sealed partial class FinanceService(
                     0m,
                     0m,
                     0m,
-                    0m));
+                    0m,
+                    CalculationIssue: issue));
+                rowIndexes[(month, incomeType.Id)] = rows.Count - 1;
             }
         }
 

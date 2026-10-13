@@ -714,7 +714,8 @@ public sealed record GarageIncomeWorksheetRowDto(
     decimal? IrregularPaymentRemainingAmount = null,
     AccrualCalculationDetailsDto? CalculationDetails = null,
     string? Reason = null,
-    string? IncomeTypeCode = null);
+    string? IncomeTypeCode = null,
+    string? CalculationIssue = null);
 
 public sealed record GarageIncomeWorksheetDto(
     Guid GarageId,

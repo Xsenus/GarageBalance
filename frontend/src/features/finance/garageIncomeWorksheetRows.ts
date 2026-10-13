@@ -32,6 +32,7 @@ export type GarageIncomePrototypeRow = {
   debt: number
   meterRequired?: boolean
   calculationDetails?: AccrualCalculationDetailsDto | null
+  calculationIssue?: string | null
   reason?: string | null
   incomeTypeCode: string | null
 }
@@ -67,10 +68,16 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       debt: row.debt,
       meterRequired: row.meterKind !== null && row.meterValue === null,
       calculationDetails: row.calculationDetails ?? null,
+      calculationIssue: row.calculationIssue ?? null,
       reason: row.reason ?? null,
       incomeTypeCode: row.incomeTypeCode ?? null,
     }
   })
+}
+
+export function getGarageIncomeCalculationIssue(row: Pick<GarageIncomePrototypeRow, 'accrued' | 'calculationIssue'>) {
+  if (!row.calculationIssue) return null
+  return `${row.accrued > 0 ? 'Прежняя сумма сохранена; повторный расчёт не выполнен:' : 'Начисление не рассчитано:'} ${row.calculationIssue}`
 }
 
 export function mergeSavedGarageAccrual(rows: GarageIncomePrototypeRow[], accrual: AccrualDto, incomeTypeCode: string | null) {

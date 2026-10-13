@@ -40,7 +40,7 @@ import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toS
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
-import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, isFeePaymentClosed, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeCalculationIssue, getGarageIncomeRowTitle, isFeePaymentClosed, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -5985,6 +5985,7 @@ function PaymentsPrototypePanel({
                             <td className="payments-prototype-month-cell">{row.monthLabel}</td>
                             <td>
                               <span className="payments-prototype-service-name">{getGarageIncomeRowTitle(row)}</span>
+                              {row.calculationIssue ? <small className="payments-prototype-row-reason">{getGarageIncomeCalculationIssue(row)}</small> : null}
                               {shouldShowAccrualReason(row, accrualReasonDisplayMode) ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
                             </td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>

@@ -11866,6 +11866,8 @@ describe('App', () => {
         accountingMonth: `${historicalMonth}-01`,
         incomeTypeId: 'income-water-history',
         incomeTypeName: 'Вода историческая',
+        calculationIssue: savedValue === null ? 'нет показания счётчика за месяц.' : null,
+        reason: 'Комментарий к прежнему начислению',
         meterKind: 'water',
         meterReadingId: savedValue === null ? null : 'reading-history',
         meterReadingVersion: savedValue === null ? null : 'reading-history-version',
@@ -11933,6 +11935,8 @@ describe('App', () => {
     }, expect.any(AbortSignal)))
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
     const meterInput = await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })
+    expect(within(prototype).getByText('Начисление не рассчитано: нет показания счётчика за месяц.')).toBeInTheDocument()
+    expect(within(prototype).queryByText('Причина: Комментарий к прежнему начислению')).not.toBeInTheDocument()
     await user.type(meterInput, '115')
     await user.click(within(prototype).getByRole('button', { name: 'Сохранить показание Вода историческая фев.24' }))
 
@@ -11963,6 +11967,7 @@ describe('App', () => {
       resolveWorksheetRefresh(worksheet())
       await worksheetRefresh
     })
+    await waitFor(() => expect(within(prototype).queryByText('Начисление не рассчитано: нет показания счётчика за месяц.')).not.toBeInTheDocument())
   })
 
   it('shows an error when the garage financial period is unavailable without requesting a partial worksheet', async () => {

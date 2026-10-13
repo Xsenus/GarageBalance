@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
-import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeRowTitle, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeCalculationIssue, getGarageIncomeRowTitle, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import type { AccrualDto } from '../../services/financeApi'
 
@@ -59,6 +59,22 @@ describe('normalizeGarageDebtAfterForHistory', () => {
 })
 
 describe('createGarageIncomeRowsFromWorksheet', () => {
+  it('preserves a calculation issue without changing financial values', () => {
+    const [row] = createGarageIncomeRowsFromWorksheet({
+      garageId: 'garage-1', garageNumber: '1', ownerName: null,
+      monthFrom: '2026-09-01', monthTo: '2026-09-01', openingBalance: 0, openingDebt: 0,
+      unrepresentedOpeningDebt: 0, accrualTotal: 25, incomeTotal: 0, advanceTotal: 0, debtTotal: 25, closingBalance: 25, closingDebt: 25,
+      rows: [{ accountingMonth: '2026-09-01', incomeTypeId: 'water', incomeTypeName: 'Вода', annualAccrualId: null,
+        meterKind: 'water', meterReadingId: null, meterReadingVersion: null, meterReadingDate: null, meterValue: null,
+        meterConsumption: null, accrualAmount: 25, payableAmount: 25, incomeAmount: 0, advanceAmount: 0, debt: 25,
+        calculationIssue: 'нет показания счётчика за месяц.' }],
+    })
+    expect(row).toMatchObject({ accrued: 25, payable: 25, paid: 0, debt: 25, calculationIssue: 'нет показания счётчика за месяц.' })
+    expect(getGarageIncomeCalculationIssue(row)).toBe('Прежняя сумма сохранена; повторный расчёт не выполнен: нет показания счётчика за месяц.')
+    expect(getGarageIncomeCalculationIssue({ accrued: 0, calculationIssue: 'Не задан тариф.' })).toBe('Начисление не рассчитано: Не задан тариф.')
+    expect(getGarageIncomeCalculationIssue({ accrued: 0 })).toBeNull()
+    expect(getGarageIncomeCalculationIssue({ accrued: 25, calculationIssue: null })).toBeNull()
+  })
   it('includes a service overpayment in the visible paid amount', () => {
     const [row] = createGarageIncomeRowsFromWorksheet({
       garageId: 'garage-1', garageNumber: '1', ownerName: 'Тестовый владелец',

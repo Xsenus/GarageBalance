@@ -417,6 +417,7 @@ export type GarageOverdueDebtDto = {
 }
 
 export type GarageIncomeWorksheetRowDto = {
+  calculationIssue?: string | null
   accountingMonth: string
   incomeTypeId: string | null
   incomeTypeName: string
