@@ -297,6 +297,7 @@ export type CancelMeterDeviceReplacementRequest = {
 }
 
 export type MeterReadingYearGarageDto = {
+  accountingStartMonth?: string | null
   id: string
   number: string
   initialReadingMonth?: string | null

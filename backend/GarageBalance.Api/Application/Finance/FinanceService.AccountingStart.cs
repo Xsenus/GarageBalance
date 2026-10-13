@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -63,6 +64,7 @@ public sealed partial class FinanceService : IGarageAccountingStartService
                 }
             }
 
+            if (!isNew) await AlignLegacyOpeningMonthAsync(garage, kinds, month, actorUserId, cancellationToken);
             garage.AccountingStartMonth = month;
             transferred = true;
             return FinanceResult<GarageAccountingStartChange>.Success(new(transaction, locks, async token =>
@@ -90,4 +92,33 @@ public sealed partial class FinanceService : IGarageAccountingStartService
 
     private static FinanceResult<GarageAccountingStartChange> AccountingStartFailure(string code, string message) =>
         FinanceResult<GarageAccountingStartChange>.Failure(code, message);
+
+    private async Task AlignLegacyOpeningMonthAsync(Garage garage, IReadOnlyList<string> kinds, DateOnly month,
+        Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        garage.InitialMeterReadingMonth = month.AddMonths(-1);
+        var connectedKinds = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
+            .Select(connection => connection.MeterKind).ToHashSet(StringComparer.Ordinal);
+        foreach (var kind in kinds.Where(kind => !connectedKinds.Contains(kind)))
+        {
+            var devices = await meterReadingRepository.GetDevicesForUpdateAsync(garage.Id, kind, cancellationToken);
+            var first = await meterReadingRepository.GetFirstActiveAsync(garage.Id, kind, cancellationToken);
+            var baseline = MeterBaselineResolver.FindBaselineDevice(devices, first);
+            var openingDate = month.AddDays(-1);
+            if (baseline is null || baseline.IsCanceled || baseline.ReplacedDeviceId.HasValue ||
+                baseline.SerialNumber != MeterBaselineResolver.UnnumberedDeviceSerial || baseline.InstalledOn <= openingDate) continue;
+            // The original unnumbered device has a generated opening boundary, not a known
+            // physical installation date. Numbered devices and replacement dates stay intact.
+            var oldDate = baseline.InstalledOn;
+            baseline.InstalledOn = openingDate;
+            baseline.Version = Guid.NewGuid();
+            baseline.UpdatedAtUtc = timeProvider.GetUtcNow();
+            auditEventWriter.Add(new AuditEventWriteRequest(actorUserId, "finance.legacy_meter_opening_date_adjusted", "meter_device", baseline.Id.ToString(),
+                Summary: "Исправлена граница начального учёта прибора без известного номера.",
+                OldValues: new Dictionary<string, object?> { ["installedOn"] = oldDate.ToString("dd.MM.yyyy") },
+                NewValues: new Dictionary<string, object?> { ["installedOn"] = openingDate.ToString("dd.MM.yyyy") },
+                FieldLabels: new Dictionary<string, string> { ["installedOn"] = "Граница начального учёта" },
+                RelatedGarageId: garage.Id.ToString(), RelatedGarageNumber: garage.Number));
+        }
+    }
 }

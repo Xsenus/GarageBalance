@@ -13,7 +13,8 @@ export function getMeterReadingDateForMonth(year: string, monthKey: string, curr
   return closedOn?.slice(0, 7) === month && closedOn < afterConnection ? closedOn : afterConnection
 }
 
-export function getMeterReadingConnectionStatus(garage: { connectedOn?: string | null; closedOn?: string | null; requiresStartValue?: boolean; requiresConnectionDate?: boolean }, month: string) {
+export function getMeterReadingConnectionStatus(garage: { accountingStartMonth?: string | null; connectedOn?: string | null; closedOn?: string | null; requiresStartValue?: boolean; requiresConnectionDate?: boolean }, month: string) {
+  if (garage.accountingStartMonth && month < garage.accountingStartMonth.slice(0, 7)) return 'До начала учёта гаража'
   if (garage.requiresConnectionDate || garage.connectedOn && month < garage.connectedOn.slice(0, 7)) return 'Не подключена'
   if (garage.closedOn && month > garage.closedOn.slice(0, 7)) return 'Услуга отключена'
   if (garage.requiresStartValue) return 'Требуется стартовое показание'

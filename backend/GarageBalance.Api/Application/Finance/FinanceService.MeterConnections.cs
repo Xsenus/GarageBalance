@@ -13,6 +13,9 @@ public sealed partial class FinanceService
         Garage garage, string meterKind, DateOnly month, DateOnly readingDate,
         bool requireApplicableService, CancellationToken cancellationToken)
     {
+        if (garage.AccountingStartMonth is { } accountingStart && month < accountingStart)
+            return FinanceResult<MeterConnectionContext>.Failure("meter_reading_before_accounting_start",
+                $"Показания гаража учитываются с {accountingStart:MM.yyyy}. Выберите допустимый месяц или исправьте «Учитывать с» в карточке гаража.");
         var connection = await meterReadingRepository.GetConnectionForUpdateAsync(garage.Id, meterKind, cancellationToken);
         if (requireApplicableService &&
             !await chargeServiceSettingRepository.IsRegularMeterKindApplicableAsync(garage.Id, meterKind, cancellationToken))

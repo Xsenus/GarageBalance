@@ -296,6 +296,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 garage.Id,
                 garage.Number,
                 garage.InitialMeterReadingMonth,
+                garage.AccountingStartMonth,
                 InitialReadingValue = meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : meterKind == MeterKinds.Electricity ? garage.InitialElectricityMeterValue : null,
                 HasConnection = connections.Any(connection => connection.GarageId == garage.Id),
                 ConnectedOn = connections.Where(connection => connection.GarageId == garage.Id)
@@ -326,7 +327,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             garage.ConnectedOn,
             garage.HasConnection ? !garage.BaselineMeterDeviceId.HasValue : !garage.HasLegacyBase,
             !garage.HasConnection && !garage.HasLegacyBase,
-            garage.ClosedOn)).ToList();
+            garage.ClosedOn, garage.AccountingStartMonth)).ToList();
 
         if (garages.Count == 0)
         {
@@ -371,7 +372,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         var yearEnd = new DateOnly(year, 12, 31);
         var rows = await dbContext.Database.SqlQuery<MeterReadingYearPageRow>($$"""
             WITH applicable_garages AS (
-                SELECT garage."Id", garage."Number",
+                SELECT garage."Id", garage."Number", garage."AccountingStartMonth",
                        CASE WHEN connection."Id" IS NULL THEN garage."InitialMeterReadingMonth" ELSE NULL END AS "InitialMeterReadingMonth",
                        CASE WHEN connection."Id" IS NULL THEN garage."InitialWaterMeterValue" ELSE NULL END AS "InitialWaterMeterValue",
                        CASE WHEN connection."Id" IS NULL THEN garage."InitialElectricityMeterValue" ELSE NULL END AS "InitialElectricityMeterValue",
@@ -418,6 +419,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                     garage."Id" AS "GarageId",
                     garage."Number" AS "GarageNumber",
                     garage."InitialMeterReadingMonth" AS "InitialReadingMonth",
+                    garage."AccountingStartMonth",
                     CASE WHEN {{meterKind}} = 'water' THEN garage."InitialWaterMeterValue"
                          WHEN {{meterKind}} = 'electricity' THEN garage."InitialElectricityMeterValue"
                          ELSE NULL END AS "InitialReadingValue",
@@ -435,6 +437,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 paged_garage."GarageId",
                 paged_garage."GarageNumber",
                 paged_garage."InitialReadingMonth",
+                paged_garage."AccountingStartMonth",
                 paged_garage."InitialReadingValue",
                 paged_garage."ConnectedOn", paged_garage."ClosedOn", paged_garage."RequiresStartValue", paged_garage."RequiresConnectionDate",
                 paged_garage."GarageOrdinal",
@@ -464,6 +467,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 NULL::uuid AS "GarageId",
                 NULL::text AS "GarageNumber",
                 NULL::date AS "InitialReadingMonth",
+                NULL::date AS "AccountingStartMonth",
                 NULL::numeric AS "InitialReadingValue",
                 NULL::date AS "ConnectedOn", NULL::date AS "ClosedOn", FALSE AS "RequiresStartValue", FALSE AS "RequiresConnectionDate",
                 NULL::bigint AS "GarageOrdinal",
@@ -482,10 +486,10 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         var totalCount = checked((int)(rows.FirstOrDefault()?.TotalCount ?? 0));
         var garages = rows
             .Where(row => row.Category == 1)
-            .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal, row.InitialReadingMonth, row.InitialReadingValue, row.ConnectedOn, row.ClosedOn, row.RequiresStartValue, row.RequiresConnectionDate })
+            .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal, row.InitialReadingMonth, row.InitialReadingValue, row.ConnectedOn, row.ClosedOn, row.RequiresStartValue, row.RequiresConnectionDate, row.AccountingStartMonth })
             .OrderBy(group => group.Key.GarageOrdinal)
             .Select(group => new MeterReadingYearGarageData(group.Key.GarageId!.Value, group.Key.GarageNumber!, group.Key.InitialReadingMonth, group.Key.InitialReadingValue,
-                group.Key.ConnectedOn, group.Key.RequiresStartValue, group.Key.RequiresConnectionDate, group.Key.ClosedOn))
+                group.Key.ConnectedOn, group.Key.RequiresStartValue, group.Key.RequiresConnectionDate, group.Key.ClosedOn, group.Key.AccountingStartMonth))
             .ToList();
         var readings = rows
             .Where(row => row.Category == 1 && row.ReadingId is not null)
@@ -510,6 +514,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         public Guid? GarageId { get; set; }
         public string? GarageNumber { get; set; }
         public DateOnly? InitialReadingMonth { get; set; }
+        public DateOnly? AccountingStartMonth { get; set; }
         public decimal? InitialReadingValue { get; set; }
         public DateOnly? ConnectedOn { get; set; }
         public DateOnly? ClosedOn { get; set; }

@@ -34,4 +34,12 @@ describe('meter reading month availability', () => {
     expect(getMeterReadingConnectionStatus({ closedOn: '2026-10-05' }, '2026-11')).toBe('Услуга отключена')
     expect(getMeterReadingConnectionStatus({}, '2026-01')).toBeNull()
   })
+
+  it('checks the garage accounting month before the individual connection and permits the first month', () => {
+    expect(getMeterReadingConnectionStatus({ accountingStartMonth: '2026-09-01' }, '2026-08')).toBe('До начала учёта гаража')
+    expect(getMeterReadingConnectionStatus({ accountingStartMonth: '2026-09-01' }, '2026-09')).toBeNull()
+    expect(getMeterReadingConnectionStatus({ accountingStartMonth: '2026-09-01', connectedOn: '2026-10-15' }, '2026-09')).toBe('Не подключена')
+    expect(getMeterReadingConnectionStatus({ accountingStartMonth: '2026-09-01', connectedOn: '2026-10-15' }, '2026-10')).toBeNull()
+    expect(getMeterReadingConnectionStatus({ accountingStartMonth: '2027-01-01', requiresConnectionDate: true }, '2026-12')).toBe('До начала учёта гаража')
+  })
 })

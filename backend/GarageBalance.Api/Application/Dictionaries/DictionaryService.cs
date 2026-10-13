@@ -50,6 +50,7 @@ public sealed class DictionaryService(
         ["meterNotes"] = "Счетчики",
         ["number"] = "Номер",
         ["accountingMonth"] = "Учитывать с",
+        ["initialMeterReadingMonth"] = "Месяц стартовых показаний",
         ["peopleCount"] = "Количество людей",
         ["peopleCountEffectiveFrom"] = "Число людей действует с",
         ["floorCount"] = "Количество этажей",
@@ -465,6 +466,7 @@ public sealed class DictionaryService(
         OptimisticConcurrencyGuard.EnsureCurrent(request.Version, garage);
 
         var oldAccountingStartMonth = GarageAccountingPeriod.ResolveStartMonth(garage.AccountingStartMonth, garage.RegisteredOn ?? businessDateProvider.ToBusinessDate(garage.CreatedAtUtc));
+        var oldInitialMeterReadingMonth = garage.InitialMeterReadingMonth;
         var accountingStartChanged = request.AccountingStartMonth.HasValue && request.AccountingStartMonth != oldAccountingStartMonth;
         if (accountingStartChanged && string.IsNullOrWhiteSpace(request.AccountingStartReason))
             return DictionaryResult<GarageDto>.Failure("garage_accounting_start_reason_required", "Укажите причину исправления месяца начала учёта.");
@@ -611,6 +613,8 @@ public sealed class DictionaryService(
             {
                 oldValues["accountingMonth"] = oldAccountingStartMonth;
                 newValues["accountingMonth"] = request.AccountingStartMonth;
+                oldValues["initialMeterReadingMonth"] = oldInitialMeterReadingMonth?.ToString("MM.yyyy");
+                newValues["initialMeterReadingMonth"] = garage.InitialMeterReadingMonth?.ToString("MM.yyyy");
             }
 
             garage.Number = number;

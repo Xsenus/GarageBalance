@@ -254,7 +254,7 @@ public sealed partial class FinanceService(
             cancellationToken);
         var result = new MeterReadingYearPageDto(
             page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue,
-                garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn)).ToList(),
+                garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn, garage.AccountingStartMonth)).ToList(),
             page.Readings.Select(reading => new MeterReadingYearValueDto(
                 reading.Id,
                 reading.GarageId,
@@ -6567,15 +6567,12 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_current_below_initial", "Текущее показание нового счетчика не может быть меньше его начального показания.");
         }
 
-        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
-        if (garage is null)
-        {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure("garage_not_found", "Гараж для замены счетчика не найден.");
-        }
-
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            [GetMeterChainLockKey(garage.Id, meterKind)],
+            [GetMeterChainLockKey(request.GarageId, meterKind)],
             cancellationToken);
+        var garage = await garageRepository.FindActiveFreshWithOwnerAsync(request.GarageId, cancellationToken);
+        if (garage is null)
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("garage_not_found", "Гараж для замены счетчика не найден.");
         var connectionContext = await ValidateMeterConnectionAsync(garage, meterKind, accountingMonth, request.ReplacementDate, true, cancellationToken);
         if (!connectionContext.Succeeded)
         {
@@ -6882,16 +6879,12 @@ public sealed partial class FinanceService(
             periodOverrideReason = "Ввод показания за другой месяц.";
         }
 
-        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
-        if (garage is null)
-        {
-            return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
-        }
-
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            [GetMeterChainLockKey(garage.Id, meterKind)],
+            [GetMeterChainLockKey(request.GarageId, meterKind)],
             cancellationToken);
-
+        var garage = await garageRepository.FindActiveFreshWithOwnerAsync(request.GarageId, cancellationToken);
+        if (garage is null)
+            return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         var connectionContext = await ValidateMeterConnectionAsync(garage, meterKind, month, request.ReadingDate, true, cancellationToken);
         if (!connectionContext.Succeeded)
         {
@@ -6915,10 +6908,16 @@ public sealed partial class FinanceService(
         if (meterDevice is null)
         {
             var activeDevice = await meterReadingRepository.GetActiveDeviceForUpdateAsync(garage.Id, meterKind, cancellationToken);
-            if (activeDevice is not null && string.Equals(activeDevice.SerialNumber, "Без номера", StringComparison.Ordinal))
+            if (activeDevice is not null && string.Equals(activeDevice.SerialNumber, "Без номера", StringComparison.Ordinal) &&
+                !activeDevice.ReplacedDeviceId.HasValue && !activeDevice.ReplacementAccountingMonth.HasValue)
             {
                 meterDevice = activeDevice;
                 adjustMeterDeviceInstalledOn = meterConnection is null;
+            }
+            else if (activeDevice is not null)
+            {
+                return FinanceResult<MeterReadingDto>.Failure("meter_reading_outside_device_period",
+                    "Дата показания раньше установки действующего прибора. Проверьте дату показания и историю приборов в карточке гаража.");
             }
         }
 
@@ -7215,7 +7214,7 @@ public sealed partial class FinanceService(
             return HistoricalMeterReadingMonthRequired();
         }
 
-        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
+        var garage = await garageRepository.FindActiveFreshWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");

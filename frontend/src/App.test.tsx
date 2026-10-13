@@ -8874,8 +8874,9 @@ describe('App', () => {
         { id: 'baseline', number: 'BASE', initialReadingMonth: '2026-05-01', initialReadingValue: 0 },
         { id: 'legacy', number: 'LEGACY', initialReadingMonth: null, initialReadingValue: 100 },
         { id: 'previous-year', number: 'JAN', initialReadingMonth: '2025-12-01', initialReadingValue: 125.5 },
+        { id: 'explicit-start', number: 'START', initialReadingMonth: '2026-05-01', initialReadingValue: 0, accountingStartMonth: '2026-06-01' },
       ],
-      readings: [], totalCount: 3, offset: 0, limit: 25, currentAccountingMonth: '2026-06-01',
+      readings: [], totalCount: 4, offset: 0, limit: 25, currentAccountingMonth: '2026-06-01',
     }))
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({
       getTariffs: async () => [electricityTariff],
@@ -8895,6 +8896,8 @@ describe('App', () => {
     expect(createMeterReading).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Гараж BASE, Апрель, показание')).toBeDisabled()
     expect(screen.getByLabelText('Гараж BASE, Июнь, показание')).toBeEnabled()
+    expect(screen.getByLabelText('Гараж START, Май, показание')).toBeDisabled()
+    expect(screen.getByLabelText('Гараж START, Июнь, показание')).toBeEnabled()
     expect(screen.getByLabelText('Гараж LEGACY, Май, показание')).toHaveValue('')
     expect(screen.getByLabelText('Гараж LEGACY, Май, показание')).not.toHaveAttribute('readonly')
     expect(screen.getByLabelText('Гараж JAN, Декабрь, показание')).toHaveValue('')
