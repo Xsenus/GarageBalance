@@ -3406,7 +3406,7 @@ function compactPrototypeChanges(changes: Array<PrototypeChangeEntry | null>) {
 function getGaragePrototypeChanges(previous: ContractorGarageRow, next: ContractorGarageRow) {
   return compactPrototypeChanges([
     createPrototypeChangeEntry('Номер', previous.number, next.number),
-    createPrototypeChangeEntry('Учитывать с', previous.accountingStartMonth ? formatMonth(`${previous.accountingStartMonth}-01`) : 'По регистрации', next.accountingStartMonth ? formatMonth(`${next.accountingStartMonth}-01`) : 'Не указан'),
+    previous.accountingStartMonth === next.accountingStartMonth ? null : createPrototypeChangeEntry('Учитывать с', previous.accountingStartMonth ? formatMonth(`${previous.accountingStartMonth}-01`) : 'По регистрации', next.accountingStartMonth ? formatMonth(`${next.accountingStartMonth}-01`) : 'Не указан'),
     createPrototypeChangeEntry('Количество человек', previous.peopleCount, next.peopleCount),
     createPrototypeChangeEntry('Этажи', previous.floorCount, next.floorCount),
     createPrototypeChangeEntry('Стартовое значение счетчика воды', previous.initialWater, next.initialWater),
@@ -3930,7 +3930,7 @@ function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canRe
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
                 <FormField label="Учитывать с" help={garageAccountingStartHelp}>
-                  <div data-garage-field="accountingStartMonth"><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={form.accountingStartMonth ?? ''} required={Boolean(item) || form.accountingStartMonth !== undefined} disabled={saving || !canManageMeterConnections} aria-invalid={Boolean(validationErrors.accountingStartMonth)} onChange={(accountingStartMonth) => { clearValidationError('accountingStartMonth'); setForm({ ...form, accountingStartMonth }) }} /></div>
+                  <div data-garage-field="accountingStartMonth"><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={form.accountingStartMonth ?? ''} required={form.accountingStartMonth !== undefined} disabled={saving || !canManageMeterConnections} aria-invalid={Boolean(validationErrors.accountingStartMonth)} onChange={(accountingStartMonth) => { clearValidationError('accountingStartMonth'); setForm({ ...form, accountingStartMonth }) }} /></div>
                   {validationErrors.accountingStartMonth ? <span className="form-field-error">{validationErrors.accountingStartMonth}</span> : null}
                 </FormField>
                 {item && form.accountingStartMonth !== item.accountingStartMonth ? <FormField label="Причина исправления начала учёта"><textarea aria-label="Причина исправления начала учёта" data-garage-field="accountingStartReason" aria-invalid={Boolean(validationErrors.accountingStartReason)} required maxLength={1000} disabled={saving || !canManageMeterConnections} value={form.accountingStartReason ?? ''} onChange={(event) => { clearValidationError('accountingStartReason'); setForm({ ...form, accountingStartReason: event.target.value }) }} />{validationErrors.accountingStartReason ? <span className="form-field-error">{validationErrors.accountingStartReason}</span> : null}</FormField> : null}
