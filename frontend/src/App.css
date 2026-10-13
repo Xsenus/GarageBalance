@@ -3247,9 +3247,10 @@ h1 {
   width: 100%;
   min-height: 36px;
   justify-content: flex-start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  text-align: left;
   font-size: 13px;
 }
 

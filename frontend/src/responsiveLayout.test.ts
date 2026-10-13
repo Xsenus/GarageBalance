@@ -148,6 +148,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain(".tariff-schedule-row > [role='cell'] {\n  min-width: 0;")
     expect(normalizedAppCss).toContain('.tariff-schedule-row:focus-within {\n  z-index: 40;')
     expect(normalizedAppCss).toContain(".tariff-schedule-row > [role='cell']:nth-child(3) input {\n  text-align: right;")
+    const tierSummaryStyles = normalizedAppCss.match(/\.tariff-schedule-tiers-button \{[^}]*\}/u)?.[0]
+    expect(tierSummaryStyles).toContain('white-space: normal;')
+    expect(tierSummaryStyles).toContain('overflow-wrap: anywhere;')
+    expect(tierSummaryStyles).toContain('line-height: 1.35;')
+    expect(tierSummaryStyles).not.toContain('text-overflow: ellipsis;')
+    expect(tierSummaryStyles).not.toContain('overflow: hidden;')
     expect(normalizedAppCss).toContain('.contractors-threshold-row {\n  display: grid;\n  grid-template-columns: minmax(120px, 0.72fr) minmax(230px, 1.25fr) minmax(230px, 1.25fr) 40px;')
     expect(normalizedAppCss).toContain('.contractors-threshold-row label:last-of-type input {\n  text-align: right;')
     expect(normalizedAppCss).toContain('@media (max-width: 1100px) {\n  .contractors-modal-form.contractors-modal-form--service-edit {\n    grid-template-columns: minmax(0, 1fr);')

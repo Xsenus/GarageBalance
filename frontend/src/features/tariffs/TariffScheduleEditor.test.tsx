@@ -491,7 +491,7 @@ describe('редактор тарифной сетки услуги', () => {
       { tariffId: 'tariff-b', effectiveFrom: '2026-10-01', effectiveTo: null, rate: 8.31, tariffVersion: 'vb', electricityTiers: tiersB },
     ]
 
-    function renderTiered(overrides: { onUpdateTariffSchedule?: ReturnType<typeof vi.fn>; onUpdateWithTariff?: ReturnType<typeof vi.fn> } = {}) {
+    function renderTiered(overrides: { onUpdateTariffSchedule?: ReturnType<typeof vi.fn>; onUpdateWithTariff?: ReturnType<typeof vi.fn>; periods?: typeof periods } = {}) {
       const onUpdateTariffSchedule = overrides.onUpdateTariffSchedule ?? vi.fn().mockResolvedValue(periods)
       const onUpdateWithTariff = overrides.onUpdateWithTariff ?? vi.fn()
       render(<AddServicePrototypeDialog
@@ -505,13 +505,29 @@ describe('редактор тарифной сетки услуги', () => {
         incomeTypes={[{ id: 'income-1', name: 'Электроэнергия', code: 'electricity', isArchived: false, destinationFundId: 'fund-1', destinationFundName: 'Электроэнергия' }]}
         measurementUnits={[]}
         tariffs={[]}
-        tariffSchedule={periods}
+        tariffSchedule={overrides.periods ?? periods}
         onClose={vi.fn()}
         onUpdateWithTariff={onUpdateWithTariff}
         onUpdateTariffSchedule={onUpdateTariffSchedule}
       />)
       return { onUpdateTariffSchedule, onUpdateWithTariff }
     }
+
+    it('keeps the full long rate summary and allows choosing its period', () => {
+      const longTiers = Array.from({ length: 20 }, (_, index) => ({
+        ...tiersA[0], id: `long-${index}`, name: `Ступень ${index + 1}`,
+        upperBound: index === 19 ? null : (index + 1) * 100,
+        rate: index + 1.25,
+      }))
+      renderTiered({ periods: [{ ...periods[0], electricityTiers: longTiers }, periods[1]] })
+      const summary = screen.getByRole('button', { name: 'Пороги периода с 01.01.2026' })
+      expect(summary).toHaveClass('tariff-schedule-tiers-button')
+      expect(summary).toHaveTextContent(longTiers.map((tier) => tier.rate.toFixed(2)).join(' / '))
+      expect(summary).toBeEnabled()
+      fireEvent.click(summary)
+      expect(summary).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByLabelText('Ступень 20: цена за единицу')).toHaveValue('20.25')
+    })
 
     it('показывает даты и пороги каждой версии и сохраняет их через тарифную сетку', async () => {
       const { onUpdateTariffSchedule, onUpdateWithTariff } = renderTiered()
