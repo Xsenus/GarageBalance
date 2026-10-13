@@ -257,7 +257,8 @@ public sealed partial class FinanceService(
             cancellationToken);
         var result = new MeterReadingYearPageDto(
             page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue,
-                garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn, garage.AccountingStartMonth)).ToList(),
+                garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn, garage.AccountingStartMonth,
+                garage.StartValue, garage.StartValueDate, garage.StartValueSource, garage.StartValueDeviceSerial)).ToList(),
             page.Readings.Select(reading => new MeterReadingYearValueDto(
                 reading.Id,
                 reading.GarageId,

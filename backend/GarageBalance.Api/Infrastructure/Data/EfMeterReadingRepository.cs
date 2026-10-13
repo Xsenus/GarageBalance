@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Finance;
+using System.Text.Json;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
@@ -335,6 +336,31 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         }
 
         var garageIds = garages.Select(garage => garage.Id).ToArray();
+        var devices = await dbContext.MeterDevices.AsNoTracking()
+            .Where(device => garageIds.Contains(device.GarageId) && device.MeterKind == meterKind && !device.IsCanceled)
+            .Select(device => new MeterDevice
+            {
+                Id = device.Id, GarageId = device.GarageId, MeterKind = device.MeterKind, SerialNumber = device.SerialNumber,
+                InstalledOn = device.InstalledOn, RemovedOn = device.RemovedOn, InitialValue = device.InitialValue,
+                ReplacedDeviceId = device.ReplacedDeviceId
+            }).ToListAsync(cancellationToken);
+        var firstReadings = await dbContext.MeterReadings.AsNoTracking()
+            .Where(reading => garageIds.Contains(reading.GarageId) && reading.MeterKind == meterKind && !reading.IsCanceled)
+            .GroupBy(reading => reading.GarageId)
+            .Select(group => group.OrderBy(reading => reading.AccountingMonth).ThenBy(reading => reading.Id)
+                .Select(reading => new MeterReading
+                {
+                    Id = reading.Id, GarageId = reading.GarageId, MeterKind = reading.MeterKind,
+                    AccountingMonth = reading.AccountingMonth, MeterDeviceId = reading.MeterDeviceId, IsMeterReplacement = reading.IsMeterReplacement
+                }).First()).ToListAsync(cancellationToken);
+        var devicesByGarage = devices.ToLookup(device => device.GarageId);
+        var firstByGarage = firstReadings.ToDictionary(reading => reading.GarageId);
+        var connectionDevices = garages.ToDictionary(garage => garage.Id, garage => garage.BaselineMeterDeviceId);
+        garageData = garageData.Select(garage => ApplyYearPageStartValue(garage, new MeterYearStartSnapshot
+        {
+            Devices = devicesByGarage[garage.Id].ToList(), FirstReading = firstByGarage.GetValueOrDefault(garage.Id),
+            ConnectionBaselineDeviceId = connectionDevices[garage.Id]
+        })).ToList();
         var readings = await dbContext.MeterReadings.AsNoTracking()
             .Where(reading =>
                 !reading.IsCanceled &&
@@ -376,7 +402,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                        CASE WHEN connection."Id" IS NULL THEN garage."InitialMeterReadingMonth" ELSE NULL END AS "InitialMeterReadingMonth",
                        CASE WHEN connection."Id" IS NULL THEN garage."InitialWaterMeterValue" ELSE NULL END AS "InitialWaterMeterValue",
                        CASE WHEN connection."Id" IS NULL THEN garage."InitialElectricityMeterValue" ELSE NULL END AS "InitialElectricityMeterValue",
-                       connection."ConnectedOn", connection."ClosedOn",
+                       connection."ConnectedOn", connection."ClosedOn", connection."BaselineMeterDeviceId" AS "ConnectionBaselineDeviceId",
                        CASE WHEN connection."Id" IS NOT NULL THEN connection."BaselineMeterDeviceId" IS NULL
                             ELSE NOT legacy."HasBase" END AS "RequiresStartValue",
                        connection."Id" IS NULL AND NOT legacy."HasBase" AS "RequiresConnectionDate"
@@ -423,7 +449,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                     CASE WHEN {{meterKind}} = 'water' THEN garage."InitialWaterMeterValue"
                          WHEN {{meterKind}} = 'electricity' THEN garage."InitialElectricityMeterValue"
                          ELSE NULL END AS "InitialReadingValue",
-                    garage."ConnectedOn", garage."ClosedOn", garage."RequiresStartValue", garage."RequiresConnectionDate",
+                    garage."ConnectedOn", garage."ClosedOn", garage."RequiresStartValue", garage."RequiresConnectionDate", garage."ConnectionBaselineDeviceId",
                     ROW_NUMBER() OVER (
                         ORDER BY LENGTH(garage."Number"), garage."Number", garage."Id") AS "GarageOrdinal",
                     COUNT(*) OVER () AS "TotalCount"
@@ -448,7 +474,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading."MeterDeviceId",
                 meter_device."SerialNumber" AS "MeterDeviceSerialNumber",
                 COALESCE(reading."IsMeterReplacement", FALSE) AS "IsMeterReplacement",
-                paged_garage."TotalCount"
+                paged_garage."TotalCount",
+                NULL::text AS "StartSnapshotJson"
             FROM paged_garages AS paged_garage
             LEFT JOIN meter_readings AS reading
                 ON reading."GarageId" = paged_garage."GarageId"
@@ -478,18 +505,54 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 NULL::uuid AS "MeterDeviceId",
                 NULL::text AS "MeterDeviceSerialNumber",
                 FALSE AS "IsMeterReplacement",
-                (SELECT COUNT(*) FROM applicable_garages) AS "TotalCount"
+                (SELECT COUNT(*) FROM applicable_garages) AS "TotalCount",
+                NULL::text AS "StartSnapshotJson"
             WHERE NOT EXISTS (SELECT 1 FROM paged_garages)
+
+            UNION ALL
+
+            SELECT 3 AS "Category", paged_garage."GarageId", NULL::text AS "GarageNumber",
+                NULL::date AS "InitialReadingMonth", NULL::date AS "AccountingStartMonth", NULL::numeric AS "InitialReadingValue",
+                NULL::date AS "ConnectedOn", NULL::date AS "ClosedOn", FALSE AS "RequiresStartValue", FALSE AS "RequiresConnectionDate",
+                paged_garage."GarageOrdinal", NULL::uuid AS "ReadingId", NULL::date AS "AccountingMonth", NULL::numeric AS "CurrentValue",
+                NULL::uuid AS "Version", NULL::uuid AS "MeterDeviceId", NULL::text AS "MeterDeviceSerialNumber", FALSE AS "IsMeterReplacement",
+                0::bigint AS "TotalCount",
+                jsonb_build_object(
+                    'connectionBaselineDeviceId', paged_garage."ConnectionBaselineDeviceId",
+                    'devices', COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'id', device."Id", 'garageId', device."GarageId", 'meterKind', device."MeterKind",
+                            'serialNumber', device."SerialNumber", 'installedOn', device."InstalledOn", 'removedOn', device."RemovedOn",
+                            'initialValue', device."InitialValue", 'replacedDeviceId', device."ReplacedDeviceId"
+                        ) ORDER BY device."InstalledOn", device."Id")
+                        FROM meter_devices AS device
+                        WHERE device."GarageId" = paged_garage."GarageId" AND device."MeterKind" = {{meterKind}} AND device."IsCanceled" = FALSE
+                    ), '[]'::jsonb),
+                    'firstReading', (
+                        SELECT jsonb_build_object(
+                            'id', first_reading."Id", 'garageId', first_reading."GarageId", 'meterKind', first_reading."MeterKind",
+                            'accountingMonth', first_reading."AccountingMonth", 'meterDeviceId', first_reading."MeterDeviceId",
+                            'isMeterReplacement', first_reading."IsMeterReplacement")
+                        FROM meter_readings AS first_reading
+                        WHERE first_reading."GarageId" = paged_garage."GarageId" AND first_reading."MeterKind" = {{meterKind}} AND first_reading."IsCanceled" = FALSE
+                        ORDER BY first_reading."AccountingMonth", first_reading."Id" LIMIT 1
+                    )
+                )::text AS "StartSnapshotJson"
+            FROM paged_garages AS paged_garage
             ORDER BY "Category", "GarageOrdinal", "AccountingMonth", "ReadingId"
             """).ToListAsync(cancellationToken);
 
         var totalCount = checked((int)(rows.FirstOrDefault()?.TotalCount ?? 0));
+        var startSnapshots = rows.Where(row => row.Category == 3)
+            .ToDictionary(row => row.GarageId!.Value,
+                row => JsonSerializer.Deserialize<MeterYearStartSnapshot>(row.StartSnapshotJson!, MeterYearStartJsonOptions)!);
         var garages = rows
             .Where(row => row.Category == 1)
             .GroupBy(row => new { row.GarageId, row.GarageNumber, row.GarageOrdinal, row.InitialReadingMonth, row.InitialReadingValue, row.ConnectedOn, row.ClosedOn, row.RequiresStartValue, row.RequiresConnectionDate, row.AccountingStartMonth })
             .OrderBy(group => group.Key.GarageOrdinal)
             .Select(group => new MeterReadingYearGarageData(group.Key.GarageId!.Value, group.Key.GarageNumber!, group.Key.InitialReadingMonth, group.Key.InitialReadingValue,
                 group.Key.ConnectedOn, group.Key.RequiresStartValue, group.Key.RequiresConnectionDate, group.Key.ClosedOn, group.Key.AccountingStartMonth))
+            .Select(garage => ApplyYearPageStartValue(garage, startSnapshots[garage.Id]))
             .ToList();
         var readings = rows
             .Where(row => row.Category == 1 && row.ReadingId is not null)
@@ -506,6 +569,33 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 row.IsMeterReplacement))
             .ToList();
         return new MeterReadingYearPageData(garages, readings, totalCount);
+    }
+
+    private static readonly JsonSerializerOptions MeterYearStartJsonOptions = new(JsonSerializerDefaults.Web);
+
+    private sealed class MeterYearStartSnapshot
+    {
+        public Guid? ConnectionBaselineDeviceId { get; set; }
+        public List<MeterDevice> Devices { get; set; } = [];
+        public MeterReading? FirstReading { get; set; }
+    }
+
+    private static MeterReadingYearGarageData ApplyYearPageStartValue(MeterReadingYearGarageData garage, MeterYearStartSnapshot snapshot)
+    {
+        var devices = snapshot.Devices.OrderBy(device => device.InstalledOn).ThenBy(device => device.Id).ToList();
+        var hasConnection = garage.ConnectedOn.HasValue;
+        var baseline = hasConnection
+            ? devices.FirstOrDefault(device => device.Id == snapshot.ConnectionBaselineDeviceId)
+            : MeterBaselineResolver.FindBaselineDevice(devices, snapshot.FirstReading);
+        var value = baseline?.InitialValue ?? (hasConnection ? null : garage.InitialReadingValue);
+        return garage with
+        {
+            StartValue = value,
+            StartValueDate = hasConnection ? garage.ConnectedOn : baseline?.InstalledOn ?? garage.InitialReadingMonth,
+            StartValueSource = value is null ? "unknown" : hasConnection ? "connection" : baseline is null ? "legacy" : "device",
+            StartValueDeviceSerial = baseline?.SerialNumber,
+            RequiresStartValue = hasConnection ? value is null : garage.RequiresStartValue
+        };
     }
 
     private sealed class MeterReadingYearPageRow
@@ -529,6 +619,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         public string? MeterDeviceSerialNumber { get; set; }
         public bool IsMeterReplacement { get; set; }
         public long TotalCount { get; set; }
+        public string? StartSnapshotJson { get; set; }
     }
 
     public async Task<IReadOnlyDictionary<Guid, MeterReading>> GetActiveByGarageIdsAsync(

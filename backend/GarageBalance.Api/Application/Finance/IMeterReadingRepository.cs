@@ -84,7 +84,11 @@ public sealed record MeterReadingYearGarageData(
     bool RequiresStartValue = false,
     bool RequiresConnectionDate = false,
     DateOnly? ClosedOn = null,
-    DateOnly? AccountingStartMonth = null);
+    DateOnly? AccountingStartMonth = null,
+    decimal? StartValue = null,
+    DateOnly? StartValueDate = null,
+    string? StartValueSource = null,
+    string? StartValueDeviceSerial = null);
 
 public sealed record MeterReadingYearValueData(
     Guid Id,

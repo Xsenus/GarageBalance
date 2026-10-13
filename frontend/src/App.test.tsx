@@ -8865,7 +8865,44 @@ describe('App', () => {
     expect(within(contractorsPanel).getByText('Гаражи пока не настроены.')).toBeInTheDocument()
   })
 
-  it('shows garage opening readings in their stored month without saving them as consumption', async () => {
+  it.each([true, false])('hides inactive year columns and shows actual device and connection baselines, with write permission %s', async (canWrite) => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'year-column-tariff', calculationBase: 'meter_electricity' })
+    const createMeterReading = vi.fn()
+    const getMeterReadingYearPage = vi.fn(async () => ({
+      garages: [
+        { id: 'year-start', number: 'START', accountingStartMonth: '2026-09-01', initialReadingMonth: '2026-08-01', initialReadingValue: 9, startValue: 100, startValueSource: 'device' as const, startValueDate: '2026-08-31', startValueDeviceSerial: 'ORIGINAL' },
+        { id: 'year-connection', number: 'CONNECTED', connectedOn: '2026-10-10', closedOn: '2026-11-10', initialReadingValue: 999, startValue: 0, startValueSource: 'connection' as const, startValueDate: '2026-10-10' },
+      ], readings: [], totalCount: 2, offset: 0, limit: 25, currentAccountingMonth: '2026-10-01',
+    }))
+    render(<App authClient={createAuthClient({ login: async () => canWrite ? createAuthResponse() : createAuthResponse({ user: { permissions: ['dictionaries.read', 'payments.read'] } }) })}
+      dictionaryClient={createDictionaryClient({ getTariffs: async () => [tariff], getChargeServiceSettings: async () => [createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: tariff.id, tariffCalculationBase: 'meter_electricity', meterKind: 'electricity' })] })}
+      financeClient={createFinanceClient({ getMeterReadingYearPage, createMeterReading })}
+      importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    const start = await screen.findByLabelText('Гараж START, стартовое показание')
+    expect(start).toHaveTextContent('100')
+    expect(start).toHaveTextContent('Прибор ORIGINAL · 31.08.2026')
+    expect(screen.getByLabelText('Гараж CONNECTED, стартовое показание')).toHaveTextContent('0Подключение 10.10.2026')
+    expect(screen.queryByLabelText('Гараж START, Август, показание')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Гараж START, Январь, показание')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Гараж CONNECTED, Сентябрь, показание')).toBeDisabled()
+    const first = screen.getByLabelText('Гараж START, Сентябрь, показание')
+    if (canWrite) expect(first).toBeEnabled()
+    else expect(first).toBeDisabled()
+    expect(screen.getByLabelText('Справка: Стартовое показание')).toHaveAccessibleDescription(/База показана отдельно/)
+    const year = screen.getByLabelText('Год показаний')
+    await user.clear(year)
+    await user.type(year, '2025')
+    expect(await screen.findByText('В выбранном году нет активных месяцев. Стартовые значения показаны отдельно.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Гараж START, Сентябрь, показание')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Гараж START, стартовое показание')).toHaveTextContent('100')
+    expect(createMeterReading).not.toHaveBeenCalled()
+  })
+
+  it('shows garage opening readings separately without saving them as consumption', async () => {
     const user = userEvent.setup()
     const createMeterReading = vi.fn()
     const electricityTariff = createTariff({ id: 'initial-electricity', calculationBase: 'meter_electricity' })
@@ -8885,14 +8922,11 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Показания')
-    const baseline = await screen.findByLabelText('Гараж BASE, Май, показание')
-    expect(baseline).toHaveValue('0')
-    expect(baseline).toHaveAttribute('readonly')
-    expect(baseline).toBeEnabled()
-    expect(baseline).toHaveAttribute('title', 'Начальное показание из карточки гаража. Расход за этот месяц не начисляется.')
-    await user.click(baseline)
-    await user.keyboard('9{Enter}{Tab}')
-    expect(baseline).toHaveValue('0')
+    const baseline = await screen.findByLabelText('Гараж BASE, стартовое показание')
+    expect(baseline).toHaveTextContent('0База за 05.2026')
+    expect(baseline.querySelector('input')).toBeNull()
+    expect(screen.getByLabelText('Гараж BASE, Май, показание')).toHaveValue('')
+    expect(screen.getByLabelText('Гараж BASE, Май, показание')).toBeDisabled()
     expect(createMeterReading).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Гараж BASE, Апрель, показание')).toBeDisabled()
     expect(screen.getByLabelText('Гараж BASE, Июнь, показание')).toBeEnabled()
@@ -8905,8 +8939,9 @@ describe('App', () => {
     await user.clear(yearInput)
     await user.type(yearInput, '2025')
     await waitFor(() => expect(screen.getByRole('table', { name: 'Показания счетчиков за 2025 год' })).toBeInTheDocument())
-    await waitFor(() => expect(screen.getByLabelText('Гараж JAN, Декабрь, показание')).toHaveValue('125,5'))
-    expect(screen.getByLabelText('Гараж JAN, Декабрь, показание')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText('Гараж JAN, Декабрь, показание')).toHaveValue('')
+    expect(screen.getByLabelText('Гараж JAN, Декабрь, показание')).toBeDisabled()
+    expect(screen.getByLabelText('Гараж JAN, стартовое показание')).toHaveTextContent('125,5База за 12.2025')
     expect(createMeterReading).not.toHaveBeenCalled()
   })
 
@@ -8933,8 +8968,7 @@ describe('App', () => {
     const first = await within(panel).findByLabelText('Гараж 1, Май, показание')
     expect(first).toBeEnabled()
     expect(first).not.toHaveAttribute('readonly')
-    expect(within(panel).getByLabelText('Гараж 1, Апрель, показание')).toBeDisabled()
-    expect(within(panel).getByLabelText('Гараж 1, Апрель, показание')).toHaveAttribute('title', 'Не подключена')
+    expect(within(panel).queryByLabelText('Гараж 1, Апрель, показание')).not.toBeInTheDocument()
     expect(within(panel).getByLabelText('Гараж 2, Май, показание')).toBeDisabled()
     expect(within(panel).getByLabelText('Гараж 2, Май, показание')).toHaveAttribute('title', 'Требуется стартовое показание')
     expect(within(panel).getByLabelText('Гараж 3, Июнь, показание')).toBeDisabled()
