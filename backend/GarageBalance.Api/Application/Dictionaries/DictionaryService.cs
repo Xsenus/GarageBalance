@@ -2702,6 +2702,14 @@ public sealed class DictionaryService(
     public async Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
+        await using var writeScope = await chargeServiceSettingRepository.BeginTariffWriteAsync(cancellationToken);
+        var result = await UpdateChargeServiceSettingCoreAsync(id, request, actorUserId, cancellationToken);
+        if (result.Succeeded) await writeScope.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private async Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingCoreAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
         var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {
@@ -2787,6 +2795,19 @@ public sealed class DictionaryService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
+        await using var writeScope = await chargeServiceSettingRepository.BeginTariffWriteAsync(cancellationToken);
+        var result = await UpdateChargeServiceWithTariffCoreAsync(id, request, actorUserId, cancellationToken);
+        if (result.Succeeded) await writeScope.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> UpdateChargeServiceWithTariffCoreAsync(
+        Guid id,
+        UpdateChargeServiceWithTariffRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
         if (!request.Service.IsRegular || !request.Service.TariffId.HasValue)
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
@@ -2801,7 +2822,6 @@ public sealed class DictionaryService(
                 "Тариф услуги должен быть больше 0 и не превышать 999999999.");
         }
 
-        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {
@@ -3022,6 +3042,18 @@ public sealed class DictionaryService(
         CancellationToken cancellationToken)
     {
         await using var allocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
+        await using var writeScope = await chargeServiceSettingRepository.BeginTariffWriteAsync(cancellationToken);
+        var result = await UpdateChargeServiceTariffScheduleCoreAsync(id, request, actorUserId, cancellationToken);
+        if (result.Succeeded) await writeScope.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private async Task<DictionaryResult<UpdatedChargeServiceTariffScheduleDto>> UpdateChargeServiceTariffScheduleCoreAsync(
+        Guid id,
+        UpsertChargeServiceTariffScheduleRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
         var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {

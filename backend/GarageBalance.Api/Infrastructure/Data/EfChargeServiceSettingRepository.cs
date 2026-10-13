@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -8,6 +9,9 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbContext) : IChargeServiceSettingRepository
 {
+    public Task<IApplicationWriteScope> BeginTariffWriteAsync(CancellationToken cancellationToken) =>
+        EfApplicationWriteScope.BeginAsync(dbContext, cancellationToken);
+
     public async Task<bool> IsRegularMeterKindApplicableAsync(Guid garageId, string meterKind, CancellationToken cancellationToken)
     {
         // Project one scalar from indexed kind candidates. Any applicable setting wins;
