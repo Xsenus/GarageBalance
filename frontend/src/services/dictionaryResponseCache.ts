@@ -28,8 +28,8 @@ const cacheDependencies: Record<string, string[]> = {
   'income-types': ['income-types', 'charge-services', 'fee-campaigns'],
   'expense-types': ['expense-types', 'charge-services', 'suppliers'],
   'measurement-units': ['measurement-units', 'charge-services'],
-  tariffs: ['tariffs', 'charge-services'],
-  'charge-services': ['charge-services', 'tariffs', 'suppliers', 'measurement-units'],
+  tariffs: ['tariffs', 'charge-services', 'garages'],
+  'charge-services': ['charge-services', 'tariffs', 'garages', 'suppliers', 'measurement-units'],
   'fee-campaigns': ['fee-campaigns'],
   'irregular-payments': ['irregular-payments'],
 }

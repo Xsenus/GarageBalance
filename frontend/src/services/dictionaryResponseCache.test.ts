@@ -13,6 +13,34 @@ describe('dictionaryResponseCache', () => {
     clearDictionaryResponseCache()
   })
 
+  it.each(['tariffs', 'charge-services'])('invalidates recalculated garage balances after a %s mutation for the current session', async (tag) => {
+    for (const token of ['current-session', 'other-session']) {
+      const garage = getDictionaryCacheContext(token, '/api/dictionaries/garages', true)
+      storeDictionaryResponse(token, garage.cacheTag!, garage.cacheKey, Promise.resolve([{ id: 'garage', balance: 100 }]))
+    }
+    const owner = getDictionaryCacheContext('current-session', '/api/dictionaries/owners', true)
+    storeDictionaryResponse('current-session', owner.cacheTag!, owner.cacheKey, Promise.resolve(['owner']))
+    invalidateDictionaryResponseCache('current-session', tag)
+    expect(getDictionaryCacheContext('current-session', '/api/dictionaries/garages', true).cachedResponse).toBeNull()
+    await expect(getDictionaryCacheContext('other-session', '/api/dictionaries/garages', true).cachedResponse).resolves.toEqual([{ id: 'garage', balance: 100 }])
+    await expect(getDictionaryCacheContext('current-session', '/api/dictionaries/owners', true).cachedResponse).resolves.toEqual(['owner'])
+  })
+
+  it.each(['tariffs', 'charge-services'])('does not let an old garage request restore cached balances after a %s mutation', async (tag) => {
+    let resolveOld!: (value: { balance: number }[]) => void
+    const before = getDictionaryCacheContext('token', '/api/dictionaries/garages', true)
+    const oldResponse = new Promise<{ balance: number }[]>((resolve) => { resolveOld = resolve })
+    invalidateDictionaryResponseCache('token', tag)
+    const after = getDictionaryCacheContext('token', '/api/dictionaries/garages', true)
+    expect(after.cacheKey).not.toBe(before.cacheKey)
+    storeDictionaryResponse('token', before.cacheTag!, before.cacheKey, oldResponse)
+    expect(getDictionaryCacheContext('token', '/api/dictionaries/garages', true).cachedResponse).toBeNull()
+    storeDictionaryResponse('token', after.cacheTag!, after.cacheKey, Promise.resolve([{ balance: 125 }]))
+    resolveOld([{ balance: 100 }])
+    await oldResponse
+    await expect(getDictionaryCacheContext('token', '/api/dictionaries/garages', true).cachedResponse).resolves.toEqual([{ balance: 125 }])
+  })
+
   it('stores a successful response for the matching session and path', async () => {
     const initial = getDictionaryCacheContext<unknown[]>('token-1', '/api/dictionaries/owners', true)
     const response = Promise.resolve([{ id: 'owner-1' }])
