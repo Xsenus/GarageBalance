@@ -52,7 +52,8 @@ public sealed record GarageDto(
     decimal OverdueDebt = 0,
     string? OwnerPhone = null,
     Guid Version = default,
-    decimal StartingOverdueDebt = 0);
+    decimal StartingOverdueDebt = 0,
+    DateOnly? AccountingStartMonth = null);
 
 public sealed record UpsertGarageRequest(
     [Required, MaxLength(80)] string Number,
@@ -65,7 +66,9 @@ public sealed record UpsertGarageRequest(
     [MaxLength(1000)] string? Comment,
     Guid? Version = null,
     [Range(0, 999999999)] decimal? StartingOverdueDebt = null,
-    [MaxLength(50)] IReadOnlyList<UpsertGarageMeterStartValueRequest>? MeterStartValues = null);
+    [MaxLength(50)] IReadOnlyList<UpsertGarageMeterStartValueRequest>? MeterStartValues = null,
+    DateOnly? AccountingStartMonth = null,
+    [MaxLength(1000)] string? AccountingStartReason = null);
 
 public sealed record InitialGarageAnnualPaymentRequest(
     Guid IncomeTypeId,

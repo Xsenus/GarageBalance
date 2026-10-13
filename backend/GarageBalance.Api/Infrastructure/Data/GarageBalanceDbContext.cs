@@ -335,6 +335,12 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 "\"StartingOverdueDebt\" IS NULL OR (CAST(\"StartingOverdueDebt\" AS NUMERIC) >= 0 AND CAST(\"StartingOverdueDebt\" AS NUMERIC) <= CASE WHEN CAST(\"StartingBalance\" AS NUMERIC) > 0 THEN CAST(\"StartingBalance\" AS NUMERIC) ELSE 0 END)"));
             entity.Property(garage => garage.InitialWaterMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.InitialElectricityMeterValue).HasPrecision(18, 3);
+            if (Database.IsNpgsql())
+            {
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_garages_AccountingStartMonth",
+                    "\"AccountingStartMonth\" IS NULL OR (EXTRACT(DAY FROM \"AccountingStartMonth\") = 1 AND \"AccountingStartMonth\" >= DATE '1900-01-01' AND \"AccountingStartMonth\" <= DATE '9999-12-01')"));
+            }
             entity.Property(garage => garage.Comment).HasMaxLength(1000);
             entity.Property(garage => garage.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(garage => garage.Number).IsUnique().HasFilter("\"IsArchived\" = false");

@@ -8,6 +8,12 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) : IMeterReadingRepository
 {
+    public async Task<IReadOnlyList<string>> GetStoredMeterKindsAsync(Guid garageId, CancellationToken cancellationToken) =>
+        await dbContext.MeterReadings.Where(reading => reading.GarageId == garageId).Select(reading => reading.MeterKind)
+            .Union(dbContext.MeterDevices.Where(device => device.GarageId == garageId).Select(device => device.MeterKind))
+            .Union(dbContext.GarageMeterConnections.Where(connection => connection.GarageId == garageId).Select(connection => connection.MeterKind))
+            .OrderBy(kind => kind).Take(501).ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<MeterReading>> GetListAsync(
         DateOnly? monthFrom,
         DateOnly? monthTo,

@@ -198,6 +198,8 @@ builder.Services.AddScoped<IRegularAccrualRecalculationService>(services =>
     (IRegularAccrualRecalculationService)services.GetRequiredService<IFinanceService>());
 builder.Services.AddScoped<IGarageMeterBaselineService>(services =>
     (IGarageMeterBaselineService)services.GetRequiredService<IFinanceService>());
+builder.Services.AddScoped<IGarageAccountingStartService>(services =>
+    (IGarageAccountingStartService)services.GetRequiredService<IFinanceService>());
 builder.Services.AddScoped<IGarageMeterConnectionService, GarageMeterConnectionService>();
 builder.Services.AddScoped<IGarageOnboardingService, GarageOnboardingService>();
 builder.Services.AddScoped<IFundService, FundService>();

@@ -1128,6 +1128,10 @@ public sealed class DictionariesController(
 
     private ActionResult<GarageDto>? ValidateMeterConnectionPermission(UpsertGarageRequest request)
     {
+        if (request.AccountingStartMonth.HasValue &&
+            (!User.HasClaim("permission", SystemPermissions.OpeningDataAdjust) || !User.HasClaim("permission", SystemPermissions.PaymentsWrite)))
+            return StatusCode(StatusCodes.Status403Forbidden, ApiProblemDetails.Create(
+                "garage_accounting_start_permission_denied", "Для выбора и исправления начала учёта нужны права на корректировку начальных данных и запись платежей.", StatusCodes.Status403Forbidden));
         if (request.MeterStartValues?.Any(value => value?.ConnectedOn.HasValue == true) != true ||
             User.HasClaim("permission", SystemPermissions.OpeningDataAdjust) && User.HasClaim("permission", SystemPermissions.PaymentsWrite))
         {

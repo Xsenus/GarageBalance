@@ -31,6 +31,7 @@ public sealed class DictionaryService(
     IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
     ITariffAccrualRecalculationService tariffAccrualRecalculationService,
     IGarageMeterBaselineService garageMeterBaselineService,
+    IGarageAccountingStartService garageAccountingStartService,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     IBusinessDateProvider businessDateProvider) : IDictionaryService
@@ -48,6 +49,7 @@ public sealed class DictionaryService(
         ["address"] = "Адрес",
         ["meterNotes"] = "Счетчики",
         ["number"] = "Номер",
+        ["accountingMonth"] = "Учитывать с",
         ["peopleCount"] = "Количество людей",
         ["peopleCountEffectiveFrom"] = "Число людей действует с",
         ["floorCount"] = "Количество этажей",
@@ -342,6 +344,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<GarageDto>> CreateGarageAsync(UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateGarageAccountingStart(request) is { } accountingValidation) return accountingValidation;
         if (ValidateGarageMeterStartValues(request.MeterStartValues) is { } meterValidation)
         {
             return meterValidation;
@@ -385,7 +388,7 @@ public sealed class DictionaryService(
             Owner = owner,
             InitialWaterMeterValue = listedWater is null ? MoneyMath.RoundMeterValue(request.InitialWaterMeterValue) : null,
             InitialElectricityMeterValue = listedElectricity is null ? MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue) : null,
-            InitialMeterReadingMonth = MonthPeriod.Normalize(registeredOn).AddMonths(-1),
+            InitialMeterReadingMonth = (request.AccountingStartMonth ?? MonthPeriod.Normalize(registeredOn)).AddMonths(-1),
             RegisteredOn = registeredOn,
             Comment = NormalizeOptional(request.Comment)
         };
@@ -394,7 +397,7 @@ public sealed class DictionaryService(
         garageRepository.AddPeopleCountPeriod(new GaragePeopleCountPeriod
         {
             GarageId = garage.Id,
-            EffectiveFrom = MonthPeriod.Normalize(registeredOn),
+            EffectiveFrom = request.AccountingStartMonth ?? MonthPeriod.Normalize(registeredOn),
             PeopleCount = garage.PeopleCount
         });
         AddAudit(actorUserId, "dictionary.garage_created", "garage", garage.Id, $"Создан гараж N {garage.Number}.");
@@ -403,8 +406,19 @@ public sealed class DictionaryService(
             .Select(item => item with { MeterKind = item.MeterKind.Trim() })
             .ToList();
         GarageMeterStartValueApplyResult? meterStart = null;
+        GarageAccountingStartChange? accountingStart = null;
         try
         {
+            if (request.AccountingStartMonth is { } startMonth)
+            {
+                var appliedStart = await garageAccountingStartService.BeginAsync(garage, startMonth, null, true, actorUserId, cancellationToken);
+                if (!appliedStart.Succeeded) return DictionaryResult<GarageDto>.Failure(appliedStart.ErrorCode!, appliedStart.ErrorMessage!);
+                accountingStart = appliedStart.Value;
+                AddAudit(actorUserId, "dictionary.garage_accounting_start_set", "garage", garage.Id,
+                    "Установлен месяц начала учёта гаража.",
+                    oldValues: new Dictionary<string, object?> { ["accountingMonth"] = MonthPeriod.Normalize(registeredOn) },
+                    newValues: new Dictionary<string, object?> { ["accountingMonth"] = startMonth });
+            }
             if (serviceStartValues.Count > 0)
             {
                 var applied = await garageMeterBaselineService.ApplyStartValuesAsync(garage, serviceStartValues, actorUserId, cancellationToken);
@@ -417,6 +431,11 @@ public sealed class DictionaryService(
             }
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            if (accountingStart is not null)
+            {
+                var completed = await accountingStart.CompleteAsync(cancellationToken);
+                if (!completed.Succeeded) return DictionaryResult<GarageDto>.Failure(completed.ErrorCode!, completed.ErrorMessage!);
+            }
             return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
         }
         finally
@@ -425,11 +444,13 @@ public sealed class DictionaryService(
             {
                 await meterStart.DisposeAsync();
             }
+            if (accountingStart is not null) await accountingStart.DisposeAsync();
         }
     }
 
     public async Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (ValidateGarageAccountingStart(request) is { } accountingValidation) return accountingValidation;
         if (ValidateGarageMeterStartValues(request.MeterStartValues) is { } meterValidation)
         {
             return meterValidation;
@@ -442,6 +463,11 @@ public sealed class DictionaryService(
         }
 
         OptimisticConcurrencyGuard.EnsureCurrent(request.Version, garage);
+
+        var oldAccountingStartMonth = GarageAccountingPeriod.ResolveStartMonth(garage.AccountingStartMonth, garage.RegisteredOn ?? businessDateProvider.ToBusinessDate(garage.CreatedAtUtc));
+        var accountingStartChanged = request.AccountingStartMonth.HasValue && request.AccountingStartMonth != oldAccountingStartMonth;
+        if (accountingStartChanged && string.IsNullOrWhiteSpace(request.AccountingStartReason))
+            return DictionaryResult<GarageDto>.Failure("garage_accounting_start_reason_required", "Укажите причину исправления месяца начала учёта.");
 
         var number = request.Number.Trim();
         if (await garageRepository.ActiveNumberExistsAsync(id, number, cancellationToken))
@@ -483,8 +509,15 @@ public sealed class DictionaryService(
         var oldInitialElectricityMeterValue = garage.InitialElectricityMeterValue;
         var meterStartRequests = BuildMeterStartValueRequests(garage, initialWaterMeterValue, initialElectricityMeterValue, request.MeterStartValues);
         GarageMeterStartValueApplyResult? meterStart = null;
+        GarageAccountingStartChange? accountingStart = null;
         try
         {
+            if (accountingStartChanged)
+            {
+                var appliedStart = await garageAccountingStartService.BeginAsync(garage, request.AccountingStartMonth!.Value, request.Version, false, actorUserId, cancellationToken);
+                if (!appliedStart.Succeeded) return DictionaryResult<GarageDto>.Failure(appliedStart.ErrorCode!, appliedStart.ErrorMessage!);
+                accountingStart = appliedStart.Value;
+            }
             if (meterStartRequests.Count > 0)
             {
                 var applied = await garageMeterBaselineService.ApplyStartValuesAsync(garage, meterStartRequests, actorUserId, cancellationToken);
@@ -497,7 +530,7 @@ public sealed class DictionaryService(
             }
 
             var meterStartChanges = meterStart?.Changes ?? [];
-            if (meterStartChanges.Count == 0 &&
+            if (!accountingStartChanged && meterStartChanges.Count == 0 &&
                 oldInitialWaterMeterValue == garage.InitialWaterMeterValue &&
                 oldInitialElectricityMeterValue == garage.InitialElectricityMeterValue &&
                 GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, startingOverdueDebt, garage.InitialWaterMeterValue, garage.InitialElectricityMeterValue, comment))
@@ -574,6 +607,12 @@ public sealed class DictionaryService(
                 newValues[$"meterConnectedOn:{change.Label}"] = change.NewConnectedOn;
             }
 
+            if (accountingStartChanged)
+            {
+                oldValues["accountingMonth"] = oldAccountingStartMonth;
+                newValues["accountingMonth"] = request.AccountingStartMonth;
+            }
+
             garage.Number = number;
             if (peopleCountChanged)
             {
@@ -588,8 +627,13 @@ public sealed class DictionaryService(
             garage.Comment = comment;
             garage.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-            AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", oldValues: oldValues, newValues: newValues);
+            AddAudit(actorUserId, "dictionary.garage_updated", "garage", garage.Id, $"Обновлен гараж N {garage.Number}.", reason: accountingStartChanged ? request.AccountingStartReason : null, oldValues: oldValues, newValues: newValues);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            if (accountingStart is not null)
+            {
+                var completed = await accountingStart.CompleteAsync(cancellationToken);
+                if (!completed.Succeeded) return DictionaryResult<GarageDto>.Failure(completed.ErrorCode!, completed.ErrorMessage!);
+            }
             return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
         }
         finally
@@ -598,7 +642,17 @@ public sealed class DictionaryService(
             {
                 await meterStart.DisposeAsync();
             }
+            if (accountingStart is not null) await accountingStart.DisposeAsync();
         }
+    }
+
+    private static DictionaryResult<GarageDto>? ValidateGarageAccountingStart(UpsertGarageRequest request)
+    {
+        if (request.AccountingStartMonth is { } month && !GarageAccountingPeriod.IsValidStartMonth(month))
+            return DictionaryResult<GarageDto>.Failure("garage_accounting_start_invalid", "Выберите месяц начала учёта не раньше января 1900 года.");
+        if (request.AccountingStartReason?.Trim().Length > 1000)
+            return DictionaryResult<GarageDto>.Failure("garage_accounting_start_reason_invalid", "Причина исправления не должна превышать 1000 символов.");
+        return null;
     }
 
     public Task<IReadOnlyList<GarageMeterStartValueDto>> GetMeterStartServicesForNewGarageAsync(CancellationToken cancellationToken) =>
@@ -5471,7 +5525,7 @@ public sealed class DictionaryService(
     private static StaffDepartmentDto ToStaffDepartmentDto(StaffDepartment department) =>
         new(department.Id, department.Name, department.IsArchived);
 
-    private static GarageDto ToGarageDto(Garage garage, decimal? balance = null, decimal? overdueDebt = null)
+    private GarageDto ToGarageDto(Garage garage, decimal? balance = null, decimal? overdueDebt = null)
     {
         var calculatedBalance = balance ?? garage.StartingBalance;
         return new GarageDto(
@@ -5490,7 +5544,9 @@ public sealed class DictionaryService(
             overdueDebt ?? GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt),
             garage.Owner?.Phone,
             garage.Version,
-            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt));
+            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt),
+            GarageAccountingPeriod.ResolveStartMonth(garage.AccountingStartMonth,
+                garage.RegisteredOn ?? businessDateProvider.ToBusinessDate(garage.CreatedAtUtc)));
     }
 
     private static DictionaryResult<T> InvalidPhone<T>() =>
@@ -5499,7 +5555,7 @@ public sealed class DictionaryService(
     private static DictionaryResult<T> OwnerPhoneLimitExceeded<T>() =>
         DictionaryResult<T>.Failure("owner_phone_limit", "Для владельца можно указать не более 10 телефонов.");
 
-    private static GarageDto ToGarageDto(GarageListItemData garage, decimal balance, decimal overdueDebt) =>
+    private GarageDto ToGarageDto(GarageListItemData garage, decimal balance, decimal overdueDebt) =>
         new(
             garage.Id,
             garage.Number,
@@ -5516,7 +5572,10 @@ public sealed class DictionaryService(
             overdueDebt,
             garage.OwnerPhone,
             garage.Version,
-            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt));
+            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt),
+            garage.AccountingStartMonth ?? (garage.RegisteredOn is { } registration
+                ? MonthPeriod.Normalize(registration)
+                : garage.CreatedAtUtc == default ? null : MonthPeriod.Normalize(businessDateProvider.ToBusinessDate(garage.CreatedAtUtc))));
 
     private static decimal GetStartingOverdueDebt(decimal startingBalance, decimal? startingOverdueDebt) =>
         startingOverdueDebt ?? Math.Max(startingBalance, 0m);

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
+import { getCurrentMonthInputValue } from './formatters'
 import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto } from '../services/dictionariesApi'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createGarageFormFromDto, createOwnerFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseLabel, getTariffCalculationBaseOptions, getTariffCalculationUnitName, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
 
@@ -72,6 +73,8 @@ describe('dictionary workbench metadata', () => {
     })
 
     expect(createEmptyGarageForm()).toEqual({
+      accountingStartMonth: getCurrentMonthInputValue(),
+      originalAccountingStartMonth: getCurrentMonthInputValue(),
       number: '',
       peopleCount: 1,
       floorCount: 1,

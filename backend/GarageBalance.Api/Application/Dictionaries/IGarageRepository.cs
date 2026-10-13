@@ -8,6 +8,8 @@ public interface IGarageRepository
     Task<GaragePageData> GetPageAsync(string? normalizedSearch, GarageColumnFilters filters, bool includeArchived, bool debtorsOnly, int offset, int limit, string sortBy, bool sortDescending, CancellationToken cancellationToken);
     Task<GarageBalanceTotalsData> GetBalanceTotalsAsync(IReadOnlyCollection<Guid> garageIds, CancellationToken cancellationToken);
     Task<Garage?> FindActiveWithOwnerAsync(Guid id, CancellationToken cancellationToken);
+    Task<Garage?> FindActiveFreshWithOwnerAsync(Guid id, CancellationToken cancellationToken);
+    Task ReloadForUpdateAsync(Garage garage, CancellationToken cancellationToken);
     Task<Garage?> FindArchivedWithOwnerAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Garage>> GetAllActiveWithOwnerAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<Guid>> GetActiveIdsAsync(CancellationToken cancellationToken);
@@ -45,7 +47,10 @@ public sealed record GarageListItemData(
     decimal? InitialElectricityMeterValue,
     string? Comment,
     bool IsArchived,
-    Guid Version);
+    Guid Version,
+    DateOnly? AccountingStartMonth = null,
+    DateOnly? RegisteredOn = null,
+    DateTimeOffset CreatedAtUtc = default);
 
 public sealed record GarageBalanceTotalsData(
     IReadOnlyDictionary<Guid, decimal> AccrualTotals,

@@ -12,10 +12,13 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class DictionariesControllerTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public async Task DatedMeterStartValues_CannotBypassDedicatedPermissionsThroughGarageEndpoints(bool opening, bool payments)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    public async Task DatedMeterStartValues_CannotBypassDedicatedPermissionsThroughGarageEndpoints(bool opening, bool payments, bool accountingStart)
     {
         var fake = new FakeDictionaryService();
         var onboarding = new FakeGarageOnboardingService();
@@ -25,7 +28,8 @@ public sealed class DictionariesControllerTests
         if (payments) claims.Add(new Claim("permission", SystemPermissions.PaymentsWrite));
         controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
         var request = new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null,
-            MeterStartValues: [new("water", 0, new DateOnly(2026, 9, 10))]);
+            MeterStartValues: accountingStart ? null : [new("water", 0, new DateOnly(2026, 9, 10))],
+            AccountingStartMonth: accountingStart ? new DateOnly(2026, 9, 1) : null);
         var results = new[]
         {
             await controller.CreateGarage(request, CancellationToken.None),
@@ -37,15 +41,17 @@ public sealed class DictionariesControllerTests
         {
             var denied = Assert.IsType<ObjectResult>(result.Result);
             Assert.Equal(StatusCodes.Status403Forbidden, denied.StatusCode);
-            Assert.Equal("meter_connection_permission_denied", Assert.IsType<ProblemDetails>(denied.Value).Extensions["code"]);
+            Assert.Equal(accountingStart ? "garage_accounting_start_permission_denied" : "meter_connection_permission_denied", Assert.IsType<ProblemDetails>(denied.Value).Extensions["code"]);
         });
         Assert.Null(onboarding.LastRequest);
         Assert.Null(onboarding.LastUpdateRequest);
         Assert.Null(fake.LastActorUserId);
     }
 
-    [Fact]
-    public async Task DatedMeterStartValues_ReachAllGarageEndpointsWithBothPermissions()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DatedMeterStartValues_ReachAllGarageEndpointsWithBothPermissions(bool accountingStart)
     {
         var dto = new GarageDto(Guid.NewGuid(), "12", 1, 1, null, null, 0, null, null, null, false);
         var fake = new FakeDictionaryService
@@ -59,7 +65,8 @@ public sealed class DictionariesControllerTests
         ((ClaimsIdentity)controller.User.Identity!).AddClaims([
             new Claim("permission", SystemPermissions.OpeningDataAdjust), new Claim("permission", SystemPermissions.PaymentsWrite)]);
         var request = new UpsertGarageRequest("12", 1, 1, null, 0, null, null, null,
-            MeterStartValues: [new("water", 0, new DateOnly(2026, 9, 10))]);
+            MeterStartValues: accountingStart ? null : [new("water", 0, new DateOnly(2026, 9, 10))],
+            AccountingStartMonth: accountingStart ? new DateOnly(2026, 9, 1) : null);
         Assert.IsType<CreatedAtActionResult>((await controller.CreateGarage(request, CancellationToken.None)).Result);
         Assert.IsType<OkObjectResult>((await controller.UpdateGarage(dto.Id, request, CancellationToken.None)).Result);
         Assert.IsType<CreatedAtActionResult>((await controller.CreateGarageWithAnnualPayments(new(request, 2026, []), CancellationToken.None)).Result);

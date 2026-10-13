@@ -40,6 +40,7 @@ internal static class DictionaryServiceTestFactory
             new EfAccrualPaymentAllocationRepository(dbContext),
             tariffAccrualRecalculationService ?? new NoOpTariffAccrualRecalculationService(),
             garageMeterBaselineService ?? FinanceServiceTestFactory.Create(dbContext, businessDate: businessDate),
+            FinanceServiceTestFactory.Create(dbContext, businessDate: businessDate),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             new TestBusinessDateProvider(businessDate ?? DefaultBusinessDate));

@@ -1146,21 +1146,16 @@ public sealed partial class FinanceService(
                 $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
-        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
-        if (garage is null)
-        {
-            return FinanceResult<GarageIncomeWorksheetDto>.Failure(
-                "garage_not_found",
-                "Гараж для расчета поступлений не найден.");
-        }
-
-        var garageAccrualStartMonth = GetGarageAccrualStartMonth(garage);
         var calculationMonthFrom = monthFrom;
 
         await using var garageWorksheetLock =
             await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(
-                garage.Id,
+                garageId,
                 cancellationToken);
+        var garage = await garageRepository.FindActiveFreshWithOwnerAsync(garageId, cancellationToken);
+        if (garage is null)
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для расчета поступлений не найден.");
+        var garageAccrualStartMonth = GetGarageAccrualStartMonth(garage);
         var individualPeriodsByService = (await garageTariffAssignmentQuery.GetForGaragePeriodAsync(
             garage.Id, calculationMonthFrom, monthTo, cancellationToken)).ToLookup(period => period.ChargeServiceSettingId);
 
@@ -1224,6 +1219,7 @@ public sealed partial class FinanceService(
         foreach (var historicalAnnualAccrual in existingAccruals.Where(accrual =>
                      accrual.AccountingMonth < garageAccrualStartMonth &&
                      accrual.AccountingYear == garageAccrualStartMonth.Year &&
+                     (!garage.AccountingStartMonth.HasValue || !paidAccrualIds.Contains(accrual.Id)) &&
                      accrual.Basis is null &&
                      !accrual.FeeCampaignId.HasValue &&
                      !accrual.IrregularPaymentId.HasValue))
@@ -9808,7 +9804,7 @@ public sealed partial class FinanceService(
         garage.RegisteredOn ?? businessDateProvider.ToBusinessDate(garage.CreatedAtUtc);
 
     private DateOnly GetGarageAccrualStartMonth(Garage garage) =>
-        MonthPeriod.Normalize(GetGarageRegistrationDate(garage));
+        GarageAccountingPeriod.ResolveStartMonth(garage.AccountingStartMonth, GetGarageRegistrationDate(garage));
 
     private static string? NormalizeExpensePaymentSource(string? value, string? expensePaymentType)
     {

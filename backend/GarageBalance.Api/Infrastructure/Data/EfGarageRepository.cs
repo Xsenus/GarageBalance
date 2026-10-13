@@ -13,6 +13,38 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
     private const int AllocationBalanceCategory = 3;
     private DateOnly Today => businessDateProvider?.Today ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
+    public Task ReloadForUpdateAsync(Garage garage, CancellationToken cancellationToken) =>
+        dbContext.Entry(garage).ReloadAsync(cancellationToken);
+
+    public async Task<Garage?> FindActiveFreshWithOwnerAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var fresh = await dbContext.Garages.AsNoTracking().Include(garage => garage.Owner)
+            .SingleOrDefaultAsync(garage => garage.Id == id && !garage.IsArchived, cancellationToken);
+        if (fresh is null) return null;
+
+        // A tracking query would reuse values loaded before a financial lock was acquired.
+        // Refresh from one bounded query, preserving EF's identity map and query budget.
+        if (fresh.Owner is { } owner)
+        {
+            var existingOwner = dbContext.Owners.Local.FirstOrDefault(item => item.Id == owner.Id);
+            if (existingOwner is not null) fresh.Owner = existingOwner;
+        }
+        var tracked = dbContext.Garages.Local.FirstOrDefault(garage => garage.Id == id);
+        if (tracked is null)
+        {
+            dbContext.Attach(fresh);
+            return fresh;
+        }
+        var entry = dbContext.Entry(tracked);
+        if (entry.State != EntityState.Unchanged)
+            throw new InvalidOperationException("Save pending garage changes before calculating its worksheet.");
+        entry.CurrentValues.SetValues(fresh);
+        entry.OriginalValues.SetValues(fresh);
+        entry.State = EntityState.Unchanged;
+        tracked.Owner = fresh.Owner;
+        return tracked;
+    }
+
     public async Task<IReadOnlyList<GarageListItemData>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
@@ -135,6 +167,9 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             Comment = garage.Comment,
             IsArchived = (bool?)garage.IsArchived,
             Version = (Guid?)garage.Version,
+            AccountingStartMonth = garage.AccountingStartMonth,
+            RegisteredOn = garage.RegisteredOn,
+            CreatedAtUtc = (DateTimeOffset?)garage.CreatedAtUtc,
             OverdueDebtSort = calculateOverdueDebt
                 ? Math.Max(
                     (garage.StartingOverdueDebt ?? (garage.StartingBalance > 0m ? garage.StartingBalance : 0m)) +
@@ -171,6 +206,9 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 Comment = null,
                 IsArchived = null,
                 Version = null,
+                AccountingStartMonth = null,
+                RegisteredOn = null,
+                CreatedAtUtc = null,
                 OverdueDebtSort = 0m,
                 TotalCount = query.Count()
             });
@@ -198,7 +236,10 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 row.InitialElectricityMeterValue,
                 row.Comment,
                 row.IsArchived!.Value,
-                row.Version!.Value))
+                row.Version!.Value,
+                row.AccountingStartMonth,
+                row.RegisteredOn,
+                row.CreatedAtUtc!.Value))
             .ToList();
         return new GaragePageData(items, totalCount);
     }
@@ -398,7 +439,10 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             garage.InitialElectricityMeterValue,
             garage.Comment,
             garage.IsArchived,
-            garage.Version));
+            garage.Version,
+            garage.AccountingStartMonth,
+            garage.RegisteredOn,
+            garage.CreatedAtUtc));
 
     private static IQueryable<Garage> ApplySearch(
         IQueryable<Garage> query,
@@ -705,6 +749,9 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         public string? Comment { get; init; }
         public bool? IsArchived { get; init; }
         public Guid? Version { get; init; }
+        public DateOnly? AccountingStartMonth { get; init; }
+        public DateOnly? RegisteredOn { get; init; }
+        public DateTimeOffset? CreatedAtUtc { get; init; }
         public decimal OverdueDebtSort { get; init; }
         public int TotalCount { get; init; }
     }

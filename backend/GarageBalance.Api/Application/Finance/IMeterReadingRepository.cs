@@ -4,6 +4,7 @@ namespace GarageBalance.Api.Application.Finance;
 
 public interface IMeterReadingRepository
 {
+    Task<IReadOnlyList<string>> GetStoredMeterKindsAsync(Guid garageId, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterReading>> GetListAsync(
         DateOnly? monthFrom,
         DateOnly? monthTo,

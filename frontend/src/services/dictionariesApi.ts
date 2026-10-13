@@ -24,6 +24,7 @@ export type OwnerDto = {
 export type GarageDto = {
   id: string
   number: string
+  accountingStartMonth?: string | null
   peopleCount: number
   floorCount: number
   ownerId: string | null
@@ -265,6 +266,8 @@ export type UpsertGarageMeterStartValueRequest = {
 }
 
 export type UpsertGarageRequest = {
+  accountingStartMonth?: string | null
+  accountingStartReason?: string
   number: string
   peopleCount: number
   floorCount: number

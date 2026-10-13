@@ -40,6 +40,7 @@ import { loadStoredWorkspaceView, saveStoredWorkspaceView, workspaceViewStorageK
 import { garageBalanceWithOverdueHelp, garageOverdueHelp, syncDisplayedGarageBalanceWithOverdue, toDisplayedGarageStartingBalance, toStoredGarageStartingBalance } from '../../shared/garageOpeningBalance'
 import { supplierBalanceWithDebtHelp, supplierDebtSortDirection, toDisplayedSupplierBalance, toStoredSupplierStartingBalance } from '../../shared/supplierOpeningBalance'
 import { isInteractiveTableRowTarget } from '../../shared/tableRowInteraction'
+import { buildGarageAccountingStartRequest, garageAccountingStartHelp, validateGarageAccountingMonth } from '../../shared/garageAccountingStart'
 
 function normalizeContractorTargetText(value?: string | null) {
   return (value ?? '').trim().toLocaleLowerCase('ru-RU')
@@ -121,6 +122,9 @@ type ContractorGarageRow = {
   version?: string
   ownerId?: string | null
   number: string
+  accountingStartMonth?: string
+  originalAccountingStartMonth?: string
+  accountingStartReason?: string
   peopleCount: string
   floorCount: string
   owner: string
@@ -470,11 +474,14 @@ function parsePrototypeNullableNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-type GaragePrototypeField = 'number' | 'peopleCount' | 'floorCount' | 'phone' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity' | `meter:${string}`
+type GaragePrototypeField = 'number' | 'accountingStartMonth' | 'accountingStartReason' | 'peopleCount' | 'floorCount' | 'phone' | 'startingBalance' | 'startingOverdueDebt' | 'initialWater' | 'initialElectricity' | `meter:${string}`
 type GaragePrototypeValidationErrors = Partial<Record<GaragePrototypeField, string>>
 
 function getGaragePrototypeValidationErrors(row: ContractorGarageRow, isCreate: boolean) {
   const errors: GaragePrototypeValidationErrors = {}
+  const accountingError = validateGarageAccountingMonth(row.accountingStartMonth)
+  if (accountingError) errors.accountingStartMonth = accountingError
+  if (!isCreate && row.accountingStartMonth && row.accountingStartMonth !== row.originalAccountingStartMonth && !row.accountingStartReason?.trim()) errors.accountingStartReason = 'Укажите причину исправления месяца начала учёта.'
   const peopleCount = Number(row.peopleCount)
   const floorCount = Number(row.floorCount)
 
@@ -573,6 +580,8 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
     version: garage.version,
     ownerId: garage.ownerId,
     number: garage.number,
+    accountingStartMonth: garage.accountingStartMonth?.slice(0, 7) ?? undefined,
+    originalAccountingStartMonth: garage.accountingStartMonth?.slice(0, 7) ?? undefined,
     peopleCount: String(garage.peopleCount),
     floorCount: String(garage.floorCount),
     owner: garage.ownerName ?? owner?.fullName ?? '',
@@ -594,6 +603,7 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
 function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | null): UpsertGarageRequest {
   return {
     number: row.number.trim(),
+    ...buildGarageAccountingStartRequest(row.accountingStartMonth, row.originalAccountingStartMonth, row.accountingStartReason),
     peopleCount: parsePrototypeInteger(row.peopleCount, 0),
     floorCount: parsePrototypeInteger(row.floorCount, 0),
     ownerId,
@@ -3317,10 +3327,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 }
 
 function createEmptyGaragePrototype(): ContractorGarageRow {
+  const currentMonth = getLocalDateInputValue().slice(0, 7)
   return {
     id: `garage-${Date.now()}`,
     ownerId: null,
     number: '',
+    accountingStartMonth: currentMonth,
+    originalAccountingStartMonth: currentMonth,
     peopleCount: '',
     floorCount: '',
     owner: '',
@@ -3394,6 +3407,7 @@ function compactPrototypeChanges(changes: Array<PrototypeChangeEntry | null>) {
 function getGaragePrototypeChanges(previous: ContractorGarageRow, next: ContractorGarageRow) {
   return compactPrototypeChanges([
     createPrototypeChangeEntry('Номер', previous.number, next.number),
+    createPrototypeChangeEntry('Учитывать с', previous.accountingStartMonth ? formatMonth(`${previous.accountingStartMonth}-01`) : 'По регистрации', next.accountingStartMonth ? formatMonth(`${next.accountingStartMonth}-01`) : 'Не указан'),
     createPrototypeChangeEntry('Количество человек', previous.peopleCount, next.peopleCount),
     createPrototypeChangeEntry('Этажи', previous.floorCount, next.floorCount),
     createPrototypeChangeEntry('Стартовое значение счетчика воды', previous.initialWater, next.initialWater),
@@ -3916,6 +3930,11 @@ function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canRe
                 <FormField className="contractors-garage-form-meters" label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
+                <FormField label="Учитывать с" help={garageAccountingStartHelp}>
+                  <div data-garage-field="accountingStartMonth"><LocalizedDatePicker ariaLabel="Учитывать с" mode="month" value={form.accountingStartMonth ?? ''} required disabled={saving || !canManageMeterConnections} aria-invalid={Boolean(validationErrors.accountingStartMonth)} onChange={(accountingStartMonth) => { clearValidationError('accountingStartMonth'); setForm({ ...form, accountingStartMonth }) }} /></div>
+                  {validationErrors.accountingStartMonth ? <span className="form-field-error">{validationErrors.accountingStartMonth}</span> : null}
+                </FormField>
+                {item && form.accountingStartMonth !== item.accountingStartMonth ? <FormField label="Причина исправления начала учёта"><textarea aria-label="Причина исправления начала учёта" data-garage-field="accountingStartReason" aria-invalid={Boolean(validationErrors.accountingStartReason)} required maxLength={1000} disabled={saving || !canManageMeterConnections} value={form.accountingStartReason ?? ''} onChange={(event) => { clearValidationError('accountingStartReason'); setForm({ ...form, accountingStartReason: event.target.value }) }} />{validationErrors.accountingStartReason ? <span className="form-field-error">{validationErrors.accountingStartReason}</span> : null}</FormField> : null}
                 {meterStartLoader ? (
                   <GarageMeterStartFields
                     loadKey={meterStartLoadKey}

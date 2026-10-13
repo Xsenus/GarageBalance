@@ -1,5 +1,5 @@
 import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto } from '../services/dictionariesApi'
-import { formatMoney } from './formatters'
+import { formatMoney, getCurrentMonthInputValue } from './formatters'
 import type { OwnerGarageLinkForm } from './validation'
 import { garageBalanceSignHelp, toDisplayedGarageStartingBalance } from './garageOpeningBalance'
 
@@ -26,6 +26,9 @@ export type DictionaryOwnerFormState = {
 }
 
 export type DictionaryGarageFormState = {
+  accountingStartMonth?: string
+  originalAccountingStartMonth?: string
+  accountingStartReason?: string
   number: string
   peopleCount: number
   floorCount: number
@@ -182,7 +185,10 @@ export function createOwnerFormFromDto(owner: OwnerDto): DictionaryOwnerFormStat
 }
 
 export function createEmptyGarageForm(): DictionaryGarageFormState {
+  const currentMonth = getCurrentMonthInputValue()
   return {
+    accountingStartMonth: currentMonth,
+    originalAccountingStartMonth: currentMonth,
     number: '',
     peopleCount: 1,
     floorCount: 1,
@@ -197,6 +203,8 @@ export function createEmptyGarageForm(): DictionaryGarageFormState {
 
 export function createGarageFormFromDto(garage: GarageDto): DictionaryGarageFormState {
   return {
+    accountingStartMonth: garage.accountingStartMonth?.slice(0, 7),
+    originalAccountingStartMonth: garage.accountingStartMonth?.slice(0, 7),
     number: garage.number,
     peopleCount: garage.peopleCount,
     floorCount: garage.floorCount,
