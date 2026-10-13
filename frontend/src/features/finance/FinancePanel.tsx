@@ -6062,7 +6062,7 @@ function PaymentsPrototypePanel({
                                 <MoneyTextInput
                                   className="payments-prototype-payment-input"
                                   aria-label={`Платеж ${row.service} ${row.monthLabel}`}
-                                  disabled={savingPaymentRowId === row.id || isFeePaymentClosed(row)}
+                                  disabled={!canWritePayments || savingPaymentRowId === row.id || isFeePaymentClosed(row)}
                                   value={row.paymentDraft}
                                   onValueChange={(paymentDraft) => handlePaymentDraftChange(row.id, paymentDraft)}
                                   onBlur={() => formatPaymentDraft(row.id)}

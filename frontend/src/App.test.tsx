@@ -12104,6 +12104,84 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
   })
 
+  it.each([true, false])('loads fresh worksheet amounts after leaving tariffs, with payment write permission %s', async (canWrite) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-tariff-refresh', number: '773', ownerName: 'Тестовый владелец' })
+    const income = createAccountingType({ id: 'income-tariff-refresh', name: 'Тестовая охрана', code: 'other_income', destinationFundId: 'fund-other', destinationFundName: 'Прочее' })
+    let tariff = createTariff({ id: 'tariff-refresh', name: 'Тестовый тариф охраны', calculationBase: 'fixed', rate: 100, effectiveFrom: '2026-01-01' })
+    let service = createChargeServiceSetting({
+      id: 'service-tariff-refresh', name: income.name, isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+      paymentDueDay: 30, overdueGraceDays: 30, incomeTypeId: income.id, tariffId: tariff.id, tariffCalculationBase: 'fixed', unitName: 'руб.',
+    })
+    let amount = 100
+    const response = () => createGarageIncomeWorksheet({
+      garageId: garage.id, garageNumber: garage.number, ownerName: garage.ownerName,
+      monthFrom: '2026-10-01', monthTo: '2026-10-01', accrualTotal: amount, incomeTotal: 0, debtTotal: amount, closingDebt: amount,
+      rows: [{ accountingMonth: '2026-10-01', incomeTypeId: income.id, incomeTypeName: income.name, meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: amount, incomeAmount: 0, debt: amount }],
+    })
+    const getGarageIncomeWorksheet = vi.fn(async () => response())
+    const calculateGarageIncomeWorksheet = vi.fn(async () => response())
+    const updateSchedule = vi.fn(async (_token: string, _id: string, request: Parameters<DictionaryClient['updateChargeServiceTariffSchedule']>[2]) => {
+      amount = 125
+      tariff = { ...tariff, rate: amount, effectiveFrom: '2026-10-01', version: 'tariff-refresh-v2' }
+      service = { ...service, version: 'service-refresh-v2' }
+      return { service, tariff, periods: request.periods.map((period) => ({ ...period, tariffId: tariff.id, tariffVersion: tariff.version })) }
+    })
+    render(<App
+      authClient={createAuthClient({ login: async () => canWrite ? createAuthResponse() : createAuthResponse({ user: { permissions: ['dictionaries.read', 'payments.read'] } }) })}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [garage], getIncomeTypes: async () => [income], getTariffs: async () => [tariff],
+        getChargeServiceSettings: async () => [service],
+        getChargeServiceTariffSchedule: async () => [{ tariffId: tariff.id, effectiveFrom: tariff.effectiveFrom, effectiveTo: null, rate: tariff.rate, tariffVersion: tariff.version }],
+        updateChargeServiceTariffSchedule: updateSchedule,
+      })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({ monthFrom: '2026-10-01', monthTo: '2026-10-01', defaultMonthFrom: '2026-10-01', defaultMonthTo: '2026-10-01' }),
+        getGarageIncomeWorksheet, calculateGarageIncomeWorksheet,
+      })}
+      fundsClient={createFundsClient()}
+      importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()}
+    />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    async function openWorksheet() {
+      await openSection(user, 'Платежи')
+      const panel = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+      if (!within(panel).queryByLabelText('Выбранный гараж')) {
+        await user.type(within(panel).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+        await user.click(await within(panel).findByRole('option', { name: /Гараж\s*773\s*Тестовый владелец/ }))
+      }
+      return await within(panel).findByRole('table', { name: 'Поступления гаража 773' })
+    }
+    let table = await openWorksheet()
+    await waitFor(() => expect(table.querySelector('.payments-prototype-payable-amount')).toHaveTextContent('100.00'))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    if (canWrite) {
+      await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Тестовая охрана' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+      await user.clear(within(dialog).getByLabelText('Тариф регулярной услуги'))
+      await user.type(within(dialog).getByLabelText('Тариф регулярной услуги'), '125')
+      await user.clear(within(dialog).getByLabelText('Ставка с'))
+      await user.type(within(dialog).getByLabelText('Ставка с'), '01.10.2026{Tab}')
+      await user.click(within(dialog).getByRole('button', { name: 'Сохранить изменения' }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
+      expect(updateSchedule).toHaveBeenCalledWith('token', service.id, expect.objectContaining({ periods: [expect.objectContaining({ effectiveFrom: '2026-10-01', rate: 125 })] }))
+    } else {
+      expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Тестовая охрана' })).toBeDisabled()
+      amount = 125 // Another authorized employee has saved the tariff on the server.
+    }
+    const callsBefore = canWrite ? calculateGarageIncomeWorksheet.mock.calls.length : getGarageIncomeWorksheet.mock.calls.length
+    table = await openWorksheet()
+    await waitFor(() => expect(table.querySelector('.payments-prototype-payable-amount')).toHaveTextContent('125.00'))
+    expect((canWrite ? calculateGarageIncomeWorksheet : getGarageIncomeWorksheet).mock.calls.length).toBeGreaterThan(callsBefore)
+    if (!canWrite) {
+      expect(calculateGarageIncomeWorksheet).not.toHaveBeenCalled()
+      expect(updateSchedule).not.toHaveBeenCalled()
+      expect(within(table).getByLabelText('Платеж Тестовая охрана окт.26')).toBeDisabled()
+    }
+  })
+
   it('aborts a stale income worksheet request when another garage is selected', async () => {
     const user = userEvent.setup()
     const firstGarage = createGarage({ id: 'garage-worksheet-first', number: '76', ownerName: 'Первый владелец' })
@@ -20394,6 +20472,7 @@ describe('App', () => {
     expect(await within(paymentPrototype).findByText('77')).toBeInTheDocument()
     expect(within(paymentPrototype).getByRole('button', { name: 'Начислить штраф' })).toBeDisabled()
     expect(within(paymentPrototype).queryByRole('textbox', { name: /^Показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
+    expect(within(paymentPrototype).getByRole('textbox', { name: /^Платеж Электроэнергия только просмотр/ })).toBeDisabled()
     expect(within(paymentPrototype).queryByRole('button', { name: /^Сохранить показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
     await user.click(within(paymentPrototype).getByRole('tab', { name: 'Выплаты' }))
     expect(within(paymentPrototype).getByRole('button', { name: 'Начислить премию' })).toBeDisabled()
