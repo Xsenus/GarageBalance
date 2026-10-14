@@ -6,10 +6,9 @@ const budget = {
   mainJsGzipBytes: 180 * 1024,
   initialJsGzipBytes: 110 * 1024,
   mainCssGzipBytes: 40 * 1024,
-  // Individual garage tariffs and the daily service-payment report expand the
-  // authenticated workspace. The initial-load and per-asset limits stay unchanged.
-  // The 310 KiB total budget was approved for this feature release.
-  totalAssetsGzipBytes: 310 * 1024,
+  // The 512 KiB total budget was approved by the user on 2026-10-14.
+  // Keep the initial-load and per-asset limits unchanged.
+  totalAssetsGzipBytes: 512 * 1024,
 }
 
 function formatBytes(bytes) {
