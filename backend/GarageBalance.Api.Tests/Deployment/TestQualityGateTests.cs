@@ -17,6 +17,22 @@ public sealed class TestQualityGateTests
     }
 
     [Fact]
+    public void AgentInstructionsRequireBranchesAndPullRequestsForAllAgents()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var instructions = File.ReadAllText(Path.Combine(repositoryRoot, "AGENTS.md"));
+        var claudeInstructions = File.ReadAllText(Path.Combine(repositoryRoot, "CLAUDE.md")).ReplaceLineEndings("\n");
+
+        Assert.Contains("## Git: Branches And Pull Requests", instructions, StringComparison.Ordinal);
+        Assert.Contains("Base branch: `master`.", instructions, StringComparison.Ordinal);
+        Assert.Contains("Direct commits and pushes to `master` are forbidden.", instructions, StringComparison.Ordinal);
+        Assert.Contains("Changes reach `master` only through a PR.", instructions, StringComparison.Ordinal);
+        Assert.Contains("### Checks Before A PR", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("## Git Preparation", instructions, StringComparison.Ordinal);
+        Assert.Equal("@AGENTS.md", claudeInstructions.Split('\n')[0]);
+    }
+
+    [Fact]
     public void StagingWorkflowRunsCoverageGatesBeforePackagingAndDeployment()
     {
         var workflow = File
