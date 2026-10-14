@@ -39,8 +39,7 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 - update the relevant active roadmap status and `История выполнения` with what was done, why, how it was checked, and what remains; if there is no active roadmap, skip this step and do not create a replacement roadmap unless the user asks for one;
 - add an end-user "Что нового" entry when the change is visible to cooperative staff/admins or changes business rules, permissions, integrations, data handling, reports, imports, or visible defects;
 - if no release note is required because the change is infrastructure-only or documentation-only, leave the release file unchanged and mention the reason when useful;
-- after successful verification of an implementation task, make logical commits with Russian commit messages unless the user explicitly asked not to commit yet; never treat a commit as permission to push;
-- do not push until the user explicitly asks for push.
+- after successful verification of an implementation task, make logical commits with Russian commit messages in the task branch unless the user explicitly asked not to commit yet, then push the branch, open a PR, and merge it as described in `Git: Branches And Pull Requests`.
 
 When the user asks to check whether the last task is done, inspect the current code, active docs, tests, active roadmap when one exists, and release notes before deciding. Archived roadmaps must not be used to expand or resume the task unless the user explicitly orders work from the archive.
 
@@ -292,18 +291,87 @@ The app must support:
 - future VPS deployment behind a domain;
 - local-only installation on the customer's PC.
 
-## Git Preparation
+## Git: Branches And Pull Requests
 
-The project is prepared for Git, but do not publish, push, or create a remote repository unless the user explicitly asks. Keep commits scoped when Git is initialized later.
+Mandatory for all agents (Codex, Claude Code) and people. PR means Pull Request (Merge Request in GitLab). Base branch: `master`. Hosting: GitHub (`Xsenus/GarageBalance`), CLI: `gh`.
 
-Before any future push/deployment, verify tests, builds, migrations, Docker configuration, and release notes.
+### Branches
 
-When the user explicitly asks to push:
+- Make every change, even a single line or documentation, in a new branch from a fresh `master`: `git fetch origin`, then create the branch from `origin/master`.
+- One task, one branch. The repository has no special naming scheme, so use `feature/…`, `fix/…`, or `chore/…`.
+- Check `git status` before creating a branch: do not touch other people's uncommitted changes and do not carry them into your branch; ask instead.
+- Do not commit to someone else's branch, including another agent's branch, without a request. When Codex and Claude work at the same time, each one uses its own branch and its own worktree or clone.
+- Direct commits and pushes to `master` are forbidden.
 
-- ensure the intended commits are present and scoped;
-- run or confirm the required checks before push;
-- push to the requested branch;
-- wait for GitHub Actions to finish;
-- if GitHub Actions fails, inspect the failing job/logs, fix the problem, commit the fix, push again, and repeat until the workflow passes or a real external blocker is found;
-- when the workflow deploys to VPS, verify the deployed service after Actions completes, including `garagebalance-staging.service`, nginx configuration, `/health`, frontend response, and any task-specific smoke checks;
-- report the commit, workflow result, deploy result, and any remaining risks.
+### Merging Only Through A PR
+
+- Changes reach `master` only through a PR. Forbidden: a local `git merge` into `master` followed by a push, a direct push, a force-push to shared branches, and merging around branch protection (`--admin` and similar).
+- Run the "Checks Before A PR" below before opening a PR, in the scope required by the Risk-Based Test Gate. Do not claim that checks passed if you did not run them.
+- The PR description states what was done and why, how it was checked, and whether there are database migrations.
+- After opening a PR, wait for the CI results (`gh pr checks <number> --watch`). The `Verify branch` workflow runs on every push to a non-`master` branch and on every PR.
+- A PR is merged only when the checks are green (local checks if there is no CI), there are no conflicts, and the required reviews are received. Merge method: a merge commit (`gh pr merge <number> --merge`), as the repository history does.
+- Who merges: the agent itself, through the PR (`gh pr merge`), as soon as the conditions above are met.
+- If a push or PR creation needs confirmation, request it. If that is impossible (no network, permissions, or CLI), do not work around it with a local merge: bring the branch to green local checks and give the branch name, PR title, and PR description in the response. If the environment creates the branch and PR itself (Codex and Claude Code cloud tasks), use its mechanism.
+- A merge into `master` triggers `Deploy staging` (VPS). After the merge, wait for that workflow and verify the deployed service: `garagebalance-staging.service`, nginx configuration, `/health`, frontend response, and task-specific smoke checks. Report the commit, workflow result, deploy result, and remaining risks.
+
+### When Checks (Local Or CI) Or The Merge Fail
+
+- The goal is a green PR by fixing the cause, not by bypassing checks.
+- Read the logs of failed jobs (`gh run view <id> --log-failed`), reproduce the failure locally with the same command as CI, and find the root cause.
+- Fix the code, not the checks. Without the user's explicit permission you must not: skip, delete, or weaken tests; add suppressions to get a green status (`@ts-ignore`, `eslint-disable`, `#pragma warning disable`, test skips); lower thresholds (coverage, bundle budget, and similar); edit CI or linter configuration to get green; commit with `--no-verify`.
+- If a test is outdated because of an intentional behavior change, update it and explain this in the PR description.
+- Conflicts: bring a fresh `master` into your branch, resolve the conflicts while preserving other people's changes, and run the checks again. After a rebase, use only `git push --force-with-lease` and only to your own branch.
+- Push fixes to the same branch; do not create a new PR.
+- If the failure is unrelated to your changes (the same thing fails on `master`, a flaky test, infrastructure, CI secrets), do not mask it: rerun the job once, and if that does not help, report it with a diagnosis.
+- If the checks are still red after three fix cycles, stop and describe what you tried and what you believe the cause is.
+
+### After The Merge: Deleting Branches
+
+- Delete a branch only when it is completely finished: the PR is merged (`gh pr view <number> --json state`), no work remains on it, and there are no other open PRs from it.
+- Delete the remote branch if the hosting did not do it: `git push origin --delete <branch>`.
+- Locally: `git switch master && git pull --ff-only`, then `git branch -d <branch>`. After a squash or rebase merge git may refuse; then, after confirming the PR is merged, use `-D`. Finish with `git fetch --prune`.
+- Do not reuse a merged branch: follow-up work and fixes after the merge go into a new branch from a fresh `master`.
+- Never delete `master`, protected branches, other people's branches, or branches with open PRs or with commits not included in the merged PR.
+
+### Database And Migrations
+
+- Change the database schema only through the project's EF Core migrations (`backend/GarageBalance.Api/Infrastructure/Data/Migrations`), in the same branch and the same PR as the code.
+- Do not apply anything from a working branch to shared or production databases.
+
+### Checks Before A PR
+
+These are the same commands that `.github/workflows/verify.yml` runs. Choose the applicable parts by the Risk-Based Test Gate (a documentation-only change needs no application suites); CI always runs everything.
+
+Backend (repository root; backend tests need PostgreSQL in `GARAGEBALANCE_POSTGRES_TEST_CONNECTION`):
+
+- `dotnet restore GarageBalance.slnx --locked-mode`
+- `dotnet tool restore`
+- `dotnet build GarageBalance.slnx --configuration Release --no-restore`
+- `dotnet test GarageBalance.slnx --configuration Release --no-build --no-restore --collect:"XPlat Code Coverage" --settings backend-coverage.runsettings --results-directory artifacts/coverage-backend`
+- `pwsh ./infrastructure/scripts/verify-backend-coverage.ps1 -ResultsDirectory artifacts/coverage-backend`
+- migrations: `dotnet tool run dotnet-ef migrations has-pending-model-changes --project backend/GarageBalance.Api/GarageBalance.Api.csproj --startup-project backend/GarageBalance.Api/GarageBalance.Api.csproj --configuration Release --no-build`
+- migration SQL: `dotnet tool run dotnet-ef migrations script --idempotent --project backend/GarageBalance.Api/GarageBalance.Api.csproj --startup-project backend/GarageBalance.Api/GarageBalance.Api.csproj --configuration Release --no-build --output artifacts/verify-migrations.sql`
+
+Frontend (in `frontend/`, install by `package-lock.json`):
+
+- `npm ci`
+- `npm run test:coverage`
+- `npm run lint`
+- `npm run build` (includes the TypeScript type check `tsc -b`)
+- `npm run check:bundle`
+- `npm audit --package-lock-only --audit-level=high`
+
+Quality, formatting, and privacy (repository root):
+
+- `pwsh ./infrastructure/scripts/verify-backend-dependencies.ps1`
+- `dotnet format GarageBalance.slnx --verify-no-changes --no-restore`
+- `pwsh ./infrastructure/scripts/verify-package-privacy.ps1`
+- `pwsh ./infrastructure/scripts/check-docker-distribution.ps1 -RequireDocker`
+- `git show --format= --check HEAD`
+- `find infrastructure -name '*.sh' -print0 | xargs -0 -r -n 1 bash -n`
+
+Docker (when Dockerfiles, `docker-compose.yml`, ports, or environment variables change; the CI `docker` job always runs it):
+
+- `docker compose config --quiet`
+- `docker compose build`
+- `docker compose up --detach --wait --wait-timeout 180`, check `/health/ready` of the API and frontend, then `docker compose down --volumes --remove-orphans`
