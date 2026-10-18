@@ -75,6 +75,37 @@ public sealed class GarageStartMonthMeterTests
         Assert.Equal(330m, (await context.MeterDevices.AsNoTracking().SingleAsync(item => item.Id == connection.BaselineMeterDeviceId)).InitialValue);
     }
 
+    // Customer comments 14.10.2026, item 5: month start 270, removed at 300, new device continues.
+    [Theory]
+    [InlineData(500, 550, 80)]
+    [InlineData(300, 330, 60)]
+    [InlineData(250, 310, 90)]
+    public async Task ReplacementCountsBothDevicesWithoutTheGapAndTwiceForAnOverlap(int newInitial, int monthEnd, int expected)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var setting = await SeedElectricityAsync(context);
+        var created = await DictionaryServiceTestFactory.Create(context, Today).CreateGarageAsync(Request(September) with
+        {
+            MeterStartValues = [new UpsertGarageMeterStartValueRequest(setting.MeterKind!, 250)]
+        }, null, CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        var garageId = created.Value!.Id;
+        var finance = FinanceServiceTestFactory.Create(context, businessDate: Today);
+        var september = await finance.CreateMeterReadingAsync(
+            new(garageId, setting.MeterKind!, September, September.AddDays(29), 270, null), null, CancellationToken.None);
+        Assert.True(september.Succeeded, september.ErrorMessage);
+
+        var replaced = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(9),
+            "NEW-1", newInitial, monthEnd, 300, "Замена счётчика"), null, CancellationToken.None);
+
+        Assert.True(replaced.Succeeded, replaced.ErrorMessage);
+        Assert.Equal(expected, replaced.Value!.Reading.Consumption);
+        var worksheet = await finance.CalculateGarageIncomeWorksheetAsync(garageId, new(October, October), null, CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal(expected * 5m, Assert.Single(worksheet.Value!.Rows, row => row.IncomeTypeId == setting.IncomeTypeId).AccrualAmount);
+    }
+
     [Fact]
     public async Task StartValueMovesALaterConnectionToTheGarageStart()
     {
