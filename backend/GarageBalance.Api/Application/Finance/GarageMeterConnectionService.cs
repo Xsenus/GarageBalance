@@ -75,6 +75,53 @@ public sealed class GarageMeterConnectionService(
         }
     }
 
+    public async Task<FinanceResult<GarageMeterConnectionBatchItemDto>> SetStartValueAsync(
+        SetGarageMeterStartValueRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (request.GarageId == Guid.Empty || !MeterKinds.IsValid(request.MeterKind?.Trim()) ||
+            request.Value is < 0 or > 999999999 || request.Reason?.Trim().Length > 1000)
+        {
+            return FinanceResult<GarageMeterConnectionBatchItemDto>.Failure(
+                "meter_start_value_invalid", "Стартовое показание должно быть числом от 0 до 999 999 999.");
+        }
+
+        var scope = await meterReadingRepository.BeginConnectionWriteAsync(cancellationToken);
+        var leases = new List<GarageMeterStartValueApplyResult>();
+        try
+        {
+            var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
+            if (garage is null)
+            {
+                return FinanceResult<GarageMeterConnectionBatchItemDto>.Failure("garage_not_found", "Гараж не найден.");
+            }
+
+            // No explicit date: the value belongs to the month before the garage's "Учитывать с".
+            var applied = await baselineService.ApplyStartValuesAsync(garage,
+                [new UpsertGarageMeterStartValueRequest(request.MeterKind!.Trim(), request.Value, Reason: request.Reason?.Trim())],
+                actorUserId, cancellationToken, alignConnectionsToGarageStart: true);
+            if (!applied.Succeeded)
+            {
+                return FinanceResult<GarageMeterConnectionBatchItemDto>.Failure(applied.ErrorCode!, applied.ErrorMessage!);
+            }
+
+            leases.Add(applied.Value!);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await scope.CommitAsync(cancellationToken);
+            return FinanceResult<GarageMeterConnectionBatchItemDto>.Success(
+                new GarageMeterConnectionBatchItemDto(garage.Id, garage.Number, applied.Value!.Changes));
+        }
+        catch (Exception exception) when (exception is OptimisticConcurrencyException or ApplicationConcurrencyException or ApplicationPersistenceConflictException)
+        {
+            return FinanceResult<GarageMeterConnectionBatchItemDto>.Failure(
+                "meter_connection_changed", "Показания или подключение изменились другим пользователем. Обновите список и повторите действие; изменения не сохранены.");
+        }
+        finally
+        {
+            await DisposeScopeAndLeasesAsync(scope, leases);
+        }
+    }
+
     public async Task<FinanceResult<GarageMeterConnectionPreviewDto>> PreviewAsync(
         PreviewGarageMeterConnectionsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {

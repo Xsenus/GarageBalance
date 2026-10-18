@@ -36,17 +36,20 @@ public sealed class GarageMeterConnectionTests
     }
 
     [Fact]
-    public async Task NewService_RequiresDateAndKeepsOtherHistoryUnchanged()
+    public async Task NewService_WithoutDateStartsWithGarageAndKeepsOtherHistoryUnchanged()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
         var (garage, setting) = await SeedAsync(database.Context);
+        garage.AccountingStartMonth = new DateOnly(2026, 9, 1);
+        await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var result = await service.UpdateGarageAsync(garage.Id, Request(garage, new(setting.MeterKind!, 250m)), null, CancellationToken.None);
 
-        Assert.Equal("meter_connection_date_required", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
         database.Context.ChangeTracker.Clear();
-        Assert.Empty(await database.Context.GarageMeterConnections.ToListAsync());
-        Assert.Empty(await database.Context.MeterDevices.ToListAsync());
+        var connection = await database.Context.GarageMeterConnections.SingleAsync();
+        Assert.Equal(new DateOnly(2026, 9, 1), connection.ConnectedOn);
+        Assert.Equal(250m, (await database.Context.MeterDevices.SingleAsync(device => device.Id == connection.BaselineMeterDeviceId)).InitialValue);
         Assert.Equal(100m, (await database.Context.Garages.SingleAsync()).InitialWaterMeterValue);
     }
 

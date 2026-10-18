@@ -45,6 +45,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         return values;
     }
 
+    private const string GarageStartMeterReason = "Стартовое показание на начало учёта гаража";
+
     public async Task<IReadOnlyList<GarageMeterStartValueDto>> GetStartServicesForNewGarageAsync(
         CancellationToken cancellationToken)
     {
@@ -54,8 +56,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             .Where(setting => setting is { IsRegular: true, IsMetered: true, IsArchived: false, AppliesToSelectedGarages: false } &&
                 !string.IsNullOrWhiteSpace(setting.MeterKind) && MeterKinds.IsValid(setting.MeterKind))
             .OrderBy(setting => setting.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(setting => new GarageMeterStartValueDto(setting.MeterKind!, setting.Name, setting.UnitName, null, false,
-                RequiresConnectionDate: true))
+            .Select(setting => new GarageMeterStartValueDto(setting.MeterKind!, setting.Name, setting.UnitName, null, false))
             .ToList();
     }
 
@@ -63,7 +64,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         Garage garage,
         IReadOnlyList<UpsertGarageMeterStartValueRequest> requested,
         Guid? actorUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool alignConnectionsToGarageStart = false)
     {
         var locks = new List<IAsyncDisposable>();
         var transferred = false;
@@ -110,7 +112,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 }
 
                 var label = setting?.Name ?? (meterKind == MeterKinds.Water ? "Вода" : "Электроэнергия");
-                var step = await ApplyStartValueAsync(garage, meterKind, label, item, actorUserId, locks, cancellationToken);
+                var step = await ApplyStartValueAsync(garage, meterKind, label, item, actorUserId, locks, cancellationToken,
+                    alignConnectionsToGarageStart);
                 if (!step.Succeeded)
                 {
                     return FinanceResult<GarageMeterStartValueApplyResult>.Failure(step.ErrorCode!, step.ErrorMessage!);
@@ -144,7 +147,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         UpsertGarageMeterStartValueRequest request,
         Guid? actorUserId,
         List<IAsyncDisposable> locks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool alignConnectionToGarageStart)
     {
         var devices = (await meterReadingRepository.GetDevicesForUpdateAsync(garage.Id, meterKind, cancellationToken)).ToList();
         var readings = (await meterReadingRepository.GetAllActiveForUpdateAsync(garage.Id, meterKind, cancellationToken)).ToList();
@@ -152,6 +156,20 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         var isLegacyKind = meterKind is MeterKinds.Water or MeterKinds.Electricity;
         var baseline = MeterBaselineResolver.FindBaselineDevice(devices, readings.FirstOrDefault());
         var connection = await meterReadingRepository.GetConnectionForUpdateAsync(garage.Id, meterKind, cancellationToken);
+        if (!request.ConnectedOn.HasValue &&
+            (connection is not null ? alignConnectionToGarageStart : baseline is null && readings.Count == 0 && column is null && request.Value.HasValue))
+        {
+            // The start value is the reading at the end of the month before the garage's
+            // "Учитывать с" month. An explicit connection date stays available for services
+            // connected later, but the card and the readings form follow the garage start.
+            request = request with
+            {
+                ConnectedOn = GetGarageAccrualStartMonth(garage),
+                ConnectionVersion = request.ConnectionVersion ?? connection?.Version,
+                Reason = string.IsNullOrWhiteSpace(request.Reason) ? GarageStartMeterReason : request.Reason
+            };
+        }
+
         if (connection is not null || request.ConnectedOn.HasValue)
         {
             return await ApplyConnectionStartValueAsync(garage, meterKind, label, request, connection,

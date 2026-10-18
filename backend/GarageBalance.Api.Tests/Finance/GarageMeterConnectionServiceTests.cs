@@ -376,9 +376,10 @@ public sealed class GarageMeterConnectionServiceTests
         public Task<IReadOnlyList<GarageMeterStartValueDto>> GetStartValuesAsync(Garage garage, CancellationToken cancellationToken) => inner.GetStartValuesAsync(garage, cancellationToken);
         public Task<IReadOnlyList<GarageMeterStartValueDto>> GetStartServicesForNewGarageAsync(CancellationToken cancellationToken) => inner.GetStartServicesForNewGarageAsync(cancellationToken);
         public async Task<FinanceResult<GarageMeterStartValueApplyResult>> ApplyStartValuesAsync(Garage garage,
-            IReadOnlyList<UpsertGarageMeterStartValueRequest> requested, Guid? actorUserId, CancellationToken cancellationToken)
+            IReadOnlyList<UpsertGarageMeterStartValueRequest> requested, Guid? actorUserId, CancellationToken cancellationToken,
+            bool alignConnectionsToGarageStart = false)
         {
-            var result = await inner.ApplyStartValuesAsync(garage, requested, actorUserId, cancellationToken);
+            var result = await inner.ApplyStartValuesAsync(garage, requested, actorUserId, cancellationToken, alignConnectionsToGarageStart);
             cancellation?.Cancel();
             return result;
         }

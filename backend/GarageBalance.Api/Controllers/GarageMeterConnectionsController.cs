@@ -25,6 +25,18 @@ public sealed class GarageMeterConnectionsController(IGarageMeterConnectionServi
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpPut("start-value")]
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [ProducesResponseType<GarageMeterConnectionBatchItemDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<GarageMeterConnectionBatchItemDto>> SetStartValue(SetGarageMeterStartValueRequest request, CancellationToken cancellationToken)
+    {
+        var result = await service.SetStartValueAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpPost("preview")]
     [Authorize(Policy = SystemPermissions.PaymentsRead)]
     [ProducesResponseType<GarageMeterConnectionPreviewDto>(StatusCodes.Status200OK)]

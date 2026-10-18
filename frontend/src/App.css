@@ -3722,6 +3722,11 @@ input.meter-readings-control {
   padding-left: 25px;
 }
 
+.meter-readings-value-cell--baseline input {
+  border-style: dashed;
+  font-weight: 600;
+}
+
 .meter-readings-replacement-marker {
   position: absolute;
   z-index: 1;

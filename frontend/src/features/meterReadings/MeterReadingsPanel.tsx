@@ -19,7 +19,7 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { getMeterReadingConnectionStatus, getMeterReadingDateForMonth } from './meterReadingPeriod'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
-import { getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
+import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
 const meterReadingMonths = monthNames.map((label, index) => ({
   key: String(index + 1).padStart(2, '0'), label,
 }))
@@ -72,6 +72,7 @@ type MeterReadingPrototypePendingChange = {
   nextValue: string
   isOutsideCurrentMonth: boolean
   suggestsReplacement: boolean
+  isStartValue?: boolean
 }
 
 type MeterReadingMonth = typeof meterReadingMonths[number]
@@ -79,6 +80,7 @@ type MeterReadingMonth = typeof meterReadingMonths[number]
 type MeterReadingsTableProps = {
   appliedYear: string
   canWritePayments: boolean
+  canEditStartValue: boolean
   canEditOutsideCurrentMonth: boolean
   historicalCorrectionEnabled: boolean
   currentMonth: string
@@ -88,9 +90,11 @@ type MeterReadingsTableProps = {
   loading: boolean
   meterType: MeterReadingTypeId
   onCommitReading: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
+  onCommitStartValue: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
   onDraftReadingChange: (cellKey: string, value: string) => void
   savedReadings: Record<string, string>
   savedReadingReplacements: Record<string, string>
+  startValueCells: Record<string, boolean>
   savingReadingKey: string | null
   selectedMeterType: typeof meterReadingTypes[number]
   yearIsValid: boolean
@@ -99,6 +103,7 @@ type MeterReadingsTableProps = {
 const MeterReadingsTable = memo(function MeterReadingsTable({
   appliedYear,
   canWritePayments,
+  canEditStartValue,
   canEditOutsideCurrentMonth,
   historicalCorrectionEnabled,
   currentMonth,
@@ -108,9 +113,11 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   loading,
   meterType,
   onCommitReading,
+  onCommitStartValue,
   onDraftReadingChange,
   savedReadings,
   savedReadingReplacements,
+  startValueCells,
   savingReadingKey,
   selectedMeterType,
   yearIsValid,
@@ -132,7 +139,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
           <span role="columnheader">Гараж</span>
           <span className="meter-readings-start-header" role="columnheader">
             <strong>Стартовое показание</strong>
-            <FieldHelp label="Стартовое показание">База показана отдельно от месячных показаний. Ноль — известное значение, «Не задано» — неизвестная база. Используется исходный прибор цепочки или база подключения услуги. Неактивные месяцы скрываются, сохранённая история остаётся видимой.</FieldHelp>
+            <FieldHelp label="Стартовое показание">Стартовое показание — значение счётчика на конец месяца, предшествующего «Учитывать с» в карточке гаража. Этот месяц показан в таблице первым, значение в нём можно исправить: расход и неоплаченные начисления пересчитаются. Ноль — известное значение, «Не задано» — неизвестная база.</FieldHelp>
           </span>
           {visibleMonths.map((month) => (
             <span role="columnheader" aria-label={`${month.label}${selectedMeterType.unit}`} key={month.key}>
@@ -164,6 +171,26 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             </span>
             {visibleMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
+              if (startValueCells[cellKey]) {
+                return (
+                  <span className="meter-readings-value-cell meter-readings-value-cell--baseline" role="cell" key={cellKey}>
+                    <MeterReadingInput
+                      aria-label={`Гараж ${garage.number}, ${month.label}, стартовое показание`}
+                      disabled={!canEditStartValue || loading || !yearIsValid || savingReadingKey === cellKey}
+                      placeholder="Старт"
+                      title={canEditStartValue
+                        ? 'Стартовое показание на конец месяца перед «Учитывать с». Изменение пересчитает расход и неоплаченные начисления.'
+                        : 'Стартовое показание меняют пользователи с правом корректировки начальных данных.'}
+                      value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
+                      onBlur={(event) => {
+                        if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitStartValue(garage, month)
+                      }}
+                      onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
+                      onKeyDown={(event) => handleEditableInputKeyDown(event, () => onCommitStartValue(garage, month))}
+                    />
+                  </span>
+                )
+              }
               const baselineMonth = !garage.connectedOn && garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
               const beforeInitialReading = !!baselineMonth && `${appliedYear}-${month.key}` <= baselineMonth
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
@@ -235,6 +262,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [savedReadingIds, setSavedReadingIds] = useState<Record<string, string>>({})
   const [savedReadingVersions, setSavedReadingVersions] = useState<Record<string, string>>({})
   const [savedReadingReplacements, setSavedReadingReplacements] = useState<Record<string, string>>({})
+  const [startValueCells, setStartValueCells] = useState<Record<string, boolean>>({})
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
   const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
   const [readingChangeError, setReadingChangeError] = useState<string | null>(null)
@@ -246,6 +274,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [historicalCorrectionEnabled, setHistoricalCorrectionEnabled] = useState(false)
   const [connectingService, setConnectingService] = useState(false)
   const canConnectService = hasPermission(auth, permissions.openingDataAdjust) && hasPermission(auth, permissions.paymentsWrite) && hasPermission(auth, permissions.dictionariesWrite)
+  const canEditStartValue = canConnectService && Boolean(financeClient.setMeterStartValue)
 
   const selectedMeterType = availableMeterTypes?.find((item) => item.id === meterType)
     ?? meterReadingTypes.find((item) => item.id === meterType)
@@ -313,6 +342,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       } finally {
         setSavingReadingKey(null)
       }
+      return
+    }
+
+    if (pendingReadingChange.isStartValue) {
+      void saveStartValue(pendingReadingChange.cellKey, pendingReadingChange.nextValue, true)
       return
     }
 
@@ -445,6 +479,17 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           }
         })
 
+        const nextStartValueCells: Record<string, boolean> = {}
+        yearPage.garages.forEach((garage) => {
+          const baselineMonth = getMeterBaselineMonth(garage)
+          if (!baselineMonth || baselineMonth.slice(0, 4) !== appliedYear) return
+          const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, baselineMonth.slice(5, 7))
+          if (nextSavedReadingIds[cellKey]) return
+          nextStartValueCells[cellKey] = true
+          const startValue = getMeterReadingStartDisplay(garage).value
+          if (startValue != null) nextSavedReadings[cellKey] = formatMeterReadingInputValue(startValue)
+        })
+
         setConfirmedPage([auth.accessToken, yearPage.offset, yearPage.limit])
         setGarages(yearPage.garages)
         if (yearPage.currentAccountingMonth) {
@@ -456,6 +501,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         setSavedReadingIds(nextSavedReadingIds)
         setSavedReadingVersions(nextSavedReadingVersions)
         setSavedReadingReplacements(nextSavedReadingReplacements)
+        setStartValueCells(nextStartValueCells)
       } catch (loadError) {
         if (!isMounted) {
           return
@@ -542,6 +588,59 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setSavingReadingKey(null)
     }
   }, [appliedYear, auth.accessToken, canWritePayments, currentMonth, financeClient, garages, meterType])
+
+  const saveStartValue = useCallback(async (cellKey: string, nextValue: string, showErrorInDialog = false) => {
+    if (!canEditStartValue || !financeClient.setMeterStartValue) return
+    const [, , garageId] = cellKey.split(':')
+    const parsedValue = nextValue.trim() ? parseMeterReadingInputValue(nextValue) : null
+    if (nextValue.trim() && parsedValue === null) {
+      const message = 'Введите стартовое показание неотрицательным числом.'
+      if (showErrorInDialog) setReadingChangeError(message)
+      else setError(message)
+      return
+    }
+
+    setSavingReadingKey(cellKey)
+    setError(null)
+    setReadingChangeError(null)
+    try {
+      await financeClient.setMeterStartValue(auth.accessToken, { garageId, meterKind: meterType, value: parsedValue })
+      setPendingReadingChange(null)
+      setReloadRevision((revision) => revision + 1)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Не удалось сохранить стартовое показание.'
+      if (showErrorInDialog) setReadingChangeError(message)
+      else setError(message)
+    } finally {
+      setSavingReadingKey(null)
+    }
+  }, [auth.accessToken, canEditStartValue, financeClient, meterType])
+
+  const commitStartValue = useCallback((garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => {
+    if (!yearIsValid || !canEditStartValue) return
+    const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
+    if (savingReadingKey === cellKey) return
+    const nextValue = draftReadings[cellKey] ?? ''
+    const previousValue = savedReadings[cellKey] ?? ''
+    if (nextValue.trim() === previousValue.trim()) return
+    if (!previousValue.trim()) {
+      void saveStartValue(cellKey, nextValue)
+      return
+    }
+
+    setPendingReadingChange({
+      cellKey,
+      garageNumber: garage.number,
+      monthLabel: month.label,
+      previousValue,
+      nextValue,
+      isOutsideCurrentMonth: false,
+      suggestsReplacement: false,
+      isStartValue: true,
+    })
+    setError(null)
+    setReadingChangeError(null)
+  }, [appliedYear, canEditStartValue, draftReadings, meterType, savedReadings, saveStartValue, savingReadingKey, yearIsValid])
 
   const changeDraftReading = useCallback((cellKey: string, value: string) => {
     setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: value }))
@@ -681,6 +780,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       ) : availableMeterTypes && availableMeterTypes.length > 0 ? <MeterReadingsTable
         appliedYear={appliedYear}
         canWritePayments={canWritePayments}
+        canEditStartValue={canEditStartValue}
         canEditOutsideCurrentMonth={canEditOutsideCurrentMonth}
         historicalCorrectionEnabled={historicalCorrectionEnabled}
         currentMonth={currentMonth}
@@ -690,9 +790,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         loading={loading}
         meterType={meterType}
         onCommitReading={commitReading}
+        onCommitStartValue={commitStartValue}
         onDraftReadingChange={changeDraftReading}
         savedReadings={savedReadings}
         savedReadingReplacements={savedReadingReplacements}
+        startValueCells={startValueCells}
         savingReadingKey={savingReadingKey}
         selectedMeterType={selectedMeterType}
         yearIsValid={yearIsValid}
@@ -716,17 +818,19 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           <section ref={readingChangeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="meter-reading-change-title" aria-describedby="meter-reading-change-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">{pendingReadingChange.suggestsReplacement ? 'Замена счетчика' : pendingReadingChange.isOutsideCurrentMonth ? 'Другой месяц' : 'Изменение'}</p>
-                <h3 id="meter-reading-change-title">{pendingReadingChange.suggestsReplacement ? 'Оформить замену счетчика?' : pendingReadingChange.isOutsideCurrentMonth ? 'Сохранить показание за другой месяц?' : 'Подтвердить показание?'}</h3>
+                <p className="eyebrow">{pendingReadingChange.isStartValue ? 'Стартовое показание' : pendingReadingChange.suggestsReplacement ? 'Замена счетчика' : pendingReadingChange.isOutsideCurrentMonth ? 'Другой месяц' : 'Изменение'}</p>
+                <h3 id="meter-reading-change-title">{pendingReadingChange.isStartValue ? 'Изменить стартовое показание?' : pendingReadingChange.suggestsReplacement ? 'Оформить замену счетчика?' : pendingReadingChange.isOutsideCurrentMonth ? 'Сохранить показание за другой месяц?' : 'Подтвердить показание?'}</h3>
                 <p>{`Гараж ${pendingReadingChange.garageNumber}, ${pendingReadingChange.monthLabel}`}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Закрыть подтверждение показания" disabled={pendingReadingSaving} onClick={cancelPendingReadingChange}>
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="meter-reading-change-description">Проверьте показание. После сохранения изменение появится в истории гаража.</p>
+            <p className="confirmation-text" id="meter-reading-change-description">{pendingReadingChange.isStartValue
+              ? 'Расход первого месяца учёта и неоплаченные начисления будут пересчитаны. Изменение появится в истории гаража.'
+              : 'Проверьте показание. После сохранения изменение появится в истории гаража.'}</p>
             <ChangePreviewList ariaLabel="Изменяемые поля показания" changes={[{
-              field: 'Показание',
+              field: pendingReadingChange.isStartValue ? 'Стартовое показание' : 'Показание',
               before: formatPrototypeChangeValue(pendingReadingChange.previousValue),
               after: formatPrototypeChangeValue(pendingReadingChange.nextValue),
             }]} />

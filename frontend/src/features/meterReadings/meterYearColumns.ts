@@ -1,5 +1,25 @@
 import type { MeterReadingYearGarageDto } from '../../services/financeApi'
 
+function getPreviousMonth(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const previous = new Date(Date.UTC(year, monthNumber - 2, 1))
+  return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+// The start value is the reading at the end of the month before the garage's "Учитывать с"
+// month (or before a later service connection). That month is shown as an editable column.
+export function getMeterBaselineMonth(garage: MeterReadingYearGarageDto) {
+  if (garage.connectedOn) {
+    const starts = [garage.accountingStartMonth?.slice(0, 7), garage.connectedOn.slice(0, 7)]
+      .filter((value): value is string => Boolean(value))
+      .sort()
+    return getPreviousMonth(starts.at(-1)!)
+  }
+  if (garage.startValueSource === 'device') return null
+  if (garage.initialReadingMonth) return garage.initialReadingMonth.slice(0, 7)
+  return garage.accountingStartMonth ? getPreviousMonth(garage.accountingStartMonth.slice(0, 7)) : null
+}
+
 export function getVisibleMeterReadingMonthKeys(
   year: string,
   garages: readonly MeterReadingYearGarageDto[],
@@ -10,6 +30,7 @@ export function getVisibleMeterReadingMonthKeys(
     const month = `${year}-${key}`
     if (savedMonths.has(month)) return true
     return garages.some((garage) => {
+      if (getMeterBaselineMonth(garage) === month) return true
       if (garage.requiresConnectionDate) return false
       const starts = [garage.accountingStartMonth?.slice(0, 7), garage.connectedOn?.slice(0, 7)]
       if (!garage.connectedOn) {

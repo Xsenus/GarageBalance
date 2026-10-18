@@ -63,10 +63,14 @@ public interface IGarageMeterBaselineService
     /// readings/accruals without saving. The caller saves the unit of work and disposes the result.
     /// Legacy null values preserve dependent baselines. An explicit connection may wait without
     /// a start value until readings or replacements depend on that value.
+    /// A value without a date for a new service is placed before the garage's accounting start.
+    /// With <paramref name="alignConnectionsToGarageStart"/> an existing connection without an
+    /// explicit date moves to that start as well; callers enable it only for authorized corrections.
     /// </summary>
     Task<FinanceResult<GarageMeterStartValueApplyResult>> ApplyStartValuesAsync(
         Garage garage,
         IReadOnlyList<UpsertGarageMeterStartValueRequest> requested,
         Guid? actorUserId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool alignConnectionsToGarageStart = false);
 }
