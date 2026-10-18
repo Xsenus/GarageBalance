@@ -16,12 +16,12 @@ import { getMeterReplacementConsumption, parseReplacementValue as parseValue } f
 import { SelectControl } from '../../shared/SelectControl'
 
 const defaultOptions = [{ value: 'electricity', label: 'Электроэнергия' }, { value: 'water', label: 'Вода' }]
-export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeClient, garage, onClose, onSaved }: {
-  auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; garage: { id: string; number: string }
+export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeClient, garage, initialMeterKind = 'electricity', onClose, onSaved }: {
+  auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; garage: { id: string; number: string }; initialMeterKind?: string
   onClose: () => void; onSaved: () => void
 }) {
   const [reasonRequired] = useActionCommentSettings()
-  const [kind, setKind] = useState('electricity')
+  const [kind, setKind] = useState(initialMeterKind)
   const [date, setDate] = useState(getLocalDateInputValue)
   const [serial, setSerial] = useState('')
   const [initial, setInitial] = useState('0')

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState, type CSSProperties } from 'react'
-import { LoaderCircle, PlugZap, RefreshCw, Save, X } from 'lucide-react'
+import { LoaderCircle, PlugZap, RefreshCw, Replace, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
@@ -18,6 +18,7 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEdi
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { getMeterReadingConnectionStatus, getMeterReadingDateForMonth } from './meterReadingPeriod'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
+import { GarageMeterReplacementDialog } from './GarageMeterReplacementDialog'
 import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
 import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
 const meterReadingMonths = monthNames.map((label, index) => ({
@@ -77,6 +78,10 @@ type MeterReadingPrototypePendingChange = {
 
 type MeterReadingMonth = typeof meterReadingMonths[number]
 
+function isConnectedAfterGarageStart(garage: MeterReadingYearGarageDto) {
+  return Boolean(garage.connectedOn && garage.accountingStartMonth && garage.connectedOn.slice(0, 7) > garage.accountingStartMonth.slice(0, 7))
+}
+
 type MeterReadingsTableProps = {
   appliedYear: string
   canWritePayments: boolean
@@ -91,6 +96,7 @@ type MeterReadingsTableProps = {
   meterType: MeterReadingTypeId
   onCommitReading: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
   onCommitStartValue: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
+  onReplaceMeter?: (garage: MeterReadingYearGarageDto) => void
   onDraftReadingChange: (cellKey: string, value: string) => void
   savedReadings: Record<string, string>
   savedReadingReplacements: Record<string, string>
@@ -114,6 +120,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   meterType,
   onCommitReading,
   onCommitStartValue,
+  onReplaceMeter,
   onDraftReadingChange,
   savedReadings,
   savedReadingReplacements,
@@ -164,7 +171,16 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
           const start = getMeterReadingStartDisplay(garage)
           return (
           <div className="meter-readings-data-row" role="row" key={garage.id}>
-            <span role="rowheader">Гараж {garage.number}</span>
+            <span role="rowheader">
+              <span>Гараж {garage.number}</span>
+              {onReplaceMeter ? (
+                <button className="icon-button meter-readings-replace-button" type="button" disabled={loading}
+                  aria-label={`Заменить счётчик: гараж ${garage.number}`} title="Заменить счётчик"
+                  onClick={() => onReplaceMeter(garage)}>
+                  <Replace size={14} aria-hidden="true" />
+                </button>
+              ) : null}
+            </span>
             <span className="meter-readings-start-cell" role="cell" aria-label={`Гараж ${garage.number}, стартовое показание`}>
               <strong>{start.value == null ? 'Не задано' : formatMeterReadingInputValue(start.value)}</strong>
               <small>{start.description}</small>
@@ -178,9 +194,11 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                       aria-label={`Гараж ${garage.number}, ${month.label}, стартовое показание`}
                       disabled={!canEditStartValue || loading || !yearIsValid || savingReadingKey === cellKey}
                       placeholder="Старт"
-                      title={canEditStartValue
-                        ? 'Стартовое показание на конец месяца перед «Учитывать с». Изменение пересчитает расход и неоплаченные начисления.'
-                        : 'Стартовое показание меняют пользователи с правом корректировки начальных данных.'}
+                      title={!canEditStartValue
+                        ? 'Стартовое показание меняют пользователи с правом корректировки начальных данных.'
+                        : isConnectedAfterGarageStart(garage)
+                          ? 'Счётчик подключён позже «Учитывать с». После сохранения стартовое показание будет перенесено на конец месяца перед «Учитывать с», расход и неоплаченные начисления пересчитаются.'
+                          : 'Стартовое показание на конец месяца перед «Учитывать с». Изменение пересчитает расход и неоплаченные начисления.'}
                       value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                       onBlur={(event) => {
                         if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitStartValue(garage, month)
@@ -273,6 +291,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
   const [historicalCorrectionEnabled, setHistoricalCorrectionEnabled] = useState(false)
   const [connectingService, setConnectingService] = useState(false)
+  const [replacementGarage, setReplacementGarage] = useState<MeterReadingYearGarageDto | null>(null)
   const canConnectService = hasPermission(auth, permissions.openingDataAdjust) && hasPermission(auth, permissions.paymentsWrite) && hasPermission(auth, permissions.dictionariesWrite)
   const canEditStartValue = canConnectService && Boolean(financeClient.setMeterStartValue)
 
@@ -791,6 +810,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         meterType={meterType}
         onCommitReading={commitReading}
         onCommitStartValue={commitStartValue}
+        onReplaceMeter={canWritePayments && financeClient.replaceMeterDevice ? setReplacementGarage : undefined}
         onDraftReadingChange={changeDraftReading}
         savedReadings={savedReadings}
         savedReadingReplacements={savedReadingReplacements}
@@ -812,6 +832,9 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         onPageSizeChange={(limit) => { setPageSize(limit); setPageOffset(0) }}
       /> : null}
 
+      {replacementGarage ? <GarageMeterReplacementDialog auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient}
+        garage={replacementGarage} initialMeterKind={meterType} onClose={() => setReplacementGarage(null)}
+        onSaved={() => { setReplacementGarage(null); setReloadRevision((value) => value + 1) }} /> : null}
       {connectingService ? <MeterConnectionBatchDialog accessToken={auth.accessToken} financeClient={financeClient} meterKind={meterType} serviceName={selectedMeterType.label} year={appliedYear} onClose={() => setConnectingService(false)} onSaved={() => { setConnectingService(false); setReloadRevision((value) => value + 1) }} /> : null}
       {pendingReadingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>

@@ -3665,6 +3665,22 @@ input.meter-readings-control {
   white-space: nowrap;
 }
 
+.meter-readings-replace-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  place-items: center;
+  border-radius: 6px;
+  color: #475467;
+}
+
+.meter-readings-replace-button:hover:not(:disabled),
+.meter-readings-replace-button:focus-visible {
+  background: #eef4ff;
+  color: #1d4ed8;
+}
+
 .meter-readings-data-row > span:not(:first-child) {
   display: block;
   min-height: 32px;
