@@ -84,13 +84,15 @@ public sealed class GarageInitialMeterReadingTests
         var dictionaries = DictionaryServiceTestFactory.Create(context, new DateOnly(2026, 3, 1));
         var undatedWater = await dictionaries
             .UpdateGarageAsync(created.Value!.Id, new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, 0, 10, null), null, CancellationToken.None);
-        Assert.Equal("meter_connection_date_required", undatedWater.ErrorCode);
+        // A previously empty baseline is placed before the garage start without rewriting legacy columns.
+        Assert.True(undatedWater.Succeeded, undatedWater.ErrorMessage);
         context.ChangeTracker.Clear();
-        var afterRejection = await context.Garages.SingleAsync();
-        Assert.Null(afterRejection.InitialWaterMeterValue);
-        Assert.Equal(5m, afterRejection.InitialElectricityMeterValue);
+        var afterWater = await context.Garages.SingleAsync();
+        Assert.Null(afterWater.InitialWaterMeterValue);
+        Assert.Equal(10m, afterWater.InitialElectricityMeterValue);
+        Assert.Equal(new DateOnly(2026, 1, 1), (await context.GarageMeterConnections.SingleAsync()).ConnectedOn);
         var updated = await dictionaries
-            .UpdateGarageAsync(created.Value.Id, new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, null, 10, null), null, CancellationToken.None);
+            .UpdateGarageAsync(created.Value.Id, new UpsertGarageRequest("INITIAL-EMPTY", 1, 1, null, 0, null, 10, null, (await context.Garages.SingleAsync()).Version), null, CancellationToken.None);
         Assert.True(updated.Succeeded, updated.ErrorMessage);
         context.ChangeTracker.Clear();
         Assert.Equal(new DateOnly(2025, 12, 1), (await context.Garages.SingleAsync()).InitialMeterReadingMonth);
@@ -99,6 +101,6 @@ public sealed class GarageInitialMeterReadingTests
         Assert.Equal(10, Assert.Single(page.Value!.Garages).InitialReadingValue);
         Assert.Empty(page.Value.Readings);
         Assert.Null((await context.Garages.SingleAsync()).InitialWaterMeterValue);
-        Assert.Empty(await context.GarageMeterConnections.ToListAsync());
+        Assert.Equal(MeterKinds.Water, (await context.GarageMeterConnections.SingleAsync()).MeterKind);
     }
 }

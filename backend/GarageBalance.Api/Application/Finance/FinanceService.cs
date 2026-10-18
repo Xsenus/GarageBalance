@@ -1167,7 +1167,9 @@ public sealed partial class FinanceService(
         var individualPeriodsByService = (await garageTariffAssignmentQuery.GetForGaragePeriodAsync(
             garage.Id, calculationMonthFrom, monthTo, cancellationToken)).ToLookup(period => period.ChargeServiceSettingId);
 
-        var settings = (await chargeServiceSettingRepository.GetActiveRegularAsync(monthTo, cancellationToken))
+        // Each month must use its own tariff versions. A setting loaded for the last month
+        // only would recalculate earlier unpaid months with later (or missing) terms.
+        var settings = (await chargeServiceSettingRepository.GetActiveRegularForPeriodAsync(calculationMonthFrom, monthTo, cancellationToken))
             .Where(setting => setting.IncomeTypeId.HasValue)
             .GroupBy(setting => setting.IncomeTypeId!.Value)
             .Select(group => group.First())
@@ -1321,7 +1323,7 @@ public sealed partial class FinanceService(
                     continue;
                 }
 
-                var tariff = SelectTariffForMonth(setting, month);
+                var tariff = SelectTariffForPeriodMonth(setting, month);
                 if (tariff is null)
                 {
                     calculationIssues[(month, incomeType.Id)] = "Не задан тариф на этот месяц. Добавьте соответствующий тарифный период.";
@@ -1542,7 +1544,7 @@ public sealed partial class FinanceService(
                     if (issue is not null) rows[rowIndex] = rows[rowIndex] with { CalculationIssue = issue };
                     continue;
                 }
-                var tariff = SelectTariffForMonth(setting, month);
+                var tariff = SelectTariffForPeriodMonth(setting, month);
                 var segments = tariff is null ? [] : ApplyGarageTariffPeriods(month, setting, tariff, BuildRegularAccrualSegments(month, setting, tariff), individualPeriodsByService[setting.Id]);
                 var meteredBase = segments
                     .Select(segment => segment.CalculationBase)
@@ -8229,6 +8231,28 @@ public sealed partial class FinanceService(
                 .OrderBy(version => version.EffectiveFrom)
                 .Select(version => version.Tariff)
                 .FirstOrDefault();
+    }
+
+    // A setting loaded for a period carries every overlapping version, while its service-level
+    // tariff describes only the period's last month and must not be reused for earlier months.
+    private static Tariff? SelectTariffForPeriodMonth(ChargeServiceSetting setting, DateOnly accountingMonth)
+    {
+        if (setting.TariffVersions.Count == 0)
+        {
+            return setting.Tariff;
+        }
+
+        var month = MonthPeriod.Normalize(accountingMonth);
+        var monthEnd = month.AddMonths(1).AddDays(-1);
+        return setting.TariffVersions
+            .Where(version =>
+                !version.IsArchived &&
+                !version.Tariff.IsArchived &&
+                version.EffectiveFrom <= monthEnd &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= month))
+            .OrderBy(version => version.EffectiveFrom)
+            .Select(version => version.Tariff)
+            .FirstOrDefault();
     }
 
     private static RegularAccrualSegmentDefinition CreateTariffSegment(

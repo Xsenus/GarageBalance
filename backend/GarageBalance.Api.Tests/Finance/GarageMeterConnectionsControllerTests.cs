@@ -86,6 +86,55 @@ public sealed class GarageMeterConnectionsControllerTests
     }
 
     [Fact]
+    public async Task StartValueReturnsDtoAndForwardsRequestActorAndCancellation()
+    {
+        var fake = new FakeService();
+        var actor = Guid.NewGuid();
+        using var cancellation = new CancellationTokenSource();
+        var request = new SetGarageMeterStartValueRequest(Guid.NewGuid(), "electricity", 320, "Стартовое показание");
+        var result = await CreateController(fake, actor).SetStartValue(request, cancellation.Token);
+        Assert.Same(fake.StartValue.Value, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Same(request, fake.LastStartValue);
+        Assert.Equal(actor, fake.Actor);
+        Assert.Equal(cancellation.Token, fake.Token);
+    }
+
+    [Theory]
+    [InlineData("garage_not_found", 404)]
+    [InlineData("meter_connection_changed", 409)]
+    [InlineData("meter_start_accrual_paid", 409)]
+    [InlineData("meter_start_value_invalid", 400)]
+    [InlineData("meter_start_value_breaks_readings", 400)]
+    public async Task StartValueMapsValidationMissingAndConflictErrors(string code, int status)
+    {
+        var fake = new FakeService { StartValue = FinanceResult<GarageMeterConnectionBatchItemDto>.Failure(code, "Проверка") };
+        var result = await CreateController(fake, null).SetStartValue(new(Guid.NewGuid(), "electricity", 1), CancellationToken.None);
+        var error = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(status, error.StatusCode);
+        Assert.Equal(code, Assert.IsType<ProblemDetails>(error.Value).Extensions["code"]);
+    }
+
+    [Fact]
+    public async Task StartValuePolicyDeniesEveryMissingPermission()
+    {
+        var type = typeof(GarageMeterConnectionsController);
+        var action = type.GetMethod(nameof(GarageMeterConnectionsController.SetStartValue))!;
+        Assert.Equal("start-value", action.GetCustomAttribute<HttpPutAttribute>()!.Template);
+        var policies = type.GetCustomAttributes<AuthorizeAttribute>().Concat(action.GetCustomAttributes<AuthorizeAttribute>())
+            .Select(attribute => attribute.Policy!).Order().ToArray();
+        var expected = new[] { SystemPermissions.DictionariesRead, SystemPermissions.DictionariesWrite, SystemPermissions.OpeningDataAdjust, SystemPermissions.PaymentsWrite }.Order().ToArray();
+        Assert.Equal(expected, policies);
+        foreach (var omitted in expected.Cast<string?>().Append(null))
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(expected.Where(permission => permission != omitted)
+                .Select(permission => new Claim("permission", permission)), "Test"));
+            var context = new AuthorizationHandlerContext(policies.Select(policy => new PermissionRequirement(policy)).ToArray(), principal, null);
+            await new PermissionAuthorizationHandler().HandleAsync(context);
+            Assert.Equal(omitted is null, context.HasSucceeded);
+        }
+    }
+
+    [Fact]
     public async Task PreviewNullItemReturnsTheStructuredValidationError()
     {
         var fake = new FakeService
@@ -112,6 +161,9 @@ public sealed class GarageMeterConnectionsControllerTests
             Enumerable.Range(0, 101).Select(_ => new ConnectGarageMeterItemRequest(Guid.NewGuid(), 0)).ToArray())));
         Assert.False(Valid(new PreviewGarageMeterConnectionsRequest(Guid.NewGuid(), Guid.NewGuid(), [])));
         Assert.False(Valid(new ConnectGarageMeterItemRequest(Guid.NewGuid(), -1)));
+        Assert.False(Valid(new SetGarageMeterStartValueRequest(Guid.NewGuid(), "electricity", -1)));
+        Assert.False(Valid(new SetGarageMeterStartValueRequest(Guid.NewGuid(), "electricity", 1, new string('x', 1001))));
+        Assert.True(Valid(new SetGarageMeterStartValueRequest(Guid.NewGuid(), "electricity", null)));
         Assert.True(Valid(new ConnectGarageMeterItemRequest(Guid.NewGuid(), null)));
         Assert.True(Valid(new ConnectGarageMeterItemRequest(Guid.NewGuid(), 0)));
     }
@@ -133,6 +185,8 @@ public sealed class GarageMeterConnectionsControllerTests
         public FinanceResult<GarageMeterConnectionPreviewDto> Preview { get; init; } = FinanceResult<GarageMeterConnectionPreviewDto>.Success(new(Guid.NewGuid(), "12", [], []));
         public ConnectGarageMetersBatchRequest? LastBatch { get; private set; }
         public PreviewGarageMeterConnectionsRequest? LastPreview { get; private set; }
+        public FinanceResult<GarageMeterConnectionBatchItemDto> StartValue { get; init; } = FinanceResult<GarageMeterConnectionBatchItemDto>.Success(new(Guid.NewGuid(), "12", []));
+        public SetGarageMeterStartValueRequest? LastStartValue { get; private set; }
         public Guid? Actor { get; private set; }
         public CancellationToken Token { get; private set; }
         public Task<FinanceResult<GarageMeterConnectionBatchDto>> ConnectBatchAsync(ConnectGarageMetersBatchRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -142,6 +196,10 @@ public sealed class GarageMeterConnectionsControllerTests
         public Task<FinanceResult<GarageMeterConnectionPreviewDto>> PreviewAsync(PreviewGarageMeterConnectionsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastPreview = request; Actor = actorUserId; Token = cancellationToken; return Task.FromResult(Preview);
+        }
+        public Task<FinanceResult<GarageMeterConnectionBatchItemDto>> SetStartValueAsync(SetGarageMeterStartValueRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastStartValue = request; Actor = actorUserId; Token = cancellationToken; return Task.FromResult(StartValue);
         }
     }
 }

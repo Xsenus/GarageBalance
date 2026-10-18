@@ -1,6 +1,7 @@
 import { authenticatedJsonApiFetch } from './authenticatedApiFetch'
 import type { UpsertGarageMeterStartValueRequest } from './dictionariesApi'
 
+export type MeterStartValueRequest = { garageId: string; meterKind: string; value: number | null; reason?: string }
 export type MeterConnectionChangeDto = { meterKind: string; label: string; oldValue: number | null; newValue: number | null; oldConnectedOn: string | null; newConnectedOn: string | null }
 export type MeterConnectionPreviewDto = {
   garageId: string
@@ -914,6 +915,7 @@ export type CorrectHistoricalMeterReadingRequest = {
 
 export type FinanceClient = {
   connectMeterServicesBatch?(accessToken: string, request: MeterConnectionBatchRequest): Promise<{ items: Array<{ garageId: string; garageNumber: string; changes: MeterConnectionChangeDto[] }> }>
+  setMeterStartValue?(accessToken: string, request: MeterStartValueRequest): Promise<{ garageId: string; garageNumber: string; changes: MeterConnectionChangeDto[] }>
   previewMeterConnections?(accessToken: string, request: { garageId: string; garageVersion: string; values: UpsertGarageMeterStartValueRequest[] }, signal?: AbortSignal): Promise<MeterConnectionPreviewDto>
   getFinancialJournalPage?(accessToken: string, params?: FinancialJournalPageParams, signal?: AbortSignal): Promise<FinancePagedResult<FinancialJournalEntryDto>>
   getOperations(accessToken: string, limit?: number, signal?: AbortSignal): Promise<FinancialOperationDto[]>
@@ -1034,6 +1036,9 @@ export { requestJson as requestFinanceJson }
 export const financeApi: FinanceClient = {
   connectMeterServicesBatch(accessToken, request) {
     return requestJson(accessToken, '/api/finance/meter-connections/batch', { method: 'POST', body: JSON.stringify(request) })
+  },
+  setMeterStartValue(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/meter-connections/start-value', { method: 'PUT', body: JSON.stringify(request) })
   },
   previewMeterConnections(accessToken, request, signal) {
     return requestJson(accessToken, '/api/finance/meter-connections/preview', { method: 'POST', body: JSON.stringify(request), signal })

@@ -1,5 +1,4 @@
 import type { GarageMeterStartValueDto, UpsertGarageMeterStartValueRequest } from '../../services/dictionariesApi'
-import { formatDateOnly } from '../../shared/formatters'
 
 export type GarageMeterStartRow = {
   meterKind: string
@@ -21,10 +20,6 @@ export const maxMeterStartValue = 999999999
 
 export function getGarageMeterStartFieldKey(meterKind: string) {
   return `meter:${meterKind}`
-}
-
-export function getGarageMeterConnectionFieldKey(meterKind: string) {
-  return `meter:${meterKind}:connectedOn`
 }
 
 export function formatMeterStartValue(value: number | null | undefined) {
@@ -69,13 +64,6 @@ export function toGarageMeterStartRows(values: GarageMeterStartValueDto[]): Gara
 export function validateGarageMeterStartRows(rows: GarageMeterStartRow[] | undefined) {
   const errors: Record<string, string> = {}
   for (const row of rows ?? []) {
-    if (row.initialConnectedOn && !row.connectedOn || row.requiresConnectionDate && row.value.trim() && !row.connectedOn) {
-      errors[getGarageMeterConnectionFieldKey(row.meterKind)] = `Укажите дату подключения услуги «${row.label}».`
-    }
-    const parsedDate = new Date(`${row.connectedOn}T00:00:00Z`)
-    if (row.connectedOn && (!/^\d{4}-\d{2}-\d{2}$/.test(row.connectedOn) || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== row.connectedOn)) {
-      errors[getGarageMeterConnectionFieldKey(row.meterKind)] = `Укажите корректную дату подключения услуги «${row.label}».`
-    }
     if (requiresGarageMeterConnectionReason(row) && !row.reason.trim()) {
       errors[`meter:${row.meterKind}:reason`] = `Укажите причину изменения учёта услуги «${row.label}».`
     } else if (row.reason.trim().length > 1000) {
@@ -98,16 +86,19 @@ export function validateGarageMeterStartRows(rows: GarageMeterStartRow[] | undef
 }
 
 export function isGarageMeterStartRowChanged(row: GarageMeterStartRow) {
-  return row.connectedOn !== row.initialConnectedOn || (Boolean(row.connectedOn) || row.value.trim() !== '') && row.value.trim() !== row.initialValue.trim()
+  return row.value.trim() !== row.initialValue.trim()
 }
 
-export function buildGarageMeterStartRequests(rows: GarageMeterStartRow[] | undefined): UpsertGarageMeterStartValueRequest[] {
+// The start value is the reading at the end of the month before the garage's "Учитывать с"
+// month. A connected meter is moved to that month; a new one is placed there by the server.
+export function buildGarageMeterStartRequests(rows: GarageMeterStartRow[] | undefined, accountingStartMonth?: string): UpsertGarageMeterStartValueRequest[] {
   const requests: UpsertGarageMeterStartValueRequest[] = []
   for (const row of rows ?? []) {
     const parsed = parseMeterStartValue(row.value)
-    if (isGarageMeterStartRowChanged(row) && (parsed !== null || row.connectedOn && !row.value.trim())) {
+    if (isGarageMeterStartRowChanged(row) && (parsed !== null || row.initialConnectedOn && !row.value.trim())) {
+      const connectedOn = row.initialConnectedOn ? (accountingStartMonth ? `${accountingStartMonth}-01` : row.initialConnectedOn) : null
       requests.push({ meterKind: row.meterKind, value: parsed,
-        ...(row.connectedOn ? { connectedOn: row.connectedOn, connectionVersion: row.connectionVersion } : {}),
+        ...(connectedOn ? { connectedOn, connectionVersion: row.connectionVersion } : {}),
         ...(row.reason.trim() ? { reason: row.reason.trim() } : {}),
       })
     }
@@ -119,18 +110,22 @@ export function buildGarageMeterStartRequests(rows: GarageMeterStartRow[] | unde
 export function describeGarageMeterStartChanges(rows: GarageMeterStartRow[] | undefined) {
   return (rows ?? [])
     .filter(isGarageMeterStartRowChanged)
-    .flatMap((row) => [
-      ...(row.connectedOn !== row.initialConnectedOn ? [{ fieldLabel: `Дата подключения: ${row.label}`, previousValue: row.initialConnectedOn ? formatDateOnly(row.initialConnectedOn) : '', nextValue: row.connectedOn ? formatDateOnly(row.connectedOn) : '' }] : []),
-      ...(row.value.trim() !== row.initialValue.trim() ? [{ fieldLabel: `Стартовое значение: ${row.label}`, previousValue: row.initialValue, nextValue: row.value }] : []),
-    ])
+    .map((row) => ({ fieldLabel: `Стартовое значение: ${row.label}`, previousValue: row.initialValue, nextValue: row.value }))
 }
 
-export function getGarageMeterConnectionStatus(row: GarageMeterStartRow) {
-  if (!row.connectedOn) return row.requiresConnectionDate ? 'Не подключена' : null
-  if (!row.value.trim()) return 'Требуется стартовое показание'
-  return `Первый расчётный месяц: ${row.connectedOn.slice(5, 7)}.${row.connectedOn.slice(0, 4)}`
+export function getGarageMeterBaselineMonth(accountingStartMonth: string | undefined) {
+  if (!accountingStartMonth || !/^\d{4}-\d{2}$/.test(accountingStartMonth)) return null
+  const [year, month] = accountingStartMonth.split('-').map(Number)
+  const previous = new Date(Date.UTC(year, month - 2, 1))
+  return `${String(previous.getUTCMonth() + 1).padStart(2, '0')}.${previous.getUTCFullYear()}`
+}
+
+export function getGarageMeterConnectionStatus(row: GarageMeterStartRow, accountingStartMonth?: string) {
+  const baselineMonth = getGarageMeterBaselineMonth(accountingStartMonth)
+  if (!row.value.trim()) return row.initialConnectedOn ? 'Требуется стартовое показание' : row.requiresConnectionDate ? 'Не подключена' : null
+  return baselineMonth ? `Показание на конец ${baselineMonth}` : null
 }
 
 export function requiresGarageMeterConnectionReason(row: GarageMeterStartRow) {
-  return isGarageMeterStartRowChanged(row) && Boolean(row.connectedOn) && (Boolean(row.initialConnectedOn) || row.initialValue.trim() !== '' || row.hasReadings)
+  return isGarageMeterStartRowChanged(row) && Boolean(row.initialConnectedOn)
 }

@@ -313,6 +313,39 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         return settings;
     }
 
+    public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForPeriodAsync(
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        var periodStart = new DateOnly(monthFrom.Year, monthFrom.Month, 1);
+        var lastMonth = new DateOnly(monthTo.Year, monthTo.Month, 1);
+        var periodEnd = lastMonth.AddMonths(1).AddDays(-1);
+        var rows = await dbContext.ChargeServiceSettings.AsNoTracking()
+            .Include(setting => setting.IncomeType)
+            .Include(setting => setting.Tariff)
+            .Include(setting => setting.TariffVersions.Where(version =>
+                !version.IsArchived &&
+                version.EffectiveFrom <= periodEnd &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= periodStart)))
+                .ThenInclude(version => version.Tariff)
+            .Where(setting => !setting.IsArchived && setting.IsRegular)
+            .OrderBy(setting => setting.Name)
+            .Select(setting => new ChargeServiceSettingQueryRow(
+                setting,
+                setting.TariffVersions.Any(version => !version.IsArchived && !version.Tariff.IsArchived)))
+            .ToListAsync(cancellationToken);
+        var settings = rows.Select(row => row.Setting).ToList();
+        var servicesWithVersions = rows
+            .Where(row => row.HasTariffVersions)
+            .Select(row => row.Setting.Id)
+            .ToHashSet();
+
+        // The service-level tariff describes the last month; earlier months use the loaded versions.
+        await ApplyTariffsForMonthAsync(settings, lastMonth, cancellationToken, servicesWithVersions);
+        return settings;
+    }
+
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
         DateOnly accountingMonth,
         int limit,

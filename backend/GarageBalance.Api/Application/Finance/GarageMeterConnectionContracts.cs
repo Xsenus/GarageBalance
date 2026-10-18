@@ -15,6 +15,13 @@ public sealed record GarageMeterConnectionBatchItemDto(
 
 public sealed record GarageMeterConnectionBatchDto(IReadOnlyList<GarageMeterConnectionBatchItemDto> Items);
 
+/// <summary>Sets the reading at the end of the month before the garage's accounting start.</summary>
+public sealed record SetGarageMeterStartValueRequest(
+    Guid GarageId,
+    [Required, MaxLength(40)] string MeterKind,
+    [Range(0, 999999999)] decimal? Value,
+    [MaxLength(1000)] string? Reason = null);
+
 public sealed record PreviewGarageMeterConnectionsRequest(
     Guid GarageId,
     Guid GarageVersion,
@@ -41,6 +48,8 @@ public interface IGarageMeterConnectionService
         ConnectGarageMetersBatchRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<FinanceResult<GarageMeterConnectionPreviewDto>> PreviewAsync(
         PreviewGarageMeterConnectionsRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<FinanceResult<GarageMeterConnectionBatchItemDto>> SetStartValueAsync(
+        SetGarageMeterStartValueRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 }
 
 public interface IMeterConnectionWriteScope : IAsyncDisposable

@@ -614,7 +614,7 @@ function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | 
     startingOverdueDebt: parsePrototypeMoney(row.startingOverdueDebt ?? ''),
     initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
     initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
-    ...(buildGarageMeterStartRequests(row.meterStartValues).length > 0 ? { meterStartValues: buildGarageMeterStartRequests(row.meterStartValues) } : {}),
+    ...(buildGarageMeterStartRequests(row.meterStartValues, row.accountingStartMonth).length > 0 ? { meterStartValues: buildGarageMeterStartRequests(row.meterStartValues, row.accountingStartMonth) } : {}),
     comment: row.comment.trim(),
     version: row.version,
   }
@@ -3808,7 +3808,7 @@ function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canRe
   const meterStartLoadKey = `${accessToken}|${existingGarageId ?? 'new'}`
   const [meterStartLoadedKey, setMeterStartLoadedKey] = useState<string | null>(null)
   const [meterPreviewReady, setMeterPreviewReady] = useState(false)
-  const changedMeterStarts = buildGarageMeterStartRequests(form.meterStartValues)
+  const changedMeterStarts = buildGarageMeterStartRequests(form.meterStartValues, form.accountingStartMonth)
   const requiresMeterPreview = Boolean(existingGarageId && financeClient.previewMeterConnections && changedMeterStarts.some((value) => value.connectedOn))
   const meterStartReady = !meterStartLoader || meterStartLoadedKey === meterStartLoadKey
   const openingDataChanged = Boolean(item)
@@ -3939,6 +3939,7 @@ function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canRe
                     loadKey={meterStartLoadKey}
                     load={meterStartLoader}
                     rows={form.meterStartValues}
+                    accountingStartMonth={form.accountingStartMonth ?? getLocalDateInputValue().slice(0, 7)}
                     canManageConnections={canManageMeterConnections}
                     errors={validationErrors}
                     disabled={saving}
@@ -3949,10 +3950,6 @@ function GaragePrototypeDialog({ financeClient, canManageMeterConnections, canRe
                     onChange={(meterKind, value) => setForm((currentForm) => ({
                       ...currentForm,
                       meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, value } : row),
-                    }))}
-                    onConnectionDateChange={(meterKind, connectedOn) => setForm((currentForm) => ({
-                      ...currentForm,
-                      meterStartValues: currentForm.meterStartValues?.map((row) => row.meterKind === meterKind ? { ...row, connectedOn } : row),
                     }))}
                     onReasonChange={(meterKind, reason) => setForm((currentForm) => ({
                       ...currentForm,

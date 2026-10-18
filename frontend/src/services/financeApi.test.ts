@@ -14,6 +14,9 @@ describe('financeApi', () => {
     const controller = new AbortController()
     await financeApi.previewMeterConnections!('token', preview, controller.signal)
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/meter-connections/preview', expect.objectContaining({ method: 'POST', body: JSON.stringify(preview), signal: expect.any(AbortSignal) }))
+    const start = { garageId: 'g1', meterKind: 'electricity', value: 320, reason: 'Акт' }
+    await financeApi.setMeterStartValue!('token', start)
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/finance/meter-connections/start-value', expect.objectContaining({ method: 'PUT', body: JSON.stringify(start) }))
   })
   it('loads a bounded garage device history and sends exact cancellation versions and reason', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [], totalCount: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })))

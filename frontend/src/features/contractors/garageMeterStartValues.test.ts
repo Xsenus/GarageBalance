@@ -3,6 +3,7 @@ import {
   buildGarageMeterStartRequests,
   describeGarageMeterStartChanges,
   formatMeterStartValue,
+  getGarageMeterBaselineMonth,
   getGarageMeterStartFieldKey,
   getGarageMeterConnectionStatus,
   requiresGarageMeterConnectionReason,
@@ -51,43 +52,34 @@ describe('garage meter start values', () => {
     expect(buildGarageMeterStartRequests(undefined)).toEqual([])
   })
 
-  it('saves a dated pending connection and distinguishes an explicitly entered zero', () => {
+  it('places a new start value before "Учитывать с" without a separate connection date', () => {
     const [row] = toGarageMeterStartRows([dto({ value: null, requiresConnectionDate: true })])
-    expect(getGarageMeterConnectionStatus(row)).toBe('Не подключена')
-    const dated = { ...row, connectedOn: '2026-09-10' }
-    expect(validateGarageMeterStartRows([dated])).toEqual({})
-    expect(buildGarageMeterStartRequests([dated])).toEqual([{ meterKind: 'water', value: null, connectedOn: '2026-09-10', connectionVersion: null }])
-    expect(getGarageMeterConnectionStatus(dated)).toBe('Требуется стартовое показание')
-    expect(buildGarageMeterStartRequests([{ ...dated, value: '0' }])[0].value).toBe(0)
-    expect(getGarageMeterConnectionStatus({ ...dated, value: '0' })).toBe('Первый расчётный месяц: 09.2026')
-    expect(describeGarageMeterStartChanges([dated])).toEqual([{ fieldLabel: 'Дата подключения: Вода', previousValue: '', nextValue: '10.09.2026' }])
+    expect(getGarageMeterConnectionStatus(row, '2026-09')).toBe('Не подключена')
+    const entered = { ...row, value: '320' }
+    expect(validateGarageMeterStartRows([entered])).toEqual({})
+    expect(buildGarageMeterStartRequests([entered], '2026-09')).toEqual([{ meterKind: 'water', value: 320 }])
+    expect(getGarageMeterConnectionStatus(entered, '2026-09')).toBe('Показание на конец 08.2026')
+    expect(getGarageMeterConnectionStatus(entered, '2027-01')).toBe('Показание на конец 12.2026')
+    expect(getGarageMeterConnectionStatus(entered)).toBeNull()
+    expect(getGarageMeterBaselineMonth('invalid')).toBeNull()
+    expect(buildGarageMeterStartRequests([{ ...row, value: '0' }])[0].value).toBe(0)
+    expect(requiresGarageMeterConnectionReason(entered)).toBe(false)
   })
 
-  it('requires valid dates for new services and prevents removing dates or recorded baselines', () => {
-    const [row] = toGarageMeterStartRows([dto({ value: null, requiresConnectionDate: true })])
-    expect(validateGarageMeterStartRows([{ ...row, value: '0' }])).toHaveProperty('meter:water:connectedOn')
-    for (const connectedOn of ['2026-02-30', '2026-13-01', 'invalid']) {
-      expect(validateGarageMeterStartRows([{ ...row, connectedOn }])).toHaveProperty('meter:water:connectedOn')
-    }
-    expect(validateGarageMeterStartRows([{ ...row, connectedOn: '2028-02-29' }])).toEqual({})
-    const [active] = toGarageMeterStartRows([dto({ connectedOn: '2026-09-10', hasReadings: true, connectionVersion: 'v1' })])
-    expect(validateGarageMeterStartRows([{ ...active, connectedOn: '' }])).toHaveProperty('meter:water:connectedOn')
-    expect(validateGarageMeterStartRows([{ ...active, value: '', reason: 'Акт' }])).toHaveProperty('meter:water')
-    expect(getGarageMeterConnectionStatus(toGarageMeterStartRows([dto()])[0])).toBeNull()
-  })
-
-  it('requires reasons for existing connections and legacy histories while preserving concurrency versions', () => {
-    const [row] = toGarageMeterStartRows([dto({ connectedOn: '2026-09-10', connectionVersion: 'v1' })])
+  it('moves an existing connection to the garage start and keeps its version and reason', () => {
+    const [row] = toGarageMeterStartRows([dto({ connectedOn: '2026-10-18', connectionVersion: 'v1', value: 320 })])
     expect(requiresGarageMeterConnectionReason(row)).toBe(false)
-    const changed = { ...row, connectedOn: '2026-09-12', value: '250' }
+    const changed = { ...row, value: '330' }
     expect(validateGarageMeterStartRows([changed])).toHaveProperty('meter:water:reason')
     expect(validateGarageMeterStartRows([{ ...changed, reason: 'a'.repeat(1001) }])).toHaveProperty('meter:water:reason')
-    const withReason = { ...changed, reason: '  Акт подключения  ' }
+    const withReason = { ...changed, reason: '  Акт  ' }
     expect(validateGarageMeterStartRows([withReason])).toEqual({})
-    expect(buildGarageMeterStartRequests([withReason])).toEqual([{ meterKind: 'water', value: 250, connectedOn: '2026-09-12', connectionVersion: 'v1', reason: 'Акт подключения' }])
-    expect(describeGarageMeterStartChanges([withReason])[0]).toEqual({ fieldLabel: 'Дата подключения: Вода', previousValue: '10.09.2026', nextValue: '12.09.2026' })
+    expect(buildGarageMeterStartRequests([withReason], '2026-09')).toEqual([{ meterKind: 'water', value: 330, connectedOn: '2026-09-01', connectionVersion: 'v1', reason: 'Акт' }])
+    expect(buildGarageMeterStartRequests([withReason])).toEqual([{ meterKind: 'water', value: 330, connectedOn: '2026-10-18', connectionVersion: 'v1', reason: 'Акт' }])
+    expect(getGarageMeterConnectionStatus({ ...row, value: '' })).toBe('Требуется стартовое показание')
+    expect(validateGarageMeterStartRows([{ ...row, hasReadings: true, value: '', reason: 'Акт' }])).toHaveProperty('meter:water')
+    expect(describeGarageMeterStartChanges([withReason])).toEqual([{ fieldLabel: 'Стартовое значение: Вода', previousValue: '320', nextValue: '330' }])
     const [legacy] = toGarageMeterStartRows([dto({ hasReadings: true })])
-    expect(requiresGarageMeterConnectionReason({ ...legacy, connectedOn: '2026-09-01' })).toBe(true)
     expect(requiresGarageMeterConnectionReason({ ...legacy, value: '250' })).toBe(false)
   })
 })

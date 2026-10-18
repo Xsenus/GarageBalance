@@ -20,6 +20,11 @@ public interface IChargeServiceSettingRepository
         CancellationToken cancellationToken);
     // Includes the linked IncomeType so financial callers need no second lookup.
     Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
+    // Loads every tariff version overlapping the whole period, so each month can resolve its own terms.
+    Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForPeriodAsync(
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
         DateOnly accountingMonth,
         int limit,

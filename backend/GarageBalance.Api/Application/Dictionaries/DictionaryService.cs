@@ -510,6 +510,19 @@ public sealed class DictionaryService(
         var oldInitialWaterMeterValue = garage.InitialWaterMeterValue;
         var oldInitialElectricityMeterValue = garage.InitialElectricityMeterValue;
         var meterStartRequests = BuildMeterStartValueRequests(garage, initialWaterMeterValue, initialElectricityMeterValue, request.MeterStartValues);
+        if (accountingStartChanged)
+        {
+            // Connected meters keep their start value at the end of the month before the
+            // garage's "Учитывать с" month, so they move together with the corrected start.
+            foreach (var current in await garageMeterBaselineService.GetStartValuesAsync(garage, cancellationToken))
+            {
+                if (current.ConnectedOn.HasValue && meterStartRequests.All(item => item.MeterKind != current.MeterKind))
+                {
+                    meterStartRequests.Add(new UpsertGarageMeterStartValueRequest(
+                        current.MeterKind, current.Value, Reason: request.AccountingStartReason?.Trim()));
+                }
+            }
+        }
         GarageMeterStartValueApplyResult? meterStart = null;
         GarageAccountingStartChange? accountingStart = null;
         try
@@ -522,7 +535,9 @@ public sealed class DictionaryService(
             }
             if (meterStartRequests.Count > 0)
             {
-                var applied = await garageMeterBaselineService.ApplyStartValuesAsync(garage, meterStartRequests, actorUserId, cancellationToken);
+                // A corrected "Учитывать с" (which requires opening-data rights) moves connected meters with it.
+                var applied = await garageMeterBaselineService.ApplyStartValuesAsync(
+                    garage, meterStartRequests, actorUserId, cancellationToken, alignConnectionsToGarageStart: accountingStartChanged);
                 if (!applied.Succeeded)
                 {
                     return DictionaryResult<GarageDto>.Failure(applied.ErrorCode!, applied.ErrorMessage!);
