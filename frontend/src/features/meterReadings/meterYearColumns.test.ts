@@ -53,7 +53,7 @@ describe('visible meter months and the start value month', () => {
   })
   it('uses the explicit device or connection base instead of a stale garage value', () => {
     expect(getMeterReadingStartDisplay({ id: 'a', number: '1', initialReadingValue: 9, startValue: 100, startValueDate: '2026-08-31', startValueSource: 'device', startValueDeviceSerial: 'ORIGINAL' })).toEqual({ value: 100, description: 'Прибор ORIGINAL · 31.08.2026' })
-    expect(getMeterReadingStartDisplay({ id: 'a', number: '1', initialReadingValue: 999, startValue: 0, startValueSource: 'connection', startValueDate: '2026-09-10' })).toEqual({ value: 0, description: 'Подключение 10.09.2026' })
+    expect(getMeterReadingStartDisplay({ id: 'a', number: '1', initialReadingValue: 999, startValue: 0, startValueSource: 'connection', startValueDate: '2026-09-10', connectedOn: '2026-09-10' })).toEqual({ value: 0, description: 'База за 08.2026' })
     expect(getMeterReadingStartDisplay({ id: 'a', number: '1', initialReadingValue: 999, startValueSource: 'unknown', connectedOn: '2026-09-10' })).toEqual({ value: null, description: 'Подключено 10.09.2026' })
   })
 })

@@ -48,8 +48,9 @@ export function getMeterReadingStartDisplay(garage: MeterReadingYearGarageDto) {
   const value = garage.startValueSource ? garage.startValue ?? null : !garage.connectedOn ? garage.initialReadingValue ?? null : null
   const date = garage.startValueSource ? garage.startValueDate : garage.initialReadingMonth
   const formattedDate = date ? (source === 'legacy' ? date.slice(0, 7) : date.slice(0, 10)).split('-').reverse().join('.') : null
+  const baselineMonth = getMeterBaselineMonth(garage)
   const description = source === 'connection'
-    ? `Подключение${formattedDate ? ` ${formattedDate}` : ''}`
+    ? baselineMonth ? `База за ${baselineMonth.split('-').reverse().join('.')}` : 'Месяц базы неизвестен'
     : source === 'device'
       ? `Прибор${garage.startValueDeviceSerial ? ` ${garage.startValueDeviceSerial}` : ''}${formattedDate ? ` · ${formattedDate}` : ''}`
       : source === 'legacy'

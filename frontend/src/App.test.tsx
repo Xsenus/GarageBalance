@@ -8887,7 +8887,7 @@ describe('App', () => {
     const start = await screen.findByLabelText('Гараж START, стартовое показание')
     expect(start).toHaveTextContent('100')
     expect(start).toHaveTextContent('Прибор ORIGINAL · 31.08.2026')
-    expect(screen.getByLabelText('Гараж CONNECTED, стартовое показание')).toHaveTextContent('0Подключение 10.10.2026')
+    expect(screen.getByLabelText('Гараж CONNECTED, стартовое показание')).toHaveTextContent('0База за 09.2026')
     expect(screen.queryByLabelText('Гараж START, Август, показание')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Гараж START, Январь, показание')).not.toBeInTheDocument()
     const connectedStart = screen.getByLabelText('Гараж CONNECTED, Сентябрь, стартовое показание')
