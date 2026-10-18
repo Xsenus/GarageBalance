@@ -8997,7 +8997,8 @@ describe('App', () => {
       garages: [
         { id: 'g-start', number: '903', accountingStartMonth: '2026-09-01', connectedOn: '2026-09-01', startValue, startValueSource: 'connection' as const, startValueDate: '2026-09-01' },
         { id: 'g-new', number: '904', accountingStartMonth: '2026-09-01', requiresConnectionDate: true },
-      ], readings: [], totalCount: 2, offset: 0, limit: 25, currentAccountingMonth: '2026-10-01',
+        { id: 'g-late', number: '906', accountingStartMonth: '2026-09-01', connectedOn: '2026-10-18', startValue: 320, startValueSource: 'connection' as const, startValueDate: '2026-10-18' },
+      ], readings: [], totalCount: 3, offset: 0, limit: 25, currentAccountingMonth: '2026-10-01',
     }))
     const setMeterStartValue = vi.fn(async (_token: string, request: { garageId: string; value: number | null }) => {
       if (request.garageId === 'g-start') startValue = request.value ?? 0
@@ -9017,6 +9018,9 @@ describe('App', () => {
     expect(start).toBeEnabled()
     expect(within(panel).queryByLabelText('Гараж 903, Июль, показание')).not.toBeInTheDocument()
     expect(within(panel).getByLabelText('Гараж 903, Сентябрь, показание')).toBeEnabled()
+    const late = within(panel).getByLabelText('Гараж 906, Сентябрь, стартовое показание')
+    expect(late).toHaveValue('320')
+    expect(late).toHaveAttribute('title', expect.stringContaining('подключён позже «Учитывать с»'))
 
     await user.clear(start)
     await user.type(start, '330')
@@ -9045,6 +9049,50 @@ describe('App', () => {
     await user.click(within(failed).getByRole('button', { name: 'Отмена' }))
     expect(within(panel).getByLabelText('Гараж 903, Август, стартовое показание')).toHaveValue('330')
     expect(createReading).not.toHaveBeenCalled()
+  }, 20000)
+
+  it.each([
+    [500, 550, 80],
+    [300, 330, 60],
+    [250, 310, 90],
+  ])('opens meter replacement from the readings row and shows the customer consumption for new start %s', async (newStart, monthEnd, expected) => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'readings-replacement-tariff', calculationBase: 'meter_electricity' })
+    const replaceMeterDevice = vi.fn(async () => ({ device: {}, reading: {} }))
+    const financeClient = createFinanceClient({
+      replaceMeterDevice,
+      getMeterReadingsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 100 }),
+      getMeterDevices: async () => [{ id: 'old', garageId: 'g-rep', meterKind: 'electricity', serialNumber: 'OLD', installedOn: '2026-08-01', removedOn: null, initialValue: 250, finalValue: null, version: 'v', lastReadingValue: 270 }],
+      getMeterReadingYearPage: async () => ({
+        garages: [{ id: 'g-rep', number: '905', accountingStartMonth: '2026-09-01', connectedOn: '2026-09-01', startValue: 250, startValueSource: 'connection' as const, startValueDate: '2026-09-01' }],
+        readings: [], totalCount: 1, offset: 0, limit: 25, currentAccountingMonth: '2026-10-01',
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getTariffs: async () => [tariff], getChargeServiceSettings: async () => [createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: tariff.id, tariffCalculationBase: 'meter_electricity', meterKind: 'electricity' })] })}
+      financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    await user.click(await screen.findByRole('button', { name: 'Заменить счётчик: гараж 905' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Замена счётчика' })
+    expect(within(dialog).getByLabelText('Счётчик для замены')).toHaveTextContent('Электроэнергия')
+    await waitFor(() => expect(within(dialog).getByLabelText('Конечное показание старого счетчика')).toHaveValue('270'))
+    const final = within(dialog).getByLabelText('Конечное показание старого счетчика')
+    await user.clear(final)
+    await user.type(final, '300')
+    await user.type(within(dialog).getByLabelText('Номер нового счетчика'), 'NEW-1')
+    const initial = within(dialog).getByLabelText('Начальное показание нового счетчика')
+    await user.clear(initial)
+    await user.type(initial, String(newStart))
+    const current = within(dialog).getByLabelText('Текущее показание нового счетчика')
+    await user.clear(current)
+    await user.type(current, String(monthEnd))
+    expect(within(dialog).getByText(new RegExp(`Расход за месяц: ${expected} `))).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('Причина замены счетчика'), 'Замена по акту')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить замену' }))
+    await waitFor(() => expect(replaceMeterDevice).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: 'g-rep', meterKind: 'electricity', removedDeviceFinalValue: 300, newInitialValue: newStart, currentValue: monthEnd, newSerialNumber: 'NEW-1' })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Замена счётчика' })).not.toBeInTheDocument())
   }, 20000)
 
   it('keeps the start value read-only without opening-data permission', async () => {
