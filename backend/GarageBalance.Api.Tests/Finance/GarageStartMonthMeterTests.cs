@@ -143,6 +143,59 @@ public sealed class GarageStartMonthMeterTests
         Assert.Contains(await context.AuditEvents.ToListAsync(), item => item.Action == "finance.meter_connection_changed");
     }
 
+    // Garages after a meter accounting restart keep the restart boundary as their baseline device.
+    [Fact]
+    public async Task Sqlite_RestartBoundaryDefinesTheBaseMonthAndItsValueIsCorrectedWithoutAConnection()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        await AssertRestartBoundaryAsync(database.Context);
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSql_RestartBoundaryDefinesTheBaseMonthAndItsValueIsCorrectedWithoutAConnection()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        await AssertRestartBoundaryAsync(context);
+    }
+
+    private static async Task AssertRestartBoundaryAsync(GarageBalanceDbContext context)
+    {
+        var setting = await SeedElectricityAsync(context);
+        var garage = new Garage { Number = "SYNTHETIC-RESTART", RegisteredOn = new(2025, 1, 1), AccountingStartMonth = new(2026, 1, 1), PeopleCount = 1, InitialElectricityMeterValue = 0, InitialMeterReadingMonth = September };
+        var removed = new MeterDevice { Garage = garage, MeterKind = setting.MeterKind!, SerialNumber = "OLD-1", InstalledOn = new(2025, 1, 1), InitialValue = 10, RemovedOn = September.AddMonths(1).AddDays(-1), FinalValue = 90 };
+        var boundary = new MeterDevice { Garage = garage, MeterKind = setting.MeterKind!, SerialNumber = $"{MeterBaselineResolver.RestartDeviceSerialPrefix} 01.10.2026", InstalledOn = October, InitialValue = 0 };
+        context.AddRange(garage, removed, boundary,
+            new MeterReading { Garage = garage, MeterKind = setting.MeterKind!, MeterDevice = removed, AccountingMonth = September, ReadingDate = September.AddDays(29), CurrentValue = 90, Consumption = 80, IsCanceled = true });
+        await context.SaveChangesAsync();
+        var finance = FinanceServiceTestFactory.Create(context, businessDate: Today);
+        var reading = await finance.CreateMeterReadingAsync(new(garage.Id, setting.MeterKind!, October, October.AddDays(9), 120, null), null, CancellationToken.None);
+        Assert.True(reading.Succeeded, reading.ErrorMessage);
+        Assert.Equal(120m, reading.Value!.Consumption);
+        context.ChangeTracker.Clear();
+
+        var start = Assert.Single(await finance.GetStartValuesAsync(await context.Garages.SingleAsync(item => item.Id == garage.Id), CancellationToken.None));
+        Assert.Equal(October, start.BaselineStartsOn);
+        Assert.Null(start.ConnectedOn);
+        var year = Assert.Single((await new EfMeterReadingRepository(context).GetYearPageAsync(2026, setting.MeterKind!, 0, 25, CancellationToken.None)).Garages);
+        Assert.Equal(("device", October, 0m), (year.StartValueSource, year.StartValueDate, year.StartValue));
+        context.ChangeTracker.Clear();
+
+        var corrected = await CreateConnectionService(context).SetStartValueAsync(
+            new(garage.Id, setting.MeterKind!, 100, "Показание на конец сентября"), null, CancellationToken.None);
+
+        Assert.True(corrected.Succeeded, corrected.ErrorMessage);
+        Assert.Equal((0m, 100m), (Assert.Single(corrected.Value!.Changes).OldValue, corrected.Value.Changes[0].NewValue));
+        context.ChangeTracker.Clear();
+        Assert.False(await context.GarageMeterConnections.AnyAsync());
+        var devices = await context.MeterDevices.AsNoTracking().OrderBy(item => item.InstalledOn).ToListAsync();
+        Assert.Equal([(new DateOnly(2025, 1, 1), 10m), (October, 100m)], devices.Select(item => (item.InstalledOn, item.InitialValue)).ToArray());
+        Assert.Equal(20m, (await context.MeterReadings.AsNoTracking().SingleAsync(item => !item.IsCanceled)).Consumption);
+        Assert.Equal(100m, (await context.Accruals.AsNoTracking()
+            .SingleAsync(item => item.GarageId == garage.Id && item.IncomeTypeId == setting.IncomeTypeId && !item.IsCanceled)).Amount);
+        Assert.True(await context.MeterReadings.AnyAsync(item => item.IsCanceled && item.CurrentValue == 90));
+    }
+
     [Fact]
     public async Task GarageCreatedWithoutStartMonthUsesItsRegistrationMonth()
     {

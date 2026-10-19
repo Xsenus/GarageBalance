@@ -13,6 +13,7 @@ export type GarageMeterStartRow = {
   requiresStartValue: boolean
   requiresTariff: boolean
   connectionVersion: string | null
+  baselineStartsOn: string
   reason: string
 }
 
@@ -56,6 +57,7 @@ export function toGarageMeterStartRows(values: GarageMeterStartValueDto[]): Gara
       requiresStartValue: item.requiresStartValue ?? false,
       requiresTariff: item.requiresTariff ?? false,
       connectionVersion: item.connectionVersion ?? null,
+      baselineStartsOn: item.baselineStartsOn ?? '',
       reason: '',
     }
   })
@@ -113,15 +115,22 @@ export function describeGarageMeterStartChanges(rows: GarageMeterStartRow[] | un
     .map((row) => ({ fieldLabel: `Стартовое значение: ${row.label}`, previousValue: row.initialValue, nextValue: row.value }))
 }
 
-export function getGarageMeterBaselineMonth(accountingStartMonth: string | undefined) {
+// The base month precedes "Учитывать с", or a later meter accounting restart boundary.
+export function getGarageMeterBaselineMonth(accountingStartMonth: string | undefined, baselineStartsOn?: string) {
   if (!accountingStartMonth || !/^\d{4}-\d{2}$/.test(accountingStartMonth)) return null
-  const [year, month] = accountingStartMonth.split('-').map(Number)
+  const boundary = baselineStartsOn?.slice(0, 7)
+  const start = boundary && /^\d{4}-\d{2}$/.test(boundary) && boundary > accountingStartMonth ? boundary : accountingStartMonth
+  const [year, month] = start.split('-').map(Number)
   const previous = new Date(Date.UTC(year, month - 2, 1))
   return `${String(previous.getUTCMonth() + 1).padStart(2, '0')}.${previous.getUTCFullYear()}`
 }
 
+export function isGarageMeterBaselineAfterAccountingStart(row: GarageMeterStartRow, accountingStartMonth: string | undefined) {
+  return Boolean(accountingStartMonth && row.baselineStartsOn && row.baselineStartsOn.slice(0, 7) > accountingStartMonth)
+}
+
 export function getGarageMeterConnectionStatus(row: GarageMeterStartRow, accountingStartMonth?: string) {
-  const baselineMonth = getGarageMeterBaselineMonth(accountingStartMonth)
+  const baselineMonth = getGarageMeterBaselineMonth(accountingStartMonth, row.baselineStartsOn)
   if (!row.value.trim()) return row.initialConnectedOn ? 'Требуется стартовое показание' : row.requiresConnectionDate ? 'Не подключена' : null
   return baselineMonth ? `Показание на конец ${baselineMonth}` : null
 }

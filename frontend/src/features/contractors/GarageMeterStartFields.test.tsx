@@ -47,6 +47,17 @@ it('shows the start month before "Учитывать с" without a connection da
   expect(props.onReasonChange).toHaveBeenCalledWith('water', 'Акт сверки')
 })
 
+it('uses a later meter accounting restart boundary for the base month and its help', async () => {
+  const props = makeProps()
+  const restarted: GarageMeterStartValueDto = { ...values[0], value: 53547, hasReadings: false, baselineStartsOn: '2026-10-01' }
+  const { rerender } = render(<GarageMeterStartFields {...props} rows={toGarageMeterStartRows([restarted])} accountingStartMonth="2026-08" />)
+  expect(await screen.findByText('Показание на конец 09.2026')).toBeInTheDocument()
+  expect(screen.getByLabelText('Справка: Старт. зн. сч.: Вода')).toHaveAccessibleDescription(/на конец 09\.2026 — месяца перед началом нового учёта показаний/)
+  rerender(<GarageMeterStartFields {...props} rows={toGarageMeterStartRows([restarted])} accountingStartMonth="2026-11" />)
+  expect(screen.getByText('Показание на конец 10.2026')).toBeInTheDocument()
+  expect(screen.getByLabelText('Справка: Старт. зн. сч.: Вода')).toHaveAccessibleDescription(/на конец 10\.2026 — месяца перед «Учитывать с»/)
+})
+
 it('shows unconnected services without requiring a correction reason', async () => {
   const props = makeProps()
   render(<GarageMeterStartFields {...props} rows={toGarageMeterStartRows([{ ...values[0], value: null, hasReadings: false, requiresConnectionDate: true }])} />)

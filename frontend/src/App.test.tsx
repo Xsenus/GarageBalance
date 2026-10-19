@@ -8886,7 +8886,8 @@ describe('App', () => {
     await openSection(user, 'Показания')
     const start = await screen.findByLabelText('Гараж START, стартовое показание')
     expect(start).toHaveTextContent('100')
-    expect(start).toHaveTextContent('Прибор ORIGINAL · 31.08.2026')
+    expect(start).toHaveTextContent('База за 08.2026 · прибор ORIGINAL')
+    expect(screen.getByLabelText('Гараж START, Август, стартовое показание')).toHaveValue('100')
     expect(screen.getByLabelText('Гараж CONNECTED, стартовое показание')).toHaveTextContent('0База за 09.2026')
     expect(screen.queryByLabelText('Гараж START, Август, показание')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Гараж START, Январь, показание')).not.toBeInTheDocument()
@@ -9053,6 +9054,51 @@ describe('App', () => {
     await user.click(within(failed).getByRole('button', { name: 'Отмена' }))
     expect(within(panel).getByLabelText('Гараж 903, Август, стартовое показание')).toHaveValue('330')
     expect(createReading).not.toHaveBeenCalled()
+  }, 20000)
+
+  it('shows the base month of a garage after a meter accounting restart and edits its start value', async () => {
+    const user = userEvent.setup()
+    const tariff = createTariff({ id: 'restart-start-tariff', calculationBase: 'meter_electricity' })
+    let startValue = 53547
+    const reading = (id: string, garageId: string, accountingMonth: string, currentValue: number) => ({ id, garageId, accountingMonth, currentValue, version: `${id}-v`, meterDeviceId: null, meterDeviceSerialNumber: null, isMeterReplacement: false })
+    const getMeterReadingYearPage = vi.fn(async () => ({
+      garages: [
+        { id: 'g-restart', number: '1', accountingStartMonth: '2020-01-01', initialReadingMonth: '2026-09-01', initialReadingValue: 0, startValue, startValueSource: 'device' as const, startValueDate: '2026-10-01', startValueDeviceSerial: 'Начало учёта 01.10.2026' },
+        { id: 'g-history', number: '2', accountingStartMonth: '2020-01-01', startValue: 10, startValueSource: 'device' as const, startValueDate: '2026-10-01', startValueDeviceSerial: 'Начало учёта 01.10.2026' },
+      ],
+      readings: [reading('r-1', 'g-restart', '2026-10-01', 53782), reading('r-2', 'g-history', '2026-08-01', 5)],
+      totalCount: 2, offset: 0, limit: 25, currentAccountingMonth: '2026-10-01',
+    }))
+    const setMeterStartValue = vi.fn(async (_token: string, request: { garageId: string; value: number | null }) => {
+      startValue = request.value ?? 0
+      return { garageId: request.garageId, garageNumber: '1', changes: [] }
+    })
+    render(<App authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getTariffs: async () => [tariff], getChargeServiceSettings: async () => [createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: tariff.id, tariffCalculationBase: 'meter_electricity', meterKind: 'electricity' })] })}
+      financeClient={createFinanceClient({ getMeterReadingYearPage, setMeterStartValue })}
+      importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    const panel = await screen.findByRole('region', { name: 'Показания' })
+    expect(await within(panel).findByLabelText('Гараж 1, стартовое показание')).toHaveTextContent('53547База за 09.2026')
+    const start = within(panel).getByLabelText('Гараж 1, Сентябрь, стартовое показание')
+    expect(start).toHaveValue('53547')
+    expect(start).toBeEnabled()
+    expect(start).toHaveAttribute('title', expect.stringContaining('на конец 09.2026'))
+    expect(within(panel).getByLabelText('Гараж 1, Октябрь, показание')).toHaveValue('53782')
+    expect(within(panel).getByLabelText('Гараж 1, Август, показание')).toBeDisabled()
+    // An entered reading before the base month keeps the ordinary cell instead of a start value.
+    expect(within(panel).queryByLabelText('Гараж 2, Сентябрь, стартовое показание')).not.toBeInTheDocument()
+    expect(within(panel).getByLabelText('Гараж 2, Август, показание')).toHaveValue('5')
+
+    await user.clear(start)
+    await user.type(start, '53600')
+    await user.tab()
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить стартовое показание?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(setMeterStartValue).toHaveBeenCalledWith('token', { garageId: 'g-restart', meterKind: 'electricity', value: 53600 }))
+    await waitFor(() => expect(within(panel).getByLabelText('Гараж 1, Сентябрь, стартовое показание')).toHaveValue('53600'))
   }, 20000)
 
   it.each([

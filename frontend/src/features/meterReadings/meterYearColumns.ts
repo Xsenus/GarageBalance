@@ -6,16 +6,23 @@ function getPreviousMonth(month: string) {
   return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+// Logical boundary written when meter accounting is restarted; it is not a physical device.
+export const meterAccountingRestartSerialPrefix = 'Начало учёта'
+const unnumberedMeterSerial = 'Без номера'
+
+function getPreviousMonthOfLatest(...months: (string | null | undefined)[]) {
+  const latest = months.map((value) => value?.slice(0, 7)).filter((value): value is string => Boolean(value)).sort().at(-1)
+  return latest ? getPreviousMonth(latest) : null
+}
+
 // The start value is the reading at the end of the month before the garage's "Учитывать с"
-// month (or before a later service connection). That month is shown as an editable column.
+// month, or before a later service connection or meter accounting restart. That month is
+// shown as an editable column.
 export function getMeterBaselineMonth(garage: MeterReadingYearGarageDto) {
-  if (garage.connectedOn) {
-    const starts = [garage.accountingStartMonth?.slice(0, 7), garage.connectedOn.slice(0, 7)]
-      .filter((value): value is string => Boolean(value))
-      .sort()
-    return getPreviousMonth(starts.at(-1)!)
+  if (garage.connectedOn) return getPreviousMonthOfLatest(garage.accountingStartMonth, garage.connectedOn)
+  if (garage.startValueSource === 'device') {
+    return garage.startValueDate ? getPreviousMonthOfLatest(garage.accountingStartMonth, garage.startValueDate) : null
   }
-  if (garage.startValueSource === 'device') return null
   if (garage.initialReadingMonth) return garage.initialReadingMonth.slice(0, 7)
   return garage.accountingStartMonth ? getPreviousMonth(garage.accountingStartMonth.slice(0, 7)) : null
 }
@@ -52,9 +59,17 @@ export function getMeterReadingStartDisplay(garage: MeterReadingYearGarageDto) {
   const description = source === 'connection'
     ? baselineMonth ? `База за ${baselineMonth.split('-').reverse().join('.')}` : 'Месяц базы неизвестен'
     : source === 'device'
-      ? `Прибор${garage.startValueDeviceSerial ? ` ${garage.startValueDeviceSerial}` : ''}${formattedDate ? ` · ${formattedDate}` : ''}`
+      ? getDeviceStartDescription(baselineMonth, garage.startValueDeviceSerial, formattedDate)
       : source === 'legacy'
         ? formattedDate ? `База за ${formattedDate}` : 'Месяц базы неизвестен'
         : garage.connectedOn ? `Подключено ${garage.connectedOn.slice(0, 10).split('-').reverse().join('.')}` : 'База не заполнена'
   return { value, description }
+}
+
+function getDeviceStartDescription(baselineMonth: string | null, serial: string | null | undefined, formattedDate: string | null) {
+  const physicalSerial = serial?.trim() && !serial.startsWith(meterAccountingRestartSerialPrefix) && serial.trim() !== unnumberedMeterSerial
+    ? serial.trim()
+    : null
+  if (!baselineMonth) return `Прибор${physicalSerial ? ` ${physicalSerial}` : ''}${formattedDate ? ` · ${formattedDate}` : ''}`
+  return `База за ${baselineMonth.split('-').reverse().join('.')}${physicalSerial ? ` · прибор ${physicalSerial}` : ''}`
 }

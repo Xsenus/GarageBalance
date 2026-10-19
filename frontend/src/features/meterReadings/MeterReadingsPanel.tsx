@@ -146,7 +146,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
           <span role="columnheader">Гараж</span>
           <span className="meter-readings-start-header" role="columnheader">
             <strong>Стартовое показание</strong>
-            <FieldHelp label="Стартовое показание">Стартовое показание — значение счётчика на конец месяца, предшествующего «Учитывать с» в карточке гаража. Этот месяц показан в таблице первым, значение в нём можно исправить: расход и неоплаченные начисления пересчитаются. Ноль — известное значение, «Не задано» — неизвестная база.</FieldHelp>
+            <FieldHelp label="Стартовое показание">Стартовое показание — значение счётчика на конец месяца, предшествующего «Учитывать с» в карточке гаража или началу нового учёта показаний, если оно позже. Этот месяц показан в таблице первым, значение в нём можно исправить: расход и неоплаченные начисления пересчитаются. Ноль — известное значение, «Не задано» — неизвестная база.</FieldHelp>
           </span>
           {visibleMonths.map((month) => (
             <span role="columnheader" aria-label={`${month.label}${selectedMeterType.unit}`} key={month.key}>
@@ -198,7 +198,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                         ? 'Стартовое показание меняют пользователи с правом корректировки начальных данных.'
                         : isConnectedAfterGarageStart(garage)
                           ? 'Счётчик подключён позже «Учитывать с». После сохранения стартовое показание будет перенесено на конец месяца перед «Учитывать с», расход и неоплаченные начисления пересчитаются.'
-                          : 'Стартовое показание на конец месяца перед «Учитывать с». Изменение пересчитает расход и неоплаченные начисления.'}
+                          : `Стартовое показание на конец ${month.key}.${appliedYear} — месяца перед «Учитывать с» или началом нового учёта показаний, если оно позже. Изменение пересчитает расход и неоплаченные начисления.`}
                       value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                       onBlur={(event) => {
                         if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitStartValue(garage, month)
@@ -503,7 +503,9 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           const baselineMonth = getMeterBaselineMonth(garage)
           if (!baselineMonth || baselineMonth.slice(0, 4) !== appliedYear) return
           const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, baselineMonth.slice(5, 7))
-          if (nextSavedReadingIds[cellKey]) return
+          // An entered reading in or before the base month keeps its own cell.
+          if (meterReadingMonths.some((month) => month.key <= baselineMonth.slice(5, 7) &&
+            nextSavedReadingIds[createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)])) return
           nextStartValueCells[cellKey] = true
           const startValue = getMeterReadingStartDisplay(garage).value
           if (startValue != null) nextSavedReadings[cellKey] = formatMeterReadingInputValue(startValue)
