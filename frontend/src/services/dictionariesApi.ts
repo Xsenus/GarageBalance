@@ -255,6 +255,7 @@ export type GarageMeterStartValueDto = {
   requiresTariff?: boolean
   requiresConnectionDate?: boolean
   connectionVersion?: string | null
+  baselineStartsOn?: string | null
 }
 
 export type UpsertGarageMeterStartValueRequest = {

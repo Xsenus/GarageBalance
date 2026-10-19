@@ -14,7 +14,8 @@ public sealed record GarageMeterStartValueDto(
     bool RequiresStartValue = false,
     bool RequiresConnectionDate = false,
     Guid? ConnectionVersion = null,
-    bool RequiresTariff = false);
+    bool RequiresTariff = false,
+    DateOnly? BaselineStartsOn = null);
 
 public sealed record UpsertGarageMeterStartValueRequest(
     [Required, MaxLength(40)] string MeterKind,

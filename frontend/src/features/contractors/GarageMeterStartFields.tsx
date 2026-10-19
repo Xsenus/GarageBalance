@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { GarageMeterStartValueDto } from '../../services/dictionariesApi'
 import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
-import { getGarageMeterBaselineMonth, getGarageMeterConnectionStatus, getGarageMeterStartFieldKey, requiresGarageMeterConnectionReason, toGarageMeterStartRows } from './garageMeterStartValues'
+import { getGarageMeterBaselineMonth, getGarageMeterConnectionStatus, getGarageMeterStartFieldKey, isGarageMeterBaselineAfterAccountingStart, requiresGarageMeterConnectionReason, toGarageMeterStartRows } from './garageMeterStartValues'
 import type { GarageMeterStartRow } from './garageMeterStartValues'
 
 type LoadState = { key: string; status: 'ready' | 'error' }
@@ -53,14 +53,14 @@ export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, 
       {(rows ?? []).map((row) => {
         const fieldKey = getGarageMeterStartFieldKey(row.meterKind)
         const status = getGarageMeterConnectionStatus(row, accountingStartMonth)
-        const baselineMonth = getGarageMeterBaselineMonth(accountingStartMonth)
+        const baselineMonth = getGarageMeterBaselineMonth(accountingStartMonth, row.baselineStartsOn)
         return (
           <div className="contractors-garage-meter-service" key={row.meterKind} role="group" aria-label={`Учёт услуги: ${row.label}`}>
           <FormField
             label={`Старт. зн. сч.: ${row.label}`}
             help={row.hasReadings
               ? 'По счётчику уже есть показания: при изменении расход и неоплаченные начисления будут пересчитаны.'
-              : `Показание счётчика на конец ${baselineMonth ?? 'месяца перед началом учёта'} — месяца перед «Учитывать с»${row.unitName ? `, ${row.unitName}` : ''}. Расход первого месяца считается от этого значения.`}
+              : `Показание счётчика на конец ${baselineMonth ?? 'месяца перед началом учёта'} — месяца перед ${isGarageMeterBaselineAfterAccountingStart(row, accountingStartMonth) ? 'началом нового учёта показаний' : '«Учитывать с»'}${row.unitName ? `, ${row.unitName}` : ''}. Расход первого месяца считается от этого значения.`}
           >
             <input
               aria-label={`Стартовое значение счётчика: ${row.label}`}

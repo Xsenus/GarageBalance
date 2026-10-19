@@ -6,6 +6,7 @@ import {
   getGarageMeterBaselineMonth,
   getGarageMeterStartFieldKey,
   getGarageMeterConnectionStatus,
+  isGarageMeterBaselineAfterAccountingStart,
   requiresGarageMeterConnectionReason,
   parseMeterStartValue,
   toGarageMeterStartRows,
@@ -62,8 +63,20 @@ describe('garage meter start values', () => {
     expect(getGarageMeterConnectionStatus(entered, '2027-01')).toBe('Показание на конец 12.2026')
     expect(getGarageMeterConnectionStatus(entered)).toBeNull()
     expect(getGarageMeterBaselineMonth('invalid')).toBeNull()
+    expect(getGarageMeterBaselineMonth('2026-09', 'bad')).toBe('08.2026')
     expect(buildGarageMeterStartRequests([{ ...row, value: '0' }])[0].value).toBe(0)
     expect(requiresGarageMeterConnectionReason(entered)).toBe(false)
+  })
+
+  it('uses a later meter accounting restart boundary for the base month', () => {
+    const [row] = toGarageMeterStartRows([dto({ value: 53547, baselineStartsOn: '2026-10-01' })])
+    expect(row.baselineStartsOn).toBe('2026-10-01')
+    expect(getGarageMeterConnectionStatus(row, '2020-01')).toBe('Показание на конец 09.2026')
+    expect(isGarageMeterBaselineAfterAccountingStart(row, '2020-01')).toBe(true)
+    expect(getGarageMeterConnectionStatus(row, '2026-11')).toBe('Показание на конец 10.2026')
+    expect(isGarageMeterBaselineAfterAccountingStart(row, '2026-11')).toBe(false)
+    expect(isGarageMeterBaselineAfterAccountingStart(row, undefined)).toBe(false)
+    expect(buildGarageMeterStartRequests([{ ...row, value: '53600' }], '2020-01')).toEqual([{ meterKind: 'water', value: 53600 }])
   })
 
   it('moves an existing connection to the garage start and keeps its version and reason', () => {

@@ -39,7 +39,10 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 connection is not null && !value.HasValue,
                 connection is null && !hasLegacyHistory,
                 connection?.Version,
-                connection is not null && await RequiresConnectionTariffAsync(garage.Id, setting.Id, connection, cancellationToken)));
+                connection is not null && await RequiresConnectionTariffAsync(garage.Id, setting.Id, connection, cancellationToken),
+                // Without a connection the baseline device (for example a meter accounting
+                // restart boundary) can start later than "Учитывать с" and then defines the base month.
+                connection is null ? baseline?.InstalledOn : null));
         }
 
         return values;
