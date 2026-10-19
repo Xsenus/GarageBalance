@@ -219,7 +219,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                 (outsideCurrentMonth && hasSavedReading && !historicalCorrectionEnabled)
               const replacementSerial = savedReadingReplacements[cellKey]
               return (
-                <span className={replacementSerial ? 'meter-readings-value-cell meter-readings-value-cell--replacement' : 'meter-readings-value-cell'} role="cell" key={cellKey}>
+                <span className={['meter-readings-value-cell', replacementSerial ? 'meter-readings-value-cell--replacement' : '', connectionStatus ? 'meter-readings-value-cell--unavailable' : ''].filter(Boolean).join(' ')} role="cell" key={cellKey}>
                   {replacementSerial ? (
                     <span
                       className="meter-readings-replacement-marker"
