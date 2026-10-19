@@ -37,6 +37,15 @@ if [[ "${1:-}" == "cleanup-codex-records" ]]; then
   exec /usr/local/bin/garagebalance-cleanup-codex-records "$2"
 fi
 
+if [[ "${1:-}" == "archived-garages" ]]; then
+  [[ "$#" == "3" || "$#" == "4" ]] || {
+    echo "usage: $0 archived-garages preview|cleanup <confirmation> [plan-fingerprint]"
+    exit 64
+  }
+  shift
+  exec /usr/local/bin/garagebalance-archived-garages-cleanup "$@"
+fi
+
 if [[ "${1:-}" == "audit-database" ]]; then
   [[ "$#" == "2" ]] || {
     echo "usage: $0 audit-database <confirmation>"
@@ -427,6 +436,9 @@ install -o root -g root -m 0750 \
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" \
   /usr/local/bin/garagebalance-audit-database
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-archived-garages.sh" \
+  /usr/local/bin/garagebalance-archived-garages-cleanup
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" \
   /usr/local/bin/garagebalance-configure-cloud-backup
