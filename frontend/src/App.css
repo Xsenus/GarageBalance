@@ -3771,6 +3771,11 @@ input.meter-readings-control {
   text-align: right;
 }
 
+/* Прочерк месяца вне подключения услуги стоит в центре ячейки. */
+.meter-readings-value-cell--unavailable input {
+  text-align: center;
+}
+
 .meter-readings-data-row input:focus {
   background: #eef4ff;
   outline: 2px solid #2563eb;
