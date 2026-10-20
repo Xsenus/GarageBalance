@@ -55,7 +55,7 @@ it('checks the current reading, validates required fields and saves exact garage
   expect(replace).toHaveBeenCalledWith('token', expect.not.objectContaining({ currentValue: expect.anything() }))
 })
 
-it('blocks invalid precision and decreasing new readings, then preserves the draft and reloads on failure', async () => {
+it('treats a lower month value as the removed meter value, blocks invalid precision, then preserves the draft and reloads on failure', async () => {
   const { props, replace, getPage, reading } = fixture()
   getPage.mockResolvedValue({ items: [{ ...reading, currentValue: 0, previousValue: 0 }], totalCount: 1 })
   replace.mockRejectedValueOnce(new Error('Показание уже изменено')).mockResolvedValue({})
@@ -63,10 +63,9 @@ it('blocks invalid precision and decreasing new readings, then preserves the dra
   await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
   fill()
   fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '1' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('меньше начального показания нового счётчика')
-  expect(replace).not.toHaveBeenCalled()
-  fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '0' } })
+  // A month value below the new meter's start was taken from the removed meter, so it does not block the replacement.
+  expect(screen.getByRole('status')).toHaveTextContent('Показание за месяц 0 меньше начального показания нового счётчика и будет считаться показанием старого счётчика')
+  expect(screen.getByRole('status')).toHaveTextContent('Показание нового счётчика на конец месяца введите в «Платежах»')
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '1.1234' } })
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
   expect(replace).not.toHaveBeenCalled()
@@ -77,6 +76,8 @@ it('blocks invalid precision and decreasing new readings, then preserves the dra
   expect(screen.getByLabelText('Номер нового счетчика')).toHaveValue(' NEW-1 ')
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
   await waitFor(() => expect(props.onSaved).toHaveBeenCalledOnce())
+  expect(replace).toHaveBeenLastCalledWith('token', expect.objectContaining({ newInitialValue: 1, removedDeviceFinalValue: 47.125 }))
+  expect(replace).toHaveBeenLastCalledWith('token', expect.not.objectContaining({ currentValue: expect.anything() }))
 })
 
 it('shows a retryable loading error and rejects stale responses after a meter change or unmount', async () => {
