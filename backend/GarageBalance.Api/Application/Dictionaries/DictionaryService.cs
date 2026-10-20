@@ -2732,6 +2732,7 @@ public sealed class DictionaryService(
         }
 
         OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        request = KeepStoredTariffLink(setting, request);
 
         var validation = ValidateChargeServiceSettingRequest(request);
         if (!validation.Succeeded)
@@ -2823,7 +2824,7 @@ public sealed class DictionaryService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
-        if (!request.Service.IsRegular || !request.Service.TariffId.HasValue)
+        if (!request.Service.IsRegular)
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
                 "charge_service_tariff_regular_required",
@@ -2846,6 +2847,13 @@ public sealed class DictionaryService(
         }
 
         OptimisticConcurrencyGuard.EnsureCurrent(request.Service.Version, setting);
+        request = request with { Service = KeepStoredTariffLink(setting, request.Service) };
+        if (!request.Service.TariffId.HasValue)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_regular_required",
+                "Изменить тариф можно только у регулярной услуги с назначенным тарифом.");
+        }
 
         var validation = ValidateChargeServiceSettingRequest(request.Service);
         if (!validation.Succeeded)
@@ -3093,6 +3101,7 @@ public sealed class DictionaryService(
 
         if (request.Service is not null)
         {
+            request = request with { Service = KeepStoredTariffLink(setting, request.Service) };
             var serviceValidation = ValidateChargeServiceSettingRequest(request.Service);
             if (!serviceValidation.Succeeded)
                 return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(serviceValidation.ErrorCode!, serviceValidation.ErrorMessage!);
@@ -3318,6 +3327,16 @@ public sealed class DictionaryService(
 
         return DictionaryResult<bool>.Success(true);
     }
+
+    // While the working date falls into a gap of the tariff schedule, the service list
+    // shows no current tariff, so the client sends none. The stored link to the latest
+    // tariff stays the service's fallback, and an omitted tariff means "unchanged".
+    private static UpsertChargeServiceSettingRequest KeepStoredTariffLink(
+        ChargeServiceSetting setting,
+        UpsertChargeServiceSettingRequest request) =>
+        request is { IsRegular: true, TariffId: null, IncomeTypeId: not null } && setting.IsRegular && setting.TariffId.HasValue
+            ? request with { TariffId = setting.TariffId }
+            : request;
 
     private static bool IsInlineTariffRateCorrection(
         ChargeServiceSetting setting,

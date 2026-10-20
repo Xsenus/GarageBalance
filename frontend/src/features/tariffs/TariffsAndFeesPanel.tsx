@@ -30,7 +30,7 @@ import { TablePagination } from '../../shared/TablePagination'
 import { useColumnResize, usePointerResize } from '../../shared/useColumnResize'
 import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
-import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
+import { findTariffGapSourcePeriod, getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName, getTariffGapRateStart } from './tariffServicePresentation'
 import { removeTariffSchedulePeriod } from './tariffSchedulePeriods'
 import { selectServiceViewRecords } from './serviceViewRecords'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
@@ -1720,18 +1720,22 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     electricityTierChangeReason?: string,
     onPersistenceError?: (message: string) => void,
   ) {
-    if (row.backendServiceSettingId && !row.threshold && (row.serviceSettingKind !== 'main' || !row.backendTariffId)) {
+    const targetRow = nextRows.find((item) => item.id === row.id) ?? row
+    // A service without a tariff for the working date (its schedule has a gap)
+    // still accepts a rate typed into the grid: it starts a new period today.
+    const startsRateInTariffGap = Boolean(row.backendServiceSettingId) && row.serviceSettingKind === 'main' &&
+      !row.threshold && !row.backendTariffId && (targetRow.amount ?? '').trim() !== (row.amount ?? '').trim()
+    if (row.backendServiceSettingId && !row.threshold && (row.serviceSettingKind !== 'main' || !row.backendTariffId) && !startsRateInTariffGap) {
       return persistServiceSettingRow(row, nextRows, onPersistenceError)
     }
 
-    if (!canManageTariffs || !row.calculationBase) {
+    if (!canManageTariffs || (!row.calculationBase && !startsRateInTariffGap)) {
       return false
     }
 
-    const targetRow = nextRows.find((item) => item.id === row.id) ?? row
     const backendTariff = targetRow.backendTariffId
       ? backendTariffs.find((tariff) => tariff.id === targetRow.backendTariffId)
-      : findTariffForPrototypeRow(backendTariffs, targetRow)
+      : startsRateInTariffGap ? undefined : findTariffForPrototypeRow(backendTariffs, targetRow)
     // The row displays the tariff selected by the backend for the working date.
     // An inline edit therefore corrects that exact period instead of inserting
     // a new period from today and silently closing a deliberately saved gap.
@@ -1768,7 +1772,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     } else {
       request = {
         name: targetRow.title,
-        calculationBase: targetRow.calculationBase ?? row.calculationBase,
+        calculationBase: targetRow.calculationBase ?? row.calculationBase ?? '',
         rate: amount,
         effectiveFrom,
         comment: backendTariff?.comment ?? '',
@@ -1785,6 +1789,24 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     setTariffSavingRowId(targetRow.id)
     setTariffPersistenceError(null)
     try {
+      if (linkedSetting && startsRateInTariffGap) {
+        // The new period copies the terms of the latest period that started before it.
+        const periods = await dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, linkedSetting.id)
+        const sourcePeriod = findTariffGapSourcePeriod(periods, effectiveFrom)
+        if (!sourcePeriod) {
+          ;(onPersistenceError ?? setTariffPersistenceError)('У услуги нет тарифных периодов. Добавьте период в карточке услуги.')
+          return false
+        }
+        const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, linkedSetting.id, {
+          service: { ...buildChargeServiceRequest(linkedSetting, nextRows), tariffId: sourcePeriod.tariffId },
+          rate: request.rate,
+          effectiveFrom: getTariffGapRateStart(effectiveFrom, sourcePeriod),
+          tariffVersion: sourcePeriod.tariffVersion,
+        })
+        applySavedServiceTariff(saved)
+        return true
+      }
+
       if (linkedSetting && backendTariff) {
         const tariffMode = linkedSetting.hasTieredTariff ? 'metered_tiered' : linkedSetting.isMetered ? 'metered' : 'regular'
         const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, linkedSetting.id, {
