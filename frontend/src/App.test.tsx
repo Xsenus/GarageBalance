@@ -13289,7 +13289,7 @@ describe('App', () => {
     expect(overdueRefreshSignal?.aborted).toBe(true)
   })
 
-  it('does not duplicate an annual obligation in full payment and hides its future row after payoff', async () => {
+  it('shows an unpaid annual obligation as one row with one payment field in the last month', async () => {
     const user = userEvent.setup()
     const currentMonth = getTestCurrentMonthInputValue()
     const previousMonth = addTestMonths(currentMonth, -1)
@@ -13310,7 +13310,7 @@ describe('App', () => {
       closingDebt: fullyPaid ? 0 : 400,
       rows: fullyPaid
         ? [{
-            accountingMonth: `${previousMonth}-01`,
+            accountingMonth: `${currentMonth}-01`,
             annualAccrualId,
             incomeTypeId: 'income-type-membership',
             incomeTypeName: 'Членский взнос',
@@ -13322,8 +13322,8 @@ describe('App', () => {
             incomeAmount: 400,
             debt: 0,
           }]
-        : [currentMonth, previousMonth].map((month) => ({
-            accountingMonth: `${month}-01`,
+        : [{
+            accountingMonth: `${currentMonth}-01`,
             annualAccrualId,
             incomeTypeId: 'income-type-membership',
             incomeTypeName: 'Членский взнос',
@@ -13334,7 +13334,7 @@ describe('App', () => {
             payableAmount: 400,
             incomeAmount: 0,
             debt: 400,
-          })),
+          }],
     }))
     const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
       fullyPaid = true
@@ -13358,24 +13358,24 @@ describe('App', () => {
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '79')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*79\s*Соколов Андрей/ }))
 
-    await waitFor(() => expect(within(prototype).getAllByRole('textbox', { name: /^Платеж Членский взнос/ })).toHaveLength(2))
+    await waitFor(() => expect(within(prototype).getAllByRole('textbox', { name: /^Платеж Членский взнос/ })).toHaveLength(1))
     await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('400.00')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Отмена' }))
 
-    const paymentInputs = within(prototype).getAllByRole('textbox', { name: /^Платеж Членский взнос/ })
-    const futurePaymentLabel = paymentInputs[0].getAttribute('aria-label')!
-    await user.type(paymentInputs[1], '400')
+    const [paymentInput] = within(prototype).getAllByRole('textbox', { name: /^Платеж Членский взнос/ })
+    const paymentLabel = paymentInput.getAttribute('aria-label')!
+    await user.type(paymentInput, '400')
     await user.keyboard('{Enter}')
     await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({
       garageId: garage.id,
-      accountingMonth: `${previousMonth}-01`,
+      accountingMonth: `${currentMonth}-01`,
       amount: 400,
     })))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2))
     expect(within(prototype).queryAllByRole('textbox', { name: /^Платеж Членский взнос/ })).toHaveLength(0)
-    expect(within(prototype).queryByLabelText(futurePaymentLabel)).not.toBeInTheDocument()
+    expect(within(prototype).queryByLabelText(paymentLabel)).not.toBeInTheDocument()
   })
 
   it('shows a selective meter service only in the selected garage worksheet and clears it after switching garages', async () => {
