@@ -106,6 +106,71 @@ public sealed class GarageStartMonthMeterTests
         Assert.Equal(expected * 5m, Assert.Single(worksheet.Value!.Rows, row => row.IncomeTypeId == setting.IncomeTypeId).AccrualAmount);
     }
 
+    // Customer comments 14.10.2026 v1.2, item 5: the replacement dialog no longer asks for the
+    // month-end value; the operator enters it in «Платежи» afterwards.
+    [Theory]
+    [InlineData(500, 550, 80)]
+    [InlineData(300, 330, 60)]
+    [InlineData(250, 310, 90)]
+    public async Task ReplacementWithoutCurrentValueCountsBothDevicesOnceTheMonthValueIsEntered(int newInitial, int monthEnd, int expected)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var setting = await SeedElectricityAsync(context);
+        var created = await DictionaryServiceTestFactory.Create(context, Today).CreateGarageAsync(Request(September) with
+        {
+            MeterStartValues = [new UpsertGarageMeterStartValueRequest(setting.MeterKind!, 250)]
+        }, null, CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        var garageId = created.Value!.Id;
+        var finance = FinanceServiceTestFactory.Create(context, businessDate: Today);
+        Assert.True((await finance.CreateMeterReadingAsync(
+            new(garageId, setting.MeterKind!, September, September.AddDays(29), 270, null), null, CancellationToken.None)).Succeeded);
+
+        var replaced = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(9),
+            "NEW-1", newInitial, null, 300, "Замена счётчика"), null, CancellationToken.None);
+
+        Assert.True(replaced.Succeeded, replaced.ErrorMessage);
+        Assert.Equal(newInitial, replaced.Value!.Reading.CurrentValue);
+        Assert.Equal(30m, replaced.Value.Reading.Consumption);
+        var saved = await finance.SavePaymentFormMeterReadingAsync(new(garageId, setting.MeterKind!, October, October.AddDays(30),
+            monthEnd, null, replaced.Value.Reading.Id, replaced.Value.Reading.Version), null, CancellationToken.None);
+        Assert.True(saved.Succeeded, saved.ErrorMessage);
+        Assert.Equal(expected, saved.Value!.Consumption);
+        var worksheet = await finance.CalculateGarageIncomeWorksheetAsync(garageId, new(October, October), null, CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal(expected * 5m, Assert.Single(worksheet.Value!.Rows, row => row.IncomeTypeId == setting.IncomeTypeId).AccrualAmount);
+    }
+
+    [Fact]
+    public async Task ReplacementWithoutCurrentValueKeepsTheEnteredMonthValueAsTheNewMeterValue()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var setting = await SeedElectricityAsync(context);
+        var created = await DictionaryServiceTestFactory.Create(context, Today).CreateGarageAsync(Request(September) with
+        {
+            MeterStartValues = [new UpsertGarageMeterStartValueRequest(setting.MeterKind!, 250)]
+        }, null, CancellationToken.None);
+        var garageId = created.Value!.Id;
+        var finance = FinanceServiceTestFactory.Create(context, businessDate: Today);
+        Assert.True((await finance.CreateMeterReadingAsync(
+            new(garageId, setting.MeterKind!, September, September.AddDays(29), 270, null), null, CancellationToken.None)).Succeeded);
+        var october = await finance.CreateMeterReadingAsync(
+            new(garageId, setting.MeterKind!, October, October.AddDays(17), 550, null), null, CancellationToken.None);
+        Assert.True(october.Succeeded, october.ErrorMessage);
+
+        var replaced = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(9),
+            "NEW-1", 500, null, 300, "Замена счётчика", october.Value!.Id, october.Value.Version), null, CancellationToken.None);
+        Assert.True(replaced.Succeeded, replaced.ErrorMessage);
+        Assert.Equal((550m, 80m), (replaced.Value!.Reading.CurrentValue, replaced.Value.Reading.Consumption));
+
+        var tooHigh = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(12),
+            "NEW-2", 900, null, 560, "Повторная замена", replaced.Value.Reading.Id, replaced.Value.Reading.Version), null, CancellationToken.None);
+        Assert.False(tooHigh.Succeeded);
+        Assert.Equal("meter_device_current_below_initial", tooHigh.ErrorCode);
+    }
+
     [Fact]
     public async Task StartValueMovesALaterConnectionToTheGarageStart()
     {
@@ -194,6 +259,46 @@ public sealed class GarageStartMonthMeterTests
         Assert.Equal(100m, (await context.Accruals.AsNoTracking()
             .SingleAsync(item => item.GarageId == garage.Id && item.IncomeTypeId == setting.IncomeTypeId && !item.IsCanceled)).Amount);
         Assert.True(await context.MeterReadings.AnyAsync(item => item.IsCanceled && item.CurrentValue == 90));
+    }
+
+    // Customer comments 14.10.2026 v1.2, item 3: "Учитывать с" decides the base month even for
+    // garages whose meter accounting was restarted on 01.10.2026.
+    [Fact]
+    public async Task AccountingStartMovesTheRestartBoundaryAndOpensTheEarlierMonth()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var setting = await SeedElectricityAsync(context);
+        var garage = new Garage { Number = "SYNTHETIC-RESTART-13", RegisteredOn = new(2025, 1, 1), AccountingStartMonth = October, PeopleCount = 1, InitialElectricityMeterValue = 0, InitialMeterReadingMonth = September };
+        var removed = new MeterDevice { Garage = garage, MeterKind = setting.MeterKind!, SerialNumber = "OLD-13", InstalledOn = new(2025, 1, 1), InitialValue = 10, RemovedOn = October.AddDays(-1), FinalValue = 90 };
+        var boundary = new MeterDevice { Garage = garage, MeterKind = setting.MeterKind!, SerialNumber = $"{MeterBaselineResolver.RestartDeviceSerialPrefix} 01.10.2026", InstalledOn = October, InitialValue = 300 };
+        context.AddRange(garage, removed, boundary);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        var finance = FinanceServiceTestFactory.Create(context, businessDate: Today);
+        var before = await finance.CreateMeterReadingAsync(new(garage.Id, setting.MeterKind!, September, September.AddDays(29), 320, null), null, CancellationToken.None);
+        Assert.False(before.Succeeded);
+        context.ChangeTracker.Clear();
+
+        var current = await context.Garages.AsNoTracking().SingleAsync(item => item.Id == garage.Id);
+        var moved = await DictionaryServiceTestFactory.Create(context, Today).UpdateGarageAsync(garage.Id,
+            Request(September) with { Number = garage.Number, Version = current.Version, AccountingStartReason = "Учёт с сентября" }, null, CancellationToken.None);
+
+        Assert.True(moved.Succeeded, moved.ErrorMessage);
+        context.ChangeTracker.Clear();
+        var devices = await context.MeterDevices.AsNoTracking().OrderBy(item => item.InstalledOn).ToListAsync();
+        Assert.Equal([(new DateOnly(2025, 1, 1), (DateOnly?)September.AddDays(-1)), (September, null)], devices.Select(item => (item.InstalledOn, item.RemovedOn)).ToArray());
+        Assert.Contains(await context.AuditEvents.ToListAsync(), item => item.Action == "finance.meter_restart_boundary_adjusted");
+        Assert.Equal(new DateOnly(2026, 8, 1), (await context.Garages.AsNoTracking().SingleAsync(item => item.Id == garage.Id)).InitialMeterReadingMonth);
+
+        var start = Assert.Single(await finance.GetStartValuesAsync(await context.Garages.SingleAsync(item => item.Id == garage.Id), CancellationToken.None));
+        Assert.Equal(September, start.BaselineStartsOn);
+        context.ChangeTracker.Clear();
+        var reading = await FinanceServiceTestFactory.Create(context, businessDate: Today).CreateMeterReadingAsync(
+            new(garage.Id, setting.MeterKind!, September, September.AddDays(29), 320, null), null, CancellationToken.None);
+        Assert.True(reading.Succeeded, reading.ErrorMessage);
+        Assert.Equal(20m, reading.Value!.Consumption);
+        Assert.Equal(100m, await CalculateSeptemberAsync(FinanceServiceTestFactory.Create(context, businessDate: Today), garage.Id, setting));
     }
 
     [Fact]

@@ -6590,13 +6590,20 @@ public sealed partial class FinanceServiceTests
     }
 
     [Fact]
-    public async Task RegularAccrualRecalculation_UpdatesOnlyUnpaidRowsAndReportsProtectedPaidRows()
+    public async Task RegularAccrualRecalculation_RecalculatesPaidRowsKeepsPaymentsAndProtectsHistoricalAmounts()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var secondGarage = new Garage
         {
             Number = "13",
+            PeopleCount = 1,
+            FloorCount = 1,
+            CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var historicalGarage = new Garage
+        {
+            Number = "14",
             PeopleCount = 1,
             FloorCount = 1,
             CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
@@ -6608,7 +6615,7 @@ public sealed partial class FinanceServiceTests
             Rate = 300m,
             EffectiveFrom = new DateOnly(2026, 1, 1)
         };
-        database.Context.AddRange(secondGarage, tariff);
+        database.Context.AddRange(secondGarage, historicalGarage, tariff);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 9, 1);
@@ -6618,9 +6625,12 @@ public sealed partial class FinanceServiceTests
             Guid.NewGuid(),
             CancellationToken.None);
         Assert.True(generated.Succeeded, generated.ErrorMessage);
-        Assert.Equal(2, generated.Value!.CreatedCount);
+        Assert.Equal(3, generated.Value!.CreatedCount);
 
         var paidAccrual = await database.Context.Accruals.SingleAsync(accrual => accrual.GarageId == fixtures.Garage.Id);
+        var historicalAccrual = await database.Context.Accruals.SingleAsync(accrual => accrual.GarageId == historicalGarage.Id);
+        // A migrated historical amount has no original formula and must stay fixed once paid.
+        historicalAccrual.CalculationDetailsJson = null;
         var payment = new FinancialOperation
         {
             OperationKind = FinancialOperationKinds.Income,
@@ -6630,13 +6640,30 @@ public sealed partial class FinanceServiceTests
             GarageId = fixtures.Garage.Id,
             IncomeTypeId = fixtures.IncomeType.Id
         };
+        var historicalPayment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = month,
+            AccountingMonth = month,
+            Amount = historicalAccrual.Amount,
+            GarageId = historicalGarage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        };
         database.Context.AddRange(
             payment,
+            historicalPayment,
             new AccrualPaymentAllocation
             {
                 FinancialOperation = payment,
                 Accrual = paidAccrual,
                 Amount = paidAccrual.Amount,
+                IsActive = true
+            },
+            new AccrualPaymentAllocation
+            {
+                FinancialOperation = historicalPayment,
+                Accrual = historicalAccrual,
+                Amount = historicalAccrual.Amount,
                 IsActive = true
             });
         tariff.Rate = 400m;
@@ -6647,13 +6674,18 @@ public sealed partial class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(preview.Succeeded, preview.ErrorMessage);
-        Assert.Equal(2, preview.Value!.TotalCount);
-        Assert.Equal(1, preview.Value.ChangeCount);
+        Assert.Equal(3, preview.Value!.TotalCount);
+        Assert.Equal(2, preview.Value.ChangeCount);
         Assert.Equal(1, preview.Value.ProtectedPaidCount);
-        Assert.Equal(600m, preview.Value.CurrentTotal);
-        Assert.Equal(700m, preview.Value.ProposedTotal);
-        Assert.Contains(preview.Value.Rows, row => row.AccrualId == paidAccrual.Id && row.Action == "paid" && row.ProposedAmount == 300m);
+        Assert.Equal(900m, preview.Value.CurrentTotal);
+        Assert.Equal(1100m, preview.Value.ProposedTotal);
+        Assert.Contains(preview.Value.Rows, row => row.AccrualId == paidAccrual.Id && row.Action == "update" && row.ProposedAmount == 400m && !row.IsPaid);
         Assert.Contains(preview.Value.Rows, row => row.GarageNumber == "13" && row.Action == "update" && row.ProposedAmount == 400m);
+        var historicalRow = Assert.Single(preview.Value.Rows, row => row.AccrualId == historicalAccrual.Id);
+        Assert.Equal("paid", historicalRow.Action);
+        Assert.True(historicalRow.IsPaid);
+        Assert.Equal(300m, historicalRow.ProposedAmount);
+        Assert.Equal("Оплаченная историческая сумма без исходной формулы сохранена без изменений.", historicalRow.Explanation);
 
         var actorUserId = Guid.NewGuid();
         var applied = await service.ApplyRegularAccrualRecalculationAsync(
@@ -6668,8 +6700,27 @@ public sealed partial class FinanceServiceTests
 
         Assert.True(applied.Succeeded, applied.ErrorMessage);
         Assert.True(applied.Value!.Applied);
-        Assert.Equal(300m, paidAccrual.Amount);
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(400m, await database.Context.Accruals.Where(accrual => accrual.Id == paidAccrual.Id).Select(accrual => accrual.Amount).SingleAsync());
         Assert.Equal(400m, await database.Context.Accruals.Where(accrual => accrual.GarageId == secondGarage.Id).Select(accrual => accrual.Amount).SingleAsync());
+        var storedHistorical = await database.Context.Accruals.AsNoTracking().SingleAsync(accrual => accrual.Id == historicalAccrual.Id);
+        Assert.Equal(300m, storedHistorical.Amount);
+        Assert.Null(storedHistorical.CalculationDetailsJson);
+        // Payments are never changed; the raised accrual keeps its payment and the rest becomes debt.
+        var storedPayments = await database.Context.FinancialOperations.AsNoTracking()
+            .Where(operation => operation.Id == payment.Id || operation.Id == historicalPayment.Id)
+            .ToListAsync();
+        Assert.All(storedPayments, operation =>
+        {
+            Assert.False(operation.IsCanceled);
+            Assert.Equal(300m, operation.Amount);
+        });
+        var activeAllocations = await database.Context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation => allocation.IsActive)
+            .ToListAsync();
+        Assert.Equal(300m, activeAllocations.Where(allocation => allocation.AccrualId == paidAccrual.Id).Sum(allocation => allocation.Amount));
+        Assert.All(activeAllocations.Where(allocation => allocation.AccrualId == paidAccrual.Id), allocation => Assert.Equal(payment.Id, allocation.FinancialOperationId));
+        Assert.Equal(300m, activeAllocations.Where(allocation => allocation.AccrualId == historicalAccrual.Id).Sum(allocation => allocation.Amount));
         Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "finance.regular_accrual_safely_recalculated" && audit.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "finance.regular_accrual_safe_recalculation_applied");
     }
@@ -8672,21 +8723,23 @@ public sealed partial class FinanceServiceTests
             .Where(row => row.AnnualAccrualId == accrual.Id)
             .OrderBy(row => row.AccountingMonth)
             .ToArray();
-        Assert.Equal(3, rows.Length);
-        Assert.Equal(500m, rows[0].AccrualAmount);
-        Assert.Equal(250m, rows[0].IncomeAmount);
-        Assert.Equal(250m, rows[0].Debt);
-        Assert.Equal("Годовое начисление за 2026 год: 500.00.", rows[0].Reason);
-        Assert.All(rows[1..], row =>
-        {
-            Assert.Equal(500m, row.AccrualAmount);
-            Assert.Equal(250m, row.PayableAmount);
-            Assert.Equal(250m, row.IncomeAmount);
-            Assert.Equal(250m, row.Debt);
-            Assert.Equal(
-                "Перенос остатка годового начисления за 2026 год: 250.00. Новое начисление в этом месяце не создавалось.",
-                row.Reason);
-        });
+        // Customer comments 14.10.2026 v1.2, item 2: one row with one payment field in the last month.
+        var row = Assert.Single(rows);
+        Assert.Equal(new DateOnly(2026, 3, 1), row.AccountingMonth);
+        Assert.Equal(500m, row.AccrualAmount);
+        Assert.Equal(250m, row.PayableAmount);
+        Assert.Equal(250m, row.IncomeAmount);
+        Assert.Equal(250m, row.Debt);
+        Assert.Equal(
+            "Годовое начисление за 2026 год от 01.2026: 500.00, остаток к оплате 250.00. Показано одной строкой в последнем месяце периода; новое начисление в этом месяце не создавалось.",
+            row.Reason);
+
+        var accrualMonth = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 1)),
+            CancellationToken.None);
+        Assert.Equal("Годовое начисление за 2026 год: 500.00.",
+            Assert.Single(accrualMonth.Value!.Rows, item => item.AnnualAccrualId == accrual.Id).Reason);
     }
 
     [Fact]
@@ -8732,14 +8785,9 @@ public sealed partial class FinanceServiceTests
             .Where(row => row.AnnualAccrualId == accrual.Id)
             .OrderBy(row => row.AccountingMonth)
             .ToArray();
-        Assert.Equal(3, annualRows.Length);
-        Assert.Equal(600m, annualRows[0].AccrualAmount);
-        Assert.All(annualRows[1..], row =>
-        {
-            Assert.Equal(600m, row.AccrualAmount);
-            Assert.Equal(600m, row.PayableAmount);
-            Assert.Equal(0m, row.IncomeAmount);
-        });
+        var annualRow = Assert.Single(annualRows);
+        Assert.Equal(result.Value.MonthTo, annualRow.AccountingMonth);
+        Assert.Equal((600m, 600m, 0m, 600m), (annualRow.AccrualAmount, annualRow.PayableAmount, annualRow.IncomeAmount, annualRow.Debt));
     }
 
     [Fact]
@@ -11895,7 +11943,7 @@ public sealed partial class FinanceServiceTests
     }
 
     [Fact]
-    public async Task UpdateMeterReadingAsync_RejectsRecalculationWhenLinkedAccrualIsPartiallyPaid()
+    public async Task UpdateMeterReadingAsync_RecalculatesPartiallyPaidAccrualAndKeepsOverpaymentAsAdvance()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -11925,21 +11973,31 @@ public sealed partial class FinanceServiceTests
             null,
             CancellationToken.None);
 
+        Assert.True(generation.Succeeded, generation.ErrorMessage);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+        Assert.Equal(250m, database.Context.Accruals.Single().Amount);
+
+        // The corrected reading lowers the partially paid accrual below the payment.
         var result = await service.UpdateMeterReadingAsync(
             reading.Value!.Id,
-            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 18m, null, reading.Value.Version),
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 11m, null, reading.Value.Version),
             null,
             CancellationToken.None);
 
-        Assert.True(generation.Succeeded, generation.ErrorMessage);
-        Assert.True(payment.Succeeded, payment.ErrorMessage);
-        Assert.False(result.Succeeded);
-        Assert.Equal("meter_reading_accrual_paid", result.ErrorCode);
-        Assert.Contains("частично оплачено", result.ErrorMessage, StringComparison.Ordinal);
-        Assert.Equal(15m, database.Context.MeterReadings.Single().CurrentValue);
-        Assert.Equal(reading.Value.Version, database.Context.MeterReadings.Single().Version);
-        Assert.Equal(250m, database.Context.Accruals.Single().Amount);
-        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated_from_meter_reading");
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(11m, database.Context.MeterReadings.Single().CurrentValue);
+        Assert.NotEqual(reading.Value.Version, database.Context.MeterReadings.Single().Version);
+        var accrual = database.Context.Accruals.Single();
+        Assert.Equal(50m, accrual.Amount);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated_from_meter_reading");
+        // The payment itself is kept; only its allocation is rebuilt and the freed 50 stays unallocated.
+        var storedPayment = database.Context.FinancialOperations.AsNoTracking().Single(item => item.Id == payment.Value!.Id);
+        Assert.False(storedPayment.IsCanceled);
+        Assert.Equal(100m, storedPayment.Amount);
+        var activeAllocations = database.Context.AccrualPaymentAllocations.AsNoTracking().Where(item => item.IsActive).ToList();
+        Assert.Equal(50m, activeAllocations.Where(item => item.AccrualId == accrual.Id).Sum(item => item.Amount));
+        Assert.Equal(50m, storedPayment.Amount - activeAllocations.Where(item => item.FinancialOperationId == storedPayment.Id).Sum(item => item.Amount));
     }
 
     [Fact]
@@ -12061,7 +12119,7 @@ public sealed partial class FinanceServiceTests
     }
 
     [Fact]
-    public async Task InsertHistoricalMeterReading_RecalculatesFollowingUnpaidAccrualAndRejectsPaidAccrual()
+    public async Task InsertHistoricalMeterReading_RecalculatesFollowingUnpaidAndPaidAccrualAndKeepsPayment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -12103,16 +12161,23 @@ public sealed partial class FinanceServiceTests
             null,
             CancellationToken.None);
         Assert.True(payment.Succeeded, payment.ErrorMessage);
-        var rejected = await service.CancelMeterReadingAsync(
+        var canceled = await service.CancelMeterReadingAsync(
             inserted.Value!.Id,
             new CancelFinanceEntryRequest("Проверка оплаченного периода"),
             null,
             CancellationToken.None);
 
-        Assert.False(rejected.Succeeded);
-        Assert.Equal("meter_reading_accrual_paid", rejected.ErrorCode);
-        Assert.False(database.Context.MeterReadings.Single(item => item.Id == inserted.Value.Id).IsCanceled);
-        Assert.Equal(500m, Assert.Single(database.Context.Accruals).Amount);
+        // The paid June accrual is recalculated (consumption 30 - 15) while the payment stays intact.
+        Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+        database.Context.ChangeTracker.Clear();
+        Assert.True(database.Context.MeterReadings.Single(item => item.Id == inserted.Value.Id).IsCanceled);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(750m, accrual.Amount);
+        var storedPayment = database.Context.FinancialOperations.AsNoTracking().Single(item => item.Id == payment.Value!.Id);
+        Assert.False(storedPayment.IsCanceled);
+        Assert.Equal(100m, storedPayment.Amount);
+        Assert.Equal(100m, database.Context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item => item.IsActive && item.AccrualId == accrual.Id).ToList().Sum(item => item.Amount));
     }
 
     [Fact]
@@ -12293,7 +12358,7 @@ public sealed partial class FinanceServiceTests
     }
 
     [Fact]
-    public async Task ReplaceMeterDeviceAsync_RejectsPaidAccrualWithoutMutatingTrackedChain()
+    public async Task ReplaceMeterDeviceAsync_RecalculatesPaidAccrualAndKeepsPayment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -12322,10 +12387,11 @@ public sealed partial class FinanceServiceTests
             new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
             null,
             CancellationToken.None)).Succeeded);
-        Assert.True((await service.CreateIncomeAsync(
+        var payment = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 25), new DateOnly(2026, 6, 1), 100m, "PKO-replace", null),
             null,
-            CancellationToken.None)).Succeeded);
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
         var oldDevice = Assert.Single(database.Context.MeterDevices);
 
         var result = await service.ReplaceMeterDeviceAsync(
@@ -12335,15 +12401,23 @@ public sealed partial class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("meter_reading_accrual_paid", result.ErrorCode);
-        Assert.Single(database.Context.MeterDevices);
-        Assert.Null(oldDevice.RemovedOn);
-        var unchangedReading = database.Context.MeterReadings.Single(item => item.Id == june.Value.Id);
-        Assert.Equal(oldDevice.Id, unchangedReading.MeterDeviceId);
-        Assert.Equal(30m, unchangedReading.CurrentValue);
-        Assert.Equal(10m, unchangedReading.Consumption);
-        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_device_replaced");
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(2, database.Context.MeterDevices.Count());
+        Assert.Equal(new DateOnly(2026, 6, 19), database.Context.MeterDevices.Single(item => item.Id == oldDevice.Id).RemovedOn);
+        var replacedReading = database.Context.MeterReadings.Single(item => item.Id == june.Value.Id);
+        Assert.Equal(result.Value!.Device.Id, replacedReading.MeterDeviceId);
+        Assert.Equal(2m, replacedReading.CurrentValue);
+        // 10 units on the removed meter plus 2 units on the new one.
+        Assert.Equal(12m, replacedReading.Consumption);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_device_replaced");
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(600m, accrual.Amount);
+        var storedPayment = database.Context.FinancialOperations.AsNoTracking().Single(item => item.Id == payment.Value!.Id);
+        Assert.False(storedPayment.IsCanceled);
+        Assert.Equal(100m, storedPayment.Amount);
+        Assert.Equal(100m, database.Context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item => item.IsActive && item.AccrualId == accrual.Id).ToList().Sum(item => item.Amount));
     }
 
     [Fact]
@@ -12876,18 +12950,10 @@ public sealed partial class FinanceServiceTests
             .Where(row => row.AnnualAccrualId == annualAccrualId)
             .OrderBy(row => row.AccountingMonth)
             .ToList();
-        Assert.Equal(5, partialRows.Count);
-        Assert.Equal(700m, partialRows[0].AccrualAmount);
-        Assert.Equal(700m, partialRows[0].PayableAmount);
-        Assert.Equal(700m, partialRows[1].Debt);
-        Assert.Equal(700m, partialRows[2].PayableAmount);
-        Assert.Equal(300m, partialRows[2].IncomeAmount);
-        Assert.Equal(700m, partialRows[2].AccrualAmount);
-        Assert.Equal(400m, partialRows[2].Debt);
-        Assert.Equal(400m, partialRows[4].PayableAmount);
-        Assert.Equal(700m, partialRows[4].AccrualAmount);
-        Assert.Equal(300m, partialRows[4].IncomeAmount);
-        Assert.Equal(400m, partialRows[4].Debt);
+        // One row in the last month of the period with the whole charge and its remainder.
+        var partialRow = Assert.Single(partialRows);
+        Assert.Equal(new DateOnly(2026, 5, 1), partialRow.AccountingMonth);
+        Assert.Equal((700m, 400m, 300m, 400m), (partialRow.AccrualAmount, partialRow.PayableAmount, partialRow.IncomeAmount, partialRow.Debt));
 
         var fullPayment = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 4, 10), new DateOnly(2026, 4, 1), 500m, null, null),
@@ -12904,13 +12970,9 @@ public sealed partial class FinanceServiceTests
             .Where(row => row.AnnualAccrualId == annualAccrualId)
             .OrderBy(row => row.AccountingMonth)
             .ToList();
-        Assert.Equal(4, paidRows.Count);
-        Assert.Equal(new DateOnly(2026, 4, 1), paidRows[^1].AccountingMonth);
-        Assert.Equal(400m, paidRows[^1].PayableAmount);
-        Assert.Equal(700m, paidRows[^1].IncomeAmount);
-        Assert.Equal(100m, paidRows[^1].AdvanceAmount);
-        Assert.Equal(700m, paidRows[^1].AccrualAmount);
-        Assert.Equal(0m, paidRows[^1].Debt);
+        var paidRow = Assert.Single(paidRows);
+        Assert.Equal(new DateOnly(2026, 6, 1), paidRow.AccountingMonth);
+        Assert.Equal((700m, 0m, 700m, 0m), (paidRow.AccrualAmount, paidRow.PayableAmount, paidRow.IncomeAmount, paidRow.Debt));
         Assert.Equal(700m, paidWorksheet.Value.AccrualTotal);
         Assert.Equal(800m, paidWorksheet.Value.IncomeTotal);
         Assert.Equal(100m, paidWorksheet.Value.AdvanceTotal);
@@ -12940,8 +13002,12 @@ public sealed partial class FinanceServiceTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
             CancellationToken.None);
         Assert.True(restoredWorksheet.Succeeded, restoredWorksheet.ErrorMessage);
-        Assert.DoesNotContain(restoredWorksheet.Value!.Rows, row =>
-            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth > new DateOnly(2026, 4, 1));
+        Assert.Equal(0m, Assert.Single(restoredWorksheet.Value!.Rows, row => row.AnnualAccrualId == annualAccrualId).Debt);
+        var afterPayment = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 5, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.DoesNotContain(afterPayment.Value!.Rows, row => row.AnnualAccrualId == annualAccrualId);
     }
 
     [Fact]

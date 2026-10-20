@@ -77,7 +77,7 @@ public sealed class PostgreSqlPeopleWorksheetTests
     }
 
     [PostgreSqlFact]
-    public async Task CardChangeRecalculatesUnpaidPeopleAmountButPreservesPartiallyPaidSnapshot()
+    public async Task CardChangeRecalculatesUnpaidAndPartiallyPaidPeopleAmountKeepingPayment()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -113,31 +113,39 @@ public sealed class PostgreSqlPeopleWorksheetTests
         Assert.Equal(250m, Assert.Single(second.Value!.Rows, row => row.IncomeTypeId == incomeType.Id).AccrualAmount);
         var accrual = await context.Accruals.SingleAsync(item => item.GarageId == garageId && item.IncomeTypeId == incomeType.Id && !item.IsCanceled);
         var snapshot = accrual.CalculationDetailsJson;
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            GarageId = garageId,
+            IncomeType = incomeType,
+            AccountingMonth = month,
+            OperationDate = month,
+            Amount = 100m
+        };
         context.Add(new AccrualPaymentAllocation
         {
             Accrual = accrual,
             Amount = 100m,
-            FinancialOperation = new FinancialOperation
-            {
-                OperationKind = FinancialOperationKinds.Income,
-                GarageId = garageId,
-                IncomeType = incomeType,
-                AccountingMonth = month,
-                OperationDate = month,
-                Amount = 100m
-            }
+            FinancialOperation = payment
         });
         await context.SaveChangesAsync();
         updated = await dictionaries.UpdateGarageAsync(garageId, request with { PeopleCount = 5 }, null, CancellationToken.None);
         Assert.True(updated.Succeeded, updated.ErrorMessage);
         var paid = await finance.CalculateGarageIncomeWorksheetAsync(garageId, period, null, CancellationToken.None);
         Assert.True(paid.Succeeded, paid.ErrorMessage);
+        // The partially paid accrual follows the card (5 people); the payment stays and the debt grows.
         var paidRow = Assert.Single(paid.Value!.Rows, row => row.IncomeTypeId == incomeType.Id);
-        Assert.Equal(250m, paidRow.AccrualAmount);
+        Assert.Equal(625m, paidRow.AccrualAmount);
         Assert.Equal(100m, paidRow.IncomeAmount);
-        Assert.Equal(150m, paidRow.Debt);
+        Assert.Equal(525m, paidRow.Debt);
         Assert.Null(paidRow.MeterKind);
-        Assert.Equal(snapshot, accrual.CalculationDetailsJson);
+        await context.Entry(accrual).ReloadAsync();
+        Assert.Equal(625m, accrual.Amount);
+        Assert.NotEqual(snapshot, accrual.CalculationDetailsJson);
+        var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(item => item.Id == payment.Id);
+        Assert.Equal((100m, false), (storedPayment.Amount, storedPayment.IsCanceled));
+        Assert.Equal(100m, await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item => item.AccrualId == accrual.Id && item.IsActive).SumAsync(item => item.Amount));
         Assert.True(await context.AuditEvents.AnyAsync(audit => audit.Action == "finance.regular_accrual_recalculated_for_garage_worksheet"));
 
         var currentSetting = await context.ChargeServiceSettings.SingleAsync(item => item.IncomeTypeId == incomeType.Id);
@@ -150,7 +158,7 @@ public sealed class PostgreSqlPeopleWorksheetTests
         var historicalPeopleRow = Assert.Single(reopened.Value!.Rows, row => row.IncomeTypeId == incomeType.Id);
         Assert.Null(historicalPeopleRow.MeterKind);
         Assert.Null(historicalPeopleRow.MeterValue);
-        Assert.Equal(250m, historicalPeopleRow.AccrualAmount);
+        Assert.Equal(625m, historicalPeopleRow.AccrualAmount);
     }
 
     [PostgreSqlFact]

@@ -73,7 +73,7 @@ public sealed class PostgreSqlMeterReplacementHistoryTests
     }
 
     [PostgreSqlFact]
-    public async Task MultipleReplacementsPreserveStartRecalculateAccrualCancelAndProtectPaidMonth()
+    public async Task MultipleReplacementsPreserveStartRecalculateAccrualAndCancelPaidMonthKeepingPayment()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -106,27 +106,43 @@ public sealed class PostgreSqlMeterReplacementHistoryTests
         var history = await finance.GetMeterDeviceHistoryAsync(garage.Id, "water", 0, 25, default);
         var latest = history.Items[0];
         Assert.Equal(12m, (await dictionary.GetGarageMeterStartValuesAsync(garage.Id, default)).Value!.Single(item => item.MeterKind == "water").Value);
-        Assert.True((await finance.CreateIncomeAsync(new(garage.Id, income.Id, new(2026, 6, 25), new(2026, 6, 1), 50, "PG-PAY-REPLACE", null), null, default)).Succeeded);
+        var payment = await finance.CreateIncomeAsync(new(garage.Id, income.Id, new(2026, 6, 25), new(2026, 6, 1), 400, "PG-PAY-REPLACE", null), null, default);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+        await AssertPaymentAllocatedAsync(context, payment.Value!.Id, 400m);
+        // Cancelling replacements of a paid month recalculates the accrual; the payment is kept and
+        // whatever exceeds the reduced accrual stays unallocated as an advance.
         var request = new CancelMeterDeviceReplacementRequest(latest.Version, latest.ReplacementReadingVersion!.Value, new(2026, 6, 1), "Ошибочная замена");
-        Assert.Equal("meter_reading_accrual_paid", (await finance.CancelMeterDeviceReplacementAsync(latest.Id, request, null, default)).ErrorCode);
-        Assert.False(await context.MeterDevices.AnyAsync(item => item.IsCanceled));
-        Assert.Equal(550m, (await context.Accruals.SingleAsync()).Amount);
-        var operation = await context.FinancialOperations.SingleAsync();
-        Assert.True((await finance.CancelOperationAsync(operation.Id, new("Отмена тестовой оплаты"), null, default)).Succeeded);
         var canceledSecond = await finance.CancelMeterDeviceReplacementAsync(latest.Id, request, null, default);
         Assert.True(canceledSecond.Succeeded, canceledSecond.ErrorMessage);
         Assert.Equal(6m, canceledSecond.Value!.Reading.Consumption);
-        Assert.Equal(300m, (await context.Accruals.SingleAsync()).Amount);
+        Assert.Equal(300m, (await context.Accruals.AsNoTracking().SingleAsync()).Amount);
+        await AssertPaymentAllocatedAsync(context, payment.Value.Id, 300m);
         var canceledFirst = await finance.CancelMeterDeviceReplacementAsync(first.Value.Device.Id,
             new(canceledSecond.Value.RestoredDevice.Version, canceledSecond.Value.Reading.Version, new(2026, 6, 1), "Отмена первой"), null, default);
         Assert.True(canceledFirst.Succeeded, canceledFirst.ErrorMessage);
         Assert.Equal(3m, canceledFirst.Value!.Reading.Consumption);
-        Assert.Equal(150m, (await context.Accruals.SingleAsync()).Amount);
+        Assert.Equal(150m, (await context.Accruals.AsNoTracking().SingleAsync()).Amount);
+        await AssertPaymentAllocatedAsync(context, payment.Value.Id, 150m);
+        Assert.Equal(2, await context.MeterDevices.CountAsync(item => item.IsCanceled));
         Assert.Single(await finance.GetMeterDevicesAsync(garage.Id, "water", default), device => device.RemovedOn is null);
         var reused = await finance.ReplaceMeterDeviceAsync(new(garage.Id, "water", new(2026, 6, 1), new(2026, 6, 10), "PG-R1", 5, 6, 17, "Правильная повторная регистрация", canceledFirst.Value.Reading.Id, canceledFirst.Value.Reading.Version), null, default);
         Assert.True(reused.Succeeded, reused.ErrorMessage);
+        Assert.Equal(300m, (await context.Accruals.AsNoTracking().SingleAsync()).Amount);
+        await AssertPaymentAllocatedAsync(context, payment.Value.Id, 300m);
         Assert.Equal(4, (await finance.GetMeterDeviceHistoryAsync(garage.Id, null, 0, 25, default)).TotalCount);
         Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    private static async Task AssertPaymentAllocatedAsync(GarageBalanceDbContext context, Guid paymentId, decimal allocated)
+    {
+        var payment = await context.FinancialOperations.AsNoTracking().SingleAsync(item => item.Id == paymentId);
+        Assert.Equal((400m, false), (payment.Amount, payment.IsCanceled));
+        var accrual = await context.Accruals.AsNoTracking().SingleAsync();
+        var allocations = await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item => item.FinancialOperationId == paymentId && item.IsActive).ToListAsync();
+        Assert.Equal(allocated, allocations.Sum(item => item.Amount));
+        Assert.All(allocations, item => Assert.Equal(accrual.Id, item.AccrualId));
+        Assert.True(allocated <= accrual.Amount);
     }
 
     [PostgreSqlFact]

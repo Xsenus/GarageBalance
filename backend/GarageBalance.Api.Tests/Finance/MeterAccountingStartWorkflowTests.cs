@@ -257,19 +257,18 @@ public sealed class MeterAccountingStartWorkflowTests
         Assert.Equal(3, history.TotalCount);
         var latest = Assert.Single(history.Items, row => row.Id == second.Value.Device.Id);
         var cancellation = new CancelMeterDeviceReplacementRequest(latest.Version, latest.ReplacementReadingVersion!.Value, September, "Отмена второй");
-        var payment = await service.CreateIncomeAsync(new(garage.Id, income.Id, September.AddDays(24), September, 50, "SYNTHETIC-PAID", null), null, default);
+        // A partially paid month no longer blocks cancellation: the accrual is recalculated and the
+        // payment is kept, with the part above the reduced accrual left unallocated as an advance.
+        var payment = await service.CreateIncomeAsync(new(garage.Id, income.Id, September.AddDays(24), September, 400, "SYNTHETIC-PAID", null), null, default);
         Assert.True(payment.Succeeded, payment.ErrorMessage);
-        var denied = await service.CancelMeterDeviceReplacementAsync(latest.Id, cancellation, null, default);
-        Assert.Equal("meter_reading_accrual_paid", denied.ErrorCode);
-        Assert.False(await context.MeterDevices.AnyAsync(row => row.GarageId == garage.Id && row.IsCanceled));
-        Assert.Equal(550m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
-        var undonePayment = await service.CancelOperationAsync(payment.Value!.Id, new("Отмена синтетического платежа"), null, default);
-        Assert.True(undonePayment.Succeeded, undonePayment.ErrorMessage);
         var canceledSecond = await service.CancelMeterDeviceReplacementAsync(latest.Id,
             cancellation, null, default);
         Assert.True(canceledSecond.Succeeded, canceledSecond.ErrorMessage);
         Assert.Equal(6m, canceledSecond.Value!.Reading.Consumption);
-        Assert.Equal(300m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+        var septemberAccrual = await context.Accruals.AsNoTracking()
+            .SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September);
+        Assert.Equal(300m, septemberAccrual.Amount);
+        await AssertPaymentKeptAsync(context, payment.Value!.Id, septemberAccrual.Id, 400m, 300m);
         var canceledFirst = await service.CancelMeterDeviceReplacementAsync(first.Value.Device.Id,
             new(canceledSecond.Value.RestoredDevice.Version, canceledSecond.Value.Reading.Version, September, "Отмена первой"), null, default);
         Assert.True(canceledFirst.Succeeded, canceledFirst.ErrorMessage);
@@ -278,11 +277,23 @@ public sealed class MeterAccountingStartWorkflowTests
         Assert.Equal("До замен", canceledFirst.Value.Reading.Comment);
         Assert.False(canceledFirst.Value.Reading.IsMeterReplacement);
         Assert.Equal(150m, (await context.Accruals.SingleAsync(row => row.GarageId == garage.Id && row.IncomeTypeId == income.Id && row.AccountingMonth == September)).Amount);
+        await AssertPaymentKeptAsync(context, payment.Value.Id, septemberAccrual.Id, 400m, 150m);
         var persistedHistory = await service.GetMeterDeviceHistoryAsync(garage.Id, kind, 0, 25, default);
         Assert.Equal(3, persistedHistory.TotalCount);
         Assert.Equal(2, persistedHistory.Items.Count(row => row.IsCanceled));
         Assert.Equal(102m, Assert.Single(await service.GetMeterDevicesAsync(garage.Id, kind, default)).InitialValue);
         Assert.Equal(2, await context.AuditEvents.CountAsync(row => row.Action == "finance.meter_device_replacement_canceled"));
+    }
+
+    private static async Task AssertPaymentKeptAsync(GarageBalanceDbContext context, Guid paymentId, Guid accrualId,
+        decimal paymentAmount, decimal allocatedAmount)
+    {
+        var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(row => row.Id == paymentId);
+        Assert.Equal((paymentAmount, false), (storedPayment.Amount, storedPayment.IsCanceled));
+        var allocations = await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(row => row.FinancialOperationId == paymentId && row.IsActive).ToListAsync();
+        Assert.Equal(allocatedAmount, allocations.Where(row => row.AccrualId == accrualId).Sum(row => row.Amount));
+        Assert.Equal(allocatedAmount, allocations.Sum(row => row.Amount));
     }
 
     private static async Task<Garage> SeedAsync(GarageBalanceDbContext context, string kind, decimal? baseline)

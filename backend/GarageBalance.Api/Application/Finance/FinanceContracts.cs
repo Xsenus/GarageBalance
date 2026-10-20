@@ -551,7 +551,8 @@ public sealed record ReplaceMeterDeviceRequest(
     DateOnly ReplacementDate,
     [Required, MaxLength(100)] string NewSerialNumber,
     [Required, Range(0, 999999999)] decimal? NewInitialValue,
-    [Required, Range(0, 999999999)] decimal? CurrentValue,
+    // Optional: the month-end value is entered in «Платежи»; see ReplaceMeterDeviceAsync.
+    [Range(0, 999999999)] decimal? CurrentValue,
     [Range(0, 999999999)] decimal? RemovedDeviceFinalValue,
     [ActionComment, MaxLength(500)] string Reason,
     Guid? MeterReadingId = null,

@@ -105,6 +105,12 @@ public sealed partial class FinanceService : IGarageAccountingStartService
             var first = await meterReadingRepository.GetFirstActiveAsync(garage.Id, kind, cancellationToken);
             var baseline = MeterBaselineResolver.FindBaselineDevice(devices, first);
             var openingDate = month.AddDays(-1);
+            if (baseline is { IsCanceled: false, ReplacedDeviceId: null } && MeterBaselineResolver.IsRestartBoundary(baseline))
+            {
+                AlignRestartBoundary(garage, baseline, devices, month, actorUserId);
+                continue;
+            }
+
             if (baseline is null || baseline.IsCanceled || baseline.ReplacedDeviceId.HasValue ||
                 baseline.SerialNumber != MeterBaselineResolver.UnnumberedDeviceSerial || baseline.InstalledOn <= openingDate) continue;
             // The original unnumbered device has a generated opening boundary, not a known
@@ -120,5 +126,34 @@ public sealed partial class FinanceService : IGarageAccountingStartService
                 FieldLabels: new Dictionary<string, string> { ["installedOn"] = "Граница начального учёта" },
                 RelatedGarageId: garage.Id.ToString(), RelatedGarageNumber: garage.Number));
         }
+    }
+
+    // A meter accounting restart boundary ("Начало учёта") is a logical start, not a physical
+    // installation, so it follows "Учитывать с": the start value then belongs to the month
+    // before it. The previous chain keeps ending the day before the boundary.
+    private void AlignRestartBoundary(Garage garage, MeterDevice boundary, IReadOnlyList<MeterDevice> devices, DateOnly month,
+        Guid? actorUserId)
+    {
+        if (boundary.InstalledOn == month) return;
+        var previous = devices.FirstOrDefault(device => !device.IsCanceled && device.Id != boundary.Id &&
+            device.RemovedOn == boundary.InstalledOn.AddDays(-1));
+        if (previous is not null && previous.InstalledOn >= month) return;
+        var oldDate = boundary.InstalledOn;
+        boundary.InstalledOn = month;
+        boundary.Version = Guid.NewGuid();
+        boundary.UpdatedAtUtc = timeProvider.GetUtcNow();
+        if (previous is not null)
+        {
+            previous.RemovedOn = month.AddDays(-1);
+            previous.Version = Guid.NewGuid();
+            previous.UpdatedAtUtc = timeProvider.GetUtcNow();
+        }
+
+        auditEventWriter.Add(new AuditEventWriteRequest(actorUserId, "finance.meter_restart_boundary_adjusted", "meter_device", boundary.Id.ToString(),
+            Summary: "Начало учёта показаний перенесено вместе с «Учитывать с».",
+            OldValues: new Dictionary<string, object?> { ["installedOn"] = oldDate.ToString("dd.MM.yyyy") },
+            NewValues: new Dictionary<string, object?> { ["installedOn"] = month.ToString("dd.MM.yyyy") },
+            FieldLabels: new Dictionary<string, string> { ["installedOn"] = "Начало учёта показаний" },
+            RelatedGarageId: garage.Id.ToString(), RelatedGarageNumber: garage.Number));
     }
 }

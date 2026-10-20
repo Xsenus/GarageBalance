@@ -256,7 +256,7 @@ export type ReplaceMeterDeviceRequest = {
   replacementDate: string
   newSerialNumber: string
   newInitialValue: number
-  currentValue: number
+  currentValue?: number
   removedDeviceFinalValue?: number
   reason: string
   meterReadingId?: string

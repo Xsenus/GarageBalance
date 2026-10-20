@@ -21,7 +21,7 @@ public sealed class PostgreSqlGarageTariffAssignmentServiceTests
     }
 
     [PostgreSqlFact]
-    public async Task CreateUpdateAndArchiveRecalculateUnpaidAmountsRetainPaidSnapshotsAndAuditEachGarage()
+    public async Task CreateUpdateAndArchiveRecalculateUnpaidAndPaidAmountsKeepPaymentsAndAuditEachGarage()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -58,8 +58,14 @@ public sealed class PostgreSqlGarageTariffAssignmentServiceTests
         var paidUpdate = await service.UpdateAsync(fixture.Service.Id, second.Id,
             new(Month, null, 500, null, null, second.Version, fixture.Service.Version, "Новая ставка"), null, CancellationToken.None);
         Assert.True(paidUpdate.Succeeded, paidUpdate.ErrorMessage);
-        Assert.Equal(200m, paidAccrual.Amount);
-        Assert.Equal(paidSnapshot, paidAccrual.CalculationDetailsJson);
+        // The fully paid accrual follows the new individual rate; the payment stays and the rest becomes debt.
+        await context.Entry(paidAccrual).ReloadAsync();
+        Assert.Equal(500m, paidAccrual.Amount);
+        Assert.NotEqual(paidSnapshot, paidAccrual.CalculationDetailsJson);
+        var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(row => row.Id == payment.Id);
+        Assert.Equal((200m, false), (storedPayment.Amount, storedPayment.IsCanceled));
+        Assert.Equal(200m, await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(row => row.AccrualId == paidAccrual.Id && row.IsActive).SumAsync(row => row.Amount));
         await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => service.UpdateAsync(fixture.Service.Id, first.Id,
             new(Month, null, 700, null, null, first.Version, fixture.Service.Version, "Устаревшая карточка"), null, CancellationToken.None));
         var archived = await service.ArchiveAsync(fixture.Service.Id, first.Id,
@@ -67,7 +73,8 @@ public sealed class PostgreSqlGarageTariffAssignmentServiceTests
         Assert.True(archived.Succeeded, archived.ErrorMessage);
         Assert.True(archived.Value!.IsArchived);
         Assert.Equal(100m, (await context.Accruals.SingleAsync(row => row.GarageId == fixture.First.Id && row.IncomeTypeId == fixture.Income.Id)).Amount);
-        Assert.Equal(200m, paidAccrual.Amount);
+        await context.Entry(paidAccrual).ReloadAsync();
+        Assert.Equal(500m, paidAccrual.Amount);
         Assert.Equal(5, await context.AuditEvents.CountAsync(row => row.Action.StartsWith("garage_tariff.")));
         Assert.All(await context.AuditEvents.Where(row => row.Action.StartsWith("garage_tariff.")).ToListAsync(), row => Assert.NotNull(row.RelatedGarageId));
         var page = await service.GetPageAsync(fixture.Service.Id, null, false, 0, 10, CancellationToken.None);

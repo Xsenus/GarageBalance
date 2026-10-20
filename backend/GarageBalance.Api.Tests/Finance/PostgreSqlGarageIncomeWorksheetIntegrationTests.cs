@@ -256,14 +256,11 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
                 new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
                 CancellationToken.None);
             Assert.True(partialWorksheet.Succeeded, partialWorksheet.ErrorMessage);
-            var marchPartial = Assert.Single(partialWorksheet.Value!.Rows, row =>
-                row.AnnualAccrualId == accrual2026.Value.Id &&
-                row.AccountingMonth == new DateOnly(2026, 3, 1));
-            Assert.Equal(300m, marchPartial.IncomeAmount);
-            Assert.Equal(400m, marchPartial.Debt);
-            Assert.Equal(400m, Assert.Single(partialWorksheet.Value.Rows, row =>
-                row.AnnualAccrualId == accrual2026.Value.Id &&
-                row.AccountingMonth == new DateOnly(2026, 6, 1)).PayableAmount);
+            var junePartial = Assert.Single(partialWorksheet.Value!.Rows, row => row.AnnualAccrualId == accrual2026.Value.Id);
+            Assert.Equal(new DateOnly(2026, 6, 1), junePartial.AccountingMonth);
+            Assert.Equal(300m, junePartial.IncomeAmount);
+            Assert.Equal(400m, junePartial.Debt);
+            Assert.Equal(400m, junePartial.PayableAmount);
 
             var overpayment = await service.CreateIncomeAsync(
                 new CreateIncomeOperationRequest(
@@ -283,14 +280,10 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
                 new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
                 CancellationToken.None);
             Assert.True(paidWorksheet.Succeeded, paidWorksheet.ErrorMessage);
-            var aprilPaid = Assert.Single(paidWorksheet.Value!.Rows, row =>
-                row.AnnualAccrualId == accrual2026.Value.Id &&
-                row.AccountingMonth == new DateOnly(2026, 4, 1));
-            Assert.Equal(700m, aprilPaid.IncomeAmount);
-            Assert.Equal(0m, aprilPaid.Debt);
-            Assert.DoesNotContain(paidWorksheet.Value.Rows, row =>
-                row.AnnualAccrualId == accrual2026.Value.Id &&
-                row.AccountingMonth > new DateOnly(2026, 4, 1));
+            var paidRow = Assert.Single(paidWorksheet.Value!.Rows, row => row.AnnualAccrualId == accrual2026.Value.Id);
+            Assert.Equal(new DateOnly(2026, 6, 1), paidRow.AccountingMonth);
+            Assert.Equal(700m, paidRow.IncomeAmount);
+            Assert.Equal(0m, paidRow.Debt);
             Assert.Equal(800m, paidWorksheet.Value.IncomeTotal);
             Assert.Equal(0m, paidWorksheet.Value.ClosingDebt);
 
@@ -314,7 +307,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             Assert.True(newYearWorksheet.Succeeded, newYearWorksheet.ErrorMessage);
             var january2027 = Assert.Single(newYearWorksheet.Value!.Rows, row =>
                 row.AnnualAccrualId == accrual2027.Value.Id &&
-                row.AccountingMonth == new DateOnly(2027, 1, 1));
+                row.AccountingMonth == new DateOnly(2027, 3, 1));
             Assert.Equal(900m, january2027.AccrualAmount);
             Assert.Equal(100m, january2027.IncomeAmount);
             Assert.Equal(800m, january2027.PayableAmount);
@@ -349,14 +342,10 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
                 new GarageIncomeWorksheetRequest(new DateOnly(2027, 1, 1), new DateOnly(2027, 3, 1)),
                 CancellationToken.None);
             Assert.True(newYearPaidWorksheet.Succeeded, newYearPaidWorksheet.ErrorMessage);
-            var february2027 = Assert.Single(newYearPaidWorksheet.Value!.Rows, row =>
-                row.AnnualAccrualId == accrual2027.Value.Id &&
-                row.AccountingMonth == new DateOnly(2027, 2, 1));
-            Assert.Equal(900m, february2027.IncomeAmount);
-            Assert.Equal(0m, february2027.Debt);
-            Assert.DoesNotContain(newYearPaidWorksheet.Value.Rows, row =>
-                row.AnnualAccrualId == accrual2027.Value.Id &&
-                row.AccountingMonth > new DateOnly(2027, 2, 1));
+            var paid2027 = Assert.Single(newYearPaidWorksheet.Value!.Rows, row => row.AnnualAccrualId == accrual2027.Value.Id);
+            Assert.Equal(new DateOnly(2027, 3, 1), paid2027.AccountingMonth);
+            Assert.Equal(900m, paid2027.IncomeAmount);
+            Assert.Equal(0m, paid2027.Debt);
         }
     }
 
@@ -413,11 +402,11 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
             CancellationToken.None);
         Assert.True(partial.Succeeded, partial.ErrorMessage);
-        Assert.Equal(6, partial.Value!.Rows.Count(row => row.AnnualAccrualId == annualAccrualId));
+        Assert.Equal(1, partial.Value!.Rows.Count(row => row.AnnualAccrualId == annualAccrualId));
         var june = Assert.Single(partial.Value.Rows, row =>
             row.AnnualAccrualId == annualAccrualId && row.AccountingMonth == new DateOnly(2026, 6, 1));
         Assert.Equal(400m, june.Debt);
-        Assert.Contains("Новое начисление в этом месяце не создавалось", june.Reason, StringComparison.Ordinal);
+        Assert.Contains("новое начисление в этом месяце не создавалось", june.Reason, StringComparison.Ordinal);
 
         var fullPayment = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(garage.Id, annualType.Id, new DateOnly(2026, 4, 10), new DateOnly(2026, 4, 1), 400m, null, null),
@@ -429,8 +418,7 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
             CancellationToken.None);
         Assert.True(paid.Succeeded, paid.ErrorMessage);
-        Assert.DoesNotContain(paid.Value!.Rows, row =>
-            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth > new DateOnly(2026, 4, 1));
+        Assert.Equal(0m, Assert.Single(paid.Value!.Rows, row => row.AnnualAccrualId == annualAccrualId).Debt);
 
         var canceled = await service.CancelOperationAsync(
             fullPayment.Value!.Id,

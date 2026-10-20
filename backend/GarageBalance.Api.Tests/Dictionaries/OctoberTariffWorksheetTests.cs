@@ -16,14 +16,14 @@ public sealed class OctoberTariffWorksheetTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OctoberRate_RefreshesUnpaidWorksheetPreservesPaidAndCreatesMissingCharge(bool schedule)
+    public async Task OctoberRate_RefreshesUnpaidAndPaidWorksheetKeepsPaymentsAndCreatesMissingCharge(bool schedule)
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
         await AssertOctoberAsync(database.Context, schedule);
     }
 
     [PostgreSqlFact]
-    public async Task PostgreSql_OctoberRateRecalculatesOnlyEligibleChargesAndReadOnlyQueryDoesNotWrite()
+    public async Task PostgreSql_OctoberRateRecalculatesPaidAndUnpaidChargesAndReadOnlyQueryDoesNotWrite()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -68,6 +68,7 @@ public sealed class OctoberTariffWorksheetTests
         var original = await context.Accruals.Where(row => row.IncomeTypeId == income.Id).ToListAsync();
         Assert.Equal(6, original.Count);
         var snapshots = original.ToDictionary(row => row.Id, row => row.CalculationDetailsJson);
+        var payments = new List<FinancialOperation>();
         for (var index = 1; index <= 2; index++)
         {
             var accrual = original.Single(row => row.GarageId == garages[index].Id && row.AccountingMonth == October);
@@ -81,6 +82,7 @@ public sealed class OctoberTariffWorksheetTests
                 Amount = index == 1 ? 1 : 100
             };
             context.AddRange(payment, new AccrualPaymentAllocation { Accrual = accrual, FinancialOperation = payment, Amount = payment.Amount, IsActive = true });
+            payments.Add(payment);
         }
         await context.SaveChangesAsync();
         var recalculation = new TariffAccrualRecalculationService(new EfAccrualRepository(context), new EfChargeServiceSettingRepository(context), finance);
@@ -103,10 +105,22 @@ public sealed class OctoberTariffWorksheetTests
         Assert.Equal(6, updatedAccruals.Count);
         foreach (var accrual in updatedAccruals)
         {
-            var changed = accrual.GarageId == garages[0].Id && accrual.AccountingMonth == October;
+            // Partially and fully paid October charges follow the new rate too; September keeps the old rate.
+            var changed = accrual.AccountingMonth == October;
             Assert.Equal(changed ? 125m : 100m, accrual.Amount);
-            if (!changed) Assert.Equal(snapshots[accrual.Id], accrual.CalculationDetailsJson);
+            if (changed) Assert.NotEqual(snapshots[accrual.Id], accrual.CalculationDetailsJson);
+            else Assert.Equal(snapshots[accrual.Id], accrual.CalculationDetailsJson);
         }
+        var activeAllocations = await context.AccrualPaymentAllocations.AsNoTracking().Where(row => row.IsActive).ToListAsync();
+        foreach (var payment in payments)
+        {
+            var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(row => row.Id == payment.Id);
+            Assert.Equal((payment.Amount, false), (storedPayment.Amount, storedPayment.IsCanceled));
+            // The garage still owes more than it paid, so the whole payment stays allocated.
+            Assert.Equal(payment.Amount, activeAllocations.Where(row => row.FinancialOperationId == payment.Id).Sum(row => row.Amount));
+        }
+        Assert.All(updatedAccruals, accrual => Assert.True(
+            activeAllocations.Where(row => row.AccrualId == accrual.Id).Sum(row => row.Amount) <= accrual.Amount));
         var read = await finance.GetGarageIncomeWorksheetAsync(garages[0].Id, new(October, October), CancellationToken.None);
         Assert.True(read.Succeeded, read.ErrorMessage);
         Assert.Equal(125m, Assert.Single(read.Value!.Rows, row => row.IncomeTypeId == income.Id).AccrualAmount);

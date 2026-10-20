@@ -2479,7 +2479,7 @@ export function FinancePanel({
           <History size={16} aria-hidden="true" />
           <span>{journalOpen ? 'Скрыть единый журнал' : 'Единый журнал операций'}</span>
         </button>
-        {canWritePayments ? <button className="secondary-button" type="button" onClick={() => void openRecalculation()}><RotateCcw size={16} aria-hidden="true" /><span>Перерасчёт неоплаченных начислений</span></button> : null}
+        {canWritePayments ? <button className="secondary-button" type="button" onClick={() => void openRecalculation()}><RotateCcw size={16} aria-hidden="true" /><span>Перерасчёт начислений</span></button> : null}
       </div> : null}
       {advancedFinanceToolsVisible && journalOpen ? (
         <Suspense fallback={<TableLoadingState label="Загружаем единый журнал" />}>
@@ -2497,7 +2497,7 @@ export function FinancePanel({
         <div className="modal-backdrop" role="presentation">
           <section ref={recalculationDialogRef} className="detail-dialog detail-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="regular-recalculation-title">
             <div className="detail-dialog-header">
-              <div><p className="eyebrow">Безопасная операция</p><h3 id="regular-recalculation-title">Перерасчёт неоплаченных начислений</h3><p>Оплаченные строки не изменяются. Перед применением система повторно проверит, что исходные данные не менялись.</p></div>
+              <div><p className="eyebrow">Безопасная операция</p><h3 id="regular-recalculation-title">Перерасчёт начислений</h3><p>Внесённые оплаты сохраняются и распределяются заново: разница становится долгом или переплатой. Исторические суммы без исходной формулы не изменяются. Перед применением система повторно проверит, что исходные данные не менялись.</p></div>
               <button ref={recalculationCloseRef} className="icon-button" type="button" aria-label="Закрыть перерасчёт начислений" disabled={recalculationPending} onClick={() => setRecalculationOpen(false)}><X size={18} aria-hidden="true" /></button>
             </div>
             <div className="inline-fields">
@@ -6530,7 +6530,7 @@ function PaymentsPrototypePanel({
             </div>
             <div className="dialog-body">
               <p className="form-hint">
-                Показание за {historicalMeterReadingSave.row.monthLabel} изменит неоплаченный расчёт. Система автоматически сохранит это действие в истории изменений.
+                Показание за {historicalMeterReadingSave.row.monthLabel} изменит расчёт начисления; внесённые оплаты сохранятся. Система автоматически сохранит это действие в истории изменений.
               </p>
               {historicalMeterReadingSave.error ? <FormError>{historicalMeterReadingSave.error}</FormError> : null}
             </div>

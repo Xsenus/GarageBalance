@@ -95,7 +95,7 @@ public sealed class PostgreSqlPeopleCountHistoryTests
     }
 
     [PostgreSqlFact]
-    public async Task BatchWorksheetAndTariffRecalculationUseSameDailyHistoryAndProtectPaidAmounts()
+    public async Task BatchWorksheetAndTariffRecalculationUseSameDailyHistoryRecalculatePaidAndProtectHistoricalAmounts()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -138,32 +138,59 @@ public sealed class PostgreSqlPeopleCountHistoryTests
 
         var paidAccrual = accruals.Single(item => item.GarageId == ids[0]);
         var paidSnapshot = paidAccrual.CalculationDetailsJson;
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            GarageId = ids[0],
+            IncomeType = income,
+            AccountingMonth = month,
+            OperationDate = month.AddDays(29),
+            Amount = 100
+        };
         context.Add(new AccrualPaymentAllocation
         {
             Accrual = paidAccrual,
             Amount = 100,
-            FinancialOperation = new FinancialOperation
-            {
-                OperationKind = FinancialOperationKinds.Income,
-                GarageId = ids[0],
-                IncomeType = income,
-                AccountingMonth = month,
-                OperationDate = month.AddDays(29),
-                Amount = 100
-            }
+            FinancialOperation = payment
         });
         tariff.Rate = 200;
         await context.SaveChangesAsync();
         var preview = await finance.PreviewRegularAccrualRecalculationAsync(new PreviewRegularAccrualRecalculationRequest(income.Id, tariff.Id, month), CancellationToken.None);
         Assert.True(preview.Succeeded, preview.ErrorMessage);
-        Assert.Equal(1, preview.Value!.ProtectedPaidCount);
-        Assert.Equal(320m, Assert.Single(preview.Value.Rows, item => !item.IsPaid).ProposedAmount);
+        // A paid accrual with a known formula is recalculated by the same daily history as an unpaid one.
+        Assert.Equal(0, preview.Value!.ProtectedPaidCount);
+        Assert.All(preview.Value.Rows, item => Assert.Equal((320m, "update", false), (item.ProposedAmount, item.Action, item.IsPaid)));
         var applied = await finance.ApplyRegularAccrualRecalculationAsync(new ApplyRegularAccrualRecalculationRequest(
             income.Id, tariff.Id, month, preview.Value.PreviewFingerprint, "Проверка истории людей"), null, CancellationToken.None);
         Assert.True(applied.Succeeded, applied.ErrorMessage);
-        Assert.Equal(208m, paidAccrual.Amount);
-        Assert.Equal(paidSnapshot, paidAccrual.CalculationDetailsJson);
+        Assert.Equal(320m, paidAccrual.Amount);
+        Assert.NotEqual(paidSnapshot, paidAccrual.CalculationDetailsJson);
+        Assert.Equal([1, 2], RegularAccrualCalculator.Deserialize(paidAccrual.CalculationDetailsJson)!.Lines.Select(line => line.PeopleCount!.Value));
         Assert.Equal(320m, accruals.Single(item => item.GarageId == ids[1]).Amount);
+        var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(item => item.Id == payment.Id);
+        Assert.Equal((100m, false), (storedPayment.Amount, storedPayment.IsCanceled));
+        Assert.Equal(100m, await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item => item.AccrualId == paidAccrual.Id && item.IsActive).SumAsync(item => item.Amount));
+
+        // A paid historical amount without its original formula (version 0) stays fixed in both paths.
+        paidAccrual.CalculationDetailsJson = RegularAccrualCalculator.Serialize(
+            RegularAccrualCalculator.Deserialize(paidAccrual.CalculationDetailsJson)! with { Version = 0 });
+        tariff.Rate = 250;
+        await context.SaveChangesAsync();
+        await context.Entry(paidAccrual).ReloadAsync();
+        var historicalSnapshot = paidAccrual.CalculationDetailsJson;
+        var historicalPreview = await finance.PreviewRegularAccrualRecalculationAsync(new PreviewRegularAccrualRecalculationRequest(income.Id, tariff.Id, month), CancellationToken.None);
+        Assert.True(historicalPreview.Succeeded, historicalPreview.ErrorMessage);
+        Assert.Equal(1, historicalPreview.Value!.ProtectedPaidCount);
+        var historicalRow = Assert.Single(historicalPreview.Value.Rows, item => item.AccrualId == paidAccrual.Id);
+        Assert.Equal((320m, "paid", true), (historicalRow.ProposedAmount, historicalRow.Action, historicalRow.IsPaid));
+        Assert.Equal(400m, Assert.Single(historicalPreview.Value.Rows, item => item.AccrualId != paidAccrual.Id).ProposedAmount);
+        var historicalWorksheet = await finance.CalculateGarageIncomeWorksheetAsync(ids[0], new GarageIncomeWorksheetRequest(month, month), null, CancellationToken.None);
+        Assert.True(historicalWorksheet.Succeeded, historicalWorksheet.ErrorMessage);
+        Assert.Equal(320m, Assert.Single(historicalWorksheet.Value!.Rows, item => item.IncomeTypeId == income.Id).AccrualAmount);
+        await context.Entry(paidAccrual).ReloadAsync();
+        Assert.Equal(320m, paidAccrual.Amount);
+        Assert.Equal(historicalSnapshot, paidAccrual.CalculationDetailsJson);
     }
 
     [PostgreSqlFact]

@@ -12,7 +12,7 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task MeterReadingUpdate_RecalculatesUnpaidAccrualAndRejectsPaidAccrual()
+    public async Task MeterReadingUpdate_RecalculatesUnpaidAndPaidAccrualAndKeepsPayment()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid garageId;
@@ -62,23 +62,39 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
             CancellationToken.None);
         Assert.True(recalculated.Succeeded, recalculated.ErrorMessage);
         Assert.Equal(400m, (await context.Accruals.SingleAsync()).Amount);
-        Assert.True((await service.CreateIncomeAsync(
+        var payment = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(garageId, incomeTypeId, new DateOnly(2026, 6, 22), new DateOnly(2026, 6, 1), 100m, "PG-PARTIAL-METER", null),
             null,
-            CancellationToken.None)).Succeeded);
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
 
-        var conflict = await service.UpdateMeterReadingAsync(
+        // A raised reading recalculates the partially paid accrual: the payment stays allocated and the debt grows.
+        var raised = await service.UpdateMeterReadingAsync(
             recalculated.Value!.Id,
             new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 23), 20m, null, recalculated.Value.Version),
             null,
             CancellationToken.None);
 
-        Assert.False(conflict.Succeeded);
-        Assert.Equal("meter_reading_accrual_paid", conflict.ErrorCode);
+        Assert.True(raised.Succeeded, raised.ErrorMessage);
         context.ChangeTracker.Clear();
-        Assert.Equal(18m, (await context.MeterReadings.SingleAsync()).CurrentValue);
-        Assert.Equal(400m, (await context.Accruals.SingleAsync()).Amount);
+        Assert.Equal(20m, (await context.MeterReadings.SingleAsync()).CurrentValue);
+        Assert.Equal(500m, (await context.Accruals.SingleAsync()).Amount);
         Assert.Equal(100m, (await context.AccrualPaymentAllocations.SingleAsync(item => item.IsActive)).Amount);
+
+        // A lowered reading drops the accrual below the payment: the surplus stays unallocated as an advance.
+        var lowered = await service.UpdateMeterReadingAsync(
+            raised.Value!.Id,
+            new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 24), 11m, null, raised.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(lowered.Succeeded, lowered.ErrorMessage);
+        context.ChangeTracker.Clear();
+        Assert.Equal(11m, (await context.MeterReadings.SingleAsync()).CurrentValue);
+        Assert.Equal(50m, (await context.Accruals.SingleAsync()).Amount);
+        Assert.Equal(50m, await context.AccrualPaymentAllocations.Where(item => item.IsActive).SumAsync(item => item.Amount));
+        var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(item => item.Id == payment.Value!.Id);
+        Assert.Equal((100m, false), (storedPayment.Amount, storedPayment.IsCanceled));
     }
 
     [PostgreSqlFact]

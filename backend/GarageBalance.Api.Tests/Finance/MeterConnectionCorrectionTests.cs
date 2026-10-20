@@ -88,7 +88,7 @@ public sealed class MeterConnectionCorrectionTests
     }
 
     [Fact]
-    public async Task Correction_RejectsChangingPaidFirstMonthAndLeavesPersistentDataUnchanged()
+    public async Task Correction_RecalculatesPaidFirstMonthAndKeepsPayment()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
         var context = database.Context;
@@ -97,24 +97,32 @@ public sealed class MeterConnectionCorrectionTests
         var reading = await finance.CreateMeterReadingAsync(new(garage.Id, MeterKinds.Water, September, September.AddDays(29), 273m, null), null, CancellationToken.None);
         Assert.True(reading.Succeeded, reading.ErrorMessage);
         var accrual = await context.Accruals.SingleAsync(item => item.GarageId == garage.Id && item.IncomeTypeId == setting.IncomeTypeId);
-        await PayAsync(context, accrual);
+        var payment = await PayAsync(context, accrual);
+        await context.Entry(payment).ReloadAsync();
+        var paymentVersion = payment.Version;
         var version = connection.Version;
         var snapshot = accrual.CalculationDetailsJson;
         var auditCount = await context.AuditEvents.CountAsync();
         var result = await DictionaryServiceTestFactory.Create(context).UpdateGarageAsync(garage.Id,
             Request(garage, new(MeterKinds.Water, 240m, September.AddDays(7), connection.Version, "Уточнение акта")), null, CancellationToken.None);
-        Assert.Equal("meter_start_accrual_paid", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
         context.ChangeTracker.Clear();
         var saved = await context.GarageMeterConnections.Include(item => item.BaselineMeterDevice).SingleAsync(item => item.GarageId == garage.Id);
-        Assert.Equal(version, saved.Version);
-        Assert.Equal(September.AddDays(9), saved.ConnectedOn);
-        Assert.Equal(250m, saved.BaselineMeterDevice!.InitialValue);
+        Assert.NotEqual(version, saved.Version);
+        Assert.Equal(September.AddDays(7), saved.ConnectedOn);
+        Assert.Equal(240m, saved.BaselineMeterDevice!.InitialValue);
+        // The paid first month follows the corrected base (273 - 240) and the payment is not touched.
         var savedAccrual = await context.Accruals.SingleAsync(item => item.Id == accrual.Id);
-        Assert.Equal(115m, savedAccrual.Amount);
-        Assert.Equal(snapshot, savedAccrual.CalculationDetailsJson);
-        Assert.Equal(auditCount, await context.AuditEvents.CountAsync());
+        Assert.Equal(165m, savedAccrual.Amount);
+        Assert.NotEqual(snapshot, savedAccrual.CalculationDetailsJson);
+        Assert.Equal(September.AddDays(7), RegularAccrualCalculator.Deserialize(savedAccrual.CalculationDetailsJson)!.Lines[0].EffectiveFrom);
+        Assert.True(await context.AuditEvents.CountAsync() > auditCount);
         var storedReading = await context.MeterReadings.SingleAsync(item => item.Id == reading.Value!.Id);
-        Assert.Equal((250m, 23m), (storedReading.PreviousValue, storedReading.Consumption));
+        Assert.Equal((240m, 33m), (storedReading.PreviousValue, storedReading.Consumption));
+        var storedPayment = await context.FinancialOperations.SingleAsync(item => item.Id == payment.Id);
+        Assert.Equal((115m, false, paymentVersion), (storedPayment.Amount, storedPayment.IsCanceled, storedPayment.Version));
+        var allocations = await context.AccrualPaymentAllocations.Where(item => item.AccrualId == accrual.Id && item.IsActive).ToListAsync();
+        Assert.Equal(115m, allocations.Sum(item => item.Amount));
     }
 
     [Fact]
@@ -137,7 +145,7 @@ public sealed class MeterConnectionCorrectionTests
     }
 
     [Fact]
-    public async Task LegacyPaidAccrual_RejectsChangedConsumptionEvenWhenMoneyRoundsToTheSameAmount()
+    public async Task LegacyPaidAccrual_RecalculatesChangedConsumptionEvenWhenMoneyRoundsToTheSameAmount()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
         var context = database.Context;
@@ -150,13 +158,20 @@ public sealed class MeterConnectionCorrectionTests
         var accrual = await context.Accruals.SingleAsync(item => item.GarageId == garage.Id && item.IncomeTypeId == setting.IncomeTypeId);
         Assert.Equal(0.23m, accrual.Amount);
         accrual.CalculationDetailsJson = null;
-        await PayAsync(context, accrual);
+        var payment = await PayAsync(context, accrual);
         var result = await DictionaryServiceTestFactory.Create(context).UpdateGarageAsync(garage.Id,
             Request(garage, new(MeterKinds.Water, 249.999m, connection.ConnectedOn, connection.Version, "Уточнение тысячной доли показания")), null, CancellationToken.None);
-        Assert.Equal("meter_start_accrual_paid", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
         context.ChangeTracker.Clear();
-        Assert.Null((await context.Accruals.SingleAsync(item => item.Id == accrual.Id)).CalculationDetailsJson);
-        Assert.Equal(23m, (await context.MeterReadings.SingleAsync(item => item.Id == reading.Value!.Id)).Consumption);
+        Assert.Equal(23.001m, (await context.MeterReadings.SingleAsync(item => item.Id == reading.Value!.Id)).Consumption);
+        // The changed consumption is recorded in a fresh snapshot even though the money rounds the same.
+        var stored = await context.Accruals.SingleAsync(item => item.Id == accrual.Id);
+        Assert.Equal(0.23m, stored.Amount);
+        Assert.NotNull(stored.CalculationDetailsJson);
+        Assert.Equal(23.001m, RegularAccrualCalculator.Deserialize(stored.CalculationDetailsJson)!.MeterConsumption);
+        var storedPayment = await context.FinancialOperations.SingleAsync(item => item.Id == payment.Id);
+        Assert.Equal((0.23m, false), (storedPayment.Amount, storedPayment.IsCanceled));
+        Assert.Equal(0.23m, (await context.AccrualPaymentAllocations.Where(item => item.AccrualId == accrual.Id && item.IsActive).ToListAsync()).Sum(item => item.Amount));
     }
 
     private static async Task<(Garage Garage, GarageMeterConnection Connection, ChargeServiceSetting Setting)> SeedAsync(

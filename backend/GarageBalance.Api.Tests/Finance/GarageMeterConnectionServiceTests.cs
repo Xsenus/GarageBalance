@@ -161,7 +161,7 @@ public sealed class GarageMeterConnectionServiceTests
     }
 
     [Fact]
-    public async Task PreviewRejectsStaleVersionsInvalidDataAndPaidAccruals()
+    public async Task PreviewRejectsStaleVersionsAndInvalidDataButPreviewsPaidAccrualRecalculation()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
         var context = database.Context;
@@ -200,12 +200,21 @@ public sealed class GarageMeterConnectionServiceTests
             }
         });
         await context.SaveChangesAsync();
-        Assert.Equal("meter_start_accrual_paid", (await service.PreviewAsync(request with
+        context.ChangeTracker.Clear();
+        // A paid accrual no longer blocks the change: the preview shows its recalculation and writes nothing.
+        var preview = await service.PreviewAsync(request with
         {
             Values = [new(setting.MeterKind!, 260, ConnectedOn, connection.Version, "Исправление")]
-        }, null, CancellationToken.None)).ErrorCode);
+        }, null, CancellationToken.None);
+        Assert.True(preview.Succeeded, preview.ErrorMessage);
+        var accrualChange = Assert.Single(preview.Value!.AccrualChanges);
+        Assert.Equal((September, 115m, 65m), (accrualChange.AccountingMonth, accrualChange.OldAmount, accrualChange.NewAmount));
         Assert.Empty(context.ChangeTracker.Entries());
         Assert.Equal(115m, (await context.Accruals.SingleAsync()).Amount);
+        var payment = await context.FinancialOperations.AsNoTracking().SingleAsync();
+        Assert.False(payment.IsCanceled);
+        Assert.Equal(1m, payment.Amount);
+        Assert.Equal(1m, (await context.AccrualPaymentAllocations.AsNoTracking().SingleAsync(item => item.IsActive)).Amount);
     }
 
     [Theory]

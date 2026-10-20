@@ -235,31 +235,41 @@ public sealed class GarageMeterStartValueTests
     }
 
     [Fact]
-    public async Task UpdateGarage_BlocksStartValueChangeWhenAffectedAccrualIsPaid()
+    public async Task UpdateGarage_RecalculatesPaidAccrualOnStartValueChangeAndKeepsOverpaymentAsAdvance()
     {
         await using var database = await SqliteTestDatabase.CreateAsync();
         var context = database.Context;
         var (garage, income) = await SeedReplacedElectricityMeterAsync(context);
         var accrual = await context.Accruals.SingleAsync(item => item.IncomeTypeId == income.Id && !item.IsCanceled);
+        Assert.Equal(15000m, accrual.Amount);
         var payment = new FinancialOperation
         {
             OperationKind = FinancialOperationKinds.Income,
             OperationDate = new DateOnly(2026, 10, 9),
             AccountingMonth = October,
-            Amount = 100m,
+            Amount = 5000m,
             GarageId = garage.Id,
             IncomeTypeId = income.Id
         };
         context.Add(payment);
-        context.Add(new AccrualPaymentAllocation { Accrual = accrual, FinancialOperation = payment, Amount = 100m, IsActive = true });
+        context.Add(new AccrualPaymentAllocation { Accrual = accrual, FinancialOperation = payment, Amount = 5000m, IsActive = true });
         await context.SaveChangesAsync();
         var dictionary = DictionaryServiceTestFactory.Create(context, new DateOnly(2026, 10, 10));
 
         var result = await dictionary.UpdateGarageAsync(garage.Id, GarageRequest(garage, electricity: 1100m), null, CancellationToken.None);
 
-        Assert.Equal("meter_start_accrual_paid", result.ErrorCode);
+        Assert.True(result.Succeeded, result.ErrorMessage);
         context.ChangeTracker.Clear();
-        Assert.Equal(1500m, (await context.MeterReadings.AsNoTracking().SingleAsync(item => item.IsMeterReplacement)).Consumption);
+        var reading = await context.MeterReadings.AsNoTracking().SingleAsync(item => item.IsMeterReplacement);
+        Assert.Equal((100m, 400m), (reading.PreviousDeviceConsumption, reading.Consumption));
+        Assert.Equal(4000m, (await context.Accruals.AsNoTracking().SingleAsync(item => item.Id == accrual.Id)).Amount);
+        // The payment is kept as is; the part above the reduced accrual becomes an unallocated advance.
+        var storedPayment = await context.FinancialOperations.AsNoTracking().SingleAsync(item => item.Id == payment.Id);
+        Assert.False(storedPayment.IsCanceled);
+        Assert.Equal(5000m, storedPayment.Amount);
+        var allocations = await context.AccrualPaymentAllocations.AsNoTracking().Where(item => item.IsActive).ToListAsync();
+        Assert.Equal(4000m, allocations.Where(item => item.AccrualId == accrual.Id).Sum(item => item.Amount));
+        Assert.Equal(1000m, storedPayment.Amount - allocations.Where(item => item.FinancialOperationId == payment.Id).Sum(item => item.Amount));
     }
 
     [Fact]

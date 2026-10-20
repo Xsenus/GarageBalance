@@ -59,7 +59,7 @@ export function GarageMeterStartFields({ loadKey, load, rows, errors, disabled, 
           <FormField
             label={`Старт. зн. сч.: ${row.label}`}
             help={row.hasReadings
-              ? 'По счётчику уже есть показания: при изменении расход и неоплаченные начисления будут пересчитаны.'
+              ? 'По счётчику уже есть показания: при изменении расход и начисления будут пересчитаны, внесённые оплаты сохранятся.'
               : `Показание счётчика на конец ${baselineMonth ?? 'месяца перед началом учёта'} — месяца перед ${isGarageMeterBaselineAfterAccountingStart(row, accountingStartMonth) ? 'началом нового учёта показаний' : '«Учитывать с»'}${row.unitName ? `, ${row.unitName}` : ''}. Расход первого месяца считается от этого значения.`}
           >
             <input

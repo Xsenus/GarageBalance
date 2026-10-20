@@ -155,13 +155,25 @@ public sealed class MeteredAccrualCommentIntegrationTests
             var paid = await service.CreateIncomeAsync(new CreateIncomeOperationRequest(garage.Id, income.Id, month.AddDays(20), month, 1m, $"COMMENT-PAID-{kind}", null), null, CancellationToken.None);
             Assert.True(paid.Succeeded, paid.ErrorMessage);
             var auditCount = await context.AuditEvents.CountAsync();
-            var rejected = await service.UpdateMeterReadingAsync(created.Value.Id,
+            // A paid accrual is recalculated by the reading cycle as well; the payment itself never changes.
+            var paidUpdate = await service.UpdateMeterReadingAsync(created.Value.Id,
                 new CreateMeterReadingRequest(garage.Id, kind, month, month.AddDays(20), 21m, null, restored.Value!.Version), null, CancellationToken.None);
-            Assert.Equal("meter_reading_accrual_paid", rejected.ErrorCode);
-            Assert.Equal("meter_reading_accrual_paid", (await service.CancelMeterReadingAsync(created.Value.Id, new CancelFinanceEntryRequest("Отмена оплаченного"), null, CancellationToken.None)).ErrorCode);
-            Assert.Equal(prefix + "9" + suffix, accrual.Comment);
-            Assert.Equal(67.23m, accrual.Amount);
-            Assert.Equal(auditCount, await context.AuditEvents.CountAsync());
+            Assert.True(paidUpdate.Succeeded, paidUpdate.ErrorMessage);
+            Assert.Equal(prefix + "10" + suffix, accrual.Comment);
+            Assert.Equal(74.70m, accrual.Amount);
+            Assert.True(await context.AuditEvents.CountAsync() > auditCount);
+            await AssertPaymentAllocationAsync(context, paid.Value!.Id, accrual.Id, 1m);
+            var paidCancel = await service.CancelMeterReadingAsync(created.Value.Id, new CancelFinanceEntryRequest("Отмена оплаченного"), null, CancellationToken.None);
+            Assert.True(paidCancel.Succeeded, paidCancel.ErrorMessage);
+            Assert.Equal(0m, accrual.Amount);
+            Assert.Equal($"Начисление по показанию {kind}: показание отменено" + suffix, accrual.Comment);
+            // The zeroed accrual releases the payment, which stays as an unallocated advance.
+            await AssertPaymentAllocationAsync(context, paid.Value.Id, accrual.Id, 0m);
+            var paidRestore = await service.RestoreMeterReadingAsync(created.Value.Id, null, CancellationToken.None);
+            Assert.True(paidRestore.Succeeded, paidRestore.ErrorMessage);
+            Assert.Equal(prefix + "10" + suffix, accrual.Comment);
+            Assert.Equal(74.70m, accrual.Amount);
+            await AssertPaymentAllocationAsync(context, paid.Value.Id, accrual.Id, 1m);
 
             var zeroGarage = new Garage { Number = $"ZERO-COMMENT-{kind}", InitialWaterMeterValue = 0m, InitialElectricityMeterValue = 0m, CreatedAtUtc = garage.CreatedAtUtc };
             context.Garages.Add(zeroGarage);
@@ -175,6 +187,16 @@ public sealed class MeteredAccrualCommentIntegrationTests
             Assert.Equal(0m, zeroAccrual.Amount);
             Assert.Equal($"Начисление по показанию {kind}: показание отменено" + suffix, zeroAccrual.Comment);
         }
+    }
+
+    private static async Task AssertPaymentAllocationAsync(GarageBalanceDbContext context, Guid paymentId, Guid accrualId, decimal allocated)
+    {
+        var payment = await context.FinancialOperations.AsNoTracking().SingleAsync(item => item.Id == paymentId);
+        Assert.Equal((1m, false), (payment.Amount, payment.IsCanceled));
+        var allocations = await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(item => item.FinancialOperationId == paymentId && item.IsActive).ToListAsync();
+        Assert.Equal(allocated, allocations.Where(item => item.AccrualId == accrualId).Sum(item => item.Amount));
+        Assert.Equal(allocated, allocations.Sum(item => item.Amount));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
