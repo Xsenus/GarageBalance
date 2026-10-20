@@ -497,14 +497,6 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
             .Distinct()
             .ToArray();
         locks.Add(await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken));
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
-            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
-            cancellationToken))
-        {
-            return FinanceResult<bool>.Failure(
-                "meter_start_accrual_paid",
-                $"Изменение стартового показания «{label}» пересчитывает полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку.");
-        }
 
         ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, Guid.Empty);
         ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после изменения стартового показания");

@@ -8884,11 +8884,10 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Показания')
-    const start = await screen.findByLabelText('Гараж START, стартовое показание')
-    expect(start).toHaveTextContent('100')
-    expect(start).toHaveTextContent('База за 08.2026 · прибор ORIGINAL')
-    expect(screen.getByLabelText('Гараж START, Август, стартовое показание')).toHaveValue('100')
-    expect(screen.getByLabelText('Гараж CONNECTED, стартовое показание')).toHaveTextContent('0База за 09.2026')
+    expect(await screen.findByLabelText('Гараж START, Август, стартовое показание')).toHaveValue('100')
+    // The start value lives only in its own month; there is no separate start column.
+    expect(screen.queryByLabelText('Гараж START, стартовое показание')).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'База' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Гараж START, Август, показание')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Гараж START, Январь, показание')).not.toBeInTheDocument()
     const connectedStart = screen.getByLabelText('Гараж CONNECTED, Сентябрь, стартовое показание')
@@ -8901,13 +8900,12 @@ describe('App', () => {
     const first = screen.getByLabelText('Гараж START, Сентябрь, показание')
     if (canWrite) expect(first).toBeEnabled()
     else expect(first).toBeDisabled()
-    expect(screen.getByLabelText('Справка: Стартовое показание')).toHaveAccessibleDescription(/на конец месяца, предшествующего «Учитывать с»/)
+    expect(screen.getByLabelText('Справка: Стартовое показание')).toHaveAccessibleDescription(/месяце перед «Учитывать с»/)
     const year = screen.getByLabelText('Год показаний')
     await user.clear(year)
     await user.type(year, '2025')
-    expect(await screen.findByText('В выбранном году нет активных месяцев. Стартовые значения показаны отдельно.')).toBeInTheDocument()
+    expect(await screen.findByText('В выбранном году нет активных месяцев.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Гараж START, Сентябрь, показание')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Гараж START, стартовое показание')).toHaveTextContent('100')
     expect(createMeterReading).not.toHaveBeenCalled()
   })
 
@@ -8931,10 +8929,7 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Показания')
-    const baseline = await screen.findByLabelText('Гараж BASE, стартовое показание')
-    expect(baseline).toHaveTextContent('0База за 05.2026')
-    expect(baseline.querySelector('input')).toBeNull()
-    expect(screen.getByLabelText('Гараж BASE, Май, стартовое показание')).toHaveValue('0')
+    expect(await screen.findByLabelText('Гараж BASE, Май, стартовое показание')).toHaveValue('0')
     expect(screen.getByLabelText('Гараж BASE, Май, стартовое показание')).toBeDisabled()
     expect(createMeterReading).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Гараж BASE, Апрель, показание')).toBeDisabled()
@@ -8949,7 +8944,6 @@ describe('App', () => {
     await user.type(yearInput, '2025')
     await waitFor(() => expect(screen.getByRole('table', { name: 'Показания счетчиков за 2025 год' })).toBeInTheDocument())
     expect(screen.getByLabelText('Гараж JAN, Декабрь, стартовое показание')).toHaveValue('125,5')
-    expect(screen.getByLabelText('Гараж JAN, стартовое показание')).toHaveTextContent('125,5База за 12.2025')
     expect(createMeterReading).not.toHaveBeenCalled()
   })
 
@@ -9031,7 +9025,7 @@ describe('App', () => {
     await user.type(start, '330')
     await user.tab()
     const dialog = await screen.findByRole('dialog', { name: 'Изменить стартовое показание?' })
-    expect(within(dialog).getByText(/Расход первого месяца учёта и неоплаченные начисления будут пересчитаны/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Расход первого месяца учёта и начисления будут пересчитаны. Внесённые оплаты сохранятся/)).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(setMeterStartValue).toHaveBeenCalledWith('token', { garageId: 'g-start', meterKind: 'electricity', value: 330 }))
     await waitFor(() => expect(within(panel).getByLabelText('Гараж 903, Август, стартовое показание')).toHaveValue('330'))
@@ -9081,8 +9075,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Показания')
     const panel = await screen.findByRole('region', { name: 'Показания' })
-    expect(await within(panel).findByLabelText('Гараж 1, стартовое показание')).toHaveTextContent('53547База за 09.2026')
-    const start = within(panel).getByLabelText('Гараж 1, Сентябрь, стартовое показание')
+    const start = await within(panel).findByLabelText('Гараж 1, Сентябрь, стартовое показание')
     expect(start).toHaveValue('53547')
     expect(start).toBeEnabled()
     expect(start).toHaveAttribute('title', expect.stringContaining('на конец 09.2026'))
@@ -9111,7 +9104,8 @@ describe('App', () => {
     const replaceMeterDevice = vi.fn(async () => ({ device: {}, reading: {} }))
     const financeClient = createFinanceClient({
       replaceMeterDevice,
-      getMeterReadingsPage: async () => ({ items: [], totalCount: 0, offset: 0, limit: 100 }),
+      // The month-end value was entered in «Платежи» before the replacement.
+      getMeterReadingsPage: async () => ({ items: [{ id: 'oct', garageId: 'g-rep', version: 'oct-v', isCanceled: false, accountingMonth: '2026-10-01', currentValue: monthEnd, previousValue: 270 } as MeterReadingDto], totalCount: 1, offset: 0, limit: 100 }),
       getMeterDevices: async () => [{ id: 'old', garageId: 'g-rep', meterKind: 'electricity', serialNumber: 'OLD', installedOn: '2026-08-01', removedOn: null, initialValue: 250, finalValue: null, version: 'v', lastReadingValue: 270 }],
       getMeterReadingYearPage: async () => ({
         garages: [{ id: 'g-rep', number: '905', accountingStartMonth: '2026-09-01', connectedOn: '2026-09-01', startValue: 250, startValueSource: 'connection' as const, startValueDate: '2026-09-01' }],
@@ -9134,14 +9128,13 @@ describe('App', () => {
     const initial = within(dialog).getByLabelText('Начальное показание нового счетчика')
     await user.clear(initial)
     await user.type(initial, String(newStart))
-    const current = within(dialog).getByLabelText('Текущее показание нового счетчика')
-    await user.clear(current)
-    await user.type(current, String(monthEnd))
+    expect(within(dialog).queryByLabelText('Текущее показание нового счетчика')).not.toBeInTheDocument()
     expect(within(dialog).getByText(new RegExp(`Расход за месяц: ${expected} `))).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('Причина замены счетчика'), 'Замена по акту')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить замену' }))
     await waitFor(() => expect(replaceMeterDevice).toHaveBeenCalledWith('token', expect.objectContaining({
-      garageId: 'g-rep', meterKind: 'electricity', removedDeviceFinalValue: 300, newInitialValue: newStart, currentValue: monthEnd, newSerialNumber: 'NEW-1' })))
+      garageId: 'g-rep', meterKind: 'electricity', removedDeviceFinalValue: 300, newInitialValue: newStart, meterReadingId: 'oct', expectedReadingVersion: 'oct-v', newSerialNumber: 'NEW-1' })))
+    expect(replaceMeterDevice).toHaveBeenCalledWith('token', expect.not.objectContaining({ currentValue: expect.anything() }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Замена счётчика' })).not.toBeInTheDocument())
   }, 20000)
 
@@ -29778,9 +29771,9 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Платежи' })
 
     expect(within(panel).queryByRole('button', { name: 'Единый журнал операций' })).not.toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: 'Перерасчёт неоплаченных начислений' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Перерасчёт начислений' })).not.toBeInTheDocument()
     expect(within(panel).queryByRole('region', { name: 'Единый журнал финансовых операций' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Перерасчёт неоплаченных начислений' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Перерасчёт начислений' })).not.toBeInTheDocument()
   })
 
   it('keeps current annual payments out of an existing garage card', async () => {

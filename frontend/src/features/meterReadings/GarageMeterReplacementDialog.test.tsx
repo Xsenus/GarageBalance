@@ -24,17 +24,17 @@ function fill() {
 
 it('includes earlier devices in a repeated replacement and transfers the final value only on an explicit action', async () => {
   const { props, reading, getPage, replace } = fixture()
-  getPage.mockResolvedValue({ items: [{ ...reading, isMeterReplacement: true, currentValue: 7, previousValue: 5, previousDeviceConsumption: 10 }], totalCount: 1 })
+  getPage.mockResolvedValue({ items: [{ ...reading, isMeterReplacement: true, currentValue: 23, previousValue: 5, previousDeviceConsumption: 10 }], totalCount: 1 })
   render(<GarageMeterReplacementDialog {...props} />)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '9' } })
   fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '20' } })
-  fireEvent.change(screen.getByLabelText('Текущее показание нового счетчика'), { target: { value: '23' } })
+  // The month-end value comes from «Платежи»; the dialog does not ask for it.
+  expect(screen.queryByLabelText('Текущее показание нового счетчика')).not.toBeInTheDocument()
   expect(screen.getByText(/Расход за месяц: 17/)).toHaveTextContent('ранее снятые приборы 10')
   expect(replace).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Перенести конечное в начальное' }))
   expect(screen.getByLabelText('Начальное показание нового счетчика')).toHaveValue('9')
-  expect(screen.getByLabelText('Текущее показание нового счетчика')).toHaveValue('23')
   expect(screen.getByText(/Расход за месяц: 28/)).toBeInTheDocument()
 })
 
@@ -50,18 +50,21 @@ it('checks the current reading, validates required fields and saves exact garage
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
   await waitFor(() => expect(props.onSaved).toHaveBeenCalledOnce())
   expect(replace).toHaveBeenCalledWith('token', expect.objectContaining({ garageId: 'garage', meterKind: 'electricity',
-    newSerialNumber: 'NEW-1', newInitialValue: 0, currentValue: 0, removedDeviceFinalValue: 47.125,
+    newSerialNumber: 'NEW-1', newInitialValue: 0, removedDeviceFinalValue: 47.125,
     meterReadingId: 'reading', expectedReadingVersion: 'reading-v1', reason: 'Замена неисправного прибора' }))
+  expect(replace).toHaveBeenCalledWith('token', expect.not.objectContaining({ currentValue: expect.anything() }))
 })
 
 it('blocks invalid precision and decreasing new readings, then preserves the draft and reloads on failure', async () => {
-  const { props, replace, getPage } = fixture()
+  const { props, replace, getPage, reading } = fixture()
+  getPage.mockResolvedValue({ items: [{ ...reading, currentValue: 0, previousValue: 0 }], totalCount: 1 })
   replace.mockRejectedValueOnce(new Error('Показание уже изменено')).mockResolvedValue({})
   render(<GarageMeterReplacementDialog {...props} />)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
   fill()
   fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '1' } })
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('меньше начального показания нового счётчика')
   expect(replace).not.toHaveBeenCalled()
   fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '0' } })
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '1.1234' } })
@@ -138,11 +141,12 @@ it('prefills the removed meter value, shows the expected consumption and refuses
   props.financeClient = { ...props.financeClient, getMeterDevices } as unknown as FinanceClient
   render(<GarageMeterReplacementDialog {...props} />)
 
-  await waitFor(() => expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('1200'))
+  // The month value 1200 belongs to the new meter; the removed meter starts from the month's opening value.
+  await waitFor(() => expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('1000'))
   expect(getMeterDevices).toHaveBeenCalledWith('token', 'garage', 'electricity', expect.any(AbortSignal))
-  fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '0' } })
-  fireEvent.change(screen.getByLabelText('Текущее показание нового счетчика'), { target: { value: '12' } })
-  expect(screen.getByText(/Расход за месяц: 212 \(старый счётчик 200, новый 12\)\./)).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '1200' } })
+  fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '1100' } })
+  expect(screen.getByText(/Расход за месяц: 300 \(старый счётчик 200, новый 100; показание за месяц .+ из «Платежей»\)\./)).toBeInTheDocument()
 
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '900' } })
   expect(screen.getByText(/Конечное показание старого счётчика меньше его последнего показания/)).toBeInTheDocument()
@@ -162,9 +166,8 @@ it('uses the active device history when the month has no reading yet', async () 
 
   expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('100')
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '130' } })
-  fireEvent.change(screen.getByLabelText('Текущее показание нового счетчика'), { target: { value: '5' } })
 
-  expect(screen.getByText(/Расход за месяц: 35 \(старый счётчик 30, новый 5\)\./)).toBeInTheDocument()
+  expect(screen.getByText(/Расход старого счётчика: 30\. Показание нового счётчика на конец месяца введите в «Платежах»/)).toBeInTheDocument()
 })
 
 it('prefills the last saved device value when the selected month has no reading', async () => {

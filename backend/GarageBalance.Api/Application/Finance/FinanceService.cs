@@ -600,43 +600,45 @@ public sealed partial class FinanceService(
                 continue;
             }
 
+            // One row per unpaid annual obligation, in the last displayed month of its year: the
+            // full charge with a single payment field instead of a copy in every month.
             var allocations = annualAllocations.GetValueOrDefault(annualAccrual.AccrualId) ?? [];
-            for (var month = displayFrom; month <= displayTo; month = month.AddMonths(1))
+            var paidBeforePeriod = MoneyMath.RoundMoney(allocations
+                .Where(allocation => allocation.PaymentAccountingMonth < displayFrom)
+                .Sum(allocation => allocation.Amount));
+            if (AnnualAccrualPolicy.IsFullyPaid(annualAccrual.Amount, paidBeforePeriod))
             {
-                var allocatedBeforeMonth = MoneyMath.RoundMoney(allocations
-                    .Where(allocation => allocation.PaymentAccountingMonth < month)
-                    .Sum(allocation => allocation.Amount));
-                if (AnnualAccrualPolicy.IsFullyPaid(annualAccrual.Amount, allocatedBeforeMonth))
-                {
-                    break;
-                }
-
-                var allocatedInMonth = MoneyMath.RoundMoney(allocations
-                    .Where(allocation => allocation.PaymentAccountingMonth == month)
-                    .Sum(allocation => allocation.Amount));
-                var allocatedThroughMonth = MoneyMath.RoundMoney(allocatedBeforeMonth + allocatedInMonth);
-                rows.Add(new GarageIncomeWorksheetRowDto(
-                    month,
-                    annualAccrual.IncomeTypeId,
-                    annualAccrual.IncomeTypeName,
-                    annualAccrual.AccrualId,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    MoneyMath.RoundMoney(annualAccrual.Amount),
-                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
-                    allocatedThroughMonth,
-                    advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
-                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m)),
-                    Reason: BuildAnnualAccrualWorksheetReason(
-                        annualAccrual,
-                        month,
-                        MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m))),
-                    IncomeTypeCode: annualAccrual.IncomeTypeCode));
+                continue;
             }
+
+            var month = displayTo;
+            var allocatedBeforeMonth = MoneyMath.RoundMoney(allocations
+                .Where(allocation => allocation.PaymentAccountingMonth < month)
+                .Sum(allocation => allocation.Amount));
+            var allocatedThroughMonth = MoneyMath.RoundMoney(allocations
+                .Where(allocation => allocation.PaymentAccountingMonth <= month)
+                .Sum(allocation => allocation.Amount));
+            rows.Add(new GarageIncomeWorksheetRowDto(
+                month,
+                annualAccrual.IncomeTypeId,
+                annualAccrual.IncomeTypeName,
+                annualAccrual.AccrualId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                MoneyMath.RoundMoney(annualAccrual.Amount),
+                MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
+                allocatedThroughMonth,
+                advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
+                MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m)),
+                Reason: BuildAnnualAccrualWorksheetReason(
+                    annualAccrual,
+                    month,
+                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m))),
+                IncomeTypeCode: annualAccrual.IncomeTypeCode));
         }
 
         foreach (var option in feeCampaignOptions)
@@ -1318,7 +1320,8 @@ public sealed partial class FinanceService(
                     ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
                       accrualsByMonth.GetValueOrDefault((month, incomeType.Id))
                     : accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
-                if (existing is not null && paidAccrualIds.Contains(existing.Id))
+                // Payments are kept and reallocated; only a historical amount without a known formula stays fixed.
+                if (existing is not null && paidAccrualIds.Contains(existing.Id) && HasOnlyHistoricalAmount(existing.CalculationDetailsJson))
                 {
                     continue;
                 }
@@ -5851,7 +5854,7 @@ public sealed partial class FinanceService(
                 actorUserId,
                 row.Action == "cancel" ? "finance.regular_accrual_canceled_by_safe_recalculation" : RegularAccrualRecalculationAuditActions.SafelyRecalculated,
                 accrual,
-                $"Безопасный перерасчёт неоплаченного начисления по гаражу {accrual.Garage.Number} за {month:MM.yyyy}: {MoneyFormatting.Format(oldAmount)} → {MoneyFormatting.Format(row.ProposedAmount.Value)}. Основание: {reason}",
+                $"Безопасный перерасчёт начисления по гаражу {accrual.Garage.Number} за {month:MM.yyyy}: {MoneyFormatting.Format(oldAmount)} → {MoneyFormatting.Format(row.ProposedAmount.Value)}. Основание: {reason}",
                 new Dictionary<string, object?>
                 {
                     ["amount"] = oldAmount,
@@ -5997,9 +6000,13 @@ public sealed partial class FinanceService(
         }
 
         var accruals = await accrualRepository.GetActiveRegularForRecalculationAsync(incomeTypeId, month, cancellationToken);
-        var paidIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
+        // Paid accruals are recalculated as well (payments are reallocated afterwards); only a
+        // historical amount whose original formula is unknown stays unchanged.
+        var paidIds = (await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
             accruals.Select(accrual => accrual.Id).ToArray(),
-            cancellationToken);
+            cancellationToken))
+            .Intersect(accruals.Where(accrual => HasOnlyHistoricalAmount(accrual.CalculationDetailsJson)).Select(accrual => accrual.Id))
+            .ToHashSet();
         var segments = BuildRegularAccrualSegments(month, setting, tariff);
         var individualPeriods = await LoadIndividualTariffPeriodsAsync(
             accruals.Where(accrual => !paidIds.Contains(accrual.Id)).Select(accrual => accrual.GarageId).ToArray(), setting, month, cancellationToken);
@@ -6033,7 +6040,7 @@ public sealed partial class FinanceService(
                     accrual.Amount,
                     0m,
                     "paid",
-                    "Есть активное распределение платежа: сумма и снимок сохранены без изменений.",
+                    "Оплаченная историческая сумма без исходной формулы сохранена без изменений.",
                     true));
                 continue;
             }
@@ -6076,7 +6083,7 @@ public sealed partial class FinanceService(
                         : "unchanged";
             var explanation = action switch
             {
-                "cancel" => "Расчётная сумма равна нулю: неоплаченное начисление будет отменено с аудитом.",
+                "cancel" => "Расчётная сумма равна нулю: начисление будет отменено с аудитом; внесённые оплаты сохранятся и станут переплатой.",
                 "update" when accrual.IsCanceled => "Начисление, автоматически отменённое из-за отсутствия тарифа, будет восстановлено и пересчитано.",
                 "update" => "Сумма и расчётный снимок будут обновлены.",
                 "snapshot" => "Сумма не меняется; будет обновлён только расчётный снимок и ссылка на тариф.",
@@ -6607,9 +6614,9 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_reason_required", "Укажите причину замены счетчика.");
         }
 
-        if (!request.NewInitialValue.HasValue || !request.CurrentValue.HasValue)
+        if (!request.NewInitialValue.HasValue)
         {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_values_required", "Укажите начальное и текущее показания нового счетчика.");
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_values_required", "Укажите начальное показание нового счетчика.");
         }
 
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
@@ -6619,8 +6626,7 @@ public sealed partial class FinanceService(
         }
 
         var initialValue = MoneyMath.RoundMeterValue(request.NewInitialValue.Value);
-        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue.Value);
-        if (currentValue < initialValue)
+        if (request.CurrentValue.HasValue && MoneyMath.RoundMeterValue(request.CurrentValue.Value) < initialValue)
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_current_below_initial", "Текущее показание нового счетчика не может быть меньше его начального показания.");
         }
@@ -6682,6 +6688,16 @@ public sealed partial class FinanceService(
         else if (allReadings.Any(reading => reading.AccountingMonth == accountingMonth))
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_duplicate", "За выбранный месяц уже есть показание. Обновите таблицу и повторите замену из этой ячейки.");
+        }
+
+        // The month-end value belongs to the «Платежи» field: an entered reading of the month is
+        // kept as the new meter's value; without one the month starts from the new meter's initial
+        // value until the operator enters it, and only the removed meter's part is counted.
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue ?? targetReading?.CurrentValue ?? initialValue);
+        if (currentValue < initialValue)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_current_below_initial",
+                $"Показание за месяц ({currentValue:0.###}) меньше начального показания нового счётчика. Проверьте начальное показание нового счётчика.");
         }
 
         if (activeDevice is not null && request.ReplacementDate <= activeDevice.InstalledOn)
@@ -6799,14 +6815,6 @@ public sealed partial class FinanceService(
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken);
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
-            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
-            cancellationToken))
-        {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure(
-                "meter_reading_accrual_paid",
-                "Замена счетчика изменяет полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку.");
-        }
 
         if (registerLegacyDevice)
         {
@@ -7054,14 +7062,6 @@ public sealed partial class FinanceService(
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             allocationKeys,
             cancellationToken);
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
-            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
-            cancellationToken))
-        {
-            return FinanceResult<MeterReadingDto>.Failure(
-                "meter_reading_accrual_paid",
-                "Вставка показания изменяет уже оплаченное начисление последующего периода. Сначала исправьте оплату или оформите отдельную корректировку начисления.");
-        }
 
         ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
         ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после вставки показания");
@@ -7389,14 +7389,6 @@ public sealed partial class FinanceService(
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             allocationKeys,
             cancellationToken);
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
-            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
-            cancellationToken))
-        {
-            return FinanceResult<MeterReadingDto>.Failure(
-                "meter_reading_accrual_paid",
-                "Связанное начисление уже полностью или частично оплачено. Изменение показания отменено; сначала исправьте оплату или согласуйте отдельную корректировку начисления.");
-        }
 
         var oldValues = new Dictionary<string, object?>
         {
@@ -7651,14 +7643,6 @@ public sealed partial class FinanceService(
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken);
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
-            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
-            cancellationToken))
-        {
-            return FinanceResult<MeterReadingDto>.Failure(
-                "meter_reading_accrual_paid",
-                "Отмена показания изменяет полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку начисления.");
-        }
 
         ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
         ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после отмены показания");
@@ -7757,14 +7741,6 @@ public sealed partial class FinanceService(
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken);
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
-            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
-            cancellationToken))
-        {
-            return FinanceResult<MeterReadingDto>.Failure(
-                "meter_reading_accrual_paid",
-                "Восстановление показания изменяет полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку начисления.");
-        }
 
         reading.IsCanceled = false;
         ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
@@ -8302,6 +8278,22 @@ public sealed partial class FinanceService(
             : $"{userComment}; {snapshot}.";
     }
 
+    // Regular accruals migrated with their historical amount have no original formula (version 0).
+    private static bool HasOnlyHistoricalAmount(string? calculationDetailsJson)
+    {
+        if (string.IsNullOrWhiteSpace(calculationDetailsJson)) return true;
+        try
+        {
+            using var document = JsonDocument.Parse(calculationDetailsJson);
+            return !document.RootElement.TryGetProperty("version", out var version) ||
+                version.ValueKind != JsonValueKind.Number || version.GetInt32() == 0;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
+    }
+
     private static string BuildAnnualAccrualWorksheetReason(
         GarageIncomeWorksheetAnnualAccrualData accrual,
         DateOnly displayedMonth,
@@ -8309,7 +8301,7 @@ public sealed partial class FinanceService(
     {
         return accrual.AccountingMonth == displayedMonth
             ? $"Годовое начисление за {accrual.AccountingYear} год: {MoneyFormatting.Format(accrual.Amount)}."
-            : $"Перенос остатка годового начисления за {accrual.AccountingYear} год: {MoneyFormatting.Format(payableAmount)}. Новое начисление в этом месяце не создавалось.";
+            : $"Годовое начисление за {accrual.AccountingYear} год от {accrual.AccountingMonth:MM.yyyy}: {MoneyFormatting.Format(accrual.Amount)}, остаток к оплате {MoneyFormatting.Format(payableAmount)}. Показано одной строкой в последнем месяце периода; новое начисление в этом месяце не создавалось.";
     }
 
     private static string BuildFeeCampaignAccrualComment(FeeCampaign campaign, string? comment)

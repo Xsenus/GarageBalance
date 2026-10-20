@@ -139,14 +139,12 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
       <div className={`meter-readings-table${visibleMonths.length === 0 ? ' meter-readings-table--no-months' : ''}`} style={{ '--meter-month-count': visibleMonths.length } as CSSProperties} role="table" aria-label={`Показания счетчиков за ${appliedYear} год`} aria-busy={loading}>
         <div className="meter-readings-title-row" role="row">
           <span role="columnheader">Гараж</span>
-          <span role="columnheader">База</span>
           {visibleMonths.length > 0 ? <span role="columnheader">Показания</span> : null}
         </div>
         <div className="meter-readings-month-row" role="row">
-          <span role="columnheader">Гараж</span>
-          <span className="meter-readings-start-header" role="columnheader">
-            <strong>Стартовое показание</strong>
-            <FieldHelp label="Стартовое показание">Стартовое показание — значение счётчика на конец месяца, предшествующего «Учитывать с» в карточке гаража или началу нового учёта показаний, если оно позже. Этот месяц показан в таблице первым, значение в нём можно исправить: расход и неоплаченные начисления пересчитаются. Ноль — известное значение, «Не задано» — неизвестная база.</FieldHelp>
+          <span className="meter-readings-garage-header" role="columnheader">
+            <strong>Гараж</strong>
+            <FieldHelp label="Стартовое показание">Стартовое показание каждого гаража стоит в его первом месяце — месяце перед «Учитывать с» из карточки гаража. Значение в этой ячейке можно исправить: расход и начисления пересчитаются сразу, внесённые оплаты сохранятся.</FieldHelp>
           </span>
           {visibleMonths.map((month) => (
             <span role="columnheader" aria-label={`${month.label}${selectedMeterType.unit}`} key={month.key}>
@@ -165,10 +163,9 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
         ) : null}
         {loading && hasLoadedPage ? <BackgroundRefreshStatus label="Обновляем гаражи и показания" /> : null}
         {!loading && hasLoadedPage && garages.length > 0 && visibleMonths.length === 0 ? (
-          <div className="meter-readings-period-empty-row" role="row"><span role="cell"><EmptyState>В выбранном году нет активных месяцев. Стартовые значения показаны отдельно.</EmptyState></span></div>
+          <div className="meter-readings-period-empty-row" role="row"><span role="cell"><EmptyState>В выбранном году нет активных месяцев.</EmptyState></span></div>
         ) : null}
         {hasLoadedPage && garages.length > 0 ? garages.map((garage) => {
-          const start = getMeterReadingStartDisplay(garage)
           return (
           <div className="meter-readings-data-row" role="row" key={garage.id}>
             <span role="rowheader">
@@ -180,10 +177,6 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   <Replace size={14} aria-hidden="true" />
                 </button>
               ) : null}
-            </span>
-            <span className="meter-readings-start-cell" role="cell" aria-label={`Гараж ${garage.number}, стартовое показание`}>
-              <strong>{start.value == null ? 'Не задано' : formatMeterReadingInputValue(start.value)}</strong>
-              <small>{start.description}</small>
             </span>
             {visibleMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
@@ -197,8 +190,8 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                       title={!canEditStartValue
                         ? 'Стартовое показание меняют пользователи с правом корректировки начальных данных.'
                         : isConnectedAfterGarageStart(garage)
-                          ? 'Счётчик подключён позже «Учитывать с». После сохранения стартовое показание будет перенесено на конец месяца перед «Учитывать с», расход и неоплаченные начисления пересчитаются.'
-                          : `Стартовое показание на конец ${month.key}.${appliedYear} — месяца перед «Учитывать с» или началом нового учёта показаний, если оно позже. Изменение пересчитает расход и неоплаченные начисления.`}
+                          ? 'Счётчик подключён позже «Учитывать с». После сохранения стартовое показание будет перенесено на конец месяца перед «Учитывать с», расход и начисления пересчитаются, внесённые оплаты сохранятся.'
+                          : `Стартовое показание на конец ${month.key}.${appliedYear} — месяца перед «Учитывать с» или началом нового учёта показаний, если оно позже. Изменение пересчитает расход и начисления; внесённые оплаты сохранятся.`}
                       value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                       onBlur={(event) => {
                         if (!loading && shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitStartValue(garage, month)
@@ -852,7 +845,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
               </button>
             </div>
             <p className="confirmation-text" id="meter-reading-change-description">{pendingReadingChange.isStartValue
-              ? 'Расход первого месяца учёта и неоплаченные начисления будут пересчитаны. Изменение появится в истории гаража.'
+              ? 'Расход первого месяца учёта и начисления будут пересчитаны. Внесённые оплаты сохранятся, разница станет долгом или переплатой. Изменение появится в истории гаража.'
               : 'Проверьте показание. После сохранения изменение появится в истории гаража.'}</p>
             <ChangePreviewList ariaLabel="Изменяемые поля показания" changes={[{
               field: pendingReadingChange.isStartValue ? 'Стартовое показание' : 'Показание',

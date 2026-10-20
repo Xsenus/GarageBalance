@@ -25,7 +25,6 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const [date, setDate] = useState(getLocalDateInputValue)
   const [serial, setSerial] = useState('')
   const [initial, setInitial] = useState('0')
-  const [current, setCurrent] = useState('0')
   const [final, setFinal] = useState('')
   const [finalTouched, setFinalTouched] = useState(false)
   const [reason, setReason] = useState('')
@@ -40,16 +39,23 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const requestKey = JSON.stringify([auth.accessToken, garage.id, garage.number, kind, month, retry])
   const loading = canWrite && loaded?.key !== requestKey && loadError?.key !== requestKey
   const loadedForRequest = loaded?.key === requestKey ? loaded : null
-  const savedFinal = loadedForRequest?.reading?.currentValue
-    ?? loadedForRequest?.activeDevice?.lastReadingValue ?? loadedForRequest?.activeDevice?.initialValue
+  // An entered month value belongs to the new meter, so the removed meter starts from the month's
+  // opening value; a repeated replacement removes the meter that value was entered for.
+  const savedFinal = loadedForRequest?.reading
+    ? loadedForRequest.reading.isMeterReplacement ? loadedForRequest.reading.currentValue : loadedForRequest.reading.previousValue
+    : loadedForRequest?.activeDevice?.lastReadingValue ?? loadedForRequest?.activeDevice?.initialValue
   const defaultFinal = typeof savedFinal === 'number' ? String(savedFinal) : ''
   const finalText = finalTouched ? final : defaultFinal
   const consumptionBaseline = loadedForRequest?.reading
     ? loadedForRequest.reading.previousValue
     : loadedForRequest?.activeDevice ? loadedForRequest.activeDevice.lastReadingValue ?? loadedForRequest.activeDevice.initialValue : null
   const earlierConsumption = loadedForRequest?.reading?.isMeterReplacement ? loadedForRequest.reading.previousDeviceConsumption ?? 0 : 0
+  // The month-end value is entered in «Платежи»; an already entered value of the month stays the new meter's value.
+  const monthValue = loadedForRequest?.reading?.currentValue ?? null
+  const finalValue = parseValue(finalText)
+  const initialValue = parseValue(initial)
   const consumption = getMeterReplacementConsumption(
-    typeof consumptionBaseline === 'number' ? consumptionBaseline : null, parseValue(finalText), parseValue(initial), parseValue(current), earlierConsumption)
+    typeof consumptionBaseline === 'number' ? consumptionBaseline : null, finalValue, initialValue, monthValue ?? initialValue, earlierConsumption)
   const ref = useFocusTrap<HTMLElement>(true)
   useRestoreFocusOnClose(true)
   useEscapeKey(!saving, onClose)
@@ -92,12 +98,13 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
 
   async function save() {
     if (!canWrite || loading || loaded?.key !== requestKey || submitting.current || !financeClient.replaceMeterDevice) return
-    const initialValue = parseValue(initial)
-    const currentValue = parseValue(current)
-    const finalValue = parseValue(finalText)
-    if (!date || !serial.trim() || serial.trim().length > 100 || initialValue === null || currentValue === null || finalValue === null
-      || currentValue < initialValue || reasonRequired && !reason.trim()) {
-      setError('Укажите дату, номер нового счётчика, корректные показания и причину замены. Текущее показание нового счётчика не может быть меньше начального.')
+    if (!date || !serial.trim() || serial.trim().length > 100 || initialValue === null || finalValue === null
+      || reasonRequired && !reason.trim()) {
+      setError('Укажите дату, номер нового счётчика, корректные показания и причину замены.')
+      return
+    }
+    if (monthValue !== null && monthValue < initialValue) {
+      setError(`Показание за месяц (${formatAmount(monthValue)}) меньше начального показания нового счётчика. Проверьте начальное показание.`)
       return
     }
     submitting.current = true
@@ -105,7 +112,7 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
     setError(null)
     try {
       await financeClient.replaceMeterDevice(auth.accessToken, { garageId: garage.id, meterKind: kind, accountingMonth: `${month}-01`,
-        replacementDate: date, newSerialNumber: serial.trim(), newInitialValue: initialValue, currentValue,
+        replacementDate: date, newSerialNumber: serial.trim(), newInitialValue: initialValue,
         removedDeviceFinalValue: finalValue, reason: reason.trim(), meterReadingId: loaded.reading?.id, expectedReadingVersion: loaded.reading?.version })
       onSaved()
     } catch (caught) {
@@ -132,13 +139,14 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
         <FormField label="Конечное показание старого счётчика" help="Последнее значение снимаемого счётчика. Расход до замены сохраняется в начислении этого месяца."><MeterReadingInput aria-label="Конечное показание старого счетчика" required value={finalText} disabled={disabled} onChange={(event) => { setFinalTouched(true); setFinal(event.target.value) }} /></FormField>
         <FormField label="Начальное показание нового счётчика" help="Старт в карточке гаража не меняется."><MeterReadingInput aria-label="Начальное показание нового счетчика" required value={initial} disabled={disabled} onChange={(event) => setInitial(event.target.value)} /></FormField>
         <button type="button" className="ghost-button" disabled={disabled || parseValue(finalText) === null} onClick={() => setInitial(finalText)}>Перенести конечное в начальное</button>
-        <FormField label="Текущее показание нового счётчика"><MeterReadingInput aria-label="Текущее показание нового счетчика" required value={current} disabled={disabled} onChange={(event) => setCurrent(event.target.value)} /></FormField>
         {consumption ? <p className={`form-hint${consumption.oldMeter < 0 || consumption.newMeter < 0 ? ' form-hint--warning' : ''}`} role="status" aria-live="polite">
           {consumption.oldMeter < 0
             ? `Конечное показание старого счётчика меньше его последнего показания (${formatAmount(consumptionBaseline as number)}).`
             : consumption.newMeter < 0
-              ? 'Текущее показание нового счётчика меньше его начального показания.'
-              : `Расход за месяц: ${formatAmount(consumption.total)} (${earlierConsumption ? `ранее снятые приборы ${formatAmount(earlierConsumption)}, ` : ''}старый счётчик ${formatAmount(consumption.oldMeter)}, новый ${formatAmount(consumption.newMeter)}).`}
+              ? `Показание за месяц (${formatAmount(monthValue as number)}) меньше начального показания нового счётчика.`
+              : monthValue === null
+                ? `Расход старого счётчика: ${formatAmount(consumption.oldMeter)}${earlierConsumption ? ` (ранее снятые приборы ${formatAmount(earlierConsumption)})` : ''}. Показание нового счётчика на конец месяца введите в «Платежах» — расход посчитается по обоим счётчикам.`
+                : `Расход за месяц: ${formatAmount(consumption.total)} (${earlierConsumption ? `ранее снятые приборы ${formatAmount(earlierConsumption)}, ` : ''}старый счётчик ${formatAmount(consumption.oldMeter)}, новый ${formatAmount(consumption.newMeter)}; показание за месяц ${formatAmount(monthValue)} из «Платежей»).`}
         </p> : null}
         <FormField label="Причина замены счетчика"><textarea required={reasonRequired} maxLength={500} value={reason} disabled={disabled} onChange={(event) => setReason(event.target.value)} /></FormField>
         <div className="detail-dialog-actions"><button type="submit" className="secondary-button" disabled={disabled || loading || loaded?.key !== requestKey || !financeClient.replaceMeterDevice} aria-busy={saving}>{saving ? <LoaderCircle size={17} className="financial-report-button__spinner" /> : <Save size={17} />}<span>Сохранить замену</span></button>

@@ -115,7 +115,7 @@ public sealed class PostgreSqlIndividualTariffCalculationTests
     }
 
     [PostgreSqlFact]
-    public async Task GenerationPreviewAndWorksheetUseIndividualPeriodsButPreservePaidSnapshots()
+    public async Task GenerationPreviewAndWorksheetUseIndividualPeriodsAndRecalculatePaidAccrualKeepingPayment()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -181,13 +181,18 @@ public sealed class PostgreSqlIndividualTariffCalculationTests
         var preview = await service.PreviewRegularAccrualRecalculationAsync(new(income.Id, general.Id, month), CancellationToken.None);
         Assert.True(preview.Succeeded, preview.ErrorMessage);
         Assert.Contains(preview.Value!.Rows, row => row.AccrualId == firstAccrual.Id && row.ProposedAmount == 350m);
-        Assert.Contains(preview.Value.Rows, row => row.AccrualId == paidAccrual.Id && row.ProposedAmount == 400m && row.IsPaid);
+        // A paid accrual with a known formula is recalculated as well; the payment is reallocated afterwards.
+        Assert.Contains(preview.Value.Rows, row => row.AccrualId == paidAccrual.Id && row.ProposedAmount == 600m && row.Action == "update" && !row.IsPaid);
         var applied = await service.ApplyRegularAccrualRecalculationAsync(
             new(income.Id, general.Id, month, preview.Value.PreviewFingerprint, "Проверка индивидуальной ставки"), null, CancellationToken.None);
         Assert.True(applied.Succeeded, applied.ErrorMessage);
         Assert.Equal(350m, firstAccrual.Amount);
-        Assert.Equal(400m, paidAccrual.Amount);
-        Assert.Equal(paidSnapshot, paidAccrual.CalculationDetailsJson);
+        Assert.Equal(600m, paidAccrual.Amount);
+        Assert.NotEqual(paidSnapshot, paidAccrual.CalculationDetailsJson);
+        var storedOperation = await context.FinancialOperations.AsNoTracking().SingleAsync(row => row.Id == operation.Id);
+        Assert.Equal((400m, false), (storedOperation.Amount, storedOperation.IsCanceled));
+        Assert.Equal(400m, await context.AccrualPaymentAllocations.AsNoTracking()
+            .Where(row => row.AccrualId == paidAccrual.Id && row.IsActive).SumAsync(row => row.Amount));
         var worksheet = await service.CalculateGarageIncomeWorksheetAsync(first.Id, new(month, month), null, CancellationToken.None);
         Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
         Assert.Equal(350m, Assert.Single(worksheet.Value!.Rows, row => row.IncomeTypeId == income.Id).AccrualAmount);

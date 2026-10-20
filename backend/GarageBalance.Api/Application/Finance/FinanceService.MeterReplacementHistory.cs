@@ -104,8 +104,6 @@ public sealed partial class FinanceService
             target.AccountingMonth, plan.Value!, snapshot is null ? target.AccountingMonth : null, cancellationToken);
         var keys = recalculations.Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId)).Distinct().ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(keys, cancellationToken);
-        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(recalculations.Select(item => item.Accrual.Id).ToArray(), cancellationToken))
-            return Failure("meter_reading_accrual_paid", "Отмена замены изменяет оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку.");
 
         device.IsCanceled = true;
         device.CancellationReason = reason;
