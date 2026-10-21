@@ -203,7 +203,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("allocation_totals_above_accrual", script, StringComparison.Ordinal);
         Assert.Contains("duplicate_active_allocations", script, StringComparison.Ordinal);
         Assert.Contains("allocation_income_type_mismatches", script, StringComparison.Ordinal);
-        Assert.Contains("duplicate_active_supplier_accruals", script, StringComparison.Ordinal);
+        Assert.Contains("run_check \"duplicate_regular_supplier_accruals\" \"critical\"", script, StringComparison.Ordinal);
+        Assert.Contains("run_check \"repeated_manual_supplier_accruals\" \"warning\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("duplicate_active_supplier_accruals", script, StringComparison.Ordinal);
         Assert.Contains("linked_supplier_accrual_mismatches", script, StringComparison.Ordinal);
         Assert.Contains("staff_without_salary_rate_history", script, StringComparison.Ordinal);
         Assert.Contains("duplicate_staff_salary_rate_period_starts", script, StringComparison.Ordinal);

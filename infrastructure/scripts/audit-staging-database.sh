@@ -224,8 +224,12 @@ run_check "duplicate_active_allocations" "critical" \
 run_check "allocation_income_type_mismatches" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND NOT f.\"IsCanceled\" AND NOT a.\"IsCanceled\" AND f.\"IncomeTypeId\" IS NOT NULL AND f.\"IncomeTypeId\" <> a.\"IncomeTypeId\";"
 
-run_check "duplicate_active_supplier_accruals" "critical" \
-  "SELECT count(*) FROM (SELECT \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", \"Source\", coalesce(\"DocumentNumber\", '') FROM supplier_accruals WHERE NOT \"IsCanceled\" GROUP BY \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", \"Source\", coalesce(\"DocumentNumber\", '') HAVING count(*) > 1) q;"
+# Only regular supplier accruals must be unique (the application and a partial unique index enforce it);
+# repeated manual ones, such as two cash purchases from one supplier in a month, are allowed and only counted.
+run_check "duplicate_regular_supplier_accruals" "critical" \
+  "SELECT count(*) FROM (SELECT \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", coalesce(\"DocumentNumber\", '') FROM supplier_accruals WHERE NOT \"IsCanceled\" AND \"Source\" = 'regular' GROUP BY \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", coalesce(\"DocumentNumber\", '') HAVING count(*) > 1) q;"
+run_check "repeated_manual_supplier_accruals" "warning" \
+  "SELECT count(*) FROM (SELECT \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", coalesce(\"DocumentNumber\", '') FROM supplier_accruals WHERE NOT \"IsCanceled\" AND \"Source\" <> 'regular' GROUP BY \"SupplierId\", \"ExpenseTypeId\", \"AccountingMonth\", coalesce(\"DocumentNumber\", '') HAVING count(*) > 1) q;"
 run_check "nonpositive_active_supplier_accruals" "critical" \
   "SELECT count(*) FROM supplier_accruals WHERE NOT \"IsCanceled\" AND \"Amount\" <= 0;"
 run_check "linked_supplier_accrual_mismatches" "critical" \
