@@ -4132,7 +4132,8 @@ function PaymentsPrototypePanel({
         monthFrom: `${resolvedMonthFrom}-01`,
         monthTo: `${resolvedMonthTo}-01`,
       }
-      const worksheet = recalculate && canWritePayments && financeClient.calculateGarageIncomeWorksheet
+      const recalculated = Boolean(recalculate && canWritePayments && financeClient.calculateGarageIncomeWorksheet)
+      const worksheet = recalculated && financeClient.calculateGarageIncomeWorksheet
         ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
         : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
@@ -4172,6 +4173,11 @@ function PaymentsPrototypePanel({
         closingBalance: worksheet.closingBalance,
         closingDebt: worksheet.closingDebt,
       })
+      // Opening the worksheet recalculates accruals on the server (a changed tariff,
+      // reading or start value), so the garage balance in the card header is reread.
+      if (recalculated) {
+        void refreshGarageOverdueDebt(garage)
+      }
     } catch (error) {
       if (!controller.signal.aborted && incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
         setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
