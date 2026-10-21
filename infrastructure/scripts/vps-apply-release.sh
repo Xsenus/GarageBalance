@@ -46,6 +46,15 @@ if [[ "${1:-}" == "archived-garages" ]]; then
   exec /usr/local/bin/garagebalance-archived-garages-cleanup "$@"
 fi
 
+if [[ "${1:-}" == "records" ]]; then
+  [[ "$#" == "4" || "$#" == "5" ]] || {
+    echo "usage: $0 records garage-history|meter-history preview|cleanup <confirmation> [plan-fingerprint]"
+    exit 64
+  }
+  shift
+  exec /usr/local/bin/garagebalance-records-cleanup "$@"
+fi
+
 if [[ "${1:-}" == "audit-database" ]]; then
   [[ "$#" == "2" ]] || {
     echo "usage: $0 audit-database <confirmation>"
@@ -303,6 +312,8 @@ tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
   fail "staging Codex cleanup script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" ]] ||
   fail "staging database audit script was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-records.sh" ]] ||
+  fail "staging records cleanup script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" ]] ||
   fail "Cloud backup configuration script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/run-staging-storage-tool.sh" ]] ||
@@ -316,6 +327,7 @@ bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/reset-staging-working-data.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-records.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/run-staging-storage-tool.sh"
 
@@ -439,6 +451,9 @@ install -o root -g root -m 0750 \
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-archived-garages.sh" \
   /usr/local/bin/garagebalance-archived-garages-cleanup
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-records.sh" \
+  /usr/local/bin/garagebalance-records-cleanup
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/configure-staging-cloud-backup.sh" \
   /usr/local/bin/garagebalance-configure-cloud-backup
