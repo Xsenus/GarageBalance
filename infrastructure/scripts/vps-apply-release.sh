@@ -48,7 +48,7 @@ fi
 
 if [[ "${1:-}" == "records" ]]; then
   [[ "$#" == "4" || "$#" == "5" ]] || {
-    echo "usage: $0 records garage-history|meter-history preview|cleanup <confirmation> [plan-fingerprint]"
+    echo "usage: $0 records garage-history|meter-history|fund-balance preview|cleanup <confirmation> [plan-fingerprint]"
     exit 64
   }
   shift

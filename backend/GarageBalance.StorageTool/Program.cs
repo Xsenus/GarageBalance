@@ -43,6 +43,8 @@ GarageBalance.StorageTool commands:
   archived-garages-purge [--execute ...same as archived-garages-cleanup]
   meter-history-plan --output <private-json-path>
   meter-history-cleanup [--execute ...same as archived-garages-cleanup]
+  archived-fund-balance-plan --output <private-json-path>
+  archived-fund-balance-repair [--execute ...same as archived-garages-cleanup]
 Options: --checkpoint <private-json-path> --page-size N --max-jobs N --output <private-json-path>
 Mutating commands are dry-run by default. copy creates a checkpoint; resume continues it;
 delta-sync extends it with new files. Only backup-layout-prune removes old cloud paths after verification.

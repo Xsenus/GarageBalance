@@ -70,8 +70,8 @@ public interface IAccountingCleanupHostEnvironment
 public static class AccountingCleanupCommands
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-    private static readonly string[] PreviewCommands = ["archived-garages-plan", "archived-garages-purge-plan", "meter-history-plan"];
-    private static readonly string[] ExecuteCommands = ["archived-garages-cleanup", "archived-garages-purge", "meter-history-cleanup"];
+    private static readonly string[] PreviewCommands = ["archived-garages-plan", "archived-garages-purge-plan", "meter-history-plan", "archived-fund-balance-plan"];
+    private static readonly string[] ExecuteCommands = ["archived-garages-cleanup", "archived-garages-purge", "meter-history-cleanup", "archived-fund-balance-repair"];
     public static bool CanHandle(string command) => IsPreview(command) ||
         ExecuteCommands.Contains(command, StringComparer.OrdinalIgnoreCase);
     public static bool IsPreview(string command) => PreviewCommands.Contains(command, StringComparer.OrdinalIgnoreCase);
@@ -104,12 +104,37 @@ public static class AccountingCleanupCommands
             }
             await using var db = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>().UseNpgsql(connection).Options);
             var command = args[0].ToLowerInvariant();
-            if (command is "archived-garages-purge-plan" or "archived-garages-purge" or "meter-history-plan" or "meter-history-cleanup")
+            if (command is "archived-garages-purge-plan" or "archived-garages-purge" or "meter-history-plan" or "meter-history-cleanup"
+                or "archived-fund-balance-plan" or "archived-fund-balance-repair")
             {
-                if (options.Execute != (command is "archived-garages-purge" or "meter-history-cleanup"))
+                if (options.Execute != (command is "archived-garages-purge" or "meter-history-cleanup" or "archived-fund-balance-repair"))
                     throw new AccountingCleanupException("cleanup_options_invalid", "Удаление выполняется только командой очистки с --execute.");
                 object report;
-                if (command.StartsWith("archived", StringComparison.Ordinal))
+                if (command.StartsWith("archived-fund", StringComparison.Ordinal))
+                {
+                    var repair = new ArchivedFundBalanceRepairEngine(db, new AccountingCleanupBackupVerifier(), TimeProvider.System);
+                    if (!options.Execute)
+                    {
+                        var repairPlan = await repair.PreviewAsync(cancellationToken);
+                        report = repairPlan;
+                        Console.WriteLine(JsonSerializer.Serialize(new
+                        {
+                            dryRun = true,
+                            repairPlan.PlanId,
+                            funds = repairPlan.Funds.Count,
+                            blocked = repairPlan.BlockedFundNames.Count,
+                            repairPlan.Fingerprint
+                        }, JsonOptions));
+                    }
+                    else
+                    {
+                        await EnsureNoOtherClientsAsync(db, cancellationToken);
+                        report = await repair.ExecuteAsync(await ReadAsync<ArchivedFundBalanceRepairPlan>(options.PlanPath!, cancellationToken), options.Fingerprint!,
+                            await ReadAsync<AccountingCleanupBackupReceipt>(options.BackupReceiptPath!, cancellationToken), identity, options.Reason!, cancellationToken);
+                        committed = true;
+                    }
+                }
+                else if (command.StartsWith("archived", StringComparison.Ordinal))
                 {
                     var purge = new ArchivedGarageFinancialPurgeEngine(db, new AccountingCleanupBackupVerifier(), TimeProvider.System);
                     if (!options.Execute)

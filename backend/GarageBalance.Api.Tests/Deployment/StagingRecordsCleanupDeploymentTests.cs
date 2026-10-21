@@ -13,10 +13,13 @@ public sealed class StagingRecordsCleanupDeploymentTests
         Assert.Contains("environment: staging", workflow, StringComparison.Ordinal);
         Assert.Contains("- garage-history", workflow, StringComparison.Ordinal);
         Assert.Contains("- meter-history", workflow, StringComparison.Ordinal);
+        Assert.Contains("- fund-balance", workflow, StringComparison.Ordinal);
+        Assert.Contains("subject=\"ARCHIVED FUND BALANCE\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("action=\"REPAIR\"", workflow, StringComparison.Ordinal);
         Assert.Contains("subject=\"DELETED GARAGE HISTORY\"", workflow, StringComparison.Ordinal);
         Assert.Contains("subject=\"METER HISTORY\"", workflow, StringComparison.Ordinal);
         Assert.Contains("test \"$CONFIRMATION\" = \"PREVIEW GARAGEBALANCE ${subject}\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("test \"$CONFIRMATION\" = \"DELETE GARAGEBALANCE ${subject}\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("test \"$CONFIRMATION\" = \"${action} GARAGEBALANCE ${subject}\"", workflow, StringComparison.Ordinal);
         Assert.Contains("[[ \"$FINGERPRINT\" =~ ^[0-9a-f]{64}$ ]]", workflow, StringComparison.Ordinal);
         Assert.True(workflow.IndexOf("Validate inputs", StringComparison.Ordinal) < workflow.IndexOf("Prepare SSH", StringComparison.Ordinal));
         Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply records '${KIND}' preview '${CONFIRMATION}'", workflow, StringComparison.Ordinal);
@@ -38,6 +41,9 @@ public sealed class StagingRecordsCleanupDeploymentTests
         Assert.Contains("CLEANUP_COMMAND=\"meter-history-cleanup\"", script, StringComparison.Ordinal);
         Assert.Contains("CLEANUP_CONFIRMATION=\"DELETE GARAGEBALANCE DELETED GARAGE HISTORY\"", script, StringComparison.Ordinal);
         Assert.Contains("CLEANUP_CONFIRMATION=\"DELETE GARAGEBALANCE METER HISTORY\"", script, StringComparison.Ordinal);
+        Assert.Contains("PLAN_COMMAND=\"archived-fund-balance-plan\"", script, StringComparison.Ordinal);
+        Assert.Contains("CLEANUP_COMMAND=\"archived-fund-balance-repair\"", script, StringComparison.Ordinal);
+        Assert.Contains("CLEANUP_CONFIRMATION=\"REPAIR GARAGEBALANCE ARCHIVED FUND BALANCE\"", script, StringComparison.Ordinal);
         Assert.Contains("[[ \"$fingerprint\" =~ ^[0-9a-f]{64}$ ]]", script, StringComparison.Ordinal);
         Assert.Contains("-mmin \"-${PLAN_MAX_AGE_MINUTES}\"", script, StringComparison.Ordinal);
 

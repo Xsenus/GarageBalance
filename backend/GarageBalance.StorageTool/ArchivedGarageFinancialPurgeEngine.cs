@@ -13,7 +13,8 @@ namespace GarageBalance.StorageTool;
 
 // Removes archived garages together with their accruals, payments and meter history.
 // Fund deposits made from the removed payments are taken out of the fund history and the
-// rest of the fund chain is recalculated, exactly as cancelling the payment would do.
+// rest of the fund chain is recalculated, exactly as cancelling the payment would do. A deleted
+// fund keeps its zero balance: its "remainder returned on deletion" changes by the same amount.
 public sealed class ArchivedGarageFinancialPurgeEngine(GarageBalanceDbContext db, IAccountingCleanupBackupVerifier backupVerifier,
     TimeProvider clock, IAuditEventWriter? auditWriter = null)
 {
@@ -203,10 +204,21 @@ public sealed class ArchivedGarageFinancialPurgeEngine(GarageBalanceDbContext db
             fund.Balance = MoneyMath.RoundMoney(balance);
             fund.UpdatedAtUtc = clock.GetUtcNow();
             fund.Version = Guid.NewGuid();
+            decimal? remainderBefore = null;
+            if (fund.IsArchived && fund.Balance != 0m)
+            {
+                var remaining = history.Where(operation => !removed.Contains(operation.Id)).ToList();
+                if (!ArchivedFundRemainder.TryFind(fund, remaining, out var remainder, out var repairedAmount))
+                    throw Error("cleanup_archived_fund_unbalanced",
+                        $"Удалённый фонд «{fund.Name}» нельзя оставить с ненулевым остатком: нет подходящей операции возврата остатка.");
+                remainderBefore = remainder.Amount;
+                ArchivedFundRemainder.Apply(fund, remaining, remainder, repairedAmount, clock.GetUtcNow());
+            }
             db.FundOperations.RemoveRange(group);
             writer.Add(new(null, "fund.operations_removed_with_archived_garage", "fund", fund.Id.ToString(),
                 $"Из фонда «{fund.Name}» исключены операции удалённого архивного гаража: {group.Count()}. " +
-                $"Остаток {balanceBefore.ToString("0.00", CultureInfo.InvariantCulture)} → {fund.Balance.ToString("0.00", CultureInfo.InvariantCulture)}.",
+                $"Остаток {balanceBefore.ToString("0.00", CultureInfo.InvariantCulture)} → {fund.Balance.ToString("0.00", CultureInfo.InvariantCulture)}." +
+                (remainderBefore is null ? "" : " Фонд удалён, поэтому на ту же сумму изменён возврат остатка при удалении фонда."),
                 ActionKind: "delete", EntityDisplayName: fund.Name, Reason: reason.Trim(),
                 Metadata: new Dictionary<string, object?>
                 {
@@ -215,7 +227,8 @@ public sealed class ArchivedGarageFinancialPurgeEngine(GarageBalanceDbContext db
                     ["removedOperationCount"] = group.Count(),
                     ["balanceBefore"] = balanceBefore,
                     ["balanceAfter"] = fund.Balance,
-                    ["negativeBalance"] = fund.Balance < 0m
+                    ["negativeBalance"] = fund.Balance < 0m,
+                    ["archivedRemainderBefore"] = remainderBefore
                 }));
         }
         return sourced.Count;

@@ -114,6 +114,7 @@ public sealed class AccountingCleanupCommandsTests
     [Theory]
     [InlineData("archived-garages-purge-plan", "archived-garages-purge")]
     [InlineData("meter-history-plan", "meter-history-cleanup")]
+    [InlineData("archived-fund-balance-plan", "archived-fund-balance-repair")]
     public void FinancialHistoryAndMeterCommands_PreviewWithOutputAndExecuteWithFullApproval(string preview, string execute)
     {
         Assert.True(AccountingCleanupCommands.CanHandle(preview));
@@ -133,6 +134,7 @@ public sealed class AccountingCleanupCommandsTests
     [Theory]
     [InlineData("archived-garages-purge")]
     [InlineData("meter-history-cleanup")]
+    [InlineData("archived-fund-balance-repair")]
     public async Task FinancialHistoryAndMeterCleanup_RefuseToRunWithoutExecute(string command)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -162,6 +164,7 @@ public sealed class AccountingCleanupCommandsTests
         }).Build();
         var purgePath = PrivatePath("purge.json");
         var meterPath = PrivatePath("meters.json");
+        var fundPath = PrivatePath("funds.json");
         try
         {
             Assert.Equal(0, await AccountingCleanupCommands.RunAsync(["archived-garages-purge-plan", "--output", purgePath], configuration, CancellationToken.None));
@@ -171,6 +174,9 @@ public sealed class AccountingCleanupCommandsTests
             Assert.Equal(0, await AccountingCleanupCommands.RunAsync(["meter-history-plan", "--output", meterPath], configuration, CancellationToken.None));
             using var meters = JsonDocument.Parse(await File.ReadAllTextAsync(meterPath));
             Assert.Equal(0, meters.RootElement.GetProperty("readingCount").GetInt32());
+            Assert.Equal(0, await AccountingCleanupCommands.RunAsync(["archived-fund-balance-plan", "--output", fundPath], configuration, CancellationToken.None));
+            using var funds = JsonDocument.Parse(await File.ReadAllTextAsync(fundPath));
+            Assert.Equal(0, funds.RootElement.GetProperty("funds").GetArrayLength());
             await using var check = database.CreateContext();
             Assert.True(await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AnyAsync(check.Garages, garage => garage.Number == "synthetic-cli-purge"));
         }
@@ -178,6 +184,7 @@ public sealed class AccountingCleanupCommandsTests
         {
             File.Delete(purgePath);
             File.Delete(meterPath);
+            File.Delete(fundPath);
         }
     }
 
