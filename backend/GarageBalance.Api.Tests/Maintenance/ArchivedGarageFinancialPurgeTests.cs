@@ -120,6 +120,72 @@ public sealed class ArchivedGarageFinancialPurgeTests
         Assert.Equal("cleanup_plan_invalid", error.Code);
     }
 
+    // The deleted fund had returned its remainder (including the removed payment) to cash/bank;
+    // the purge keeps it at zero by shrinking that return, so cash/bank and funds stay reconciled.
+    [Theory]
+    [InlineData(1000, 1000, false)]
+    [InlineData(0, 0, true)]
+    public async Task Execute_KeepsADeletedFundAtZeroByCorrectingItsRemainderReturn(int opening, int expectedRemainder, bool remainderCanceled)
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var (garage, fund) = await SeedDeletedFundAsync(context, opening, sourcedFinalWithdrawal: false);
+        context.ChangeTracker.Clear();
+        var engine = new ArchivedGarageFinancialPurgeEngine(context, new AcceptBackup(), TimeProvider.System);
+        var plan = await engine.PreviewAsync(CancellationToken.None);
+
+        var result = await engine.ExecuteAsync(plan, plan.Fingerprint, Receipt(plan), Identity, Reason, CancellationToken.None);
+
+        Assert.Equal(1, result.DeletedGarages);
+        Assert.False(await context.Garages.AnyAsync(item => item.Id == garage.Id));
+        Assert.Equal(0m, (await context.Funds.AsNoTracking().SingleAsync(item => item.Id == fund.Id)).Balance);
+        var remainder = (await context.FundOperations.AsNoTracking().Where(item => item.FundId == fund.Id).ToListAsync())
+            .OrderBy(item => item.CreatedAtUtc).Last();
+        Assert.Equal(FundOperationKinds.Withdraw, remainder.OperationKind);
+        Assert.Equal(remainderCanceled, remainder.IsCanceled);
+        Assert.Equal(remainderCanceled ? 100m : expectedRemainder, remainder.Amount);
+        Assert.Equal(0m, remainder.BalanceAfter);
+        var audit = await context.AuditEvents.SingleAsync(item => item.Action == "fund.operations_removed_with_archived_garage");
+        Assert.Contains("возврат остатка", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Execute_RefusesADeletedFundWithoutARemainderReturnAndChangesNothing()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var (garage, fund) = await SeedDeletedFundAsync(context, 0, sourcedFinalWithdrawal: true);
+        context.ChangeTracker.Clear();
+        var engine = new ArchivedGarageFinancialPurgeEngine(context, new AcceptBackup(), TimeProvider.System);
+        var plan = await engine.PreviewAsync(CancellationToken.None);
+
+        var error = await Assert.ThrowsAsync<AccountingCleanupException>(() =>
+            engine.ExecuteAsync(plan, plan.Fingerprint, Receipt(plan), Identity, Reason, CancellationToken.None));
+
+        Assert.Equal("cleanup_archived_fund_unbalanced", error.Code);
+        Assert.True(await context.Garages.AnyAsync(item => item.Id == garage.Id));
+        Assert.Equal(2, await context.FundOperations.CountAsync(item => item.FundId == fund.Id));
+        Assert.Equal(0m, (await context.Funds.AsNoTracking().SingleAsync(item => item.Id == fund.Id)).Balance);
+    }
+
+    private static async Task<(Garage Garage, Fund Fund)> SeedDeletedFundAsync(GarageBalanceDbContext context, decimal opening, bool sourcedFinalWithdrawal)
+    {
+        var fund = new Fund { Name = "Synthetic deleted fund", NormalizedName = "SYNTHETIC DELETED FUND", IsArchived = true, Balance = 0m };
+        var income = new IncomeType { Name = "Synthetic deleted fund income", Code = "synthetic_deleted_fund" };
+        var garage = new Garage { Number = "synthetic-deleted-fund", IsArchived = true, PeopleCount = 1, FloorCount = 1 };
+        var payment = new FinancialOperation { Garage = garage, IncomeType = income, OperationKind = FinancialOperationKinds.Income, OperationDate = Month, AccountingMonth = Month, Amount = 100m };
+        var expense = new FinancialOperation { OperationKind = FinancialOperationKinds.Expense, OperationDate = Month, AccountingMonth = Month, Amount = opening + 100m };
+        var start = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        context.AddRange(fund, garage, payment,
+            new FundOperation { Fund = fund, SourceFinancialOperation = payment, OperationKind = FundOperationKinds.Deposit, Amount = 100m, BalanceBefore = opening, BalanceAfter = opening + 100m, Reason = "Synthetic payment", CreatedAtUtc = start.AddHours(1) },
+            new FundOperation { Fund = fund, SourceFinancialOperation = sourcedFinalWithdrawal ? expense : null, OperationKind = FundOperationKinds.Withdraw, Amount = opening + 100m, BalanceBefore = opening + 100m, BalanceAfter = 0m, Reason = "Synthetic remainder return", CreatedAtUtc = start.AddHours(2) });
+        if (opening > 0m)
+            context.Add(new FundOperation { Fund = fund, OperationKind = FundOperationKinds.Deposit, Amount = opening, BalanceBefore = 0m, BalanceAfter = opening, Reason = "Synthetic opening", CreatedAtUtc = start });
+        if (sourcedFinalWithdrawal) context.Add(expense);
+        await context.SaveChangesAsync();
+        return (garage, fund);
+    }
+
     private static AccountingCleanupBackupReceipt Receipt(ArchivedGarageFinancialPurgePlan plan) =>
         new(1, plan.Source, "synthetic-private-backup", new string('a', 64), plan.CreatedAtUtc, plan.CreatedAtUtc, plan.Source.SchemaFingerprint, true);
 

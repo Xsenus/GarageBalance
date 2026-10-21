@@ -124,5 +124,10 @@ dotnet GarageBalance.StorageTool.dll archived-garages-cleanup \
 |---|---|---|
 | `garage-history` | `PREVIEW GARAGEBALANCE DELETED GARAGE HISTORY` | `DELETE GARAGEBALANCE DELETED GARAGE HISTORY` |
 | `meter-history` | `PREVIEW GARAGEBALANCE METER HISTORY` | `DELETE GARAGEBALANCE METER HISTORY` |
+| `fund-balance` | `PREVIEW GARAGEBALANCE ARCHIVED FUND BALANCE` | `REPAIR GARAGEBALANCE ARCHIVED FUND BALANCE` |
+
+Если взнос удаляемого гаража лежал в фонде, который уже удалён, `archived-garages-purge` уменьшает на ту же сумму «возврат остатка при удалении фонда»: удалённый фонд остаётся с нулевым остатком, касса и фонды сходятся. Если такого возврата нет, удаление отказывается (`cleanup_archived_fund_unbalanced`) и ничего не меняет.
+
+`archived-fund-balance-plan` и `archived-fund-balance-repair --execute` (`fund-balance` в workflow) возвращают к нулю удалённый фонд, у которого остаток стал ненулевым после изменения истории вне приложения. Команда только правит возврат остатка при удалении фонда (возврат, упавший до нуля, отменяется, строки не удаляются) и пишет аудит `fund.archived_balance_repaired`. Фонды, у которых последняя действующая операция не такой возврат, не меняются и перечисляются в плане как заблокированные.
 
 Сначала удалять гаражи (`garage-history`), затем очищать показания (`meter-history`). После обеих операций запустить `Audit staging database`. Если аудит находит расхождения, тот же workflow с полем `backup_file` (имя резервной копии из `/opt/garagebalance-staging/backups`, например снятой перед очисткой) проверяет состояние базы до операции: копия восстанавливается во временную базу, рабочая база не читается и не меняется. Общий сброс рабочих данных этими командами не выполняется.

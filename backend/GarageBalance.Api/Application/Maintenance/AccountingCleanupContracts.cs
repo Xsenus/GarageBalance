@@ -45,3 +45,12 @@ public sealed record MeterHistoryCleanupPlan(int FormatVersion, Guid PlanId, Dat
 
 public sealed record MeterHistoryCleanupResult(Guid PlanId, int DeletedReadings, int DeletedReplacementDevices,
     int ReactivatedDevices, int CanceledAccruals, int RebuiltAllocationKeys, string Fingerprint);
+
+public sealed record ArchivedFundBalanceRepairCandidate(Guid FundId, string FundName, Guid FundVersion, decimal Balance,
+    Guid RemainderOperationId, decimal RemainderAmount, decimal RepairedRemainderAmount);
+
+public sealed record ArchivedFundBalanceRepairPlan(int FormatVersion, Guid PlanId, DateTimeOffset CreatedAtUtc,
+    AccountingCleanupSource Source, IReadOnlyList<ArchivedFundBalanceRepairCandidate> Funds, IReadOnlyList<string> BlockedFundNames,
+    string Fingerprint);
+
+public sealed record ArchivedFundBalanceRepairResult(Guid PlanId, int RepairedFunds, string Fingerprint);

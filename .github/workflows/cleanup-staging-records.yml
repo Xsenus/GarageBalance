@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "garage-history: archived garages with accruals and payments; meter-history: all readings and meter replacements"
+        description: "garage-history: archived garages with accruals and payments; meter-history: all readings and meter replacements; fund-balance: deleted funds back to a zero balance"
         required: true
         type: choice
         options:
           - garage-history
           - meter-history
+          - fund-balance
       operation:
         description: preview lists what will change without changes; cleanup executes exactly that previewed plan
         required: true
@@ -19,7 +20,7 @@ on:
           - preview
           - cleanup
       confirmation:
-        description: "PREVIEW|DELETE GARAGEBALANCE DELETED GARAGE HISTORY or PREVIEW|DELETE GARAGEBALANCE METER HISTORY"
+        description: "PREVIEW|DELETE GARAGEBALANCE DELETED GARAGE HISTORY, PREVIEW|DELETE GARAGEBALANCE METER HISTORY or PREVIEW|REPAIR GARAGEBALANCE ARCHIVED FUND BALANCE"
         required: true
         type: string
       fingerprint:
@@ -49,8 +50,12 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           FINGERPRINT: ${{ inputs.fingerprint }}
         run: |
+          action="DELETE"
           if [[ "$KIND" == "garage-history" ]]; then
             subject="DELETED GARAGE HISTORY"
+          elif [[ "$KIND" == "fund-balance" ]]; then
+            subject="ARCHIVED FUND BALANCE"
+            action="REPAIR"
           else
             test "$KIND" = "meter-history"
             subject="METER HISTORY"
@@ -59,7 +64,7 @@ jobs:
             test "$CONFIRMATION" = "PREVIEW GARAGEBALANCE ${subject}"
           else
             test "$OPERATION" = "cleanup"
-            test "$CONFIRMATION" = "DELETE GARAGEBALANCE ${subject}"
+            test "$CONFIRMATION" = "${action} GARAGEBALANCE ${subject}"
             [[ "$FINGERPRINT" =~ ^[0-9a-f]{64}$ ]]
           fi
 

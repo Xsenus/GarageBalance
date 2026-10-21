@@ -2,7 +2,8 @@
 # Staging cleanup of test records through the reviewed StorageTool commands
 # (docs/accounting-cleanup-cli.md):
 #   garage-history — archived garages together with their accruals, payments and fund deposits;
-#   meter-history  — all meter readings and meter replacements, start values stay.
+#   meter-history  — all meter readings and meter replacements, start values stay;
+#   fund-balance   — deleted funds back to a zero balance after their history was changed.
 # "preview" only writes a private plan; "cleanup" executes exactly the previewed plan after a verified backup.
 set -Eeuo pipefail
 
@@ -69,7 +70,14 @@ case "$kind" in
     CLEANUP_CONFIRMATION="DELETE GARAGEBALANCE METER HISTORY"
     CLEANUP_REASON="Очистка формы «Показания» после проверки замены счётчиков (п. 6) по решению от 21.10.2026"
     ;;
-  *) fail "kind must be garage-history or meter-history" ;;
+  fund-balance)
+    PLAN_COMMAND="archived-fund-balance-plan"
+    CLEANUP_COMMAND="archived-fund-balance-repair"
+    PREVIEW_CONFIRMATION="PREVIEW GARAGEBALANCE ARCHIVED FUND BALANCE"
+    CLEANUP_CONFIRMATION="REPAIR GARAGEBALANCE ARCHIVED FUND BALANCE"
+    CLEANUP_REASON="Возврат удалённого фонда к нулевому остатку после удаления архивного гаража (п. 4) по решению от 21.10.2026"
+    ;;
+  *) fail "kind must be garage-history, meter-history or fund-balance" ;;
 esac
 case "$mode" in
   preview) [[ "$#" == "3" && "$confirmation" == "$PREVIEW_CONFIRMATION" ]] || fail "exact preview confirmation is required" ;;
