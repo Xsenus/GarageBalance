@@ -125,4 +125,4 @@ dotnet GarageBalance.StorageTool.dll archived-garages-cleanup \
 | `garage-history` | `PREVIEW GARAGEBALANCE DELETED GARAGE HISTORY` | `DELETE GARAGEBALANCE DELETED GARAGE HISTORY` |
 | `meter-history` | `PREVIEW GARAGEBALANCE METER HISTORY` | `DELETE GARAGEBALANCE METER HISTORY` |
 
-Сначала удалять гаражи (`garage-history`), затем очищать показания (`meter-history`). После обеих операций запустить `Audit staging database`. Общий сброс рабочих данных этими командами не выполняется.
+Сначала удалять гаражи (`garage-history`), затем очищать показания (`meter-history`). После обеих операций запустить `Audit staging database`. Если аудит находит расхождения, тот же workflow с полем `backup_file` (имя резервной копии из `/opt/garagebalance-staging/backups`, например снятой перед очисткой) проверяет состояние базы до операции: копия восстанавливается во временную базу, рабочая база не читается и не меняется. Общий сброс рабочих данных этими командами не выполняется.

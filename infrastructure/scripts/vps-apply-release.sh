@@ -56,11 +56,12 @@ if [[ "${1:-}" == "records" ]]; then
 fi
 
 if [[ "${1:-}" == "audit-database" ]]; then
-  [[ "$#" == "2" ]] || {
-    echo "usage: $0 audit-database <confirmation>"
+  [[ "$#" == "2" || "$#" == "3" ]] || {
+    echo "usage: $0 audit-database <confirmation> [operational-backup-file-name]"
     exit 64
   }
-  exec /usr/local/bin/garagebalance-audit-database "$2"
+  shift
+  exec /usr/local/bin/garagebalance-audit-database "$@"
 fi
 
 if [[ "${1:-}" == "cloud-backup" ]]; then

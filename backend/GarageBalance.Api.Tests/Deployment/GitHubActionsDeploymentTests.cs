@@ -153,6 +153,26 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply audit-database", workflow, StringComparison.Ordinal);
         Assert.Contains("https://sgk.blagodaty.ru/health/ready", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("psql", workflow, StringComparison.Ordinal);
+        // An optional existing backup reaches the server only after the strict file-name check.
+        Assert.Contains("backup_file:", workflow, StringComparison.Ordinal);
+        Assert.Contains("BACKUP_FILE: ${{ inputs.backup_file }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("^garagebalance_[0-9]{8}-[0-9]{6}_[a-z0-9_]+\\.pgdump$", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("'${{ inputs.", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StagingDatabaseAuditCanReadAnExistingOperationalBackupWithoutANewDump()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "audit-staging-database.sh"));
+        var apply = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "vps-apply-release.sh"));
+
+        Assert.Contains("existing_backup=\"${2:-}\"", script, StringComparison.Ordinal);
+        Assert.Contains("^garagebalance_[0-9]{8}-[0-9]{6}_[a-z0-9_]+\\.pgdump$", script, StringComparison.Ordinal);
+        Assert.Contains("[[ -f \"$backup_file\" && ! -L \"$backup_file\" && -s \"$backup_file\" ]]", script, StringComparison.Ordinal);
+        Assert.Contains("auditSource=existing-backup", script, StringComparison.Ordinal);
+        Assert.Contains("[[ \"$#\" == \"2\" || \"$#\" == \"3\" ]]", apply, StringComparison.Ordinal);
+        Assert.Contains("exec /usr/local/bin/garagebalance-audit-database \"$@\"", apply, StringComparison.Ordinal);
     }
 
     [Fact]
