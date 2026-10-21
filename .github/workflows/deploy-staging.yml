@@ -108,6 +108,7 @@ jobs:
             infrastructure/scripts/cleanup-staging-codex-records.sh \
             infrastructure/scripts/audit-staging-database.sh \
             infrastructure/scripts/cleanup-staging-archived-garages.sh \
+            infrastructure/scripts/cleanup-staging-records.sh \
             infrastructure/scripts/configure-staging-cloud-backup.sh \
             infrastructure/scripts/run-staging-storage-tool.sh \
             infrastructure/scripts/install-vps-performance-configuration.sh \

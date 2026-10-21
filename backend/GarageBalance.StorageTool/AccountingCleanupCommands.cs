@@ -40,9 +40,11 @@ public sealed record AccountingCleanupCommandOptions(bool Execute, string? PlanP
         var result = new AccountingCleanupCommandOptions(execute, Value("--plan"), Value("--confirm"), Value("--backup-receipt"),
             Value("--expected-database"), Value("--service"), values.ContainsKey("--application-port") ? Number("--application-port", 0, 65535) : null,
             Value("--reason"), Number("--max-garages", 100, 500), Value("--output"));
+        if (values.ContainsKey("--max-garages") && !args[0].StartsWith("archived-garages-c", StringComparison.OrdinalIgnoreCase) &&
+            !args[0].Equals("archived-garages-plan", StringComparison.OrdinalIgnoreCase)) throw Invalid();
         if (execute)
         {
-            if (args[0].Equals("archived-garages-plan", StringComparison.OrdinalIgnoreCase) ||
+            if (AccountingCleanupCommands.IsPreview(args[0]) ||
                 string.IsNullOrWhiteSpace(result.PlanPath) || string.IsNullOrWhiteSpace(result.BackupReceiptPath) ||
                 string.IsNullOrWhiteSpace(result.Fingerprint) || result.Fingerprint.Length != 64 || !result.Fingerprint.All(Uri.IsHexDigit) ||
                 string.IsNullOrWhiteSpace(result.ExpectedDatabase) || string.IsNullOrWhiteSpace(result.Reason) ||
@@ -68,8 +70,11 @@ public interface IAccountingCleanupHostEnvironment
 public static class AccountingCleanupCommands
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-    public static bool CanHandle(string command) => command.Equals("archived-garages-plan", StringComparison.OrdinalIgnoreCase) ||
-        command.Equals("archived-garages-cleanup", StringComparison.OrdinalIgnoreCase);
+    private static readonly string[] PreviewCommands = ["archived-garages-plan", "archived-garages-purge-plan", "meter-history-plan"];
+    private static readonly string[] ExecuteCommands = ["archived-garages-cleanup", "archived-garages-purge", "meter-history-cleanup"];
+    public static bool CanHandle(string command) => IsPreview(command) ||
+        ExecuteCommands.Contains(command, StringComparer.OrdinalIgnoreCase);
+    public static bool IsPreview(string command) => PreviewCommands.Contains(command, StringComparer.OrdinalIgnoreCase);
 
     public static async Task<int> RunAsync(string[] args, IConfiguration configuration, CancellationToken cancellationToken,
         IAccountingCleanupHostEnvironment? hostEnvironment = null)
@@ -98,6 +103,84 @@ public static class AccountingCleanupCommands
                 ownedOutputPath = options.OutputPath;
             }
             await using var db = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>().UseNpgsql(connection).Options);
+            var command = args[0].ToLowerInvariant();
+            if (command is "archived-garages-purge-plan" or "archived-garages-purge" or "meter-history-plan" or "meter-history-cleanup")
+            {
+                if (options.Execute != (command is "archived-garages-purge" or "meter-history-cleanup"))
+                    throw new AccountingCleanupException("cleanup_options_invalid", "Удаление выполняется только командой очистки с --execute.");
+                object report;
+                if (command.StartsWith("archived", StringComparison.Ordinal))
+                {
+                    var purge = new ArchivedGarageFinancialPurgeEngine(db, new AccountingCleanupBackupVerifier(), TimeProvider.System);
+                    if (!options.Execute)
+                    {
+                        var purgePlan = await purge.PreviewAsync(cancellationToken);
+                        report = purgePlan;
+                        Console.WriteLine(JsonSerializer.Serialize(new
+                        {
+                            dryRun = true,
+                            purgePlan.PlanId,
+                            purgePlan.TotalArchived,
+                            selected = purgePlan.Garages.Count,
+                            garages = purgePlan.Garages.Select(row => row.GarageNumber),
+                            blocked = purgePlan.BlockedGarageNumbers.Count,
+                            accruals = purgePlan.Garages.Sum(row => row.AccrualCount),
+                            operations = purgePlan.Garages.Sum(row => row.OperationCount),
+                            fundOperations = purgePlan.Garages.Sum(row => row.FundOperationCount),
+                            meterReadings = purgePlan.Garages.Sum(row => row.MeterReadingCount),
+                            activeIncomeTotal = purgePlan.Garages.Sum(row => row.ActiveIncomeTotal),
+                            purgePlan.Fingerprint
+                        }, JsonOptions));
+                    }
+                    else
+                    {
+                        await EnsureNoOtherClientsAsync(db, cancellationToken);
+                        report = await purge.ExecuteAsync(await ReadAsync<ArchivedGarageFinancialPurgePlan>(options.PlanPath!, cancellationToken), options.Fingerprint!,
+                            await ReadAsync<AccountingCleanupBackupReceipt>(options.BackupReceiptPath!, cancellationToken), identity, options.Reason!, cancellationToken);
+                        committed = true;
+                    }
+                }
+                else
+                {
+                    var meters = new MeterHistoryCleanupEngine(db, new AccountingCleanupBackupVerifier(), TimeProvider.System);
+                    if (!options.Execute)
+                    {
+                        var meterPlan = await meters.PreviewAsync(cancellationToken);
+                        report = meterPlan;
+                        Console.WriteLine(JsonSerializer.Serialize(new
+                        {
+                            dryRun = true,
+                            meterPlan.PlanId,
+                            meterPlan.GarageCount,
+                            meterPlan.ReadingCount,
+                            meterPlan.KeptStartReadingCount,
+                            meterPlan.ReplacementDeviceCount,
+                            meterPlan.ReactivatedDeviceCount,
+                            meterPlan.MeteredAccrualCount,
+                            meterPlan.PaidMeteredAccrualCount,
+                            meterPlan.MeteredAccrualTotal,
+                            meterPlan.PaidMeteredTotal,
+                            meterPlan.Fingerprint
+                        }, JsonOptions));
+                    }
+                    else
+                    {
+                        await EnsureNoOtherClientsAsync(db, cancellationToken);
+                        report = await meters.ExecuteAsync(await ReadAsync<MeterHistoryCleanupPlan>(options.PlanPath!, cancellationToken), options.Fingerprint!,
+                            await ReadAsync<AccountingCleanupBackupReceipt>(options.BackupReceiptPath!, cancellationToken), identity, options.Reason!, cancellationToken);
+                        committed = true;
+                    }
+                }
+                if (output is not null)
+                {
+                    await JsonSerializer.SerializeAsync(output, report, report.GetType(), JsonOptions, CancellationToken.None);
+                    await output.FlushAsync(CancellationToken.None);
+                    output.Flush(flushToDisk: true);
+                    reportComplete = true;
+                }
+                if (options.Execute) Console.WriteLine(JsonSerializer.Serialize(report, report.GetType(), JsonOptions));
+                return 0;
+            }
             var engine = new ArchivedGarageCleanupEngine(db, new AccountingCleanupBackupVerifier(), TimeProvider.System);
             if (!options.Execute)
             {
@@ -119,12 +202,7 @@ public static class AccountingCleanupCommands
                 }, JsonOptions));
                 return 0;
             }
-            var clients = await db.Database.SqlQuery<int>($"""
-                SELECT COUNT(*)::int AS "Value" FROM pg_stat_activity
-                WHERE datname = current_database() AND pid <> pg_backend_pid()
-                  AND (backend_type = 'client backend' OR backend_type IS NULL)
-                """).SingleAsync(cancellationToken);
-            if (clients != 0) throw new AccountingCleanupException("cleanup_other_clients_connected", "К базе подключены другие клиенты. Очистка не начата.");
+            await EnsureNoOtherClientsAsync(db, cancellationToken);
             var savedPlan = await ReadAsync<ArchivedGarageCleanupPlan>(options.PlanPath!, cancellationToken);
             var backup = await ReadAsync<AccountingCleanupBackupReceipt>(options.BackupReceiptPath!, cancellationToken);
             var result = await engine.ExecuteAsync(savedPlan, options.Fingerprint!, backup, identity, options.Reason!, cancellationToken);
@@ -161,6 +239,16 @@ public static class AccountingCleanupCommands
             if (output is not null) await output.DisposeAsync();
             if (ownedOutputPath is not null && !reportComplete && !committed) File.Delete(ownedOutputPath);
         }
+    }
+
+    private static async Task EnsureNoOtherClientsAsync(GarageBalanceDbContext db, CancellationToken cancellationToken)
+    {
+        var clients = await db.Database.SqlQuery<int>($"""
+            SELECT COUNT(*)::int AS "Value" FROM pg_stat_activity
+            WHERE datname = current_database() AND pid <> pg_backend_pid()
+              AND (backend_type = 'client backend' OR backend_type IS NULL)
+            """).SingleAsync(cancellationToken);
+        if (clients != 0) throw new AccountingCleanupException("cleanup_other_clients_connected", "К базе подключены другие клиенты. Очистка не начата.");
     }
 
     public static void ValidatePrivateJsonPath(string path)
