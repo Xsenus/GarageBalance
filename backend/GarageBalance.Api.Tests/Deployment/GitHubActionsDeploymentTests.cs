@@ -171,6 +171,8 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("^garagebalance_[0-9]{8}-[0-9]{6}_[a-z0-9_]+\\.pgdump$", script, StringComparison.Ordinal);
         Assert.Contains("[[ -f \"$backup_file\" && ! -L \"$backup_file\" && -s \"$backup_file\" ]]", script, StringComparison.Ordinal);
         Assert.Contains("auditSource=existing-backup", script, StringComparison.Ordinal);
+        foreach (var check in new[] { "reconciliation_linked_fund_amount_mismatches", "reconciliation_active_fund_operations_of_inactive_sources", "reconciliation_archived_funds_with_balance" })
+            Assert.Contains($"run_check \"{check}\" \"warning\"", script, StringComparison.Ordinal);
         Assert.Contains("[[ \"$#\" == \"2\" || \"$#\" == \"3\" ]]", apply, StringComparison.Ordinal);
         Assert.Contains("exec /usr/local/bin/garagebalance-audit-database \"$@\"", apply, StringComparison.Ordinal);
     }
