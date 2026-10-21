@@ -111,6 +111,76 @@ public sealed class AccountingCleanupCommandsTests
         finally { File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData("archived-garages-purge-plan", "archived-garages-purge")]
+    [InlineData("meter-history-plan", "meter-history-cleanup")]
+    public void FinancialHistoryAndMeterCommands_PreviewWithOutputAndExecuteWithFullApproval(string preview, string execute)
+    {
+        Assert.True(AccountingCleanupCommands.CanHandle(preview));
+        Assert.True(AccountingCleanupCommands.CanHandle(execute.ToUpperInvariant()));
+        Assert.True(AccountingCleanupCommands.IsPreview(preview));
+        Assert.False(AccountingCleanupCommands.IsPreview(execute));
+        Assert.False(AccountingCleanupCommandOptions.Parse([preview, "--output", PrivatePath()]).Execute);
+        Assert.Throws<AccountingCleanupException>(() => AccountingCleanupCommandOptions.Parse([preview, "--output", PrivatePath(), "--max-garages", "5"]));
+        Assert.Throws<AccountingCleanupException>(() => AccountingCleanupCommandOptions.Parse([preview]));
+        var args = ValidExecution();
+        args[0] = execute;
+        Assert.True(AccountingCleanupCommandOptions.Parse(args).Execute);
+        args[0] = preview;
+        Assert.Throws<AccountingCleanupException>(() => AccountingCleanupCommandOptions.Parse(args));
+    }
+
+    [Theory]
+    [InlineData("archived-garages-purge")]
+    [InlineData("meter-history-cleanup")]
+    public async Task FinancialHistoryAndMeterCleanup_RefuseToRunWithoutExecute(string command)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:DefaultConnection"] = "Host=forbidden.invalid;Database=synthetic-database;Username=synthetic;Password=never-print-this-fixture"
+        }).Build();
+        var path = PrivatePath();
+        try
+        {
+            Assert.Equal(2, await AccountingCleanupCommands.RunAsync([command, "--output", path], configuration, CancellationToken.None));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSql_CliPreviewsOfPurgeAndMeterCleanupWritePlansWithoutChanges()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var context = database.CreateContext())
+        {
+            context.Add(new Garage { Number = "synthetic-cli-purge", IsArchived = true, PeopleCount = 1, FloorCount = 1 });
+            await context.SaveChangesAsync();
+        }
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:DefaultConnection"] = database.ConnectionString
+        }).Build();
+        var purgePath = PrivatePath("purge.json");
+        var meterPath = PrivatePath("meters.json");
+        try
+        {
+            Assert.Equal(0, await AccountingCleanupCommands.RunAsync(["archived-garages-purge-plan", "--output", purgePath], configuration, CancellationToken.None));
+            using var purge = JsonDocument.Parse(await File.ReadAllTextAsync(purgePath));
+            Assert.Equal("synthetic-cli-purge", purge.RootElement.GetProperty("garages")[0].GetProperty("garageNumber").GetString());
+            Assert.Equal(64, purge.RootElement.GetProperty("fingerprint").GetString()!.Length);
+            Assert.Equal(0, await AccountingCleanupCommands.RunAsync(["meter-history-plan", "--output", meterPath], configuration, CancellationToken.None));
+            using var meters = JsonDocument.Parse(await File.ReadAllTextAsync(meterPath));
+            Assert.Equal(0, meters.RootElement.GetProperty("readingCount").GetInt32());
+            await using var check = database.CreateContext();
+            Assert.True(await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AnyAsync(check.Garages, garage => garage.Number == "synthetic-cli-purge"));
+        }
+        finally
+        {
+            File.Delete(purgePath);
+            File.Delete(meterPath);
+        }
+    }
+
     private static string[] ValidExecution() => ["archived-garages-cleanup", "--execute", "--plan", PrivatePath(), "--confirm", new string('a', 64),
         "--backup-receipt", PrivatePath(), "--expected-database", "synthetic-database", "--reason", "Synthetic cleanup approval", "--service", "garagebalance-staging.service"];
 

@@ -26,3 +26,22 @@ public sealed class AccountingCleanupException(string code, string message) : Ex
 {
     public string Code { get; } = code;
 }
+
+public sealed record ArchivedGarageFinancialPurgeCandidate(Guid GarageId, string GarageNumber, Guid GarageVersion,
+    int AccrualCount, int OperationCount, int FundOperationCount, int MeterReadingCount, int MeterDeviceCount,
+    decimal ActiveIncomeTotal, string ContentFingerprint);
+
+public sealed record ArchivedGarageFinancialPurgePlan(int FormatVersion, Guid PlanId, DateTimeOffset CreatedAtUtc,
+    AccountingCleanupSource Source, int TotalArchived, IReadOnlyList<ArchivedGarageFinancialPurgeCandidate> Garages,
+    IReadOnlyList<string> BlockedGarageNumbers, string Fingerprint);
+
+public sealed record ArchivedGarageFinancialPurgeResult(Guid PlanId, int DeletedGarages, int DeletedAccruals,
+    int DeletedOperations, int RemovedFundOperations, decimal RemovedIncomeTotal, string Fingerprint);
+
+public sealed record MeterHistoryCleanupPlan(int FormatVersion, Guid PlanId, DateTimeOffset CreatedAtUtc,
+    AccountingCleanupSource Source, int GarageCount, int ReadingCount, int KeptStartReadingCount, int ReplacementDeviceCount,
+    int ReactivatedDeviceCount, int MeteredAccrualCount, int PaidMeteredAccrualCount, decimal MeteredAccrualTotal,
+    decimal PaidMeteredTotal, string ContentFingerprint, string Fingerprint);
+
+public sealed record MeterHistoryCleanupResult(Guid PlanId, int DeletedReadings, int DeletedReplacementDevices,
+    int ReactivatedDevices, int CanceledAccruals, int RebuiltAllocationKeys, string Fingerprint);
