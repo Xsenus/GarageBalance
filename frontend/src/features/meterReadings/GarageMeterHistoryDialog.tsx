@@ -107,7 +107,7 @@ export default function GarageMeterHistoryDialog({ auth, financeClient, garage, 
           </> : null}
         {target && canRead ? <form className="dictionary-form-section dictionary-modal-form" aria-label="Подтверждение отмены замены" noValidate onSubmit={(event) => { event.preventDefault(); void cancel() }}>
           <h4>Отменить замену на № {target.serialNumber}?</h4>
-          <p>Прибор и показание восстановятся, начисления пересчитаются. Отмена недоступна при поздних показаниях или оплате.</p>
+          <p>Прибор и показание восстановятся, начисления пересчитаются. Отмена недоступна, если в более поздних месяцах уже есть показания. Внесённые оплаты сохранятся, разница станет долгом или переплатой.</p>
           {error ? <FormError>{error}</FormError> : null}
           {target.requiresRestoredValue ? <FormField label="Показание восстанавливаемого прибора" help="Укажите фактическое показание за месяц."><MeterReadingInput aria-label="Показание восстанавливаемого прибора" required value={restoredValue} disabled={saving} onChange={(event) => setRestoredValue(event.target.value)} /></FormField> : null}
           <FormField label="Причина отмены замены"><textarea ref={reasonRef} required={reasonRequired} maxLength={500} value={reason} disabled={saving} onChange={(event) => setReason(event.target.value)} /></FormField>

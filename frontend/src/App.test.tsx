@@ -11722,6 +11722,36 @@ describe('App', () => {
     }, expect.any(AbortSignal)))
   })
 
+  it('rereads the garage balance in the card after the worksheet recalculates accruals on open', async () => {
+    const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const garage = createGarage({ id: 'garage-balance-refresh', number: '13', ownerName: 'Тестовый владелец', balance: 5899.72, overdueDebt: 0 })
+    const calculateGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      monthFrom: `${currentMonth}-01`,
+      monthTo: `${currentMonth}-01`,
+      rows: [{ accountingMonth: `${currentMonth}-01`, incomeTypeId: 'trash', incomeTypeName: 'Мусор', incomeTypeCode: 'trash',
+        meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 250, incomeAmount: 0, debt: 250 }],
+    }))
+    const getGarageOverdueDebt = vi.fn(async () => ({
+      garageId: garage.id, garageNumber: garage.number, ownerName: garage.ownerName, asOfDate: `${currentMonth}-01`, total: 0, rows: [], balance: 6149.72,
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ calculateGarageIncomeWorksheet, getGarageOverdueDebt })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '13')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*13\s*Тестовый владелец/ }))
+
+    await waitFor(() => expect(calculateGarageIncomeWorksheet).toHaveBeenCalled())
+    await waitFor(() => expect(getGarageOverdueDebt).toHaveBeenCalledWith('token', garage.id, expect.any(AbortSignal)))
+    expect(await within(prototype).findByText('-6 149.72')).toBeInTheDocument()
+    expect(within(prototype).queryByText('-5 899.72')).not.toBeInTheDocument()
+  })
+
   it('shows separate campaign names for overdue charges routed to the same fund', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-campaign-names', number: '18', ownerName: 'Иванов Иван', overdueDebt: 500 })
