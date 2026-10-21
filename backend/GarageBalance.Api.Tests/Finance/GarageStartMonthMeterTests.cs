@@ -165,10 +165,42 @@ public sealed class GarageStartMonthMeterTests
         Assert.True(replaced.Succeeded, replaced.ErrorMessage);
         Assert.Equal((550m, 80m), (replaced.Value!.Reading.CurrentValue, replaced.Value.Reading.Consumption));
 
-        var tooHigh = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(12),
+        // A month value below the next meter's start was taken from the meter being removed:
+        // the replacement is accepted and the new meter waits for its value in «Платежи».
+        var repeated = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(12),
             "NEW-2", 900, null, 560, "Повторная замена", replaced.Value.Reading.Id, replaced.Value.Reading.Version), null, CancellationToken.None);
-        Assert.False(tooHigh.Succeeded);
-        Assert.Equal("meter_device_current_below_initial", tooHigh.ErrorCode);
+        Assert.True(repeated.Succeeded, repeated.ErrorMessage);
+        Assert.Equal((900m, 90m), (repeated.Value!.Reading.CurrentValue, repeated.Value.Reading.Consumption));
+    }
+
+    [Fact]
+    public async Task ReplacementTreatsAnEnteredMonthValueBelowTheNewStartAsTheRemovedMeterValue()
+    {
+        await using var database = await SqliteTestDatabase.CreateAsync();
+        var context = database.Context;
+        var setting = await SeedElectricityAsync(context);
+        var created = await DictionaryServiceTestFactory.Create(context, Today).CreateGarageAsync(Request(September) with
+        {
+            MeterStartValues = [new UpsertGarageMeterStartValueRequest(setting.MeterKind!, 250)]
+        }, null, CancellationToken.None);
+        var garageId = created.Value!.Id;
+        var finance = FinanceServiceTestFactory.Create(context, businessDate: Today);
+        Assert.True((await finance.CreateMeterReadingAsync(
+            new(garageId, setting.MeterKind!, September, September.AddDays(29), 270, null), null, CancellationToken.None)).Succeeded);
+        // The operator entered the old meter's value for October before the replacement was recorded.
+        var october = await finance.CreateMeterReadingAsync(
+            new(garageId, setting.MeterKind!, October, October.AddDays(4), 290, null), null, CancellationToken.None);
+        Assert.True(october.Succeeded, october.ErrorMessage);
+
+        var replaced = await finance.ReplaceMeterDeviceAsync(new(garageId, setting.MeterKind!, October, October.AddDays(9),
+            "NEW-1", 500, null, 300, "Замена счётчика", october.Value!.Id, october.Value.Version), null, CancellationToken.None);
+        Assert.True(replaced.Succeeded, replaced.ErrorMessage);
+        Assert.Equal((500m, 30m), (replaced.Value!.Reading.CurrentValue, replaced.Value.Reading.Consumption));
+
+        var saved = await finance.SavePaymentFormMeterReadingAsync(new(garageId, setting.MeterKind!, October, October.AddDays(30),
+            550, null, replaced.Value.Reading.Id, replaced.Value.Reading.Version), null, CancellationToken.None);
+        Assert.True(saved.Succeeded, saved.ErrorMessage);
+        Assert.Equal(80m, saved.Value!.Consumption);
     }
 
     [Fact]

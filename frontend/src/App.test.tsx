@@ -3024,6 +3024,60 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить порог тарификации?' })).not.toBeInTheDocument())
   })
 
+  it('starts a new rate period from the working month when a service has no tariff for the working date', async () => {
+    const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const incomeType = createAccountingType({ id: 'income-waste-gap', name: 'Мусор', code: 'trash' })
+    const endedTariff = createTariff({ id: 'tariff-waste-gap', name: 'Мусор', calculationBase: 'people', rate: 128.69, effectiveFrom: '2026-01-01' })
+    const wasteSetting = createChargeServiceSetting({
+      id: 'service-waste-gap',
+      name: 'Мусор',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: null,
+      unitName: 'чел.',
+    })
+    const getChargeServiceTariffSchedule = vi.fn(async () => [{
+      tariffId: endedTariff.id,
+      effectiveFrom: '2026-01-01',
+      effectiveTo: `${addTestMonths(currentMonth, -1)}-01`,
+      rate: 128.69,
+      tariffVersion: 'tariff-waste-gap-v1',
+    }])
+    const updateChargeServiceWithTariff = vi.fn(async (_token: string, _id: string, request: UpdateChargeServiceWithTariffRequest) => ({
+      service: { ...wasteSetting, tariffId: 'tariff-waste-new' },
+      tariff: createTariff({ id: 'tariff-waste-new', name: 'Мусор', calculationBase: 'people', rate: request.rate, effectiveFrom: request.effectiveFrom ?? undefined }),
+    }))
+    const updateChargeServiceSetting = vi.fn()
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [endedTariff],
+      getIncomeTypes: async () => [incomeType],
+      getChargeServiceSettings: async () => [wasteSetting],
+      getChargeServiceTariffSchedule,
+      updateChargeServiceWithTariff,
+      updateChargeServiceSetting,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const rateInput = await within(tariffsPanel).findByLabelText('Мусор: Мусор: значение')
+    expect(rateInput).toHaveValue('')
+    await user.type(rateInput, '150')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(updateChargeServiceWithTariff).toHaveBeenCalledWith('token', wasteSetting.id, expect.objectContaining({
+      service: expect.objectContaining({ tariffId: endedTariff.id, incomeTypeId: incomeType.id }),
+      rate: 150,
+      effectiveFrom: `${currentMonth}-01`,
+      tariffVersion: 'tariff-waste-gap-v1',
+    })))
+    expect(updateChargeServiceSetting).not.toHaveBeenCalled()
+    expect(within(tariffsPanel).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('shows salary fund by departments from active staff rates and keeps it read-only', async () => {
     const user = userEvent.setup()
     const dictionaryClient = createDictionaryClient({

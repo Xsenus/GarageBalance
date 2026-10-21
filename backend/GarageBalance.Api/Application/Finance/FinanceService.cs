@@ -6692,8 +6692,10 @@ public sealed partial class FinanceService(
 
         // The month-end value belongs to the «Платежи» field: an entered reading of the month is
         // kept as the new meter's value; without one the month starts from the new meter's initial
-        // value until the operator enters it, and only the removed meter's part is counted.
-        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue ?? targetReading?.CurrentValue ?? initialValue);
+        // value until the operator enters it, and only the removed meter's part is counted. A value
+        // below the new meter's start was taken from the removed meter before the replacement.
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue ??
+            (targetReading is not null && MoneyMath.RoundMeterValue(targetReading.CurrentValue) >= initialValue ? targetReading.CurrentValue : initialValue));
         if (currentValue < initialValue)
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_current_below_initial",

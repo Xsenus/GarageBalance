@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
+import { findTariffGapSourcePeriod, getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName, getTariffGapRateStart } from './tariffServicePresentation'
 import { formatTariffDecimal } from './tariffFormatting'
 
 afterEach(() => {
@@ -47,4 +47,22 @@ describe('tariff service presentation', () => {
     expect(getInlineTariffChangeEffectiveFrom(null)).toBe('2026-08-12')
   })
 
+})
+
+describe('rate entered in a tariff schedule gap', () => {
+  const period = (effectiveFrom: string | null, effectiveTo: string | null) => ({ tariffId: `tariff-${effectiveFrom}`, effectiveFrom, effectiveTo, rate: 100, tariffVersion: 'v1' })
+
+  it('copies the latest period that started before the new rate, or the first future one', () => {
+    const periods = [period('2026-11-01', null), period(null, '2025-12-31'), period('2026-01-01', '2026-08-31')]
+    expect(findTariffGapSourcePeriod(periods, '2026-10-20')?.effectiveFrom).toBe('2026-01-01')
+    expect(findTariffGapSourcePeriod([period('2026-11-01', null)], '2026-10-20')?.effectiveFrom).toBe('2026-11-01')
+    expect(findTariffGapSourcePeriod([], '2026-10-20')).toBeUndefined()
+  })
+
+  it('starts the rate with the working month unless the previous period ends inside it', () => {
+    expect(getTariffGapRateStart('2026-10-20', period('2026-01-01', '2026-08-31'))).toBe('2026-10-01')
+    expect(getTariffGapRateStart('2026-10-20', period('2026-11-01', null))).toBe('2026-10-01')
+    expect(getTariffGapRateStart('2026-10-20', period('2026-01-01', '2026-10-09'))).toBe('2026-10-10')
+    expect(getTariffGapRateStart('2026-10-31', period('2026-01-01', '2026-10-31'))).toBe('2026-10-31')
+  })
 })
