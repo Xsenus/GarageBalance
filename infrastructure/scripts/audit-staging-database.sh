@@ -8,6 +8,9 @@ EXPECTED_CONFIRMATION="AUDIT GARAGEBALANCE STAGING"
 BACKUP_DIR="${APP_ROOT}/backups"
 OPERATIONAL_BACKUP_RETENTION_COUNT=30
 confirmation="${1:-}"
+# Optional: audit an operational backup that already exists (for example the one taken
+# before a cleanup) instead of a fresh dump. The working database is not read then.
+existing_backup="${2:-}"
 audit_database=""
 critical_findings=0
 warning_findings=0
@@ -31,7 +34,12 @@ fail() {
 trap cleanup EXIT
 
 [[ "$(id -u)" == "0" ]] || fail "script must run as root"
+[[ "$#" -le 2 ]] || fail "unexpected arguments"
 [[ "$confirmation" == "$EXPECTED_CONFIRMATION" ]] || fail "confirmation phrase is invalid"
+if [[ -n "$existing_backup" ]]; then
+  [[ "$existing_backup" =~ ^garagebalance_[0-9]{8}-[0-9]{6}_[a-z0-9_]+\.pgdump$ ]] ||
+    fail "backup must be a file name of an operational backup"
+fi
 [[ -f "$ENV_FILE" ]] || fail "environment file was not found"
 
 connection_string="$(
@@ -50,15 +58,21 @@ database_name="$(
 
 install -d -o garagebalance -g garagebalance -m 750 "$BACKUP_DIR"
 timestamp="$(date +%Y%m%d-%H%M%S)"
-backup_file="${BACKUP_DIR}/garagebalance_${timestamp}_before_integrity_audit.pgdump"
 audit_database="garagebalance_integrity_audit_${timestamp//-/}_$$"
 
-log "backupStatus=started"
-sudo -u postgres pg_dump --format=custom "$database_name" > "$backup_file"
-[[ -s "$backup_file" ]] || fail "PostgreSQL backup was not created"
-chown garagebalance:garagebalance "$backup_file"
-chmod 600 "$backup_file"
-log "backupStatus=completed"
+if [[ -n "$existing_backup" ]]; then
+  backup_file="${BACKUP_DIR}/${existing_backup}"
+  [[ -f "$backup_file" && ! -L "$backup_file" && -s "$backup_file" ]] || fail "operational backup was not found"
+  log "auditSource=existing-backup; file=${existing_backup}"
+else
+  backup_file="${BACKUP_DIR}/garagebalance_${timestamp}_before_integrity_audit.pgdump"
+  log "backupStatus=started"
+  sudo -u postgres pg_dump --format=custom "$database_name" > "$backup_file"
+  [[ -s "$backup_file" ]] || fail "PostgreSQL backup was not created"
+  chown garagebalance:garagebalance "$backup_file"
+  chmod 600 "$backup_file"
+  log "backupStatus=completed"
+fi
 
 log "restoreStatus=started"
 sudo -u postgres createdb "$audit_database"

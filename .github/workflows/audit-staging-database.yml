@@ -7,6 +7,11 @@ on:
         description: Type AUDIT GARAGEBALANCE STAGING
         required: true
         type: string
+      backup_file:
+        description: Optional operational backup file name to audit instead of a fresh dump
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: garagebalance-staging-maintenance
@@ -22,10 +27,15 @@ jobs:
     timeout-minutes: 20
     environment: staging
     steps:
-      - name: Validate confirmation
+      - name: Validate inputs
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
-        run: test "$CONFIRMATION" = "AUDIT GARAGEBALANCE STAGING"
+          BACKUP_FILE: ${{ inputs.backup_file }}
+        run: |
+          test "$CONFIRMATION" = "AUDIT GARAGEBALANCE STAGING"
+          if [ -n "$BACKUP_FILE" ]; then
+            [[ "$BACKUP_FILE" =~ ^garagebalance_[0-9]{8}-[0-9]{6}_[a-z0-9_]+\.pgdump$ ]]
+          fi
 
       - name: Prepare SSH
         run: |
@@ -35,10 +45,12 @@ jobs:
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Audit restored PostgreSQL copy
+        env:
+          BACKUP_FILE: ${{ inputs.backup_file }}
         run: |
           ssh -i ~/.ssh/garagebalance_staging \
             "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}" \
-            "sudo /usr/local/bin/garagebalance-deploy-apply audit-database 'AUDIT GARAGEBALANCE STAGING'"
+            "sudo /usr/local/bin/garagebalance-deploy-apply audit-database 'AUDIT GARAGEBALANCE STAGING' ${BACKUP_FILE}"
 
       - name: Verify deployed application
         run: |
