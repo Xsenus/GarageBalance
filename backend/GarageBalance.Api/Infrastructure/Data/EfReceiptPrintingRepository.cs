@@ -57,13 +57,13 @@ public sealed class EfReceiptPrintingRepository(GarageBalanceDbContext dbContext
         return await dbContext.AccrualPaymentAllocations
             .AsNoTracking()
             .Where(item =>
-                financialOperationIds.Contains(item.FinancialOperationId) &&
+                item.FinancialOperationId.HasValue && financialOperationIds.Contains(item.FinancialOperationId.Value) &&
                 item.IsActive &&
                 !item.Accrual.IsCanceled)
             .OrderBy(item => item.Accrual.AccountingMonth)
             .ThenBy(item => item.Accrual.IncomeType.Name)
             .Select(item => new ReceiptPrintingAllocationData(
-                item.FinancialOperationId,
+                item.FinancialOperationId!.Value,
                 item.AccrualId,
                 item.Accrual.AccountingMonth,
                 item.Accrual.IncomeType.Name,

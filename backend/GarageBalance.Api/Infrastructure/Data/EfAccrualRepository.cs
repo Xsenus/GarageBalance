@@ -29,7 +29,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                     .Where(allocation =>
                         allocation.IsActive &&
                         allocation.AccrualId == accrual.Id &&
-                        !allocation.FinancialOperation.IsCanceled)
+                        (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
                     .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
             })
             .GroupBy(accrual => accrual.IsAvailable)
@@ -387,7 +387,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                     .Where(allocation =>
                         allocation.IsActive &&
                         allocation.AccrualId == accrual.Id &&
-                        !allocation.FinancialOperation.IsCanceled)
+                        (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
                     .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
             });
 
@@ -445,7 +445,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                     .Where(allocation =>
                         allocation.IsActive &&
                         allocation.AccrualId == accrual.Id &&
-                        !allocation.FinancialOperation.IsCanceled)
+                        (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
                     .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
             })
             .ToListAsync(cancellationToken);

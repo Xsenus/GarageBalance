@@ -5,6 +5,19 @@ namespace GarageBalance.Api.Domain.Finance;
 /// </summary>
 public static class MeterBaselineResolver
 {
+    // Generated opening devices carry an accounting boundary, not the installation
+    // date of a physical replacement. Explicit connections are resolved by callers.
+    public static bool IsGeneratedOpening(MeterDevice device, IReadOnlyList<MeterDevice>? history = null) =>
+        !device.ReplacedDeviceId.HasValue && !device.ReplacementAccountingMonth.HasValue &&
+        (history is null || !history.Any(previous => previous.Id != device.Id && previous.InstalledOn < device.InstalledOn)) &&
+        (IsRestartBoundary(device) || device.SerialNumber == UnnumberedDeviceSerial);
+
+    public static DateOnly GetEffectiveStartDate(MeterDevice device, DateOnly? accountingStartMonth, IReadOnlyList<MeterDevice>? history = null) =>
+        accountingStartMonth.HasValue && IsGeneratedOpening(device, history) &&
+        new DateOnly(device.InstalledOn.Year, device.InstalledOn.Month, 1) > new DateOnly(accountingStartMonth.Value.Year, accountingStartMonth.Value.Month, 1)
+            ? new DateOnly(accountingStartMonth.Value.Year, accountingStartMonth.Value.Month, 1)
+            : device.InstalledOn;
+
     /// <summary>Serial number prefix of the logical device created when meter accounting was restarted.</summary>
     public const string RestartDeviceSerialPrefix = "Начало учёта";
 

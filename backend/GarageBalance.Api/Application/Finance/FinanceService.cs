@@ -255,6 +255,8 @@ public sealed partial class FinanceService(
             normalizedOffset,
             normalizedLimit,
             cancellationToken);
+        var markers = await meterReadingRepository.GetReplacementMarkersAsync(
+            page.Readings.Where(reading => reading.IsMeterReplacement).Select(reading => reading.Id).ToArray(), cancellationToken);
         var result = new MeterReadingYearPageDto(
             page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue,
                 garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn, garage.AccountingStartMonth,
@@ -267,7 +269,7 @@ public sealed partial class FinanceService(
                 reading.Version,
                 reading.MeterDeviceId,
                 reading.MeterDeviceSerialNumber,
-                reading.IsMeterReplacement)).ToList(),
+                reading.IsMeterReplacement, markers.GetValueOrDefault(reading.Id))).ToList(),
             page.TotalCount,
             normalizedOffset,
             normalizedLimit,
@@ -445,6 +447,8 @@ public sealed partial class FinanceService(
 
         var openingBalance = MoneyMath.RoundMoney(
             worksheetData.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal);
+        var replacementMarkers = await meterReadingRepository.GetReplacementMarkersAsync(
+            worksheetData.MeterReadings.Where(reading => reading.IsMeterReplacement).Select(reading => reading.Id).ToArray(), cancellationToken);
         var openingDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m));
         var annualAccrualIds = worksheetData.AnnualAccruals
             .Select(accrual => accrual.AccrualId)
@@ -463,7 +467,12 @@ public sealed partial class FinanceService(
                     .Sum(allocation => allocation.Amount) ?? 0m;
                 return Math.Max(accrual.Amount - allocatedBeforePeriod, 0m);
             }));
-        var unrepresentedOpeningDebt = MoneyMath.RoundMoney(Math.Max(openingDebt - representedOpeningDebt, 0m));
+        var currentDiscount = -worksheetData.AccrualBuckets.Where(bucket => bucket.Amount < 0m).Sum(bucket => bucket.Amount);
+        var discountForVisibleAccruals = worksheetData.Allocations.Where(allocation => allocation.IsDiscount &&
+            allocation.PaymentAccountingMonth >= monthFrom && allocation.AccrualAccountingMonth >= monthFrom &&
+            allocation.AccrualAccountingMonth <= monthTo).Sum(allocation => allocation.Amount);
+        var discountForOpeningDebt = Math.Max(currentDiscount - discountForVisibleAccruals, 0m);
+        var unrepresentedOpeningDebt = MoneyMath.RoundMoney(Math.Max(openingDebt - representedOpeningDebt - discountForOpeningDebt, 0m));
         var meterReadingByMonthKind = worksheetData.MeterReadings
             .GroupBy(reading => (reading.AccountingMonth, reading.MeterKind))
             .ToDictionary(
@@ -491,6 +500,7 @@ public sealed partial class FinanceService(
             .ToDictionary(group => group.Key, group => string.Join("; ", group.Select(item => item.Reason).Distinct()));
         var appliedIncomeLookup = worksheetData.Allocations
             .Where(allocation =>
+                !allocation.IsDiscount &&
                 !annualAccrualIds.Contains(allocation.AccrualId) &&
                 allocation.AccrualAccountingMonth >= monthFrom &&
                 allocation.AccrualAccountingMonth <= monthTo)
@@ -503,6 +513,7 @@ public sealed partial class FinanceService(
             .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
         var appliedPaymentLookup = worksheetData.Allocations
             .Where(allocation =>
+                !allocation.IsDiscount &&
                 allocation.PaymentAccountingMonth >= monthFrom &&
                 allocation.PaymentAccountingMonth <= monthTo)
             .GroupBy(allocation => (allocation.PaymentAccountingMonth, allocation.PaymentIncomeTypeId))
@@ -545,16 +556,21 @@ public sealed partial class FinanceService(
             .ThenBy(bucket => bucket.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var discountLookup = worksheetData.Allocations.Where(allocation => allocation.IsDiscount)
+            .GroupBy(allocation => (allocation.AccrualAccountingMonth, allocation.IncomeTypeId, allocation.IrregularPaymentId, allocation.FeeCampaignId))
+            .ToDictionary(group => group.Key, group => group.Sum(allocation => allocation.Amount));
         var rows = keys.Select(key =>
         {
             var accrualAmount = MoneyMath.RoundMoney(accrualLookup
                 .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.IrregularPaymentId, key.FeeCampaignId))?.Amount ?? 0m);
             var incomeAmount = appliedIncomeLookup
                 .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.IrregularPaymentId, key.FeeCampaignId));
+            var discount = discountLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IrregularPaymentId, key.FeeCampaignId));
+            var payableAmount = Math.Max(accrualAmount - discount, 0m);
             var advanceAmount = advanceDisplayKeys.Contains((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName))
                 ? advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))
                 : 0m;
-            var debt = MoneyMath.RoundMoney(Math.Max(accrualAmount - incomeAmount, 0m));
+            var debt = MoneyMath.RoundMoney(Math.Max(payableAmount - incomeAmount, 0m));
             var calculationDetails = calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.FeeCampaignId));
             var meterKind = calculationDetails is { RequiresMeter: false }
                 ? null
@@ -573,7 +589,7 @@ public sealed partial class FinanceService(
                 reading?.CurrentValue,
                 reading?.Consumption,
                 accrualAmount,
-                accrualAmount,
+                payableAmount,
                 incomeAmount,
                 advanceAmount,
                 debt,
@@ -582,7 +598,9 @@ public sealed partial class FinanceService(
                 IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
                 CalculationDetails: calculationDetails,
                 Reason: reasonLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName, key.IrregularPaymentId, key.FeeCampaignId)),
-                IncomeTypeCode: key.IncomeTypeCode);
+                IncomeTypeCode: key.IncomeTypeCode,
+                DiscountAmount: discount,
+                MeterReplacement: reading is null ? null : replacementMarkers.GetValueOrDefault(reading.Id));
         }).ToList();
 
         foreach (var annualAccrual in worksheetData.AnnualAccruals)
@@ -631,14 +649,15 @@ public sealed partial class FinanceService(
                 null,
                 MoneyMath.RoundMoney(annualAccrual.Amount),
                 MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
-                allocatedThroughMonth,
+                MoneyMath.RoundMoney(allocations.Where(allocation => !allocation.IsDiscount && allocation.PaymentAccountingMonth <= month).Sum(allocation => allocation.Amount)),
                 advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
                 MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m)),
                 Reason: BuildAnnualAccrualWorksheetReason(
                     annualAccrual,
                     month,
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m))),
-                IncomeTypeCode: annualAccrual.IncomeTypeCode));
+                IncomeTypeCode: annualAccrual.IncomeTypeCode,
+                DiscountAmount: allocations.Where(allocation => allocation.IsDiscount && allocation.PaymentAccountingMonth <= month).Sum(allocation => allocation.Amount)));
         }
 
         foreach (var option in feeCampaignOptions)
@@ -689,12 +708,13 @@ public sealed partial class FinanceService(
                 null,
                 accruedInPeriod,
                 payable,
-                paidInPeriod,
+                allocations.Where(allocation => !allocation.IsDiscount && allocation.PaymentAccountingMonth >= monthFrom).Sum(allocation => allocation.Amount),
                 0m,
                 debt,
                 FeeCampaignId: campaign.Id,
                 FeeCampaignRemainingAmount: campaign.ClosedAtUtc.HasValue ? 0m : campaignRemaining,
-                Reason: accrual.Comment));
+                Reason: accrual.Comment,
+                DiscountAmount: allocations.Where(allocation => allocation.IsDiscount).Sum(allocation => allocation.Amount)));
         }
 
         rows = rows
@@ -4900,6 +4920,10 @@ public sealed partial class FinanceService(
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
 
+    private static bool IsValidAccrualAmount(decimal amount, string source, string? incomeTypeCode, bool system) =>
+        amount is >= -999999999m and <= 999999999m && MoneyMath.RoundMoney(amount) != 0m &&
+        (amount > 0m || source == AccrualSources.Manual && system && incomeTypeCode == "penalty");
+
     public async Task<FinanceResult<AccrualDto>> CreateAccrualAsync(CreateAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
@@ -4934,6 +4958,8 @@ public sealed partial class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
+        if (!IsValidAccrualAmount(request.Amount, source, incomeType.Code, incomeType.IsSystem))
+            return FinanceResult<AccrualDto>.Failure("accrual_amount_invalid", "Введите ненулевую сумму. Отрицательная сумма разрешена только для ручной скидки в системном виде «Штраф».");
         if (dueDateSetting?.AppliesToGarage(garage.Id) == false)
             return FinanceResult<AccrualDto>.Failure("tariff_not_applicable", "Тариф не действует для выбранного гаража.");
         if (source == AccrualSources.Regular &&
@@ -5125,6 +5151,9 @@ public sealed partial class FinanceService(
         {
             return FinanceResult<AccrualDto>.Failure("income_type_not_found", "Вид начисления не найден.");
         }
+
+        if (!IsValidAccrualAmount(request.Amount, source, incomeType.Code, incomeType.IsSystem))
+            return FinanceResult<AccrualDto>.Failure("accrual_amount_invalid", "Введите ненулевую сумму. Отрицательная сумма разрешена только для ручной скидки в системном виде «Штраф».");
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var dueDateSetting = !isIrregular && source == AccrualSources.Regular
@@ -6619,6 +6648,11 @@ public sealed partial class FinanceService(
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_values_required", "Укажите начальное показание нового счетчика.");
         }
 
+        if (!request.RemovedDeviceFinalValue.HasValue)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_final_required", "Укажите конечное показание старого счетчика.");
+        }
+
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
         if (request.ReplacementDate.Year != accountingMonth.Year || request.ReplacementDate.Month != accountingMonth.Month)
         {
@@ -6702,7 +6736,7 @@ public sealed partial class FinanceService(
                 $"Показание за месяц ({currentValue:0.###}) меньше начального показания нового счётчика. Проверьте начальное показание нового счётчика.");
         }
 
-        if (activeDevice is not null && request.ReplacementDate <= activeDevice.InstalledOn)
+        if (activeDevice is not null && request.ReplacementDate <= MeterBaselineResolver.GetEffectiveStartDate(activeDevice, garage.AccountingStartMonth, devices))
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_date_invalid", "Дата замены должна быть позже даты установки действующего счетчика.");
         }
@@ -6713,13 +6747,26 @@ public sealed partial class FinanceService(
         }
 
         var lastOldReading = allReadings
-            .Where(reading => reading.Id != targetReading?.Id && reading.ReadingDate < request.ReplacementDate &&
+            .Where(reading => reading.Id != targetReading?.Id &&
+                (reading.AccountingMonth < accountingMonth || reading.ReadingDate < request.ReplacementDate) &&
                 (reading.MeterDeviceId == activeDevice?.Id || registerLegacyDevice && reading.MeterDeviceId is null))
-            .OrderByDescending(reading => reading.ReadingDate)
-            .ThenByDescending(reading => reading.AccountingMonth)
+            .OrderByDescending(reading => reading.AccountingMonth)
+            .ThenByDescending(reading => reading.ReadingDate)
             .FirstOrDefault();
-        var removedFinalValue = MoneyMath.RoundMeterValue(
-            request.RemovedDeviceFinalValue ?? targetReading?.CurrentValue ?? lastOldReading?.CurrentValue ?? activeDevice?.InitialValue ?? 0m);
+        var removedFinalValue = MoneyMath.RoundMeterValue(request.RemovedDeviceFinalValue.Value);
+        // A backdated reading can have a later reading date than the replacement. Validate
+        // every preceding accounting period as well as readings taken before removal.
+        var oldReadingMaximum = allReadings
+            .Where(reading => reading.Id != targetReading?.Id &&
+                (reading.AccountingMonth < accountingMonth || reading.ReadingDate < request.ReplacementDate) &&
+                (reading.MeterDeviceId == activeDevice?.Id || registerLegacyDevice && reading.MeterDeviceId is null))
+            .Select(reading => reading.CurrentValue)
+            .DefaultIfEmpty(activeDevice?.InitialValue ?? 0m)
+            .Max();
+        if (removedFinalValue < oldReadingMaximum)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_final_below_last_reading", "Конечное показание старого счетчика не может быть меньше его сохраненных показаний.");
+        }
         if (targetReading?.IsMeterReplacement == true && removedFinalValue < targetReading.CurrentValue)
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_final_below_last_reading", "Конечное показание снимаемого прибора меньше его сохранённого показания после предыдущей замены.");
@@ -6976,11 +7023,13 @@ public sealed partial class FinanceService(
         if (meterDevice is null)
         {
             var activeDevice = await meterReadingRepository.GetActiveDeviceForUpdateAsync(garage.Id, meterKind, cancellationToken);
-            if (activeDevice is not null && string.Equals(activeDevice.SerialNumber, "Без номера", StringComparison.Ordinal) &&
-                !activeDevice.ReplacedDeviceId.HasValue && !activeDevice.ReplacementAccountingMonth.HasValue)
+            var deviceHistory = await meterReadingRepository.GetDevicesAsync(garage.Id, meterKind, cancellationToken);
+            if (activeDevice is not null && MeterBaselineResolver.IsGeneratedOpening(activeDevice, deviceHistory) &&
+                (activeDevice.SerialNumber == MeterBaselineResolver.UnnumberedDeviceSerial ||
+                    request.ReadingDate >= MeterBaselineResolver.GetEffectiveStartDate(activeDevice, garage.AccountingStartMonth, deviceHistory)))
             {
                 meterDevice = activeDevice;
-                adjustMeterDeviceInstalledOn = meterConnection is null;
+                adjustMeterDeviceInstalledOn = meterConnection is null && activeDevice.SerialNumber == MeterBaselineResolver.UnnumberedDeviceSerial;
             }
             else if (activeDevice is not null)
             {
@@ -9275,13 +9324,13 @@ public sealed partial class FinanceService(
     private static bool HasGapWarning(Garage garage, string meterKind, DateOnly month, MeterReading? previousReading)
     {
         var previousMonth = previousReading?.AccountingMonth
-            ?? (GetInitialMeterValue(garage, meterKind).HasValue ? garage.InitialMeterReadingMonth : null);
+            ?? (GetInitialMeterValue(garage, meterKind).HasValue ? garage.AccountingStartMonth?.AddMonths(-1) ?? garage.InitialMeterReadingMonth : null);
         return meterKind != MeterKinds.Water && (!previousMonth.HasValue || previousMonth.Value < month.AddMonths(-1));
     }
 
     private static bool IsBeforeMeterBaseline(Garage garage, string meterKind, DateOnly month) =>
         (meterKind is not (MeterKinds.Water or MeterKinds.Electricity) || GetInitialMeterValue(garage, meterKind).HasValue) &&
-        garage.InitialMeterReadingMonth.HasValue && month <= garage.InitialMeterReadingMonth.Value;
+        (garage.AccountingStartMonth?.AddMonths(-1) ?? garage.InitialMeterReadingMonth) is { } initialMonth && month <= initialMonth;
 
     private async Task<IReadOnlyList<FinancialOperationDto>> ToOperationDtosAsync(IReadOnlyList<FinancialOperation> operations, CancellationToken cancellationToken)
     {

@@ -38,7 +38,7 @@ public sealed class EfFinancialReportPeriodQuery(GarageBalanceDbContext dbContex
                                     .Where(allocation =>
                                         allocation.IsActive &&
                                         allocation.AccrualId == accrual.Id &&
-                                        !allocation.FinancialOperation.IsCanceled)
+                                        (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
                                     .Sum(allocation => (decimal?)allocation.Amount) ?? 0m))
                         .Min(accrual => (DateOnly?)accrual.AccountingMonth)))
                 .SingleOrDefaultAsync(cancellationToken);

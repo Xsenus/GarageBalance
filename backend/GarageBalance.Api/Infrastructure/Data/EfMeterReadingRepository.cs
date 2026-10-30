@@ -9,6 +9,22 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) : IMeterReadingRepository
 {
+    public async Task<IReadOnlyDictionary<Guid, MeterReplacementMarkerDto>> GetReplacementMarkersAsync(
+        IReadOnlyCollection<Guid> readingIds, CancellationToken cancellationToken)
+    {
+        if (readingIds.Count == 0) return new Dictionary<Guid, MeterReplacementMarkerDto>();
+        return await (from reading in dbContext.MeterReadings.AsNoTracking()
+                      join device in dbContext.MeterDevices.AsNoTracking() on reading.MeterDeviceId equals device.Id
+                      join old in dbContext.MeterDevices.AsNoTracking() on device.ReplacedDeviceId equals old.Id
+                      where readingIds.Contains(reading.Id) && reading.IsMeterReplacement && !reading.IsCanceled && !device.IsCanceled
+                      select new
+                      {
+                          reading.Id,
+                          Marker = new MeterReplacementMarkerDto(device.Id, device.InstalledOn, old.SerialNumber, old.FinalValue,
+                              device.SerialNumber, device.InitialValue, reading.CurrentValue, reading.PreviousDeviceConsumption, reading.Consumption)
+                      }).ToDictionaryAsync(item => item.Id, item => item.Marker, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<string>> GetStoredMeterKindsAsync(Guid garageId, CancellationToken cancellationToken) =>
         await dbContext.MeterReadings.Where(reading => reading.GarageId == garageId).Select(reading => reading.MeterKind)
             .Union(dbContext.MeterDevices.Where(device => device.GarageId == garageId).Select(device => device.MeterKind))
@@ -601,7 +617,9 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         return garage with
         {
             StartValue = value,
-            StartValueDate = hasConnection ? garage.ConnectedOn : baseline?.InstalledOn ?? garage.InitialReadingMonth,
+            StartValueDate = hasConnection ? garage.ConnectedOn : baseline is not null
+                ? MeterBaselineResolver.GetEffectiveStartDate(baseline, garage.AccountingStartMonth, devices)
+                : garage.AccountingStartMonth?.AddMonths(-1) ?? garage.InitialReadingMonth,
             StartValueSource = value is null ? "unknown" : hasConnection ? "connection" : baseline is null ? "legacy" : "device",
             StartValueDeviceSerial = baseline?.SerialNumber,
             RequiresStartValue = hasConnection ? value is null : garage.RequiresStartValue

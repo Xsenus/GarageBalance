@@ -11,6 +11,12 @@ describe('mergeSavedGarageAccrual', () => {
     accountingYear: null, comment: null, ...overrides,
   }) as AccrualDto
 
+  it('shows a signed discount without offering a negative cash payment while waiting for the ledger refresh', () => {
+    const [row] = mergeSavedGarageAccrual([], saved({ incomeTypeId: 'penalty', incomeTypeName: 'Штраф', amount: -150, irregularPaymentId: null, basis: null, comment: 'Скидка' }), 'penalty')
+    expect(row).toMatchObject({ accrued: -150, payable: 0, debt: 0, paid: 0, advance: 0 })
+    expect(getGarageIncomeRowTitle(row)).toBe('Скидка: Скидка')
+  })
+
   it('preserves the saved catalog identity and basis before the worksheet refresh', () => {
     const [row] = mergeSavedGarageAccrual([], saved(), 'other_payments')
     expect(row).toMatchObject({ irregularPaymentId: 'repair', incomeTypeId: 'other', reason: 'Ремонт ворот', accrued: 150, payable: 150, debt: 150 })

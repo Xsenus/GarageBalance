@@ -320,7 +320,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             dbContext.AccrualPaymentAllocations
                 .Where(allocation =>
                     allocation.IsActive &&
-                    !allocation.FinancialOperation.IsCanceled &&
+                    (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled) &&
                     allocation.AccrualId == dbContext.Accruals
                         .Where(accrual =>
                             !accrual.IsCanceled &&
@@ -342,7 +342,8 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
                     allocation.IsActive &&
                     !allocation.Accrual.IsCanceled &&
                     allocation.Accrual.FeeCampaignId == campaign.Id &&
-                    !allocation.FinancialOperation.IsCanceled &&
+                    allocation.FinancialOperationId.HasValue &&
+                    (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled) &&
                     allocation.FinancialOperation.FeeCampaignId == null)
                 .Sum(allocation => (decimal?)allocation.Amount) ?? 0m)));
 

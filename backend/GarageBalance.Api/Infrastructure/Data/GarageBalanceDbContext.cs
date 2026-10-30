@@ -837,13 +837,21 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
         {
             entity.ToTable(
                 "accrual_payment_allocations",
-                table => table.HasCheckConstraint("CK_accrual_payment_allocations_Amount_Positive", "\"Amount\" > 0"));
+                table =>
+                {
+                    table.HasCheckConstraint("CK_accrual_payment_allocations_Amount_Positive", "\"Amount\" > 0");
+                    table.HasCheckConstraint("CK_accrual_payment_allocations_Source", "(\"FinancialOperationId\" IS NULL) <> (\"CreditAccrualId\" IS NULL)");
+                });
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Amount).HasPrecision(18, 2);
             entity.HasIndex(item => new { item.FinancialOperationId, item.AccrualId })
                 .IsUnique()
                 .HasFilter("\"IsActive\" = true");
             entity.HasIndex(item => item.AccrualId);
+            entity.HasIndex(item => new { item.CreditAccrualId, item.AccrualId }).IsUnique()
+                .HasFilter("\"IsActive\" = true AND \"CreditAccrualId\" IS NOT NULL");
+            entity.HasOne(item => item.CreditAccrual).WithMany().HasForeignKey(item => item.CreditAccrualId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(item => new { item.AccrualId, item.FinancialOperationId })
                 .HasFilter("\"IsActive\" = true");
             entity.HasOne(item => item.FinancialOperation)

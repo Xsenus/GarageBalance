@@ -14,6 +14,54 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlMeterReplacementHistoryTests
 {
     [PostgreSqlFact]
+    public Task ReplacementEditSaveFailureRollsBackTheEntireChange() => AssertEditRollbackAsync("failure");
+
+    [PostgreSqlFact]
+    public Task ReplacementEditCancellationRollsBackTheEntireChange() => AssertEditRollbackAsync("cancellation");
+
+    [PostgreSqlFact]
+    public Task ReplacementEditConcurrencyRollsBackTheEntireChange() => AssertEditRollbackAsync("concurrency");
+
+    private static async Task AssertEditRollbackAsync(string mode)
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var failure = new CancellationSaveInterceptor();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>().UseNpgsql(database.ConnectionString).AddInterceptors(failure).Options;
+        await using var context = new GarageBalanceDbContext(options);
+        var garage = new Garage { Number = "PG-EDIT-ROLLBACK", InitialWaterMeterValue = 10 };
+        context.Add(garage);
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context);
+        var created = await service.ReplaceMeterDeviceAsync(new(garage.Id, "water", new(2026, 6, 1), new(2026, 6, 10), "PG-EDIT", 0, 2, 15, "Замена"), null, default);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        var before = (await service.GetMeterDeviceReplacementAsync(created.Value!.Device.Id, default)).Value!;
+        var auditCount = await context.AuditEvents.CountAsync();
+        var externalVersion = Guid.NewGuid();
+        failure.BeforeSave = async () =>
+        {
+            if (mode == "failure") throw new InvalidOperationException("Ошибка сохранения.");
+            if (mode == "cancellation") throw new OperationCanceledException("Отмена сохранения.");
+            await using var external = database.CreateContext();
+            await external.MeterReadings.Where(item => item.Id == before.Reading!.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.Version, externalVersion));
+        };
+        var request = new UpdateMeterDeviceReplacementRequest(before.Device.Version, before.RemovedDevice.Version, before.Reading!.Version,
+            new(2026, 6, 1), new(2026, 6, 11), "PG-CORRECTED", 19, 1, "Исправление");
+        var action = () => service.UpdateMeterDeviceReplacementAsync(before.Device.Id, request, null, default);
+        if (mode == "failure") await Assert.ThrowsAsync<InvalidOperationException>(action);
+        else if (mode == "cancellation") await Assert.ThrowsAsync<OperationCanceledException>(action);
+        else Assert.Equal("meter_device_conflict", (await action()).ErrorCode);
+        failure.BeforeSave = null;
+        context.ChangeTracker.Clear();
+        var after = (await service.GetMeterDeviceReplacementAsync(before.Device.Id, default)).Value!;
+        Assert.Equal(before.Device, after.Device);
+        Assert.Equal(before.RemovedDevice, after.RemovedDevice);
+        Assert.Equal(before.Reading!.Consumption, after.Reading!.Consumption);
+        Assert.Equal(mode == "concurrency" ? externalVersion : before.Reading.Version, after.Reading.Version);
+        Assert.Equal(auditCount, await context.AuditEvents.CountAsync());
+    }
+
+    [PostgreSqlFact]
     public Task CancellationSaveErrorRollsBackTheEntireReplacement() => AssertCancellationRollbackAsync("failure");
 
     [PostgreSqlFact]

@@ -1352,7 +1352,10 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("FinancialOperationId")
+                    b.Property<Guid?>("CreditAccrualId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FinancialOperationId")
                         .HasColumnType("uuid");
 
                     b.Property<bool>("IsActive")
@@ -1365,6 +1368,10 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.HasIndex("AccrualId", "FinancialOperationId")
                         .HasFilter("\"IsActive\" = true");
 
+                    b.HasIndex("CreditAccrualId", "AccrualId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true AND \"CreditAccrualId\" IS NOT NULL");
+
                     b.HasIndex("FinancialOperationId", "AccrualId")
                         .IsUnique()
                         .HasFilter("\"IsActive\" = true");
@@ -1372,6 +1379,8 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.ToTable("accrual_payment_allocations", null, t =>
                         {
                             t.HasCheckConstraint("CK_accrual_payment_allocations_Amount_Positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_accrual_payment_allocations_Source", "(\"FinancialOperationId\" IS NULL) <> (\"CreditAccrualId\" IS NULL)");
                         });
                 });
 
@@ -3398,13 +3407,19 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GarageBalance.Api.Domain.Finance.Accrual", "CreditAccrual")
+                        .WithMany()
+                        .HasForeignKey("CreditAccrualId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("GarageBalance.Api.Domain.Finance.FinancialOperation", "FinancialOperation")
                         .WithMany()
                         .HasForeignKey("FinancialOperationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Accrual");
+
+                    b.Navigation("CreditAccrual");
 
                     b.Navigation("FinancialOperation");
                 });

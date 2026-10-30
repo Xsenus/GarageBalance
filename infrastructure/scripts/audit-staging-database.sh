@@ -183,7 +183,7 @@ run_check "duplicate_irregular_accruals" "critical" \
 run_check "duplicate_fee_campaign_accruals" "critical" \
   "SELECT count(*) FROM (SELECT \"GarageId\", \"FeeCampaignId\", \"AccountingMonth\" FROM accruals WHERE NOT \"IsCanceled\" AND \"FeeCampaignId\" IS NOT NULL GROUP BY \"GarageId\", \"FeeCampaignId\", \"AccountingMonth\" HAVING count(*) > 1) q;"
 run_check "invalid_accrual_amounts" "critical" \
-  "SELECT count(*) FROM accruals WHERE NOT \"IsCanceled\" AND \"Amount\" < 0;"
+  "SELECT count(*) FROM accruals a JOIN income_types i ON i.\"Id\" = a.\"IncomeTypeId\" WHERE NOT a.\"IsCanceled\" AND a.\"Amount\" < 0 AND (a.\"Source\" <> 'manual' OR NOT i.\"IsSystem\" OR i.\"Code\" IS DISTINCT FROM 'penalty');"
 run_check "invalid_overdue_dates" "critical" \
   "SELECT count(*) FROM accruals WHERE NOT \"IsCanceled\" AND \"OverdueFromDate\" IS NOT NULL AND \"OverdueFromDate\" <= \"DueDate\";"
 run_check "backdated_accrual_due_dates" "warning" \
@@ -219,8 +219,24 @@ run_check "allocation_totals_above_accrual" "critical" \
   "SELECT count(*) FROM (SELECT p.\"AccrualId\" FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" GROUP BY p.\"AccrualId\", a.\"Amount\" HAVING sum(p.\"Amount\") > a.\"Amount\") q;"
 run_check "nonpositive_active_allocations" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations WHERE \"IsActive\" AND \"Amount\" <= 0;"
-run_check "duplicate_active_allocations" "critical" \
-  "SELECT count(*) FROM (SELECT \"FinancialOperationId\", \"AccrualId\" FROM accrual_payment_allocations WHERE \"IsActive\" GROUP BY \"FinancialOperationId\", \"AccrualId\" HAVING count(*) > 1) q;"
+# Operational backups may predate the credit-source migration. Inspect only the
+# restored copy and keep both schema versions auditable.
+credit_source_column="$(sudo -u postgres psql --set ON_ERROR_STOP=1 --tuples-only --no-align --dbname="$audit_database" \
+  --command="SET statement_timeout = '60s'; SET default_transaction_read_only = on; SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'accrual_payment_allocations' AND column_name = 'CreditAccrualId';" | tail -n 1 | tr -d '[:space:]')"
+[[ "$credit_source_column" == "0" || "$credit_source_column" == "1" ]] || fail "unexpected allocation source schema"
+if [[ "$credit_source_column" == "1" ]]; then
+  run_check "duplicate_active_allocations" "critical" \
+    "SELECT count(*) FROM (SELECT \"FinancialOperationId\", \"CreditAccrualId\", \"AccrualId\" FROM accrual_payment_allocations WHERE \"IsActive\" GROUP BY \"FinancialOperationId\", \"CreditAccrualId\", \"AccrualId\" HAVING count(*) > 1) q;"
+  run_check "invalid_allocation_sources" "critical" \
+    "SELECT count(*) FROM accrual_payment_allocations WHERE (\"FinancialOperationId\" IS NULL) = (\"CreditAccrualId\" IS NULL);"
+  run_check "allocations_to_invalid_credits" "critical" \
+    "SELECT count(*) FROM accrual_payment_allocations p JOIN accruals c ON c.\"Id\" = p.\"CreditAccrualId\" JOIN income_types i ON i.\"Id\" = c.\"IncomeTypeId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND (c.\"IsCanceled\" OR a.\"IsCanceled\" OR c.\"Amount\" >= 0 OR a.\"Amount\" <= 0 OR c.\"GarageId\" IS DISTINCT FROM a.\"GarageId\" OR c.\"Source\" <> 'manual' OR NOT i.\"IsSystem\" OR i.\"Code\" IS DISTINCT FROM 'penalty');"
+  run_check "allocation_totals_above_credit" "critical" \
+    "SELECT count(*) FROM (SELECT p.\"CreditAccrualId\" FROM accrual_payment_allocations p JOIN accruals c ON c.\"Id\" = p.\"CreditAccrualId\" WHERE p.\"IsActive\" GROUP BY p.\"CreditAccrualId\", c.\"Amount\" HAVING sum(p.\"Amount\") > -c.\"Amount\") q;"
+else
+  run_check "duplicate_active_allocations" "critical" \
+    "SELECT count(*) FROM (SELECT \"FinancialOperationId\", \"AccrualId\" FROM accrual_payment_allocations WHERE \"IsActive\" GROUP BY \"FinancialOperationId\", \"AccrualId\" HAVING count(*) > 1) q;"
+fi
 run_check "allocation_income_type_mismatches" "critical" \
   "SELECT count(*) FROM accrual_payment_allocations p JOIN financial_operations f ON f.\"Id\" = p.\"FinancialOperationId\" JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"IsActive\" AND NOT f.\"IsCanceled\" AND NOT a.\"IsCanceled\" AND f.\"IncomeTypeId\" IS NOT NULL AND f.\"IncomeTypeId\" <> a.\"IncomeTypeId\";"
 

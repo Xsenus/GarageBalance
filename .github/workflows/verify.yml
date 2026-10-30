@@ -178,6 +178,9 @@ jobs:
           ./infrastructure/scripts/verify-package-privacy.ps1
           ./infrastructure/scripts/check-docker-distribution.ps1 -RequireDocker
 
+      - name: Test staging target identity guard without network
+        run: python3 infrastructure/tests/test_staging_target.py
+
       - name: Verify patch whitespace and shell syntax
         run: |
           git show --format= --check HEAD

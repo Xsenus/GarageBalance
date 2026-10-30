@@ -724,10 +724,17 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 campaign,
                 campaignPrincipal,
                 ordinaryAccrual,
-                legacyPayment,
-                ordinaryAllocation,
-                campaignAllocation);
+                legacyPayment);
             await legacyContext.SaveChangesAsync();
+            // This fixture intentionally precedes the credit-source migration. Seed
+            // allocations with the historical columns rather than the current EF model.
+            foreach (var allocation in new[] { ordinaryAllocation, campaignAllocation })
+            {
+                await legacyContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO accrual_payment_allocations ("Id", "FinancialOperationId", "AccrualId", "Amount", "IsActive", "CreatedAtUtc")
+                    VALUES ({allocation.Id}, {legacyPayment.Id}, {allocation.Accrual.Id}, {allocation.Amount}, {allocation.IsActive}, {allocation.CreatedAtUtc});
+                    """);
+            }
             campaignId = campaign.Id;
             garageId = garage.Id;
             stableIncomeTypeId = stableIncomeType.Id;
@@ -1860,10 +1867,9 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 julyDuplicate,
                 augustDuplicate,
                 principalPayment,
-                excessPayment,
-                principalAllocation,
-                duplicateAllocation);
+                excessPayment);
             await legacyContext.SaveChangesAsync();
+            await SeedHistoricalAllocationsAsync(legacyContext, principalAllocation, duplicateAllocation);
             campaignId = campaign.Id;
             garageId = garage.Id;
             incomeTypeId = incomeType.Id;
@@ -1952,8 +1958,9 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 Accrual = duplicate,
                 Amount = 100m
             };
-            legacyContext.AddRange(owner, garage, campaign, principal, duplicate, payment, duplicateAllocation);
+            legacyContext.AddRange(owner, garage, campaign, principal, duplicate, payment);
             await legacyContext.SaveChangesAsync();
+            await SeedHistoricalAllocationsAsync(legacyContext, duplicateAllocation);
             campaignId = campaign.Id;
             garageId = garage.Id;
             principalId = principal.Id;
@@ -2134,10 +2141,9 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 principal,
                 duplicate,
                 principalPayment,
-                duplicatePayment,
-                principalAllocation,
-                duplicateAllocation);
+                duplicatePayment);
             await legacyContext.SaveChangesAsync();
+            await SeedHistoricalAllocationsAsync(legacyContext, principalAllocation, duplicateAllocation);
             campaignId = campaign.Id;
             garageId = garage.Id;
             principalId = principal.Id;
@@ -2290,10 +2296,9 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
                 campaign,
                 principal,
                 duplicate,
-                payment,
-                principalAllocation,
-                duplicateAllocation);
+                payment);
             await legacyContext.SaveChangesAsync();
+            await SeedHistoricalAllocationsAsync(legacyContext, principalAllocation, duplicateAllocation);
             campaignId = campaign.Id;
             garageId = garage.Id;
             paymentId = payment.Id;
@@ -2715,4 +2720,15 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             appliesToAllGarages,
             30,
             participantGarageIds);
+    private static async Task SeedHistoricalAllocationsAsync(GarageBalanceDbContext context, params AccrualPaymentAllocation[] allocations)
+    {
+        foreach (var allocation in allocations)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO accrual_payment_allocations ("Id", "FinancialOperationId", "AccrualId", "Amount", "IsActive", "CreatedAtUtc")
+                VALUES ({allocation.Id}, {allocation.FinancialOperation.Id}, {allocation.Accrual.Id}, {allocation.Amount}, {allocation.IsActive}, {allocation.CreatedAtUtc});
+                """);
+        }
+    }
+
 }

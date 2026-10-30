@@ -4,6 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FinanceApiError, financeApi } from './financeApi'
 
 describe('financeApi', () => {
+  it('loads a saved replacement with cancellation and updates all concurrency versions', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({}), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    await financeApi.getMeterDeviceReplacement!('token', 'device', controller.signal)
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/meter-devices/device/replacement', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    const request = { expectedDeviceVersion: 'dv', expectedRemovedDeviceVersion: 'ov', expectedReadingVersion: 'rv', accountingMonth: '2026-06-01', replacementDate: '2026-06-10', newSerialNumber: 'NEW', removedDeviceFinalValue: 15, newInitialValue: 0, reason: 'Акт' }
+    await financeApi.updateMeterDeviceReplacement!('token', 'device', request)
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/meter-devices/device/replacement', expect.objectContaining({ method: 'PUT', body: JSON.stringify(request) }))
+  })
   it('posts atomic service connections and previews exact baseline changes with cancellation', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [] }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

@@ -250,6 +250,11 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Checkout verified deployment guard
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - name: Download backend release
         uses: actions/download-artifact@v8
         with:
@@ -304,6 +309,11 @@ jobs:
             ConnectTimeout 20
           EOF
           chmod 600 ~/.ssh/config
+
+      - name: Verify authorized staging target before upload
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: bash infrastructure/scripts/verify-staging-target.sh
 
       - name: Upload artifacts to VPS
         run: |

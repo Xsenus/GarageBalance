@@ -27,10 +27,10 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
         CancellationToken cancellationToken)
     {
-        var lockKeys = keys
+        var lockKeys = keys.Select(key => CreateGarageIncomeWorksheetLockKey(key.GarageId))
+            .Distinct().Order()
+            .Concat(keys.Select(CreateAdvisoryLockKey).Distinct().Order())
             .Distinct()
-            .Select(CreateAdvisoryLockKey)
-            .Order()
             .ToArray();
         return await AcquireAdvisoryLocksAsync(lockKeys, cancellationToken);
     }
@@ -88,10 +88,23 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             return new AccrualPaymentAllocationRebuildResult(0, 0, 0);
         }
 
+        var rows = await BuildLedgerQuery(distinctKeys).ToListAsync(cancellationToken);
         var garageIds = distinctKeys.Select(key => key.GarageId).Distinct().ToArray();
+        // Discounts can settle other services of the same garage. Expand only when one
+        // exists (including a canceled source, so its old allocations can be retired).
+        if (rows.Any(row => row.Kind == AccrualRowKind && row.Amount < 0m) ||
+            dbContext.Accruals.Local.Any(accrual => garageIds.Contains(accrual.GarageId) && accrual.Amount < 0m))
+        {
+            var storedKeys = await dbContext.Accruals.AsNoTracking().Where(accrual => garageIds.Contains(accrual.GarageId))
+                .Select(accrual => new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)).Distinct().ToListAsync(cancellationToken);
+            distinctKeys = distinctKeys.Concat(storedKeys)
+                .Concat(dbContext.Accruals.Local.Where(accrual => garageIds.Contains(accrual.GarageId))
+                    .Select(accrual => new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)))
+                .Distinct().ToArray();
+            rows = await BuildLedgerQuery(distinctKeys).ToListAsync(cancellationToken);
+        }
         var incomeTypeIds = distinctKeys.Select(key => key.IncomeTypeId).Distinct().ToArray();
         var keySet = distinctKeys.ToHashSet();
-        var rows = await BuildLedgerQuery(distinctKeys).ToListAsync(cancellationToken);
 
         OverlayTrackedAccruals(rows, garageIds, incomeTypeIds, keySet);
         await OverlayCampaignPaymentsForNormalizedTrackedAccrualsAsync(rows, keySet, cancellationToken);
@@ -112,6 +125,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             allocation.IsActive = false;
         }
 
+        var cashPaid = new Dictionary<Guid, decimal>();
         foreach (var key in distinctKeys)
         {
             var plan = AccrualPaymentAllocator.Allocate(
@@ -131,6 +145,39 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             dbContext.AccrualPaymentAllocations.AddRange(plan.Select(item => new AccrualPaymentAllocation
             {
                 FinancialOperationId = item.FinancialOperationId,
+                AccrualId = item.AccrualId,
+                Amount = item.Amount
+            }));
+            foreach (var item in plan) cashPaid[item.AccrualId] = cashPaid.GetValueOrDefault(item.AccrualId) + item.Amount;
+            activeAllocationCount += plan.Count;
+        }
+
+        foreach (var garageId in garageIds)
+        {
+            if (!rows.Any(row => row.Kind == AccrualRowKind && row.Key.GarageId == garageId && !row.IsCanceled && row.Amount < 0m)) continue;
+            var startingBalance = await dbContext.Garages.Where(garage => garage.Id == garageId)
+                .Select(garage => garage.StartingBalance).SingleAsync(cancellationToken);
+            var incomeQuery = dbContext.FinancialOperations.Where(operation => operation.GarageId == garageId &&
+                operation.OperationKind == FinancialOperationKinds.Income && !operation.IsCanceled).Select(operation => operation.Amount);
+            var cashIncome = dbContext.Database.IsNpgsql()
+                ? await incomeQuery.SumAsync(cancellationToken)
+                : (await incomeQuery.ToListAsync(cancellationToken)).Sum(); // SQLite test-provider decimal fallback.
+            foreach (var entry in dbContext.ChangeTracker.Entries<FinancialOperation>().Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            {
+                var original = entry.State == EntityState.Added ? null : (FinancialOperation)entry.OriginalValues.ToObject();
+                if (original is { IsCanceled: false, OperationKind: FinancialOperationKinds.Income } && original.GarageId == garageId) cashIncome -= original.Amount;
+                var current = entry.Entity;
+                if (entry.State != EntityState.Deleted && current is { IsCanceled: false, OperationKind: FinancialOperationKinds.Income } && current.GarageId == garageId) cashIncome += current.Amount;
+            }
+            var allocatedCash = rows.Where(row => row.Kind == AccrualRowKind && row.Key.GarageId == garageId)
+                .Sum(row => cashPaid.GetValueOrDefault(row.Id));
+            var openingDebt = Math.Max(startingBalance - Math.Max(cashIncome - allocatedCash, 0m), 0m);
+            var plan = GarageDiscountAllocator.Allocate(rows.Where(row => row.Kind == AccrualRowKind &&
+                    row.Key.GarageId == garageId && !row.IsCanceled)
+                .Select(row => new AccrualPaymentAllocationAccrual(row.Id, row.SortDate, row.AccountingMonth, row.Amount, row.CreatedAtUtc)), cashPaid, openingDebt);
+            dbContext.AccrualPaymentAllocations.AddRange(plan.Select(item => new AccrualPaymentAllocation
+            {
+                CreditAccrualId = item.CreditAccrualId,
                 AccrualId = item.AccrualId,
                 Amount = item.Amount
             }));
@@ -156,7 +203,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             allocation =>
                 allocation.IsActive &&
                 accrualIds.Contains(allocation.AccrualId) &&
-                !allocation.FinancialOperation.IsCanceled,
+                (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled),
             cancellationToken);
     }
 
@@ -173,7 +220,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             .Where(allocation =>
                 allocation.IsActive &&
                 accrualIds.Contains(allocation.AccrualId) &&
-                !allocation.FinancialOperation.IsCanceled)
+                (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
             .Select(allocation => allocation.AccrualId)
             .ToHashSetAsync(cancellationToken);
     }
@@ -185,19 +232,21 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             .Where(allocation =>
                 allocation.IsActive &&
                 allocation.AccrualId == accrualId &&
-                !allocation.FinancialOperation.IsCanceled)
+                (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
             .SumAsync(allocation => (decimal?)allocation.Amount, cancellationToken) ?? 0m;
 
     private IQueryable<AllocationLedgerRow> BuildLedgerQuery(IReadOnlyCollection<AccrualPaymentAllocationKey> keys)
     {
         var garageIds = keys.Select(key => key.GarageId).Distinct().ToArray();
         var incomeTypeIds = keys.Select(key => key.IncomeTypeId).Distinct().ToArray();
-        var accrualRows = dbContext.Accruals.AsNoTracking()
-            .Where(item => !item.DueDateNeedsReview && garageIds.Contains(item.GarageId) && incomeTypeIds.Contains(item.IncomeTypeId))
+        var accrualBase = dbContext.Accruals.AsNoTracking()
+            .Where(item => !item.DueDateNeedsReview && garageIds.Contains(item.GarageId));
+        var accrualRows = accrualBase
             .Where(BuildExactKeyPredicate<Accrual>(
                 keys,
                 item => item.GarageId,
                 item => item.IncomeTypeId))
+            .Union(accrualBase.Where(item => item.Amount < 0m))
             .Select(item => new
             {
                 Kind = AccrualRowKind,
@@ -306,7 +355,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 !allocation.Accrual.DueDateNeedsReview &&
                 allocation.Accrual.FeeCampaignId.HasValue &&
                 allocation.FinancialOperation.FeeCampaignId == null &&
-                !allocation.FinancialOperation.IsCanceled &&
+                (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled) &&
                 allocation.FinancialOperation.OperationKind == FinancialOperationKinds.Income &&
                 allocation.FinancialOperation.IncomeTypeId.HasValue &&
                 garageIds.Contains(allocation.Accrual.GarageId) &&

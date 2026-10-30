@@ -19,6 +19,7 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { getMeterReadingConnectionStatus, getMeterReadingDateForMonth } from './meterReadingPeriod'
 import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { GarageMeterReplacementDialog } from './GarageMeterReplacementDialog'
+import { describeMeterReplacement } from '../../shared/meterReplacementDescription'
 import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
 import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
 const meterReadingMonths = monthNames.map((label, index) => ({
@@ -217,8 +218,8 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                     <span
                       className="meter-readings-replacement-marker"
                       role="img"
-                      aria-label={`С этого месяца установлен новый счетчик ${replacementSerial}`}
-                      title={`Замена счетчика. Новый номер: ${replacementSerial}`}
+                      aria-label={replacementSerial.startsWith('Замена ') ? replacementSerial : `С этого месяца установлен новый счетчик ${replacementSerial}`}
+                      title={replacementSerial.startsWith('Замена ') ? replacementSerial : `Замена счетчика. Новый номер: ${replacementSerial}`}
                     >
                       <RefreshCw size={13} aria-hidden="true" />
                     </span>
@@ -487,7 +488,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           nextSavedReadingIds[cellKey] = reading.id
           nextSavedReadingVersions[cellKey] = reading.version
           if (reading.isMeterReplacement) {
-            nextSavedReadingReplacements[cellKey] = reading.meterDeviceSerialNumber?.trim() || 'номер не указан'
+            nextSavedReadingReplacements[cellKey] = reading.meterReplacement ? describeMeterReplacement(reading.meterReplacement) : reading.meterDeviceSerialNumber?.trim() || 'номер не указан'
           }
         })
 

@@ -617,7 +617,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         var allocations = await assertionContext.AccrualPaymentAllocations
             .AsNoTracking()
             .Where(item => item.IsActive && (item.FinancialOperationId == periodPaymentId || item.FinancialOperationId == legacyPaymentId))
-            .ToDictionaryAsync(item => item.FinancialOperationId);
+            .ToDictionaryAsync(item => item.FinancialOperationId!.Value);
 
         Assert.Equal(ledger.AccrualIds[1], allocations[periodPaymentId].AccrualId);
         Assert.Equal(300m, allocations[periodPaymentId].Amount);
@@ -687,18 +687,16 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
                 IncomeTypeId = ledger.IncomeTypeId,
                 DocumentNumber = "PG-LEGACY-FIFO-BEFORE-MIGRATION"
             };
-            var legacyAllocation = new AccrualPaymentAllocation
-            {
-                FinancialOperation = payment,
-                // Mirrors the deployed anomaly: a July payment was historically
-                // attached to August while the July principal remained unpaid.
-                AccrualId = ledger.AccrualIds[2],
-                Amount = 100m
-            };
-            legacyContext.AddRange(payment, legacyAllocation);
+            legacyContext.Add(payment);
             await legacyContext.SaveChangesAsync();
             paymentId = payment.Id;
-            legacyAllocationId = legacyAllocation.Id;
+            legacyAllocationId = Guid.NewGuid();
+            // Seed the historical schema using its own columns, before the credit-source
+            // migration exists. Keep the original July-payment/August-allocation anomaly.
+            await legacyContext.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO accrual_payment_allocations ("Id", "FinancialOperationId", "AccrualId", "Amount", "IsActive", "CreatedAtUtc")
+                VALUES ({legacyAllocationId}, {paymentId}, {ledger.AccrualIds[2]}, {100m}, {true}, {DateTimeOffset.UtcNow});
+                """);
         }
 
         await using (var migrationContext = database.CreateContext())
@@ -1029,7 +1027,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         {
             operationId = await readContext.AccrualPaymentAllocations
                 .Where(item => item.IsActive && item.AccrualId == accrualId)
-                .Select(item => item.FinancialOperationId)
+                .Select(item => item.FinancialOperationId!.Value)
                 .FirstAsync();
         }
 

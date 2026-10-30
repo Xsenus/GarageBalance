@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { LoaderCircle, RotateCcw, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { FinanceClient, FinancePagedResult, MeterDeviceDto } from '../../services/financeApi'
@@ -12,6 +12,9 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { TablePagination } from '../../shared/TablePagination'
 import { parseReplacementValue } from './meterReplacementConsumption'
+import { createRetryableLazyLoader } from '../../shared/retryableLazyLoader'
+
+const MeterReplacementDetailsCard = lazy(createRetryableLazyLoader(() => import('../meterReplacement/MeterReplacementDetailsCard').then((module) => ({ default: module.MeterReplacementDetailsCard }))))
 
 export default function GarageMeterHistoryDialog({ auth, financeClient, garage, onClose, onChanged }: {
   auth: AuthResponse; financeClient: FinanceClient; garage: { id: string; number: string }
@@ -22,6 +25,7 @@ export default function GarageMeterHistoryDialog({ auth, financeClient, garage, 
   const [revision, setRevision] = useState(0)
   const [loaded, setLoaded] = useState<{ key: string; page?: FinancePagedResult<MeterDeviceDto>; error?: string } | null>(null)
   const [target, setTarget] = useState<MeterDeviceDto | null>(null)
+  const [viewed, setViewed] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [restoredValue, setRestoredValue] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +42,7 @@ export default function GarageMeterHistoryDialog({ auth, financeClient, garage, 
   const closeRef = useFocusOnOpen<HTMLButtonElement>(true)
   useRestoreFocusOnClose(Boolean(target))
   const reasonRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(target))
-  useEscapeKey(!saving, target ? () => setTarget(null) : onClose)
+  useEscapeKey(!saving, target ? () => setTarget(null) : viewed ? () => setViewed(null) : onClose)
   useEffect(() => {
     if (!canRead) return
     const controller = new AbortController()
@@ -95,16 +99,18 @@ export default function GarageMeterHistoryDialog({ auth, financeClient, garage, 
               <th>Услуга / прибор</th><th>Установлен / снят</th><th>Начало / конец</th><th>Статус / причина</th><th>Действия</th>
             </tr></thead><tbody>{page.items.map((device) => <tr key={device.id}>
               <td>{device.serviceName ?? 'Счётчик'}<br /><strong>№ {device.serialNumber}</strong></td>
-              <td>{formatDateOnly(device.installedOn)}<br />{device.removedOn ? formatDateOnly(device.removedOn) : '—'}</td>
+              <td>{device.accountingOpeningDate ? `Учёт с ${formatDateOnly(device.accountingOpeningDate)}` : formatDateOnly(device.installedOn)}<br />{device.removedOn ? formatDateOnly(device.removedOn) : '—'}</td>
               <td>{formatNullableNumber(device.initialValue)}<br />{formatNullableNumber(device.finalValue)}</td>
               <td>{device.isCanceled ? 'Замена отменена' : device.removedOn ? 'Снят' : 'Действующий'}<br />{device.cancellationReason ?? device.replacementReason ?? '—'}</td>
-              <td>{canWrite && !device.isCanceled && !device.removedOn && device.replacedDeviceId && device.replacementReadingVersion ?
-                <button type="button" className="ghost-button" disabled={saving || loading || !financeClient.cancelMeterDeviceReplacement} onClick={() => { setTarget(device); setReason(''); setRestoredValue(''); setError(null) }} aria-label={`Отменить замену на прибор ${device.serialNumber}`}><RotateCcw size={16} />Отменить замену</button> : '—'}</td>
+              <td>{device.replacedDeviceId ? <button type="button" className="ghost-button" disabled={saving || loading || Boolean(target) || Boolean(viewed)} onClick={() => setViewed(device.id)} aria-label={`Карточка замены на прибор ${device.serialNumber}`}>Карточка замены</button> : null}{canWrite && !device.isCanceled && !device.removedOn && device.replacedDeviceId && device.replacementReadingVersion ?
+                <button type="button" className="ghost-button" disabled={saving || loading || Boolean(viewed) || !financeClient.cancelMeterDeviceReplacement} onClick={() => { setTarget(device); setReason(''); setRestoredValue(''); setError(null) }} aria-label={`Отменить замену на прибор ${device.serialNumber}`}><RotateCcw size={16} />Отменить замену</button> : '—'}</td>
             </tr>)}</tbody></table>{page.items.length === 0 ? <EmptyState>Приборов пока нет.</EmptyState> : null}</div>
             <TablePagination ariaLabel="Пагинация истории приборов" pageSizeLabel="Количество приборов" {...query}
-              totalCount={page.totalCount} visibleCount={page.items.length} disabled={saving || Boolean(target)}
+              totalCount={page.totalCount} visibleCount={page.items.length} disabled={saving || Boolean(target) || Boolean(viewed)}
               onPageChange={(number) => setQuery({ ...query, offset: (number - 1) * query.limit })} onPageSizeChange={(limit) => setQuery({ offset: 0, limit })} />
           </> : null}
+        {viewed && canRead ? <Suspense fallback={<TableLoadingState label="Открываем карточку замены" rows={3} columns={2} />}><MeterReplacementDetailsCard key={viewed} auth={auth} financeClient={financeClient} garageId={garage.id} deviceId={viewed}
+          onClose={() => setViewed(null)} onSaved={() => { setRevision((value) => value + 1); onChanged() }} onBusyChange={setSaving} /></Suspense> : null}
         {target && canRead ? <form className="dictionary-form-section dictionary-modal-form" aria-label="Подтверждение отмены замены" noValidate onSubmit={(event) => { event.preventDefault(); void cancel() }}>
           <h4>Отменить замену на № {target.serialNumber}?</h4>
           <p>Прибор и показание восстановятся, начисления пересчитаются. Отмена недоступна, если в более поздних месяцах уже есть показания. Внесённые оплаты сохранятся, разница станет долгом или переплатой.</p>
