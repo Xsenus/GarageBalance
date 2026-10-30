@@ -895,6 +895,17 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
 
     public void Add(MeterDevice device) => dbContext.MeterDevices.Add(device);
 
+    public async Task<IReadOnlyDictionary<Guid, DateOnly>> GetConnectionBaselineDatesAsync(Guid garageId, CancellationToken cancellationToken)
+    {
+        // Closed connections still explain a historical device's independent opening.
+        var connections = await dbContext.GarageMeterConnections.AsNoTracking()
+            .Where(connection => connection.GarageId == garageId && connection.BaselineMeterDeviceId.HasValue)
+            .Select(connection => new { DeviceId = connection.BaselineMeterDeviceId!.Value, connection.ConnectedOn })
+            .ToListAsync(cancellationToken);
+        return connections.GroupBy(connection => connection.DeviceId)
+            .ToDictionary(group => group.Key, group => group.Min(connection => connection.ConnectedOn));
+    }
+
     public async Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(Guid garageId, CancellationToken cancellationToken) =>
         await dbContext.GarageMeterConnections.AsNoTracking().Include(connection => connection.BaselineMeterDevice)
             .Where(connection => connection.GarageId == garageId && connection.ClosedOn == null)

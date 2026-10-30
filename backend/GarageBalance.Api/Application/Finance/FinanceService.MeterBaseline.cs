@@ -14,6 +14,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
         var settings = await GetStartValueSettingsAsync(garage, cancellationToken);
         var connections = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
             .ToDictionary(connection => connection.MeterKind, StringComparer.Ordinal);
+        var connectionBaselineDates = await meterReadingRepository.GetConnectionBaselineDatesAsync(garage.Id, cancellationToken);
         var values = new List<GarageMeterStartValueDto>(settings.Count);
         foreach (var setting in settings)
         {
@@ -41,7 +42,8 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 connection?.Version,
                 connection is not null && await RequiresConnectionTariffAsync(garage.Id, setting.Id, connection, cancellationToken),
                 connection is null && baseline is not null
-                    ? MeterBaselineResolver.GetEffectiveStartDate(baseline, garage.AccountingStartMonth, devices)
+                    ? connectionBaselineDates.TryGetValue(baseline.Id, out var connectedOn) ? connectedOn
+                        : MeterBaselineResolver.GetEffectiveStartDate(baseline, garage.AccountingStartMonth, devices)
                     : null));
         }
 

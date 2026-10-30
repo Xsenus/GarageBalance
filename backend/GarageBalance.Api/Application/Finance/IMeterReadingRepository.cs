@@ -61,6 +61,7 @@ public interface IMeterReadingRepository
     void Add(MeterReading reading);
     void Add(MeterDevice device);
     Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(Guid garageId, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, DateOnly>> GetConnectionBaselineDatesAsync(Guid garageId, CancellationToken cancellationToken);
     Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds, CancellationToken cancellationToken);
     Task<GarageMeterConnection?> GetConnectionForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     void Add(GarageMeterConnection connection);
