@@ -13,16 +13,42 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         IReadOnlyCollection<Guid> readingIds, CancellationToken cancellationToken)
     {
         if (readingIds.Count == 0) return new Dictionary<Guid, MeterReplacementMarkerDto>();
-        return await (from reading in dbContext.MeterReadings.AsNoTracking()
-                      join device in dbContext.MeterDevices.AsNoTracking() on reading.MeterDeviceId equals device.Id
-                      join old in dbContext.MeterDevices.AsNoTracking() on device.ReplacedDeviceId equals old.Id
-                      where readingIds.Contains(reading.Id) && reading.IsMeterReplacement && !reading.IsCanceled && !device.IsCanceled
-                      select new
-                      {
-                          reading.Id,
-                          Marker = new MeterReplacementMarkerDto(device.Id, device.InstalledOn, old.SerialNumber, old.FinalValue,
-                              device.SerialNumber, device.InitialValue, reading.CurrentValue, reading.PreviousDeviceConsumption, reading.Consumption)
-                      }).ToDictionaryAsync(item => item.Id, item => item.Marker, cancellationToken);
+        var markers = await (from reading in dbContext.MeterReadings.AsNoTracking()
+                             join device in dbContext.MeterDevices.AsNoTracking() on reading.MeterDeviceId equals device.Id
+                             join old in dbContext.MeterDevices.AsNoTracking() on device.ReplacedDeviceId equals old.Id
+                             where readingIds.Contains(reading.Id) && reading.IsMeterReplacement && !reading.IsCanceled && !device.IsCanceled
+                             select new
+                             {
+                                 reading.Id,
+                                 Marker = new MeterReplacementMarkerDto(device.Id, device.InstalledOn, old.SerialNumber, old.FinalValue,
+                                     device.SerialNumber, device.InitialValue, reading.CurrentValue, reading.PreviousDeviceConsumption, reading.Consumption)
+                             }).ToDictionaryAsync(item => item.Id, item => item.Marker, cancellationToken);
+        // Legacy accounting restarts deliberately have no physical replacement link.
+        // Explain their first reading without inventing removed-device consumption.
+        var restarts = await (from reading in dbContext.MeterReadings.AsNoTracking()
+                              join device in dbContext.MeterDevices.AsNoTracking() on reading.MeterDeviceId equals device.Id
+                              join old in dbContext.MeterDevices.AsNoTracking() on device.GarageId equals old.GarageId
+                              where readingIds.Contains(reading.Id) && !reading.IsCanceled && !reading.IsMeterReplacement &&
+                                  !device.IsCanceled && device.ReplacedDeviceId == null && device.ReplacementAccountingMonth == null &&
+                                  device.SerialNumber.StartsWith(MeterBaselineResolver.RestartDeviceSerialPrefix) &&
+                                  reading.PreviousDeviceConsumption == 0m && reading.PreviousValue == device.InitialValue &&
+                                  reading.Consumption == reading.CurrentValue - device.InitialValue &&
+                                  reading.AccountingMonth.AddMonths(1) > device.InstalledOn &&
+                                  old.Id == dbContext.MeterDevices.Where(previous => previous.GarageId == device.GarageId &&
+                                      previous.MeterKind == device.MeterKind && !previous.IsCanceled && previous.Id != device.Id &&
+                                      previous.RemovedOn == device.InstalledOn.AddDays(-1))
+                                      .OrderByDescending(previous => previous.InstalledOn).ThenBy(previous => previous.Id)
+                                      .Select(previous => previous.Id).FirstOrDefault() &&
+                                  !dbContext.MeterReadings.Any(previous => !previous.IsCanceled && previous.MeterDeviceId == device.Id &&
+                                      previous.AccountingMonth < reading.AccountingMonth)
+                              select new
+                              {
+                                  reading.Id,
+                                  Marker = new MeterReplacementMarkerDto(device.Id, device.InstalledOn, old.SerialNumber, old.FinalValue,
+                                      device.SerialNumber, device.InitialValue, reading.CurrentValue, reading.PreviousDeviceConsumption, reading.Consumption, true)
+                              }).ToListAsync(cancellationToken);
+        foreach (var restart in restarts) markers.TryAdd(restart.Id, restart.Marker);
+        return markers;
     }
 
     public async Task<IReadOnlyList<string>> GetStoredMeterKindsAsync(Guid garageId, CancellationToken cancellationToken) =>
@@ -403,7 +429,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading.CurrentValue,
                 reading.Version,
                 reading.MeterDeviceId,
-                reading.IsMeterReplacement && reading.MeterDevice != null
+                reading.MeterDevice != null && (reading.IsMeterReplacement || reading.MeterDevice.SerialNumber.StartsWith(MeterBaselineResolver.RestartDeviceSerialPrefix))
                     ? reading.MeterDevice.SerialNumber
                     : null,
                 reading.IsMeterReplacement))
@@ -511,7 +537,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                AND reading."AccountingMonth" <= {{monthTo}}
             LEFT JOIN meter_devices AS meter_device
                 ON meter_device."Id" = reading."MeterDeviceId"
-               AND reading."IsMeterReplacement" = TRUE
+                AND (reading."IsMeterReplacement" = TRUE OR meter_device."SerialNumber" LIKE {{MeterBaselineResolver.RestartDeviceSerialPrefix + "%"}})
 
             UNION ALL
 
@@ -618,7 +644,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         {
             StartValue = value,
             StartValueDate = hasConnection ? garage.ConnectedOn : baseline is not null
-                ? MeterBaselineResolver.GetEffectiveStartDate(baseline, garage.AccountingStartMonth, devices)
+                ? MeterBaselineResolver.GetAccountingStartDate(baseline, garage.AccountingStartMonth, devices, snapshot.FirstReading, garage.InitialReadingMonth)
                 : garage.AccountingStartMonth?.AddMonths(-1) ?? garage.InitialReadingMonth,
             StartValueSource = value is null ? "unknown" : hasConnection ? "connection" : baseline is null ? "legacy" : "device",
             StartValueDeviceSerial = baseline?.SerialNumber,

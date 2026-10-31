@@ -3,6 +3,18 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class GitHubActionsDeploymentTests
 {
     [Fact]
+    public void StagingWorkflowVerifiesInstalledVersionAndPayloadBeforeClosingItsConnection()
+    {
+        var workflow = File.ReadAllText(Path.Combine(FindRepositoryRoot(), ".github", "workflows", "deploy-staging.yml"));
+        Assert.Contains("test \"$EXPECTED_VERSION\" = \"$ACTUAL_VERSION\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("test \"$EXPECTED_API_SHA\" = \"$ACTUAL_API_SHA\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("test \"$EXPECTED_FRONTEND_SHA\" = \"$ACTUAL_FRONTEND_SHA\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("systemctl is-active --quiet garagebalance-staging.service", workflow, StringComparison.Ordinal);
+        Assert.Contains("installedReleaseStatus=verified; commit=${GITHUB_SHA}; version=${ACTUAL_VERSION}", workflow, StringComparison.Ordinal);
+        Assert.True(workflow.IndexOf("installedReleaseStatus=verified", StringComparison.Ordinal) < workflow.IndexOf("ssh -O exit", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void StagingWorkflowVerifiesBuildsPackagesAndDeploysThroughRestrictedServerScript()
     {
         var repositoryRoot = FindRepositoryRoot();

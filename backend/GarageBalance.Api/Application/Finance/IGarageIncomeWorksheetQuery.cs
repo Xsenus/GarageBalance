@@ -51,7 +51,8 @@ public sealed record GarageIncomeWorksheetMeterData(
     decimal CurrentValue,
     decimal Consumption,
     DateTimeOffset UpdatedAtUtc,
-    bool IsMeterReplacement = false);
+    bool IsMeterReplacement = false,
+    bool HasAccountingRestart = false);
 
 public sealed record GarageIncomeWorksheetAnnualAccrualData(
     Guid AccrualId,

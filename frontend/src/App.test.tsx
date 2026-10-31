@@ -9373,6 +9373,11 @@ describe('App', () => {
         meterDeviceId: 'new-device',
         meterDeviceSerialNumber: 'ЭЛ-2026-12',
         isMeterReplacement: true,
+      }, {
+        id: 'legacy-restart-reading', garageId: 'garage-27', accountingMonth: '2026-10-01',
+        currentValue: 1300, version: 'legacy-restart-version', isMeterReplacement: false,
+        meterReplacement: { deviceId: 'legacy-restart', date: '2026-10-01', oldSerial: 'OLD', oldFinalValue: 2000,
+          newSerial: 'START', newInitialValue: 1000, currentValue: 1300, removedDevicesConsumption: 0, totalConsumption: 300, isAccountingRestart: true },
       }],
       totalCount: 2,
       offset: 0,
@@ -9399,6 +9404,8 @@ describe('App', () => {
     const replacementMarker = within(readingsPanel).getByRole('img', { name: 'С этого месяца установлен новый счетчик ЭЛ-2026-12' })
     expect(replacementMarker).toHaveAttribute('title', 'Замена счетчика. Новый номер: ЭЛ-2026-12')
     expect(replacementMarker).toHaveClass('meter-readings-replacement-marker')
+    const restartMarker = within(readingsPanel).getByRole('img', { name: /^Начало учёта нового прибора 01.10.2026/ })
+    expect(restartMarker).toHaveAttribute('title', expect.stringContaining('Расход 300 = 1 300 − 1 000'))
 
     const yearInput = within(readingsPanel).getByLabelText('Год показаний')
     await user.clear(yearInput)

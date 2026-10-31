@@ -43,7 +43,7 @@ public sealed partial class FinanceService : IGarageMeterBaselineService
                 connection is not null && await RequiresConnectionTariffAsync(garage.Id, setting.Id, connection, cancellationToken),
                 connection is null && baseline is not null
                     ? connectionBaselineDates.TryGetValue(baseline.Id, out var connectedOn) ? connectedOn
-                        : MeterBaselineResolver.GetEffectiveStartDate(baseline, garage.AccountingStartMonth, devices)
+                        : MeterBaselineResolver.GetAccountingStartDate(baseline, garage.AccountingStartMonth, devices, firstReading, garage.InitialMeterReadingMonth)
                     : null));
         }
 

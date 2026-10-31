@@ -50,7 +50,7 @@ public sealed partial class FinanceService
             return Failure("meter_device_replacement_date_month_mismatch", "Дата исправления должна оставаться в месяце сохранённой замены.");
         var connectionContext = await ValidateMeterConnectionAsync(target.Garage, target.MeterKind, target.AccountingMonth, request.ReplacementDate, true, cancellationToken);
         if (!connectionContext.Succeeded) return Failure(connectionContext.ErrorCode!, connectionContext.ErrorMessage!);
-        if (request.ReplacementDate <= MeterBaselineResolver.GetEffectiveStartDate(old, target.Garage.AccountingStartMonth, devices) || device.RemovedOn is { } removedOn && request.ReplacementDate > removedOn ||
+        if (request.ReplacementDate <= MeterBaselineResolver.GetAccountingStartDate(old, target.Garage.AccountingStartMonth, devices, readings.FirstOrDefault(), target.Garage.InitialMeterReadingMonth) || device.RemovedOn is { } removedOn && request.ReplacementDate > removedOn ||
             readings.Any(item => item.Id != target.Id && item.MeterDeviceId == device.Id && item.ReadingDate < request.ReplacementDate) ||
             readings.Any(item => item.MeterDeviceId == old.Id && item.AccountingMonth == target.AccountingMonth && item.ReadingDate >= request.ReplacementDate))
             return Failure("meter_device_replacement_date_invalid", "Дата пересекает историю показаний или период другого прибора.");

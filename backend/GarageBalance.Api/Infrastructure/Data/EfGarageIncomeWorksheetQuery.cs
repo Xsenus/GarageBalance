@@ -63,7 +63,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var previousAccrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < monthFrom)
@@ -98,7 +99,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var previousIncomeQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
@@ -137,7 +139,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var accrualBucketQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
@@ -200,7 +203,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 group.Key.CalculationDetailsJson,
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var incomeBucketQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
@@ -248,7 +252,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var meterReadingQuery = dbContext.MeterReadings.AsNoTracking()
             .Where(reading =>
@@ -286,7 +291,9 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)reading.UpdatedAtUtc,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = reading.IsMeterReplacement
+                IsMeterReplacement = reading.IsMeterReplacement,
+                HasAccountingRestart = reading.MeterDevice != null &&
+                    reading.MeterDevice.SerialNumber.StartsWith(MeterBaselineResolver.RestartDeviceSerialPrefix)
             });
         var configuredMeterIncomeTypeQuery = dbContext.ChargeServiceSettings.AsNoTracking()
             .Where(setting =>
@@ -329,7 +336,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         // Legacy built-in meters are a fallback only when no active metered
         // service owns the type; otherwise that service's garage scope applies.
@@ -370,7 +378,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var meterIncomeTypeQuery = configuredMeterIncomeTypeQuery.Union(legacyMeterIncomeTypeQuery);
         var annualAccrualQuery = dbContext.Accruals.AsNoTracking()
@@ -411,7 +420,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var allocationQuery = dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(allocation =>
@@ -464,7 +474,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = allocation.CreditAccrualId,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var advanceQuery = dbContext.IncomeTypes.AsNoTracking()
             .Where(incomeType => dbContext.FinancialOperations.Any(operation =>
@@ -521,7 +532,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null,
                 CreditAccrualId = (Guid?)null,
-                IsMeterReplacement = false
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
             });
         var rows = await garageQuery
             .Concat(previousAccrualQuery)
@@ -599,7 +611,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.CurrentValue!.Value,
                     row.Consumption!.Value,
                     row.UpdatedAtUtc!.Value,
-                    row.IsMeterReplacement))
+                    row.IsMeterReplacement, row.HasAccountingRestart))
                 .ToList(),
             rows.Where(row => row.Category == AnnualAccrualCategory)
                 .Select(row => new GarageIncomeWorksheetAnnualAccrualData(

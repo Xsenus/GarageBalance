@@ -446,6 +446,7 @@ export type MeterReplacementMarkerDto = {
   currentValue: number
   removedDevicesConsumption: number
   totalConsumption: number
+  isAccountingRestart?: boolean
 }
 
 export type GarageIncomeWorksheetRowDto = {

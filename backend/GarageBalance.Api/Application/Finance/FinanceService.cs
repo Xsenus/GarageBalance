@@ -256,7 +256,9 @@ public sealed partial class FinanceService(
             normalizedLimit,
             cancellationToken);
         var markers = await meterReadingRepository.GetReplacementMarkersAsync(
-            page.Readings.Where(reading => reading.IsMeterReplacement).Select(reading => reading.Id).ToArray(), cancellationToken);
+            page.Readings.Where(reading => reading.IsMeterReplacement ||
+                reading.MeterDeviceSerialNumber != null && reading.MeterDeviceSerialNumber.StartsWith(MeterBaselineResolver.RestartDeviceSerialPrefix, StringComparison.Ordinal))
+                .Select(reading => reading.Id).ToArray(), cancellationToken);
         var result = new MeterReadingYearPageDto(
             page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number, garage.InitialReadingMonth, garage.InitialReadingValue,
                 garage.ConnectedOn, garage.RequiresStartValue, garage.RequiresConnectionDate, garage.ClosedOn, garage.AccountingStartMonth,
@@ -448,7 +450,8 @@ public sealed partial class FinanceService(
         var openingBalance = MoneyMath.RoundMoney(
             worksheetData.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal);
         var replacementMarkers = await meterReadingRepository.GetReplacementMarkersAsync(
-            worksheetData.MeterReadings.Where(reading => reading.IsMeterReplacement).Select(reading => reading.Id).ToArray(), cancellationToken);
+            worksheetData.MeterReadings.Where(reading => reading.IsMeterReplacement || reading.HasAccountingRestart)
+                .Select(reading => reading.Id).ToArray(), cancellationToken);
         var openingDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m));
         var annualAccrualIds = worksheetData.AnnualAccruals
             .Select(accrual => accrual.AccrualId)
@@ -6736,7 +6739,7 @@ public sealed partial class FinanceService(
                 $"Показание за месяц ({currentValue:0.###}) меньше начального показания нового счётчика. Проверьте начальное показание нового счётчика.");
         }
 
-        if (activeDevice is not null && request.ReplacementDate <= MeterBaselineResolver.GetEffectiveStartDate(activeDevice, garage.AccountingStartMonth, devices))
+        if (activeDevice is not null && request.ReplacementDate <= MeterBaselineResolver.GetAccountingStartDate(activeDevice, garage.AccountingStartMonth, devices, allReadings.FirstOrDefault(), garage.InitialMeterReadingMonth))
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_date_invalid", "Дата замены должна быть позже даты установки действующего счетчика.");
         }
@@ -7020,13 +7023,22 @@ public sealed partial class FinanceService(
         meterDevice ??= meterConnection?.BaselineMeterDevice;
         var registerMeterDevice = false;
         var adjustMeterDeviceInstalledOn = false;
+        var deviceHistory = await meterReadingRepository.GetDevicesForUpdateAsync(garage.Id, meterKind, cancellationToken);
+        var firstActiveReading = await meterReadingRepository.GetFirstActiveAsync(garage.Id, meterKind, cancellationToken);
+        var opening = MeterBaselineResolver.FindBaselineDevice(deviceHistory, firstActiveReading);
+        if (meterConnection is null && opening is not null && MeterBaselineResolver.IsAccountingOpening(opening, deviceHistory, firstActiveReading, garage.AccountingStartMonth, garage.InitialMeterReadingMonth) &&
+            MeterBaselineResolver.IsRestartBoundary(opening) && request.ReadingDate < opening.InstalledOn &&
+            request.ReadingDate >= MeterBaselineResolver.GetAccountingStartDate(opening, garage.AccountingStartMonth, deviceHistory, firstActiveReading, garage.InitialMeterReadingMonth))
+        {
+            // Earlier devices remain historical records of the superseded chain.
+            meterDevice = opening;
+        }
         if (meterDevice is null)
         {
             var activeDevice = await meterReadingRepository.GetActiveDeviceForUpdateAsync(garage.Id, meterKind, cancellationToken);
-            var deviceHistory = await meterReadingRepository.GetDevicesAsync(garage.Id, meterKind, cancellationToken);
-            if (activeDevice is not null && MeterBaselineResolver.IsGeneratedOpening(activeDevice, deviceHistory) &&
+            if (activeDevice is not null && MeterBaselineResolver.IsAccountingOpening(activeDevice, deviceHistory, firstActiveReading, garage.AccountingStartMonth, garage.InitialMeterReadingMonth) &&
                 (activeDevice.SerialNumber == MeterBaselineResolver.UnnumberedDeviceSerial ||
-                    request.ReadingDate >= MeterBaselineResolver.GetEffectiveStartDate(activeDevice, garage.AccountingStartMonth, deviceHistory)))
+                    request.ReadingDate >= MeterBaselineResolver.GetAccountingStartDate(activeDevice, garage.AccountingStartMonth, deviceHistory, firstActiveReading, garage.InitialMeterReadingMonth)))
             {
                 meterDevice = activeDevice;
                 adjustMeterDeviceInstalledOn = meterConnection is null && activeDevice.SerialNumber == MeterBaselineResolver.UnnumberedDeviceSerial;

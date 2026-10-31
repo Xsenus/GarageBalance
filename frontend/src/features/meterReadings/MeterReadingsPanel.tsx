@@ -218,8 +218,8 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                     <span
                       className="meter-readings-replacement-marker"
                       role="img"
-                      aria-label={replacementSerial.startsWith('Замена ') ? replacementSerial : `С этого месяца установлен новый счетчик ${replacementSerial}`}
-                      title={replacementSerial.startsWith('Замена ') ? replacementSerial : `Замена счетчика. Новый номер: ${replacementSerial}`}
+                      aria-label={(replacementSerial.startsWith('Замена ') || replacementSerial.startsWith('Начало учёта ')) ? replacementSerial : `С этого месяца установлен новый счетчик ${replacementSerial}`}
+                      title={(replacementSerial.startsWith('Замена ') || replacementSerial.startsWith('Начало учёта ')) ? replacementSerial : `Замена счетчика. Новый номер: ${replacementSerial}`}
                     >
                       <RefreshCw size={13} aria-hidden="true" />
                     </span>
@@ -487,7 +487,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           nextSavedReadings[cellKey] = formatMeterReadingInputValue(reading.currentValue)
           nextSavedReadingIds[cellKey] = reading.id
           nextSavedReadingVersions[cellKey] = reading.version
-          if (reading.isMeterReplacement) {
+          if (reading.isMeterReplacement || reading.meterReplacement) {
             nextSavedReadingReplacements[cellKey] = reading.meterReplacement ? describeMeterReplacement(reading.meterReplacement) : reading.meterDeviceSerialNumber?.trim() || 'номер не указан'
           }
         })

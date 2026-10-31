@@ -739,7 +739,7 @@ public sealed record GarageIncomeWorksheetRowDto(
 public sealed record MeterReplacementMarkerDto(
     Guid DeviceId, DateOnly Date, string OldSerial, decimal? OldFinalValue,
     string NewSerial, decimal NewInitialValue, decimal CurrentValue,
-    decimal RemovedDevicesConsumption, decimal TotalConsumption);
+    decimal RemovedDevicesConsumption, decimal TotalConsumption, bool IsAccountingRestart = false);
 
 public sealed record GarageIncomeWorksheetDto(
     Guid GarageId,
