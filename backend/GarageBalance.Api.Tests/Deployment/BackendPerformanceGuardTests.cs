@@ -376,7 +376,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COUNT(*) OVER () AS \"TotalCount\"", source, StringComparison.Ordinal);
         Assert.Contains("LEFT JOIN meter_readings AS reading", source, StringComparison.Ordinal);
         Assert.Contains("COALESCE(reading.\"IsMeterReplacement\", FALSE)", source, StringComparison.Ordinal);
-        Assert.Contains("AND reading.\"IsMeterReplacement\" = TRUE", source, StringComparison.Ordinal);
+        Assert.Contains("AND (reading.\"IsMeterReplacement\" = TRUE OR meter_device.\"SerialNumber\" LIKE", source, StringComparison.Ordinal);
+        Assert.Contains("MeterBaselineResolver.RestartDeviceSerialPrefix + \"%\"", source, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM meter_devices AS other_device", source, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT EXISTS (SELECT 1 FROM paged_garages)", source, StringComparison.Ordinal);
         var postgresYearPageStart = source.IndexOf("private async Task<MeterReadingYearPageData> GetPostgresYearPageAsync", StringComparison.Ordinal);

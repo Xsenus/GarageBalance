@@ -146,6 +146,8 @@ public interface IFinanceService
 
     Task<IReadOnlyList<MeterDeviceDto>> GetMeterDevicesAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     Task<FinancePagedResult<MeterDeviceDto>> GetMeterDeviceHistoryAsync(Guid garageId, string? meterKind, int offset, int limit, CancellationToken cancellationToken);
+    Task<FinanceResult<MeterDeviceReplacementDetailsDto>> GetMeterDeviceReplacementAsync(Guid deviceId, CancellationToken cancellationToken);
+    Task<FinanceResult<MeterDeviceReplacementDetailsDto>> UpdateMeterDeviceReplacementAsync(Guid deviceId, UpdateMeterDeviceReplacementRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<FinanceResult<MeterDeviceReplacementCancellationDto>> CancelMeterDeviceReplacementAsync(Guid deviceId, CancelMeterDeviceReplacementRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceMeterDeviceAsync(ReplaceMeterDeviceRequest request, Guid? actorUserId, CancellationToken cancellationToken);

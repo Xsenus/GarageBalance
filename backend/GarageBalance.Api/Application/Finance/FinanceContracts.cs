@@ -311,7 +311,7 @@ public sealed record CreateAccrualRequest(
     Guid GarageId,
     Guid IncomeTypeId,
     DateOnly AccountingMonth,
-    [Range(0.01, 999999999)] decimal Amount,
+    [Range(-999999999, 999999999)] decimal Amount,
     [Required, MaxLength(40)] string Source,
     [MaxLength(1000)] string? Comment,
     Guid? IrregularPaymentId = null,
@@ -533,7 +533,18 @@ public sealed record MeterDeviceDto(
     DateTimeOffset? CanceledAtUtc = null,
     bool RequiresRestoredValue = false,
     Guid? ReplacementReadingVersion = null,
-    string? ServiceName = null);
+    string? ServiceName = null,
+    DateOnly? AccountingOpeningDate = null);
+
+public sealed record MeterDeviceReplacementDetailsDto(MeterDeviceDto Device, MeterDeviceDto RemovedDevice, MeterReadingDto? Reading);
+
+public sealed record UpdateMeterDeviceReplacementRequest(
+    Guid ExpectedDeviceVersion, Guid ExpectedRemovedDeviceVersion, Guid ExpectedReadingVersion,
+    DateOnly AccountingMonth, DateOnly ReplacementDate,
+    [Required, MaxLength(100)] string NewSerialNumber,
+    [Required, Range(0, 999999999)] decimal? RemovedDeviceFinalValue,
+    [Required, Range(0, 999999999)] decimal? NewInitialValue,
+    [ActionComment, MaxLength(500)] string Reason);
 
 public sealed record CancelMeterDeviceReplacementRequest(
     Guid ExpectedDeviceVersion,
@@ -553,7 +564,7 @@ public sealed record ReplaceMeterDeviceRequest(
     [Required, Range(0, 999999999)] decimal? NewInitialValue,
     // Optional: the month-end value is entered in «Платежи»; see ReplaceMeterDeviceAsync.
     [Range(0, 999999999)] decimal? CurrentValue,
-    [Range(0, 999999999)] decimal? RemovedDeviceFinalValue,
+    [Required, Range(0, 999999999)] decimal? RemovedDeviceFinalValue,
     [ActionComment, MaxLength(500)] string Reason,
     Guid? MeterReadingId = null,
     Guid? ExpectedReadingVersion = null);
@@ -583,7 +594,8 @@ public sealed record MeterReadingYearValueDto(
     Guid Version,
     Guid? MeterDeviceId,
     string? MeterDeviceSerialNumber,
-    bool IsMeterReplacement);
+    bool IsMeterReplacement,
+    MeterReplacementMarkerDto? MeterReplacement = null);
 
 public sealed record MeterReadingYearPageDto(
     IReadOnlyList<MeterReadingYearGarageDto> Garages,
@@ -720,7 +732,14 @@ public sealed record GarageIncomeWorksheetRowDto(
     AccrualCalculationDetailsDto? CalculationDetails = null,
     string? Reason = null,
     string? IncomeTypeCode = null,
-    string? CalculationIssue = null);
+    string? CalculationIssue = null,
+    decimal DiscountAmount = 0m,
+    MeterReplacementMarkerDto? MeterReplacement = null);
+
+public sealed record MeterReplacementMarkerDto(
+    Guid DeviceId, DateOnly Date, string OldSerial, decimal? OldFinalValue,
+    string NewSerial, decimal NewInitialValue, decimal CurrentValue,
+    decimal RemovedDevicesConsumption, decimal TotalConsumption, bool IsAccountingRestart = false);
 
 public sealed record GarageIncomeWorksheetDto(
     Guid GarageId,

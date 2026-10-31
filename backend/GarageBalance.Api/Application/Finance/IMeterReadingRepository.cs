@@ -45,6 +45,7 @@ public interface IMeterReadingRepository
     Task<MeterReading?> GetNextActiveAsync(Guid? ignoredId, Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterReading>> GetActiveFromForUpdateAsync(Guid? ignoredId, Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<MeterReading?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, MeterReplacementMarkerDto>> GetReplacementMarkersAsync(IReadOnlyCollection<Guid> readingIds, CancellationToken cancellationToken);
     Task ReloadForUpdateAsync(MeterReading reading, CancellationToken cancellationToken);
     Task<MeterReading?> GetActiveAsync(Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<MeterDevice>> GetDevicesAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
@@ -60,6 +61,7 @@ public interface IMeterReadingRepository
     void Add(MeterReading reading);
     void Add(MeterDevice device);
     Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(Guid garageId, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, DateOnly>> GetConnectionBaselineDatesAsync(Guid garageId, CancellationToken cancellationToken);
     Task<IReadOnlyList<GarageMeterConnection>> GetConnectionsAsync(IReadOnlyCollection<Guid> garageIds, IReadOnlyCollection<string> meterKinds, CancellationToken cancellationToken);
     Task<GarageMeterConnection?> GetConnectionForUpdateAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
     void Add(GarageMeterConnection connection);

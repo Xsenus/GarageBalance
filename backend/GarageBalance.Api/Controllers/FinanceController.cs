@@ -160,6 +160,23 @@ public sealed class FinanceController(
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("meter-devices/{deviceId:guid}/replacement")]
+    public async Task<ActionResult<MeterDeviceReplacementDetailsDto>> GetMeterDeviceReplacement(Guid deviceId, CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetMeterDeviceReplacementAsync(deviceId, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("meter-devices/{deviceId:guid}/replacement")]
+    public async Task<ActionResult<MeterDeviceReplacementDetailsDto>> UpdateMeterDeviceReplacement(
+        Guid deviceId, [FromBody] UpdateMeterDeviceReplacementRequest request, CancellationToken cancellationToken)
+    {
+        if (!CanManageMeterReadingMonth(request.AccountingMonth)) return Forbid();
+        var result = await financeService.UpdateMeterDeviceReplacementAsync(deviceId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("meter-readings/page")]
     [ProducesResponseType<FinancePagedResult<MeterReadingDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinancePagedResult<MeterReadingDto>>> GetMeterReadingsPage(

@@ -50,7 +50,9 @@ public sealed record GarageIncomeWorksheetMeterData(
     DateOnly ReadingDate,
     decimal CurrentValue,
     decimal Consumption,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    bool IsMeterReplacement = false,
+    bool HasAccountingRestart = false);
 
 public sealed record GarageIncomeWorksheetAnnualAccrualData(
     Guid AccrualId,
@@ -70,7 +72,8 @@ public sealed record GarageIncomeWorksheetAllocationData(
     Guid PaymentIncomeTypeId,
     decimal Amount,
     Guid? IrregularPaymentId = null,
-    Guid? FeeCampaignId = null);
+    Guid? FeeCampaignId = null,
+    bool IsDiscount = false);
 
 public sealed record GarageIncomeWorksheetAdvanceData(
     Guid IncomeTypeId,

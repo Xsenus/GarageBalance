@@ -22,6 +22,7 @@ public sealed class MeterHistoryCleanupEngine(GarageBalanceDbContext db, IAccoun
     internal static readonly IReadOnlyDictionary<string, string> ReviewedLinks = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["public.accrual_payment_allocations.AccrualId->accruals"] = "c",
+        ["public.accrual_payment_allocations.CreditAccrualId->accruals"] = "r",
         ["public.financial_operations.TargetAccrualId->accruals"] = "r",
         ["public.garage_meter_connections.BaselineMeterDeviceId->meter_devices"] = "r",
         ["public.meter_devices.ReplacedDeviceId->meter_devices"] = "r",

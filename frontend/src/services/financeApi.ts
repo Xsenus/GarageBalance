@@ -257,13 +257,14 @@ export type ReplaceMeterDeviceRequest = {
   newSerialNumber: string
   newInitialValue: number
   currentValue?: number
-  removedDeviceFinalValue?: number
+  removedDeviceFinalValue: number
   reason: string
   meterReadingId?: string
   expectedReadingVersion?: string
 }
 
 export type MeterDeviceDto = {
+  accountingOpeningDate?: string | null
   id: string
   garageId: string
   meterKind: string
@@ -314,6 +315,7 @@ export type MeterReadingYearGarageDto = {
 }
 
 export type MeterReadingYearValueDto = {
+  meterReplacement?: MeterReplacementMarkerDto | null
   id: string
   garageId: string
   accountingMonth: string
@@ -421,7 +423,35 @@ export type GarageOverdueDebtDto = {
   rows: GarageOverdueDebtRowDto[]
 }
 
+export type MeterDeviceReplacementDetailsDto = { device: MeterDeviceDto; removedDevice: MeterDeviceDto; reading: MeterReadingDto | null }
+export type UpdateMeterDeviceReplacementRequest = {
+  expectedDeviceVersion: string
+  expectedRemovedDeviceVersion: string
+  expectedReadingVersion: string
+  accountingMonth: string
+  replacementDate: string
+  newSerialNumber: string
+  removedDeviceFinalValue: number
+  newInitialValue: number
+  reason: string
+}
+
+export type MeterReplacementMarkerDto = {
+  deviceId: string
+  date: string
+  oldSerial: string
+  oldFinalValue: number | null
+  newSerial: string
+  newInitialValue: number
+  currentValue: number
+  removedDevicesConsumption: number
+  totalConsumption: number
+  isAccountingRestart?: boolean
+}
+
 export type GarageIncomeWorksheetRowDto = {
+  meterReplacement?: MeterReplacementMarkerDto | null
+  discountAmount?: number
   calculationIssue?: string | null
   accountingMonth: string
   incomeTypeId: string | null
@@ -983,6 +1013,8 @@ export type FinanceClient = {
   replaceMeterDevice?(accessToken: string, request: ReplaceMeterDeviceRequest): Promise<MeterDeviceReplacementDto>
   getMeterDevices?(accessToken: string, garageId: string, meterKind: string, signal?: AbortSignal): Promise<MeterDeviceDto[]>
   getMeterDeviceHistory?(accessToken: string, garageId: string, query: { meterKind?: string; offset: number; limit: number }, signal?: AbortSignal): Promise<FinancePagedResult<MeterDeviceDto>>
+  getMeterDeviceReplacement?(accessToken: string, deviceId: string, signal?: AbortSignal): Promise<MeterDeviceReplacementDetailsDto>
+  updateMeterDeviceReplacement?(accessToken: string, deviceId: string, request: UpdateMeterDeviceReplacementRequest): Promise<MeterDeviceReplacementDetailsDto>
   cancelMeterDeviceReplacement?(accessToken: string, deviceId: string, request: CancelMeterDeviceReplacementRequest): Promise<MeterDeviceReplacementCancellationDto>
 }
 
@@ -1351,6 +1383,12 @@ export const financeApi: FinanceClient = {
   },
   getMeterDeviceHistory(accessToken, garageId, query, signal) {
     return requestJson(accessToken, withQuery('/api/finance/meter-devices/history', { garageId, ...query }), { signal })
+  },
+  getMeterDeviceReplacement(accessToken, deviceId, signal) {
+    return requestJson(accessToken, `/api/finance/meter-devices/${encodeURIComponent(deviceId)}/replacement`, { signal })
+  },
+  updateMeterDeviceReplacement(accessToken, deviceId, request) {
+    return requestJson(accessToken, `/api/finance/meter-devices/${encodeURIComponent(deviceId)}/replacement`, { method: 'PUT', body: JSON.stringify(request) })
   },
   cancelMeterDeviceReplacement(accessToken, deviceId, request) {
     return requestJson(accessToken, `/api/finance/meter-devices/${encodeURIComponent(deviceId)}/cancel-replacement`, { method: 'POST', body: JSON.stringify(request) })

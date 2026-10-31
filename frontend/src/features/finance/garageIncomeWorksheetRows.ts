@@ -1,5 +1,6 @@
 import type { AccrualDto, GarageIncomeWorksheetDto } from '../../services/financeApi'
 import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
+import { describeMeterReplacement } from '../../shared/meterReplacementDescription'
 import type { AccrualReasonDisplayMode } from '../../services/settingsApi'
 import { roundPaymentMoney } from './fullPaymentPlan'
 
@@ -35,6 +36,8 @@ export type GarageIncomePrototypeRow = {
   calculationIssue?: string | null
   reason?: string | null
   incomeTypeCode: string | null
+  discountAmount?: number
+  meterReplacementDescription?: string | null
 }
 
 export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
@@ -71,6 +74,8 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       calculationIssue: row.calculationIssue ?? null,
       reason: row.reason ?? null,
       incomeTypeCode: row.incomeTypeCode ?? null,
+      discountAmount: row.discountAmount ?? 0,
+      meterReplacementDescription: row.meterReplacement ? describeMeterReplacement(row.meterReplacement) : null,
     }
   })
 }
@@ -94,8 +99,8 @@ export function mergeSavedGarageAccrual(rows: GarageIncomePrototypeRow[], accrua
       ...row,
       reason: [...new Set([...(row.reason?.split('; ') ?? []), reason].filter(Boolean))].join('; '),
       accrued: roundPaymentMoney(row.accrued + accrual.amount),
-      payable: roundPaymentMoney(row.payable + accrual.amount),
-      debt: roundPaymentMoney(row.debt + accrual.amount),
+      payable: Math.max(roundPaymentMoney(row.payable + accrual.amount), 0),
+      debt: Math.max(roundPaymentMoney(row.debt + accrual.amount), 0),
       irregularPaymentRemainingAmount: accrual.irregularPaymentId ? roundPaymentMoney(row.debt + accrual.amount) : null,
       calculationDetails: null,
     } : row)
@@ -120,11 +125,11 @@ export function mergeSavedGarageAccrual(rows: GarageIncomePrototypeRow[], accrua
     meterError: null,
     difference: null,
     accrued: accrual.amount,
-    payable: accrual.amount,
+    payable: Math.max(accrual.amount, 0),
     paymentDraft: '',
     paid: 0,
     advance: 0,
-    debt: accrual.amount,
+    debt: Math.max(accrual.amount, 0),
   }]
 }
 
@@ -146,7 +151,8 @@ export function shouldShowAccrualReason(row: GarageIncomePrototypeRow, mode: Acc
 
 export function getGarageIncomeRowTitle(row: GarageIncomePrototypeRow) {
   if (row.incomeTypeCode === 'penalty') {
-    return row.reason ? `Штраф: ${row.reason}` : 'Штраф'
+    const label = row.accrued < 0 ? 'Скидка' : 'Штраф'
+    return row.reason ? `${label}: ${row.reason}` : label
   }
 
   if (row.irregularPaymentId || (row.incomeTypeCode === 'other_payments' && row.reason)) {

@@ -26,7 +26,6 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const [serial, setSerial] = useState('')
   const [initial, setInitial] = useState('0')
   const [final, setFinal] = useState('')
-  const [finalTouched, setFinalTouched] = useState(false)
   const [reason, setReason] = useState('')
   const [retry, setRetry] = useState(0)
   const [loaded, setLoaded] = useState<{ key: string; reading?: MeterReadingDto; activeDevice?: MeterDeviceDto; options: typeof defaultOptions } | null>(null)
@@ -44,8 +43,7 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
   const savedFinal = loadedForRequest?.reading
     ? loadedForRequest.reading.isMeterReplacement ? loadedForRequest.reading.currentValue : loadedForRequest.reading.previousValue
     : loadedForRequest?.activeDevice?.lastReadingValue ?? loadedForRequest?.activeDevice?.initialValue
-  const defaultFinal = typeof savedFinal === 'number' ? String(savedFinal) : ''
-  const finalText = finalTouched ? final : defaultFinal
+  const finalText = final
   const consumptionBaseline = loadedForRequest?.reading
     ? loadedForRequest.reading.previousValue
     : loadedForRequest?.activeDevice ? loadedForRequest.activeDevice.lastReadingValue ?? loadedForRequest.activeDevice.initialValue : null
@@ -106,6 +104,10 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
       setError('Укажите дату, номер нового счётчика, корректные показания и причину замены.')
       return
     }
+    if (typeof savedFinal === 'number' && finalValue < savedFinal) {
+      setError(`Конечное показание старого счётчика не может быть меньше его последнего показания (${formatAmount(savedFinal)}).`)
+      return
+    }
     submitting.current = true
     setSaving(true)
     setError(null)
@@ -131,11 +133,11 @@ export function GarageMeterReplacementDialog({ auth, dictionaryClient, financeCl
       <form className="dictionary-modal-form" noValidate onSubmit={(event) => { event.preventDefault(); void save() }}>
         {!canWrite ? <FormError>Нет права изменять показания и заменять счётчики.</FormError> : null}
         {error ? <FormError>{error}</FormError> : null}
-        <FormField label="Счётчик"><SelectControl aria-label="Счётчик для замены" options={loaded?.options ?? defaultOptions} value={kind} disabled={disabled} onChange={(value) => { setKind(value); setFinal(''); setFinalTouched(false); setError(null) }} /></FormField>
-        <FormField label="Дата замены"><LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" required value={date} disabled={disabled} onChange={setDate} /></FormField>
+        <FormField label="Счётчик"><SelectControl aria-label="Счётчик для замены" options={loaded?.options ?? defaultOptions} value={kind} disabled={disabled} onChange={(value) => { setKind(value); setFinal(''); setError(null) }} /></FormField>
+        <FormField label="Дата замены"><LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" required value={date} disabled={disabled} onChange={(value) => { setDate(value); setFinal(''); setError(null) }} /></FormField>
         {loading ? <TableLoadingState label="Проверяем показания счётчика" rows={2} columns={2} /> : loadError?.key === requestKey ? <AsyncErrorState message={loadError.message} onRetry={() => setRetry((value) => value + 1)} /> : null}
         <FormField label="Номер нового счётчика"><input aria-label="Номер нового счетчика" required maxLength={100} value={serial} disabled={disabled} onChange={(event) => setSerial(event.target.value)} /></FormField>
-        <FormField label="Конечное показание старого счётчика" help="Последнее значение снимаемого счётчика. Расход до замены сохраняется в начислении этого месяца."><MeterReadingInput aria-label="Конечное показание старого счетчика" required value={finalText} disabled={disabled} onChange={(event) => { setFinalTouched(true); setFinal(event.target.value) }} /></FormField>
+        <FormField label="Конечное показание старого счётчика" help="Введите фактическое значение снимаемого счётчика. Оно не может быть меньше сохранённых показаний. Расход до замены сохраняется в начислении этого месяца."><MeterReadingInput aria-label="Конечное показание старого счетчика" required value={finalText} disabled={disabled} onChange={(event) => setFinal(event.target.value)} /></FormField>
         <FormField label="Начальное показание нового счётчика" help="Старт в карточке гаража не меняется."><MeterReadingInput aria-label="Начальное показание нового счетчика" required value={initial} disabled={disabled} onChange={(event) => setInitial(event.target.value)} /></FormField>
         <button type="button" className="ghost-button" disabled={disabled || parseValue(finalText) === null} onClick={() => setInitial(finalText)}>Перенести конечное в начальное</button>
         {consumption ? <p className={`form-hint${consumption.oldMeter < 0 || consumption.newMeter < 0 ? ' form-hint--warning' : ''}`} role="status" aria-live="polite">

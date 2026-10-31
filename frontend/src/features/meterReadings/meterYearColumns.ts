@@ -23,6 +23,7 @@ export function getMeterBaselineMonth(garage: MeterReadingYearGarageDto) {
   if (garage.startValueSource === 'device') {
     return garage.startValueDate ? getPreviousMonthOfLatest(garage.accountingStartMonth, garage.startValueDate) : null
   }
+  if (garage.accountingStartMonth) return getPreviousMonth(garage.accountingStartMonth.slice(0, 7))
   if (garage.initialReadingMonth) return garage.initialReadingMonth.slice(0, 7)
   return garage.accountingStartMonth ? getPreviousMonth(garage.accountingStartMonth.slice(0, 7)) : null
 }
@@ -41,7 +42,7 @@ export function getVisibleMeterReadingMonthKeys(
       if (garage.requiresConnectionDate) return false
       const starts = [garage.accountingStartMonth?.slice(0, 7), garage.connectedOn?.slice(0, 7)]
       if (!garage.connectedOn) {
-        if (garage.initialReadingMonth && garage.initialReadingValue != null && month <= garage.initialReadingMonth.slice(0, 7)) return false
+        if (!garage.accountingStartMonth && garage.startValueSource !== 'device' && garage.initialReadingMonth && garage.initialReadingValue != null && month <= garage.initialReadingMonth.slice(0, 7)) return false
         if (garage.startValueSource === 'device' && garage.startValueDate) starts.push(garage.startValueDate.slice(0, 7))
       }
       const start = starts.filter((value): value is string => Boolean(value)).sort().at(-1)

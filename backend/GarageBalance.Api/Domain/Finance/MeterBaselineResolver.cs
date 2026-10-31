@@ -5,6 +5,40 @@ namespace GarageBalance.Api.Domain.Finance;
 /// </summary>
 public static class MeterBaselineResolver
 {
+    // A logical restart begins a new accounting chain. Retain earlier devices in
+    // history, but do not let a chain without active readings override its opening.
+    // If readings still belong to an earlier device (or an explicit replacement),
+    // FindBaselineDevice keeps that earlier chain as the accounting baseline.
+    public static bool IsAccountingOpening(MeterDevice device, IReadOnlyList<MeterDevice> history, MeterReading? firstActiveReading,
+        DateOnly? accountingStartMonth = null, DateOnly? initialMeterReadingMonth = null)
+    {
+        if (device.IsCanceled) return false;
+        var baseline = FindBaselineDevice(history.OrderBy(item => item.InstalledOn).ThenBy(item => item.Id).ToArray(), firstActiveReading);
+        if (baseline is not null && baseline.Id != device.Id) return false;
+        return IsGeneratedOpening(device, history) || IsRestartBoundary(device) &&
+            !device.ReplacedDeviceId.HasValue && !device.ReplacementAccountingMonth.HasValue &&
+            accountingStartMonth.HasValue && initialMeterReadingMonth == accountingStartMonth.Value.AddMonths(-1) &&
+            baseline?.Id == device.Id;
+    }
+
+    public static DateOnly GetAccountingStartDate(MeterDevice device, DateOnly? accountingStartMonth,
+        IReadOnlyList<MeterDevice> history, MeterReading? firstActiveReading, DateOnly? initialMeterReadingMonth = null) =>
+        IsAccountingOpening(device, history, firstActiveReading, accountingStartMonth, initialMeterReadingMonth)
+            ? GetEffectiveStartDate(device, accountingStartMonth) : device.InstalledOn;
+
+    // Generated opening devices carry an accounting boundary, not the installation
+    // date of a physical replacement. Explicit connections are resolved by callers.
+    public static bool IsGeneratedOpening(MeterDevice device, IReadOnlyList<MeterDevice>? history = null) =>
+        !device.ReplacedDeviceId.HasValue && !device.ReplacementAccountingMonth.HasValue &&
+        (history is null || !history.Any(previous => previous.Id != device.Id && previous.InstalledOn < device.InstalledOn)) &&
+        (IsRestartBoundary(device) || device.SerialNumber == UnnumberedDeviceSerial);
+
+    public static DateOnly GetEffectiveStartDate(MeterDevice device, DateOnly? accountingStartMonth, IReadOnlyList<MeterDevice>? history = null) =>
+        accountingStartMonth.HasValue && IsGeneratedOpening(device, history) &&
+        new DateOnly(device.InstalledOn.Year, device.InstalledOn.Month, 1) > new DateOnly(accountingStartMonth.Value.Year, accountingStartMonth.Value.Month, 1)
+            ? new DateOnly(accountingStartMonth.Value.Year, accountingStartMonth.Value.Month, 1)
+            : device.InstalledOn;
+
     /// <summary>Serial number prefix of the logical device created when meter accounting was restarted.</summary>
     public const string RestartDeviceSerialPrefix = "Начало учёта";
 

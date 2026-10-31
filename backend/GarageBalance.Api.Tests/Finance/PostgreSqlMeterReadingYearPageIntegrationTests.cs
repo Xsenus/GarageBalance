@@ -126,7 +126,7 @@ public sealed class PostgreSqlMeterReadingYearPageIntegrationTests
         Assert.Null(page.Readings[2].MeterDeviceSerialNumber);
         var command = Assert.Single(capture.Commands);
         Assert.Contains("reading.\"IsMeterReplacement\"", command, StringComparison.Ordinal);
-        Assert.Contains("AND reading.\"IsMeterReplacement\" = TRUE", command, StringComparison.Ordinal);
+        Assert.Contains("AND (reading.\"IsMeterReplacement\" = TRUE OR meter_device.\"SerialNumber\" LIKE", command, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM meter_devices AS other_device", command, StringComparison.Ordinal);
         Assert.DoesNotContain("date_trunc", command, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(context.ChangeTracker.Entries());

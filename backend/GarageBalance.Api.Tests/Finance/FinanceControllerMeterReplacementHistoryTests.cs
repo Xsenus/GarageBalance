@@ -11,6 +11,47 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed partial class FinanceControllerTests
 {
     [Fact]
+    public async Task ReplacementCard_MapsMissingAndPassesTheSavedDetails()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(service);
+        var missing = await controller.GetMeterDeviceReplacement(Guid.NewGuid(), default);
+        Assert.Equal(404, Assert.IsType<NotFoundObjectResult>(missing.Result).StatusCode);
+        var details = new MeterDeviceReplacementDetailsDto(CreateMeterDevice(), CreateMeterDevice(), CreateMeterReading());
+        service.ReplacementDetailsResult = FinanceResult<MeterDeviceReplacementDetailsDto>.Success(details);
+        var found = await controller.GetMeterDeviceReplacement(details.Device.Id, default);
+        Assert.Same(details, Assert.IsType<OkObjectResult>(found.Result).Value);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplacementEdit_RequiresHistoricalPermissionAndPassesVersions(bool historical)
+    {
+        var actor = Guid.NewGuid();
+        var service = new FakeFinanceService
+        {
+            ReplacementDetailsResult = FinanceResult<MeterDeviceReplacementDetailsDto>.Success(new(CreateMeterDevice(), CreateMeterDevice(), CreateMeterReading()))
+        };
+        var controller = CreateController(service, actor, new(2026, 7, 20), historical ? [SystemPermissions.HistoricalMeterReadingsCorrect] : []);
+        var request = new UpdateMeterDeviceReplacementRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new(2026, 6, 1), new(2026, 6, 10), "NEW", 15, 0, "Исправление");
+        var response = await controller.UpdateMeterDeviceReplacement(Guid.NewGuid(), request, default);
+        if (historical)
+        {
+            Assert.IsType<OkObjectResult>(response.Result);
+            Assert.Same(request, service.LastUpdateReplacementRequest);
+            Assert.Equal(actor, service.LastActorUserId);
+        }
+        else
+        {
+            Assert.IsType<ForbidResult>(response.Result);
+            Assert.Null(service.LastUpdateReplacementRequest);
+        }
+        var method = typeof(FinanceController).GetMethod(nameof(FinanceController.UpdateMeterDeviceReplacement))!;
+        Assert.Contains(method.GetCustomAttributes(typeof(AuthorizeAttribute), false).Cast<AuthorizeAttribute>(), item => item.Policy == SystemPermissions.PaymentsWrite);
+    }
+
+    [Fact]
     public async Task MeterHistory_PassesBoundedPageAndKeepsDtoShape()
     {
         var service = new FakeFinanceService { MeterDevices = [CreateMeterDevice()] };

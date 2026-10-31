@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
 
 describe('visible meter months and the start value month', () => {
+  it('agrees with garage 12 July and garage 20 August accounting starts while retaining physical replacement dates', () => {
+    expect(getVisibleMeterReadingMonthKeys('2026', [{ id: '12', number: '12', accountingStartMonth: '2026-07-01', initialReadingMonth: '2026-09-01', initialReadingValue: 100, startValueSource: 'device', startValueDate: '2026-07-01' }], new Set())).toEqual(['06', '07', '08', '09', '10', '11', '12'])
+    expect(getMeterBaselineMonth({ id: '12', number: '12', accountingStartMonth: '2026-07-01', startValueSource: 'device', startValueDate: '2026-07-01' })).toBe('2026-06')
+    expect(getMeterBaselineMonth({ id: '20', number: '20', accountingStartMonth: '2026-08-01', initialReadingMonth: '2026-06-01' })).toBe('2026-07')
+    expect(getMeterBaselineMonth({ id: '12', number: '12', accountingStartMonth: '2026-07-01', startValueSource: 'device', startValueDate: '2026-10-01', startValueDeviceSerial: 'REAL-NEW' })).toBe('2026-09')
+  })
   it('uses the later garage or connection start, shows the month before it and retains future active months', () => {
     expect(getVisibleMeterReadingMonthKeys('2026', [{ id: 'a', number: '1', accountingStartMonth: '2026-09-01', connectedOn: '2026-10-10' }], new Set())).toEqual(['09', '10', '11', '12'])
   })

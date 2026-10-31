@@ -19,11 +19,23 @@ public sealed partial class FinanceService
         }
 
         var page = await meterReadingRepository.GetDeviceHistoryPageAsync(garageId, kind, offset, limit, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
+        var connectionBaselineDates = await meterReadingRepository.GetConnectionBaselineDatesAsync(garageId, cancellationToken);
         var versions = await meterReadingRepository.GetActiveReadingVersionsAsync(
             page.Items.Where(device => device.ReplacementReadingId.HasValue).Select(device => device.ReplacementReadingId!.Value).Distinct().ToArray(), cancellationToken);
         var settings = await chargeServiceSettingRepository.GetListAsync(null, true, true, true, MaxAutomaticMeteredServices, businessDateProvider.Today, cancellationToken);
+        var histories = new Dictionary<string, IReadOnlyList<MeterDevice>>(StringComparer.Ordinal);
+        var firstReadings = new Dictionary<string, MeterReading?>(StringComparer.Ordinal);
+        foreach (var deviceKind in page.Items.Select(device => device.MeterKind).Distinct(StringComparer.Ordinal))
+        {
+            histories[deviceKind] = await meterReadingRepository.GetDevicesAsync(garageId, deviceKind, cancellationToken);
+            firstReadings[deviceKind] = await meterReadingRepository.GetFirstActiveAsync(garageId, deviceKind, cancellationToken);
+        }
         return new FinancePagedResult<MeterDeviceDto>(page.Items.Select(device => ToDto(device) with
         {
+            AccountingOpeningDate = garage?.AccountingStartMonth is { } start && MeterBaselineResolver.IsAccountingOpening(device, histories[device.MeterKind], firstReadings[device.MeterKind], start, garage.InitialMeterReadingMonth)
+                ? connectionBaselineDates.TryGetValue(device.Id, out var connectedOn) ? connectedOn
+                    : MeterBaselineResolver.GetAccountingStartDate(device, start, histories[device.MeterKind], firstReadings[device.MeterKind], garage.InitialMeterReadingMonth) : null,
             ReplacementReadingVersion = device.ReplacementReadingId.HasValue && versions.TryGetValue(device.ReplacementReadingId.Value, out var version) ? version : null,
             ServiceName = settings.Where(setting => setting.MeterKind == device.MeterKind).OrderBy(setting => setting.IsArchived).FirstOrDefault()?.Name
                 ?? (device.MeterKind == MeterKinds.Water ? "Вода" : device.MeterKind == MeterKinds.Electricity ? "Электроэнергия" : "Счётчик услуги")

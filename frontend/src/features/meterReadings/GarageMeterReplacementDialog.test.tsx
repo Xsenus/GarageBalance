@@ -133,7 +133,7 @@ it('blocks writes without permission and allows cancellation by Escape', async (
   expect(props.onClose).toHaveBeenCalledOnce()
 })
 
-it('prefills the removed meter value, shows the expected consumption and refuses a final value below the last reading', async () => {
+it('requires an explicit removed meter value, shows the consumption and refuses a value below the last reading', async () => {
   const { props, getPage, reading } = fixture()
   getPage.mockResolvedValue({ items: [{ ...reading, currentValue: 1200, previousValue: 1000 }], totalCount: 1 })
   const getMeterDevices = vi.fn().mockResolvedValue([
@@ -143,7 +143,8 @@ it('prefills the removed meter value, shows the expected consumption and refuses
   render(<GarageMeterReplacementDialog {...props} />)
 
   // The month value 1200 belongs to the new meter; the removed meter starts from the month's opening value.
-  await waitFor(() => expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('1000'))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
+  expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('')
   expect(getMeterDevices).toHaveBeenCalledWith('token', 'garage', 'electricity', expect.any(AbortSignal))
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '1200' } })
   fireEvent.change(screen.getByLabelText('Начальное показание нового счетчика'), { target: { value: '1100' } })
@@ -165,22 +166,30 @@ it('uses the active device history when the month has no reading yet', async () 
   render(<GarageMeterReplacementDialog {...props} />)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
 
-  expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('100')
+  expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('')
   fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '130' } })
 
   expect(screen.getByText(/Расход старого счётчика: 30\. Показание нового счётчика на конец месяца введите в «Платежах»/)).toBeInTheDocument()
 })
 
-it('prefills the last saved device value when the selected month has no reading', async () => {
+it('requires the operator to enter the final value even when the device has a saved reading', async () => {
   const { props, getPage, replace } = fixture()
   getPage.mockResolvedValue({ items: [], totalCount: 0 })
   props.financeClient = { ...props.financeClient, getMeterDevices: vi.fn().mockResolvedValue([
     { id: 'old', removedOn: null, initialValue: 100, lastReadingValue: 130 },
   ]) } as unknown as FinanceClient
   render(<GarageMeterReplacementDialog {...props} />)
-  await waitFor(() => expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('130'))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
+  expect(screen.getByLabelText('Конечное показание старого счетчика')).toHaveValue('')
   fireEvent.change(screen.getByLabelText('Номер нового счетчика'), { target: { value: 'NEW' } })
   fireEvent.change(screen.getByLabelText('Причина замены счетчика'), { target: { value: 'Замена' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
+  expect(replace).not.toHaveBeenCalled()
+  fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '129' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('не может быть меньше')
+  expect(replace).not.toHaveBeenCalled()
+  fireEvent.change(screen.getByLabelText('Конечное показание старого счетчика'), { target: { value: '130' } })
   fireEvent.click(screen.getByRole('button', { name: 'Сохранить замену' }))
   await waitFor(() => expect(replace).toHaveBeenCalledWith('token', expect.objectContaining({ removedDeviceFinalValue: 130 })))
 })

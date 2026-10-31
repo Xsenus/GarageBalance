@@ -9174,7 +9174,8 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: 'Заменить счётчик: гараж 905' }))
     const dialog = await screen.findByRole('dialog', { name: 'Замена счётчика' })
     expect(within(dialog).getByLabelText('Счётчик для замены')).toHaveTextContent('Электроэнергия')
-    await waitFor(() => expect(within(dialog).getByLabelText('Конечное показание старого счетчика')).toHaveValue('270'))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Сохранить замену' })).toBeEnabled())
+    expect(within(dialog).getByLabelText('Конечное показание старого счетчика')).toHaveValue('')
     const final = within(dialog).getByLabelText('Конечное показание старого счетчика')
     await user.clear(final)
     await user.type(final, '300')
@@ -9372,6 +9373,11 @@ describe('App', () => {
         meterDeviceId: 'new-device',
         meterDeviceSerialNumber: 'ЭЛ-2026-12',
         isMeterReplacement: true,
+      }, {
+        id: 'legacy-restart-reading', garageId: 'garage-27', accountingMonth: '2026-10-01',
+        currentValue: 1300, version: 'legacy-restart-version', isMeterReplacement: false,
+        meterReplacement: { deviceId: 'legacy-restart', date: '2026-10-01', oldSerial: 'OLD', oldFinalValue: 2000,
+          newSerial: 'START', newInitialValue: 1000, currentValue: 1300, removedDevicesConsumption: 0, totalConsumption: 300, isAccountingRestart: true },
       }],
       totalCount: 2,
       offset: 0,
@@ -9398,6 +9404,8 @@ describe('App', () => {
     const replacementMarker = within(readingsPanel).getByRole('img', { name: 'С этого месяца установлен новый счетчик ЭЛ-2026-12' })
     expect(replacementMarker).toHaveAttribute('title', 'Замена счетчика. Новый номер: ЭЛ-2026-12')
     expect(replacementMarker).toHaveClass('meter-readings-replacement-marker')
+    const restartMarker = within(readingsPanel).getByRole('img', { name: /^Начало учёта нового прибора 01.10.2026/ })
+    expect(restartMarker).toHaveAttribute('title', expect.stringContaining('Расход 300 = 1 300 − 1 000'))
 
     const yearInput = within(readingsPanel).getByLabelText('Год показаний')
     await user.clear(yearInput)
@@ -10934,7 +10942,7 @@ describe('App', () => {
     expect(within(garageActions as HTMLElement).queryByRole('button', { name: 'Перенести задолженность' })).not.toBeInTheDocument()
     expect(fullPaymentAction).toHaveClass('payments-prototype-action-button')
     expect(fullPaymentAction.querySelector('.lucide-wallet-cards')).not.toBeNull()
-    const penaltyAccrualButton = within(garageActions as HTMLElement).getByRole('button', { name: 'Начислить штраф' })
+    const penaltyAccrualButton = within(garageActions as HTMLElement).getByRole('button', { name: 'Начислить штраф/ Применить скидку' })
     expect(penaltyAccrualButton).toHaveClass('create-action-button')
     expect(penaltyAccrualButton).toHaveClass('payments-prototype-action-button')
     expect(penaltyAccrualButton.querySelector('.lucide-gavel')).not.toBeNull()
@@ -11012,12 +11020,12 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
 
     await user.click(penaltyAccrualButton)
-    const penaltyAccrualDialog = await screen.findByRole('dialog', { name: 'Начислить штраф' })
-    expect(within(penaltyAccrualDialog).getByText('Сумма может быть произвольной. Причина сохранится в истории изменений.')).toBeInTheDocument()
+    const penaltyAccrualDialog = await screen.findByRole('dialog', { name: 'Начислить штраф/ Применить скидку' })
+    expect(within(penaltyAccrualDialog).getByText(/Остаток скидки зачтётся в будущих начислениях/)).toBeInTheDocument()
     expect(within(penaltyAccrualDialog).getByLabelText('Месяц начисления штрафа')).toHaveValue('06.2026')
     await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
-    expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Укажите сумму штрафа больше нуля.')
-    await user.type(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа'), '1250.50')
+    expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Укажите ненулевую сумму штрафа или скидки.')
+    await user.type(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа или скидки'), '1250.50')
     await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
     expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Укажите причину начисления штрафа.')
     await user.type(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа'), 'Нарушение правил проезда')
@@ -11026,7 +11034,7 @@ describe('App', () => {
     expect(within(penaltyAccrualDialog).getByRole('button', { name: 'Начисляем...' })).toBeDisabled()
     expect(within(penaltyAccrualDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
     expect(within(penaltyAccrualDialog).getByRole('button', { name: 'Закрыть начисление штрафа' })).toBeDisabled()
-    expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа')).toBeDisabled()
+    expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа или скидки')).toBeDisabled()
     expect(within(penaltyAccrualDialog).getByLabelText('Месяц начисления штрафа')).toBeDisabled()
     expect(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа')).toBeDisabled()
     await user.keyboard('{Escape}')
@@ -11038,7 +11046,7 @@ describe('App', () => {
     })
 
     expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Штраф временно не сохранён')
-    expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа')).toHaveValue('1 250.50')
+    expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа или скидки')).toHaveValue('1 250.50')
     expect(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа')).toHaveValue('Нарушение правил проезда')
     await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
     await waitFor(() => expect(savedPenaltyAccrualRequests).toEqual([{
@@ -11049,7 +11057,7 @@ describe('App', () => {
       source: 'manual',
       comment: 'Нарушение правил проезда',
     }]))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить штраф' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить штраф/ Применить скидку' })).not.toBeInTheDocument())
     await waitFor(() => expect(penaltyAccrualButton).toHaveFocus())
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('Штраф: Нарушение правил проезда')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('1 250.50')
@@ -11587,10 +11595,10 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
-    await user.click(within(prototype).getByRole('button', { name: 'Начислить штраф' }))
+    await user.click(within(prototype).getByRole('button', { name: 'Начислить штраф/ Применить скидку' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Начислить штраф' })
-    await user.type(within(dialog).getByLabelText('Сумма штрафа'), '500')
+    const dialog = await screen.findByRole('dialog', { name: 'Начислить штраф/ Применить скидку' })
+    await user.type(within(dialog).getByLabelText('Сумма штрафа или скидки'), '500')
     await user.type(within(dialog).getByLabelText('Причина начисления штрафа'), 'Нарушение правил')
     await user.click(within(dialog).getByRole('button', { name: 'Начислить' }))
 
@@ -13016,11 +13024,11 @@ describe('App', () => {
     const panel = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.type(within(panel).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
     await user.click(await within(panel).findByRole('option', { name: /Гараж\s*105/ }))
-    await user.click(within(panel).getByRole('button', { name: kind === 'manual' ? 'Добавить начисление гаражу' : 'Начислить штраф' }))
-    const dialog = await screen.findByRole('dialog', { name: kind === 'manual' ? 'Новое начисление' : 'Начислить штраф' })
+    await user.click(within(panel).getByRole('button', { name: kind === 'manual' ? 'Добавить начисление гаражу' : 'Начислить штраф/ Применить скидку' }))
+    const dialog = await screen.findByRole('dialog', { name: kind === 'manual' ? 'Новое начисление' : 'Начислить штраф/ Применить скидку' })
     if (kind === 'manual') await user.type(within(dialog).getByRole('combobox', { name: 'Начисление гаража' }), 'Проверка')
     else await user.type(within(dialog).getByLabelText('Причина начисления штрафа'), 'Проверка')
-    await user.type(within(dialog).getByLabelText(kind === 'manual' ? 'Сумма нерегулярного начисления гаража' : 'Сумма штрафа'), '150')
+    await user.type(within(dialog).getByLabelText(kind === 'manual' ? 'Сумма нерегулярного начисления гаража' : 'Сумма штрафа или скидки'), '150')
     await user.click(within(dialog).getByRole('button', { name: kind === 'manual' ? 'Ок' : 'Начислить', exact: true }))
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
     const finances = within(panel).getByRole('region', { name: 'Финансы' })
@@ -13070,10 +13078,10 @@ describe('App', () => {
     const panel = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.type(within(panel).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
     await user.click(await within(panel).findByRole('option', { name: /Гараж\s*109/ }))
-    await user.click(within(panel).getByRole('button', { name: kind === 'penalty' ? 'Начислить штраф' : 'Добавить начисление гаражу' }))
-    const dialog = await screen.findByRole('dialog', { name: kind === 'penalty' ? 'Начислить штраф' : 'Новое начисление' })
+    await user.click(within(panel).getByRole('button', { name: kind === 'penalty' ? 'Начислить штраф/ Применить скидку' : 'Добавить начисление гаражу' }))
+    const dialog = await screen.findByRole('dialog', { name: kind === 'penalty' ? 'Начислить штраф/ Применить скидку' : 'Новое начисление' })
     await user.type(within(dialog).getByLabelText(kind === 'penalty' ? 'Причина начисления штрафа' : 'Начисление гаража'), basis)
-    const amountInput = within(dialog).getByLabelText(kind === 'penalty' ? 'Сумма штрафа' : 'Сумма нерегулярного начисления гаража')
+    const amountInput = within(dialog).getByLabelText(kind === 'penalty' ? 'Сумма штрафа или скидки' : 'Сумма нерегулярного начисления гаража')
     await user.clear(amountInput)
     await user.type(amountInput, '150')
     await user.click(within(dialog).getByRole('button', { name: kind === 'penalty' ? 'Начислить' : 'Ок', exact: true }))
@@ -20762,7 +20770,7 @@ describe('App', () => {
     await user.type(within(paymentPrototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '95')
     await user.click(await within(paymentPrototype).findByRole('option', { name: /Гараж\s*95\s*Наблюдаемый владелец/ }))
     expect(await within(paymentPrototype).findByText('77')).toBeInTheDocument()
-    expect(within(paymentPrototype).getByRole('button', { name: 'Начислить штраф' })).toBeDisabled()
+    expect(within(paymentPrototype).getByRole('button', { name: 'Начислить штраф/ Применить скидку' })).toBeDisabled()
     expect(within(paymentPrototype).queryByRole('textbox', { name: /^Показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
     expect(within(paymentPrototype).getByRole('textbox', { name: /^Платеж Электроэнергия только просмотр/ })).toBeDisabled()
     expect(within(paymentPrototype).queryByRole('button', { name: /^Сохранить показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()

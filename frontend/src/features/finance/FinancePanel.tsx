@@ -5832,7 +5832,7 @@ function PaymentsPrototypePanel({
             </button>
             <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openPenaltyAccrualDialog} disabled={!canWritePayments}>
               <Gavel size={16} aria-hidden="true" />
-              <span>Начислить штраф</span>
+              <span>Начислить штраф/ Применить скидку</span>
             </button>
             <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} aria-busy={fullPaymentQuoteLoading} disabled={garageWorksheetLoadingId === selectedGarage.id || fullPaymentQuoteLoading}>
               {fullPaymentQuoteLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <WalletCards size={16} aria-hidden="true" />}
@@ -5991,6 +5991,8 @@ function PaymentsPrototypePanel({
                             <td className="payments-prototype-month-cell">{row.monthLabel}</td>
                             <td>
                               <span className="payments-prototype-service-name">{getGarageIncomeRowTitle(row)}</span>
+                              {row.meterReplacementDescription ? <small className="payments-prototype-row-reason">{row.meterReplacementDescription}</small> : null}
+                              {(row.discountAmount ?? 0) > 0 ? <small className="payments-prototype-row-reason">Зачтена скидка: {formatPaymentMoney(row.discountAmount ?? 0)}</small> : null}
                               {row.calculationIssue ? <small className="payments-prototype-row-reason">{getGarageIncomeCalculationIssue(row)}</small> : null}
                               {shouldShowAccrualReason(row, accrualReasonDisplayMode) ? <small className="payments-prototype-row-reason">Причина: {row.reason}</small> : null}
                             </td>
@@ -7805,7 +7807,7 @@ function NewAccrualPrototypeDialog({
   )
 }
 
-function PenaltyAccrualPrototypeDialog({
+export function PenaltyAccrualPrototypeDialog({
   onClose,
   onSubmit,
 }: {
@@ -7825,8 +7827,8 @@ function PenaltyAccrualPrototypeDialog({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const parsedAmount = parsePaymentMoney(amount)
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setError('Укажите сумму штрафа больше нуля.')
+    if (!Number.isFinite(parsedAmount) || Math.round(parsedAmount * 100) === 0) {
+      setError('Укажите ненулевую сумму штрафа или скидки.')
       return
     }
     if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
@@ -7863,16 +7865,16 @@ function PenaltyAccrualPrototypeDialog({
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="penalty-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
-            <h3 id="penalty-accrual-title">Начислить штраф</h3>
-            <p>Сумма может быть произвольной. Причина сохранится в истории изменений.</p>
+            <h3 id="penalty-accrual-title">Начислить штраф/ Применить скидку</h3>
+            <p>Положительная сумма — штраф, отрицательная — скидка. Остаток скидки зачтётся в будущих начислениях. Причина сохранится в истории изменений.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть начисление штрафа" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" noValidate onSubmit={handleSubmit}>
-          <FormField label="Сумма штрафа">
-            <MoneyTextInput aria-label="Сумма штрафа" min="0.01" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
+          <FormField label="Сумма штрафа или скидки">
+            <MoneyTextInput aria-label="Сумма штрафа или скидки" required value={amount} disabled={saving} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
               setError(null)
             }} />

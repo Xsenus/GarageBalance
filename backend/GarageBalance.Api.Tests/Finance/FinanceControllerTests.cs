@@ -3167,6 +3167,15 @@ public sealed partial class FinanceControllerTests
             FinanceResult<MeterDeviceReplacementCancellationDto>.Failure("not_configured", "Not configured.");
         public CancelMeterDeviceReplacementRequest? LastCancelReplacementRequest { get; private set; }
         public Guid? LastCanceledDeviceId { get; private set; }
+        public FinanceResult<MeterDeviceReplacementDetailsDto> ReplacementDetailsResult { get; set; } = FinanceResult<MeterDeviceReplacementDetailsDto>.Failure("meter_device_not_found", "Не найдено");
+        public UpdateMeterDeviceReplacementRequest? LastUpdateReplacementRequest { get; private set; }
+        public Task<FinanceResult<MeterDeviceReplacementDetailsDto>> GetMeterDeviceReplacementAsync(Guid deviceId, CancellationToken cancellationToken) => Task.FromResult(ReplacementDetailsResult);
+        public Task<FinanceResult<MeterDeviceReplacementDetailsDto>> UpdateMeterDeviceReplacementAsync(Guid deviceId, UpdateMeterDeviceReplacementRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastUpdateReplacementRequest = request;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(ReplacementDetailsResult);
+        }
         public (Guid GarageId, string? Kind, int Offset, int Limit)? LastDeviceHistoryRequest { get; private set; }
 
         public Task<FinancePagedResult<MeterDeviceDto>> GetMeterDeviceHistoryAsync(Guid garageId, string? meterKind, int offset, int limit, CancellationToken cancellationToken)

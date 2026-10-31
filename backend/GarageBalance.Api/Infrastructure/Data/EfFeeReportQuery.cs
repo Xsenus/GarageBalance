@@ -15,6 +15,24 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
     private const int PageTotalsCategory = 3;
     private const int SummaryCategory = 4;
 
+    // Reports show charges after non-cash discounts. Cash receipts remain sourced
+    // exclusively from financial operations, including when a credit settles a campaign.
+    private IQueryable<Accrual> GetFeeAccruals() => dbContext.Accruals.AsNoTracking().Select(accrual => new Accrual
+    {
+        Id = accrual.Id,
+        GarageId = accrual.GarageId,
+        Garage = accrual.Garage,
+        IncomeTypeId = accrual.IncomeTypeId,
+        FeeCampaignId = accrual.FeeCampaignId,
+        IsCanceled = accrual.IsCanceled,
+        Source = accrual.Source,
+        Amount = accrual.Amount - (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive &&
+            allocation.CreditAccrualId.HasValue && !allocation.CreditAccrual.IsCanceled && allocation.AccrualId == accrual.Id)
+            .Sum(allocation => (decimal?)allocation.Amount) ?? 0m) +
+            (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && !allocation.Accrual.IsCanceled &&
+                allocation.CreditAccrualId == accrual.Id).Sum(allocation => (decimal?)allocation.Amount) ?? 0m)
+    });
+
     public async Task<IReadOnlyList<FeeCampaign>> GetActiveCampaignsAsync(CancellationToken cancellationToken)
     {
         return await dbContext.FeeCampaigns.AsNoTracking()
@@ -37,7 +55,7 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         IReadOnlyList<Guid> incomeTypeIds,
         CancellationToken cancellationToken)
     {
-        var accrualQuery = dbContext.Accruals.AsNoTracking()
+        var accrualQuery = GetFeeAccruals()
             .Where(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId))
             .GroupBy(accrual => new
             {
@@ -147,7 +165,7 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         IReadOnlyList<Guid> feeCampaignIds,
         CancellationToken cancellationToken)
     {
-        var accrualsByGarage = await dbContext.Accruals.AsNoTracking()
+        var accrualsByGarage = await GetFeeAccruals()
             .Where(accrual =>
                 !accrual.IsCanceled &&
                 accrual.FeeCampaignId.HasValue &&
@@ -174,10 +192,11 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         var paymentsByGarage = await dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(allocation =>
                 allocation.IsActive &&
+                allocation.FinancialOperationId.HasValue &&
                 !allocation.Accrual.IsCanceled &&
                 allocation.Accrual.FeeCampaignId.HasValue &&
                 feeCampaignIds.Contains(allocation.Accrual.FeeCampaignId.Value) &&
-                !allocation.FinancialOperation.IsCanceled)
+                (allocation.FinancialOperationId.HasValue ? !allocation.FinancialOperation.IsCanceled : !allocation.CreditAccrual.IsCanceled))
             .GroupBy(allocation => new
             {
                 allocation.Accrual.GarageId,
@@ -230,7 +249,7 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
             ? """
               accrual_rows AS (
                   SELECT "GarageId" AS garage_id, "FeeCampaignId" AS fee_id, SUM("Amount") AS accrued
-                  FROM accruals
+                  FROM net_accruals
                   WHERE "IsCanceled" = FALSE AND "FeeCampaignId" = ANY(@fee_ids)
                   GROUP BY "GarageId", "FeeCampaignId"
               ), payment_rows AS (
@@ -261,7 +280,7 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
             : """
               accrual_rows AS (
                   SELECT "GarageId" AS garage_id, "IncomeTypeId" AS fee_id, SUM("Amount") AS accrued
-                  FROM accruals
+                  FROM net_accruals
                   WHERE "IsCanceled" = FALSE AND "IncomeTypeId" = ANY(@fee_ids)
                   GROUP BY "GarageId", "IncomeTypeId"
               ), payment_rows AS (
@@ -287,7 +306,24 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
               )
               """;
         var reportRowsCte = $$"""
-            WITH {{sourceCte}}, fee_keys AS (
+            WITH credit_rows AS (
+                SELECT allocation."AccrualId" AS target_id, allocation."CreditAccrualId" AS source_id, allocation."Amount" AS amount
+                FROM accrual_payment_allocations allocation
+                JOIN accruals target ON target."Id" = allocation."AccrualId"
+                JOIN accruals source ON source."Id" = allocation."CreditAccrualId"
+                WHERE allocation."IsActive" AND NOT target."IsCanceled" AND NOT source."IsCanceled"
+                  AND (target."IncomeTypeId" = ANY(@fee_ids) OR source."IncomeTypeId" = ANY(@fee_ids) OR target."FeeCampaignId" = ANY(@fee_ids))
+            ), target_credits AS (
+                SELECT target_id, SUM(amount) AS amount FROM credit_rows GROUP BY target_id
+            ), source_credits AS (
+                SELECT source_id, SUM(amount) AS amount FROM credit_rows GROUP BY source_id
+            ), net_accruals AS (
+                SELECT a."Id", a."GarageId", a."IncomeTypeId", a."FeeCampaignId", a."IsCanceled",
+                    a."Amount" - COALESCE(t.amount,0) + COALESCE(s.amount,0) AS "Amount"
+                FROM accruals a LEFT JOIN target_credits t ON t.target_id = a."Id"
+                LEFT JOIN source_credits s ON s.source_id = a."Id"
+                WHERE a."IncomeTypeId" = ANY(@fee_ids) OR a."FeeCampaignId" = ANY(@fee_ids)
+            ), {{sourceCte}}, fee_keys AS (
                 SELECT garage_id, fee_id FROM accrual_rows
                 UNION
                 SELECT garage_id, fee_id FROM payment_rows

@@ -23,6 +23,7 @@ public sealed class ArchivedGarageFinancialPurgeEngine(GarageBalanceDbContext db
     internal static readonly IReadOnlyDictionary<string, string> ReviewedLinks = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["public.accrual_payment_allocations.AccrualId->accruals"] = "c",
+        ["public.accrual_payment_allocations.CreditAccrualId->accruals"] = "r",
         ["public.accrual_payment_allocations.FinancialOperationId->financial_operations"] = "c",
         ["public.accruals.GarageId->garages"] = "r",
         ["public.expense_payment_batch_operations.OperationId->financial_operations"] = "r",
@@ -104,7 +105,7 @@ public sealed class ArchivedGarageFinancialPurgeEngine(GarageBalanceDbContext db
             var removedFundOperations = await RemoveFundOperationsAsync(operationIds, plan, identity, reason, writer, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
 
-            await db.AccrualPaymentAllocations.Where(allocation => accrualIds.Contains(allocation.AccrualId) || operationIds.Contains(allocation.FinancialOperationId))
+            await db.AccrualPaymentAllocations.Where(allocation => accrualIds.Contains(allocation.AccrualId) || allocation.FinancialOperationId.HasValue && operationIds.Contains(allocation.FinancialOperationId.Value))
                 .ExecuteDeleteAsync(cancellationToken);
             var deletedOperations = await db.FinancialOperations.Where(operation => operationIds.Contains(operation.Id)).ExecuteDeleteAsync(cancellationToken);
             var deletedAccruals = await db.Accruals.Where(accrual => accrualIds.Contains(accrual.Id)).ExecuteDeleteAsync(cancellationToken);

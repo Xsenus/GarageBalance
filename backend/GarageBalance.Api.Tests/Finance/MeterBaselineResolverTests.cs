@@ -5,6 +5,64 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class MeterBaselineResolverTests
 {
     [Fact]
+    public void LogicalOpeningWithNoEarlierActiveChainPreservesStoredHistoryAndUsesAccountingStart()
+    {
+        var old = Device("Без номера", 1);
+        var restart = Device("Начало учёта 01.10.2026", 30);
+        var storedDate = restart.InstalledOn;
+        Assert.Equal(new DateOnly(2026, 7, 1), MeterBaselineResolver.GetAccountingStartDate(restart, new(2026, 7, 1), [restart, old], null, new(2026, 6, 1)));
+        Assert.Equal(storedDate, MeterBaselineResolver.GetAccountingStartDate(restart, new(2026, 7, 1), [old, restart], null, new(2026, 9, 1)));
+        Assert.Equal(storedDate, restart.InstalledOn);
+        Assert.Equal(old.InstalledOn, MeterBaselineResolver.GetAccountingStartDate(old, new(2026, 7, 1), [old, restart], null, new(2026, 6, 1)));
+        Assert.Equal(storedDate, MeterBaselineResolver.GetAccountingStartDate(restart, new(2026, 7, 1), [old, restart], Reading(old, false)));
+        restart.ReplacedDeviceId = old.Id;
+        Assert.Equal(storedDate, MeterBaselineResolver.GetAccountingStartDate(restart, new(2026, 7, 1), [old, restart], null));
+        restart.ReplacedDeviceId = null;
+        restart.IsCanceled = true;
+        Assert.False(MeterBaselineResolver.IsAccountingOpening(restart, [old, restart], null));
+        Assert.Equal(storedDate, MeterBaselineResolver.GetAccountingStartDate(restart, new(2026, 7, 1), [old, restart], null));
+    }
+
+    [Fact]
+    public void AccountingRestartAfterAnOlderDevicePreservesItsIndependentBoundary()
+    {
+        var old = Device("OLD", 1);
+        old.RemovedOn = new(2026, 9, 30);
+        var restart = Device("Начало учёта 01.10.2026", 30);
+        Assert.Equal(restart.InstalledOn, MeterBaselineResolver.GetEffectiveStartDate(restart, new(2026, 1, 1), [old, restart]));
+        Assert.False(MeterBaselineResolver.IsGeneratedOpening(restart, [old, restart]));
+    }
+
+    [Fact]
+    public void GeneratedOpening_PreservesTheRecordedDayWhenItsMonthAlreadyAgrees()
+    {
+        var device = Device("Начало учёта", 9);
+        Assert.Equal(device.InstalledOn, MeterBaselineResolver.GetEffectiveStartDate(device, new(2026, 9, 1)));
+    }
+
+    [Theory]
+    [InlineData("Начало учёта 01.10.2026", 7)]
+    [InlineData("Без номера", 7)]
+    [InlineData("Начало учёта 01.08.2026", 8)]
+    public void GeneratedOpening_FollowsGarageAccountingMonth(string serial, int startMonth)
+    {
+        var device = Device(serial, 31);
+        var storedDate = device.InstalledOn;
+        Assert.Equal(new DateOnly(2026, startMonth, 1), MeterBaselineResolver.GetEffectiveStartDate(device, new(2026, startMonth, 1)));
+        Assert.Equal(storedDate, device.InstalledOn);
+    }
+
+    [Fact]
+    public void PhysicalReplacement_KeepsItsOwnBoundaryEvenWithAnUnnumberedSerial()
+    {
+        var device = Device("Без номера", 31);
+        device.ReplacedDeviceId = Guid.NewGuid();
+        device.ReplacementAccountingMonth = new(2026, 10, 1);
+        Assert.Equal(device.InstalledOn, MeterBaselineResolver.GetEffectiveStartDate(device, new(2026, 7, 1)));
+        Assert.Equal(device.InstalledOn, MeterBaselineResolver.GetEffectiveStartDate(Device("PHYSICAL", 31), new(2026, 7, 1)));
+    }
+
+    [Fact]
     public void FindBaselineDevice_ReturnsNullWithoutDevices()
     {
         Assert.Null(MeterBaselineResolver.FindBaselineDevice([], null));
