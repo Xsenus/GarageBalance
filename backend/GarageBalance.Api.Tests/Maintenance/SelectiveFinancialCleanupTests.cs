@@ -210,15 +210,19 @@ public sealed class SelectiveFinancialCleanupTests
     }
 
     [PostgreSqlFact]
-    public async Task PostgreSql_LoopbackServerAddressUsesHostWithoutCidr()
+    public async Task PostgreSql_ServerAddressUsesHostWithoutCidrAndRejectsNonlocalOrWrongPort()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var address = await db.Database.SqlQueryRaw<string>("SELECT host(inet_server_addr()) AS \"Value\"").SingleAsync();
-        Assert.Equal("127.0.0.1", address);
-        Assert.True(StagingTargetBinding.IsLocalServerAddress(address));
-        Assert.True(await StagingTargetBinding.IsConnectedServerLocalAsync(db, 5433, default));
-        Assert.False(await StagingTargetBinding.IsConnectedServerLocalAsync(db, 5432, default));
+        var nativeAddress = await db.Database.SqlQueryRaw<System.Net.IPAddress>("SELECT inet_server_addr() AS \"Value\"").SingleAsync();
+        var actualPort = await db.Database.SqlQueryRaw<int>("SELECT current_setting('port')::int AS \"Value\"").SingleAsync();
+        Assert.Equal(nativeAddress.ToString(), address);
+        Assert.DoesNotContain('/', address);
+        var loopback = System.Net.IPAddress.IsLoopback(nativeAddress);
+        Assert.Equal(loopback, StagingTargetBinding.IsLocalServerAddress(address));
+        Assert.Equal(loopback, await StagingTargetBinding.IsConnectedServerLocalAsync(db, actualPort, default));
+        Assert.False(await StagingTargetBinding.IsConnectedServerLocalAsync(db, actualPort == 5432 ? 5433 : 5432, default));
     }
 
     [PostgreSqlFact]
