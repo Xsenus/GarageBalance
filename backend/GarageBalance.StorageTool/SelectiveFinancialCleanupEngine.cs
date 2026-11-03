@@ -220,7 +220,8 @@ public sealed class SelectiveFinancialCleanupEngine(GarageBalanceDbContext db,
         await db.Database.ExecuteSqlRawAsync("SELECT pg_stat_clear_snapshot()", token);
         var clients = await db.Database.SqlQuery<int>($"""
             SELECT count(*)::int AS "Value" FROM pg_stat_activity
-            WHERE datname=current_database() AND pid<>pg_backend_pid() AND backend_type='client backend'
+            WHERE datname=current_database() AND pid<>pg_backend_pid()
+              AND (backend_type='client backend' OR backend_type IS NULL)
             """).SingleAsync(token);
         if (clients != 0) throw Error("cleanup_other_clients_connected");
     }
@@ -242,11 +243,7 @@ public sealed class SelectiveFinancialCleanupEngine(GarageBalanceDbContext db,
         await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'; SET LOCAL statement_timeout = '60s'", token);
         var lockSql = "LOCK TABLE " + string.Join(',', TableNames().Select(Quote)) + " IN ACCESS EXCLUSIVE MODE";
         await db.Database.ExecuteSqlRawAsync(lockSql, token);
-        var clients = await db.Database.SqlQuery<int>($"""
-            SELECT count(*)::int AS "Value" FROM pg_stat_activity
-            WHERE datname=current_database() AND pid<>pg_backend_pid() AND backend_type='client backend'
-            """).SingleAsync(token);
-        if (clients != 0) throw Error("cleanup_other_clients_connected");
+        await RequireNoOtherClientsAsync(token);
         if (confirmStopped is not null && !await confirmStopped(token)) throw Error("cleanup_host_started");
         var planId = plan.PlanId.ToString();
         if (await db.AuditEvents.AsNoTracking().AnyAsync(e => e.Action == "finance.selective_history_cleared" && e.EntityId == planId, token))
