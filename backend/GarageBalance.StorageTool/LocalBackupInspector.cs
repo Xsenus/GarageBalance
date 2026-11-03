@@ -99,12 +99,18 @@ public sealed partial class LocalBackupInspector(IBackupCommandRunner runner, IB
     [GeneratedRegex("^(?:emergency_before_regular_seed|showcase_before|working_data_(?:analysis|before))_\\d{8}-\\d{6}\\.pgdump$", RegexOptions.CultureInvariant)]
     private static partial Regex HistoricalStandaloneName();
 
+    // Exact formats emitted by the repository's cleanup/audit helpers. They
+    // still require TOC, SHA-256 and sidecar validation like every other archive.
+    [GeneratedRegex("^garagebalance_\\d{8}-\\d{6}_before_(?:(?:garage_history|meter_history|fund_balance|archived_garage)_cleanup|integrity_audit)\\.pgdump$", RegexOptions.CultureInvariant)]
+    private static partial Regex OperationalMaintenanceName();
+
     private static string? GetBackupKind(string fileName)
     {
         var managed = ManagedName().Match(fileName);
         if (managed.Success) return managed.Groups[1].Value;
         if (DeploymentName().IsMatch(fileName)) return "pre_update";
-        if (LegacyTimestampName().IsMatch(fileName) || HistoricalOperationName().IsMatch(fileName) || HistoricalStandaloneName().IsMatch(fileName)) return "manual";
+        if (LegacyTimestampName().IsMatch(fileName) || HistoricalOperationName().IsMatch(fileName) || HistoricalStandaloneName().IsMatch(fileName) ||
+            OperationalMaintenanceName().IsMatch(fileName)) return "manual";
         return null;
     }
 }

@@ -99,6 +99,7 @@ public sealed class PerformanceDataSeeder(GarageBalanceDbContext context)
                     var previousValue = garageIndex * 1000m + monthOffset * 125m;
                     context.Accruals.Add(new Accrual
                     {
+                        IsAnnualAccrual = false,
                         Id = DeterministicGuid($"accrual-{garage.Id}-{month:yyyyMM}"),
                         GarageId = garage.Id,
                         IncomeTypeId = incomeType.Id,

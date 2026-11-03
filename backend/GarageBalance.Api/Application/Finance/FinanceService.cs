@@ -47,7 +47,8 @@ public sealed partial class FinanceService(
     TimeProvider timeProvider,
     IBusinessDateProvider businessDateProvider,
     IGarageTariffAssignmentQuery garageTariffAssignmentQuery,
-    IPayoutMutationPolicy? payoutMutationPolicy = null) : IFinanceService, IRegularAccrualRecalculationService
+    IPayoutMutationPolicy? payoutMutationPolicy = null,
+    IAnnualAccrualHoldPolicy? annualAccrualHoldPolicy = null) : IFinanceService, IRegularAccrualRecalculationService
 {
     private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private const int MaxAutomaticFeeCampaigns = 500;
@@ -753,7 +754,8 @@ public sealed partial class FinanceService(
             debtTotal,
             closingBalance,
             closingDebt,
-            rows));
+            rows,
+            worksheetData.HeldAnnualYears ?? []));
     }
 
     public async Task<FinanceResult<GarageFullPaymentQuoteDto>> GetGarageFullPaymentQuoteAsync(
@@ -963,7 +965,8 @@ public sealed partial class FinanceService(
             MoneyMath.RoundMoney(orderedRows.Where(item => item.AccrualId.HasValue).Sum(item => item.Amount ?? 0m)),
             MoneyMath.RoundMoney(orderedRows.Sum(item => item.PaidAmount)),
             MoneyMath.RoundMoney(orderedRows.Sum(item => item.OutstandingAmount)),
-            orderedRows));
+            orderedRows,
+            await IsAnnualYearHeldAsync(year, cancellationToken)));
     }
 
     public async Task<FinanceResult<GarageAnnualPaymentsDto>> CalculateGarageAnnualPaymentsAsync(
@@ -1079,6 +1082,7 @@ public sealed partial class FinanceService(
                 GetGarageAccrualStartDate(garage));
             var accrual = new Accrual
             {
+                IsAnnualAccrual = true,
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = definition.IncomeType.Id,
@@ -1152,7 +1156,7 @@ public sealed partial class FinanceService(
             .ToArray();
 
         return FinanceResult<GarageAnnualPaymentPreviewDto>.Success(
-            new GarageAnnualPaymentPreviewDto(accountingYear, items));
+            new GarageAnnualPaymentPreviewDto(accountingYear, items, await IsAnnualYearHeldAsync(accountingYear, cancellationToken)));
     }
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
@@ -1251,6 +1255,8 @@ public sealed partial class FinanceService(
             cancellationToken);
         IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null;
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
+        var calculationIssues = new Dictionary<(DateOnly Month, Guid IncomeTypeId), string>();
+        var unknownHistoryHeldYears = new Dictionary<int, bool>();
         foreach (var historicalAnnualAccrual in existingAccruals.Where(accrual =>
                      accrual.AccountingMonth < garageAccrualStartMonth &&
                      accrual.AccountingYear == garageAccrualStartMonth.Year &&
@@ -1259,6 +1265,7 @@ public sealed partial class FinanceService(
                      !accrual.FeeCampaignId.HasValue &&
                      !accrual.IrregularPaymentId.HasValue))
         {
+            if (await IsAnnualYearHeldAsync(historicalAnnualAccrual.AccountingYear, cancellationToken)) continue;
             var previousAccountingMonth = historicalAnnualAccrual.AccountingMonth;
             var setting = settings.FirstOrDefault(item => item.IncomeTypeId == historicalAnnualAccrual.IncomeTypeId);
             var dueDates = AccrualDueDates.ForGarage(
@@ -1285,6 +1292,21 @@ public sealed partial class FinanceService(
                      !accrual.AccountingYear.HasValue &&
                      !paidAccrualIds.Contains(accrual.Id)))
         {
+            if (historicalAccrual.IsAnnualAccrual != false)
+            {
+                var historicalYear = historicalAccrual.AccountingMonth.Year;
+                if (!unknownHistoryHeldYears.TryGetValue(historicalYear, out var historicalYearHeld))
+                {
+                    historicalYearHeld = await IsAnnualYearHeldAsync(historicalYear, cancellationToken);
+                    unknownHistoryHeldYears[historicalYear] = historicalYearHeld;
+                }
+                if (historicalYearHeld)
+                {
+                    calculationIssues[(historicalAccrual.AccountingMonth, historicalAccrual.IncomeTypeId)] =
+                        "Историческое основание начисления не определено. Запись сохранена; требуется проверка.";
+                    continue;
+                }
+            }
             historicalAccrual.IsCanceled = true;
             historicalAccrual.UpdatedAtUtc = timeProvider.GetUtcNow();
             AddAudit(
@@ -1318,8 +1340,6 @@ public sealed partial class FinanceService(
             .GroupBy(accrual => (AccountingYear: accrual.AccountingYear!.Value, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
 
-        var calculationIssues = new Dictionary<(DateOnly Month, Guid IncomeTypeId), string>();
-
         for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
         {
             foreach (var setting in settings)
@@ -1339,10 +1359,33 @@ public sealed partial class FinanceService(
                     incomeType.Code,
                     month,
                     setting.PeriodicityMonths);
+                if (await IsAnnualYearHeldAsync(accountingYear, cancellationToken))
+                {
+                    var unknown = accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
+                    if (unknown is not null && !unknown.IsAnnualAccrual.HasValue && !unknown.AccountingYear.HasValue)
+                        calculationIssues[(month, incomeType.Id)] =
+                            "Историческое основание начисления не определено. Запись сохранена; требуется проверка.";
+                    continue;
+                }
                 var existing = accountingYear.HasValue
                     ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
                       accrualsByMonth.GetValueOrDefault((month, incomeType.Id))
                     : accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
+                if (existing is not null && !existing.IsAnnualAccrual.HasValue && !existing.AccountingYear.HasValue)
+                {
+                    var historicalYear = existing.AccountingMonth.Year;
+                    if (!unknownHistoryHeldYears.TryGetValue(historicalYear, out var historicalYearHeld))
+                    {
+                        historicalYearHeld = await IsAnnualYearHeldAsync(historicalYear, cancellationToken);
+                        unknownHistoryHeldYears[historicalYear] = historicalYearHeld;
+                    }
+                    if (historicalYearHeld)
+                    {
+                        calculationIssues[(existing.AccountingMonth, incomeType.Id)] =
+                            "Историческое основание начисления не определено. Сумма сохранена; требуется проверка.";
+                        continue;
+                    }
+                }
                 // Payments are kept and reallocated; only a historical amount without a known formula stays fixed.
                 if (existing is not null && paidAccrualIds.Contains(existing.Id) && HasOnlyHistoricalAmount(existing.CalculationDetailsJson))
                 {
@@ -1412,6 +1455,7 @@ public sealed partial class FinanceService(
                 {
                     existing = new Accrual
                     {
+                        IsAnnualAccrual = accountingYear.HasValue,
                         GarageId = garage.Id,
                         Garage = garage,
                         IncomeTypeId = incomeType.Id,
@@ -1447,8 +1491,18 @@ public sealed partial class FinanceService(
                     continue;
                 }
 
+                if (!existing.IsAnnualAccrual.HasValue && !existing.AccountingYear.HasValue &&
+                    (accountingYear.HasValue || existing.TariffId != tariff.Id))
+                {
+                    calculationIssues[(existing.AccountingMonth, incomeType.Id)] =
+                        "Историческое основание начисления не определено. Сохранены прежний тариф и сумма; требуется проверка.";
+                    continue;
+                }
+
                 var oldAccountingMonth = existing.AccountingMonth;
                 var oldAccountingYear = existing.AccountingYear;
+                var oldAnnualClassification = existing.IsAnnualAccrual;
+                var annualClassificationChanged = existing.IsAnnualAccrual.HasValue && existing.IsAnnualAccrual != accountingYear.HasValue;
                 var accountingMonthChanged = accountingYear.HasValue && garage.AccountingStartMonth.HasValue &&
                     existing.AccountingYear == accountingYear && existing.AccountingMonth != month;
                 if (accountingMonthChanged && accrualsByMonth.TryGetValue((month, incomeType.Id), out var collision) && collision.Id != existing.Id)
@@ -1472,7 +1526,7 @@ public sealed partial class FinanceService(
                     }
                 }
 
-                if (!accountingYearChanged && !accountingMonthChanged &&
+                if (!accountingYearChanged && !accountingMonthChanged && !annualClassificationChanged &&
                     existing.Amount == calculation.Amount &&
                     existing.TariffId == tariff.Id &&
                     existing.DueDate == dueDates.DueDate &&
@@ -1482,6 +1536,7 @@ public sealed partial class FinanceService(
                     continue;
                 }
 
+                if (existing.IsAnnualAccrual.HasValue) existing.IsAnnualAccrual = accountingYear.HasValue;
                 var oldAmount = existing.Amount;
                 var oldDueDate = existing.DueDate;
                 var oldOverdueFromDate = existing.OverdueFromDate;
@@ -1508,6 +1563,7 @@ public sealed partial class FinanceService(
                         ["amount"] = oldAmount,
                         ["accountingMonth"] = oldAccountingMonth,
                         ["year"] = oldAccountingYear,
+                        ["isAnnual"] = oldAnnualClassification,
                         ["dueDate"] = oldDueDate.ToString("dd.MM.yyyy"),
                         ["overdueFromDate"] = oldOverdueFromDate.ToString("dd.MM.yyyy")
                     },
@@ -1516,6 +1572,7 @@ public sealed partial class FinanceService(
                         ["amount"] = calculation.Amount,
                         ["accountingMonth"] = existing.AccountingMonth,
                         ["year"] = existing.AccountingYear,
+                        ["isAnnual"] = existing.IsAnnualAccrual,
                         ["dueDate"] = existing.DueDate.ToString("dd.MM.yyyy"),
                         ["overdueFromDate"] = existing.OverdueFromDate.ToString("dd.MM.yyyy")
                     });
@@ -2269,6 +2326,10 @@ public sealed partial class FinanceService(
         Accrual? garageFeeCampaignAccrual = null;
         if (feeCampaign is not null)
         {
+            var feeStatus = await ResolveAnnualStatusForIncomeAsync(incomeType, MonthPeriod.Normalize(request.AccountingMonth), cancellationToken);
+            var feeYear = feeStatus.Year;
+            if (await IsAnnualYearHeldAsync(feeYear, cancellationToken))
+                return FinanceResult<FinancialOperationDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(feeYear!.Value));
             collectedBefore = MoneyMath.RoundMoney(
                 await feeCampaignRepository.GetCollectedAmountAsync(feeCampaign.Id, cancellationToken));
             var available = MoneyMath.RoundMoney(Math.Max(feeCampaign.TargetAmount - collectedBefore, 0m));
@@ -2295,6 +2356,8 @@ public sealed partial class FinanceService(
             {
                 accrual.IncomeTypeId = incomeType.Id;
                 accrual.IncomeType = incomeType;
+                accrual.IsAnnualAccrual = accrual.AccountingYear.HasValue || accrual.IsAnnualAccrual == true ? true :
+                    await ResolveAnnualClassificationForIncomeAsync(incomeType, accrual.AccountingMonth, cancellationToken);
                 accrual.UpdatedAtUtc = changedAtUtc;
             }
             garageFeeCampaignAccrual = FeeCampaignAccrualSettlement.CollapseOpenGarageAccruals(
@@ -2306,6 +2369,7 @@ public sealed partial class FinanceService(
                 var dueDates = AccrualDueDates.ForFeeCampaign(month, feeCampaign.EndsOn, feeCampaign.OverdueGraceDays);
                 garageFeeCampaignAccrual = new Accrual
                 {
+                    IsAnnualAccrual = feeStatus.Classification,
                     GarageId = garage.Id,
                     Garage = garage,
                     IncomeTypeId = incomeType.Id,
@@ -2313,6 +2377,7 @@ public sealed partial class FinanceService(
                     FeeCampaignId = feeCampaign.Id,
                     FeeCampaign = feeCampaign,
                     AccountingMonth = month,
+                    AccountingYear = feeStatus.Year,
                     DueDate = dueDates.DueDate,
                     OverdueFromDate = dueDates.OverdueFromDate,
                     Amount = feeCampaignRequiredGarageAmount,
@@ -2601,6 +2666,12 @@ public sealed partial class FinanceService(
                     "Один из сборов недоступен выбранному гаражу или виду поступления.");
             }
 
+            foreach (var line in campaignGroup)
+            {
+                var feeYear = await ResolveAnnualYearForIncomeAsync(incomeTypes[campaign.IncomeTypeId], line.AccountingMonth, cancellationToken);
+                if (await IsAnnualYearHeldAsync(feeYear, cancellationToken))
+                    return FinanceResult<FullGaragePaymentDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(feeYear!.Value));
+            }
             var batchAmount = MoneyMath.RoundMoney(campaignGroup.Sum(line => line.Amount));
             var accruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
                 campaign.Id,
@@ -2784,6 +2855,8 @@ public sealed partial class FinanceService(
             {
                 accrual.IncomeTypeId = campaignIncomeType.Id;
                 accrual.IncomeType = campaignIncomeType;
+                accrual.IsAnnualAccrual = accrual.AccountingYear.HasValue || accrual.IsAnnualAccrual == true ? true :
+                    await ResolveAnnualClassificationForIncomeAsync(campaignIncomeType, accrual.AccountingMonth, cancellationToken);
                 accrual.UpdatedAtUtc = changedAtUtc;
             }
             var principal = FeeCampaignAccrualSettlement.CollapseOpenGarageAccruals(
@@ -2799,8 +2872,10 @@ public sealed partial class FinanceService(
                     state.Campaign.EndsOn,
                     state.Campaign.OverdueGraceDays);
                 var incomeType = incomeTypes[state.Campaign.IncomeTypeId];
+                var feeStatus = await ResolveAnnualStatusForIncomeAsync(incomeType, month, cancellationToken);
                 principal = new Accrual
                 {
+                    IsAnnualAccrual = feeStatus.Classification,
                     GarageId = garage.Id,
                     Garage = garage,
                     IncomeTypeId = incomeType.Id,
@@ -2808,6 +2883,7 @@ public sealed partial class FinanceService(
                     FeeCampaignId = state.Campaign.Id,
                     FeeCampaign = state.Campaign,
                     AccountingMonth = month,
+                    AccountingYear = feeStatus.Year,
                     DueDate = dueDates.DueDate,
                     OverdueFromDate = dueDates.OverdueFromDate,
                     Amount = state.RequiredGarageAmount,
@@ -4799,6 +4875,12 @@ public sealed partial class FinanceService(
         {
             return FinanceResult<AccrualDto>.Failure("accrual_not_canceled", "Начисление уже активно.");
         }
+        var restoredAnnualYear = accrual.AccountingYear ??
+            (accrual.IsAnnualAccrual == false || accrual.IrregularPaymentId.HasValue ? null :
+                accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year :
+                await ResolveAnnualYearForIncomeAsync(accrual.IncomeType, accrual.AccountingMonth, cancellationToken));
+        if (await IsAnnualYearHeldAsync(restoredAnnualYear, cancellationToken))
+            return FinanceResult<AccrualDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(restoredAnnualYear!.Value));
 
         var duplicateExists = accrual.Source == AccrualSources.Regular &&
             (accrual.IrregularPaymentId.HasValue
@@ -4889,6 +4971,7 @@ public sealed partial class FinanceService(
         var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, setting: null);
         var accrual = new Accrual
         {
+            IsAnnualAccrual = false,
             GarageId = garage.Id,
             Garage = garage,
             IncomeTypeId = incomeType.Id,
@@ -4961,9 +5044,12 @@ public sealed partial class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
+        var heldClassificationYear = accountingYear ?? await ResolveAnnualYearForIncomeAsync(incomeType, month, cancellationToken);
+        if (await IsAnnualYearHeldAsync(heldClassificationYear, cancellationToken))
+            return FinanceResult<AccrualDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(heldClassificationYear!.Value));
         if (!IsValidAccrualAmount(request.Amount, source, incomeType.Code, incomeType.IsSystem))
             return FinanceResult<AccrualDto>.Failure("accrual_amount_invalid", "Введите ненулевую сумму. Отрицательная сумма разрешена только для ручной скидки в системном виде «Штраф».");
-        if (dueDateSetting?.AppliesToGarage(garage.Id) == false)
+        if (source == AccrualSources.Regular && dueDateSetting?.AppliesToGarage(garage.Id) == false)
             return FinanceResult<AccrualDto>.Failure("tariff_not_applicable", "Тариф не действует для выбранного гаража.");
         if (source == AccrualSources.Regular &&
             await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
@@ -4977,6 +5063,7 @@ public sealed partial class FinanceService(
         var dueDates = AccrualDueDates.ForGarage(month, incomeType.Code, dueDateSetting, GetGarageAccrualStartDate(garage));
         var accrual = new Accrual
         {
+            IsAnnualAccrual = accountingYear.HasValue ? true : await ResolveAnnualClassificationForIncomeAsync(incomeType, month, cancellationToken),
             GarageId = garage.Id,
             Garage = garage,
             IncomeTypeId = incomeType.Id,
@@ -5040,6 +5127,7 @@ public sealed partial class FinanceService(
             var dueDates = AccrualDueDates.ForChargeService(targetMonth, null);
             accrual = new Accrual
             {
+                IsAnnualAccrual = false,
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,
@@ -5071,7 +5159,7 @@ public sealed partial class FinanceService(
         var oldValues = new Dictionary<string, object?>
         {
             ["garage"] = accrual.Garage.Number,
-            ["incomeType"] = accrual.IncomeType.Name,
+            ["incomeType"] = accrual.IncomeType?.Name,
             ["accountingMonth"] = accrual.AccountingMonth,
             ["amount"] = accrual.Amount,
             ["source"] = accrual.Source,
@@ -5094,7 +5182,7 @@ public sealed partial class FinanceService(
         var newValues = new Dictionary<string, object?>
         {
             ["garage"] = accrual.Garage.Number,
-            ["incomeType"] = accrual.IncomeType.Name,
+            ["incomeType"] = accrual.IncomeType?.Name,
             ["accountingMonth"] = accrual.AccountingMonth,
             ["amount"] = accrual.Amount,
             ["source"] = accrual.Source,
@@ -5172,6 +5260,15 @@ public sealed partial class FinanceService(
             incomeType.Code,
             month,
             source == AccrualSources.Regular ? dueDateSetting?.PeriodicityMonths : null);
+        var proposedAnnualYear = isIrregular ? null : accountingYear ?? await ResolveAnnualYearForIncomeAsync(incomeType, month, cancellationToken);
+        var previousAnnualYear = accrual.AccountingYear ??
+            (accrual.IsAnnualAccrual == false || accrual.IrregularPaymentId.HasValue || accrual.Basis is not null && accrual.Source == AccrualSources.Manual ? null :
+                accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year :
+                accrual.IncomeType is null ? null : await ResolveAnnualYearForIncomeAsync(accrual.IncomeType, accrual.AccountingMonth, cancellationToken));
+        var heldYear = await IsAnnualYearHeldAsync(proposedAnnualYear, cancellationToken) ? proposedAnnualYear :
+            await IsAnnualYearHeldAsync(previousAnnualYear, cancellationToken) ? previousAnnualYear : null;
+        if (heldYear.HasValue)
+            return FinanceResult<AccrualDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(heldYear.Value));
         if (dueDateSetting?.AppliesToGarage(garage.Id) == false &&
             (accrual.GarageId != garage.Id || accrual.IncomeTypeId != incomeType.Id || accrual.Source != source))
             return FinanceResult<AccrualDto>.Failure("tariff_not_applicable", "Тариф не действует для выбранного гаража.");
@@ -5203,7 +5300,7 @@ public sealed partial class FinanceService(
         var oldValues = new Dictionary<string, object?>
         {
             ["garage"] = accrual.Garage.Number,
-            ["incomeType"] = accrual.IncomeType.Name,
+            ["incomeType"] = accrual.IncomeType?.Name,
             ["accountingMonth"] = accrual.AccountingMonth,
             ["accountingYear"] = accrual.AccountingYear,
             ["amount"] = accrual.Amount,
@@ -5223,6 +5320,9 @@ public sealed partial class FinanceService(
             ["dueDateNeedsReview"] = false
         };
 
+        if (accrual.IsAnnualAccrual.HasValue || accrual.AccountingYear.HasValue)
+            accrual.IsAnnualAccrual = isIrregular ? false : accountingYear.HasValue ? true :
+                await ResolveAnnualClassificationForIncomeAsync(incomeType, month, cancellationToken);
         accrual.GarageId = garage.Id;
         accrual.Garage = garage;
         accrual.IncomeTypeId = incomeType.Id;
@@ -5498,6 +5598,8 @@ public sealed partial class FinanceService(
             incomeType.Code,
             month,
             matchingSetting?.PeriodicityMonths);
+        if (await IsAnnualYearHeldAsync(accountingYear, cancellationToken))
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(accountingYear!.Value));
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [new AccrualPaymentAllocationKey(Guid.Empty, incomeType.Id)],
             cancellationToken);
@@ -5628,6 +5730,7 @@ public sealed partial class FinanceService(
 
             var accrual = new Accrual
             {
+                IsAnnualAccrual = accountingYear.HasValue,
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,
@@ -5731,6 +5834,11 @@ public sealed partial class FinanceService(
                 continue;
             }
 
+            if (await IsAnnualYearHeldAsync(AnnualAccrualPolicy.ResolveAccountingYear(setting.IncomeType?.Code, month, setting.PeriodicityMonths), cancellationToken))
+            {
+                skippedServices.Add(AnnualAccrualHoldPolicy.Message(month.Year));
+                continue;
+            }
             var comment = BuildRegularCatalogAccrualComment(setting.Name, request.Comment);
             var serviceResult = await GenerateRegularAccrualsAsync(
                 new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, tariff.Id, month, comment),
@@ -6063,6 +6171,12 @@ public sealed partial class FinanceService(
             : []).ToLookup(period => period.GarageId);
         foreach (var accrual in accruals)
         {
+            if (await IsAnnualYearHeldAsync(accrual.AccountingYear ?? AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month, setting?.PeriodicityMonths), cancellationToken))
+            {
+                rows.Add(new RegularAccrualRecalculationRowDto(accrual.Id, accrual.Garage.Number, accrual.Amount, accrual.Amount, 0m,
+                    "unchanged", AnnualAccrualHoldPolicy.Message(accrual.AccountingYear ?? month.Year), false));
+                continue;
+            }
             if (paidIds.Contains(accrual.Id))
             {
                 rows.Add(new RegularAccrualRecalculationRowDto(
@@ -6178,6 +6292,10 @@ public sealed partial class FinanceService(
         var month = MonthPeriod.Normalize(businessDate);
         var regularServices = await chargeServiceSettingRepository.GetActiveRegularAsync(month, cancellationToken);
         var dueServices = regularServices.Where(setting => IsChargeServiceDueForMonth(setting, month)).ToList();
+        var held = new List<ChargeServiceSetting>();
+        foreach (var setting in dueServices)
+            if (await IsAnnualYearHeldAsync(AnnualAccrualPolicy.ResolveAccountingYear(setting.IncomeType?.Code, month, setting.PeriodicityMonths), cancellationToken)) held.Add(setting);
+        dueServices = dueServices.Except(held).ToList();
         var configuredDueServiceCount = dueServices.Count(setting => setting.IncomeTypeId.HasValue && setting.TariffId.HasValue);
         var feeCampaigns = await feeCampaignRepository.GetActiveAccrualCandidatesAsync(
             month,
@@ -6185,6 +6303,7 @@ public sealed partial class FinanceService(
             cancellationToken);
         var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
         var warnings = new List<string>();
+        if (held.Count > 0) warnings.Add(AnnualAccrualHoldPolicy.Message(month.Year));
         var incompleteServiceCount = dueServices.Count - configuredDueServiceCount;
         if (incompleteServiceCount > 0)
         {
@@ -6236,6 +6355,10 @@ public sealed partial class FinanceService(
                 "other_income_destination_not_configured",
                 "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
         }
+
+        var annualStatus = await ResolveAnnualStatusForIncomeAsync(incomeType, month, cancellationToken);
+        if (await IsAnnualYearHeldAsync(annualStatus.Year, cancellationToken))
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(month.Year));
 
         if (MonthPeriod.Normalize(campaign.StartsOn) > month)
         {
@@ -6305,6 +6428,7 @@ public sealed partial class FinanceService(
 
             var accrual = new Accrual
             {
+                IsAnnualAccrual = annualStatus.Classification,
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,
@@ -6312,7 +6436,7 @@ public sealed partial class FinanceService(
                 FeeCampaignId = campaign.Id,
                 FeeCampaign = campaign,
                 AccountingMonth = month,
-                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month),
+                AccountingYear = annualStatus.Year,
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
@@ -7573,6 +7697,7 @@ public sealed partial class FinanceService(
         int year,
         CancellationToken cancellationToken)
     {
+        if (await IsAnnualYearHeldAsync(year, cancellationToken)) return [];
         var candidates = new List<(ChargeServiceSetting Setting, DateOnly AccountingMonth, Tariff? Tariff)>();
         for (var monthNumber = 1; monthNumber <= 12; monthNumber++)
         {
@@ -7957,6 +8082,7 @@ public sealed partial class FinanceService(
         var recalculations = new List<MeteredAccrualRecalculation>();
         foreach (var accrual in accruals)
         {
+            if (await IsAnnualYearHeldAsync(accrual.AccountingYear ?? (accrual.IncomeType is null ? null : await ResolveAnnualYearForIncomeAsync(accrual.IncomeType, accrual.AccountingMonth, cancellationToken)), cancellationToken)) continue;
             decimal? newAmount = null;
             AccrualCalculationDetailsDto? newDetails = null;
             decimal? newConsumption = null;
@@ -8733,6 +8859,7 @@ public sealed partial class FinanceService(
         foreach (var setting in settings)
         {
             var incomeType = setting.IncomeType;
+            if (await IsAnnualYearHeldAsync(AnnualAccrualPolicy.ResolveAccountingYear(incomeType?.Code, reading.AccountingMonth, setting.PeriodicityMonths), cancellationToken)) continue;
             var tariff = SelectTariffForMonth(setting, reading.AccountingMonth);
             if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue || !setting.AppliesToGarage(garage.Id))
             {
@@ -8778,6 +8905,7 @@ public sealed partial class FinanceService(
             var dueDates = AccrualDueDates.ForGarage(reading.AccountingMonth, incomeType.Code, setting, GetGarageAccrualStartDate(garage));
             var accrual = new Accrual
             {
+                IsAnnualAccrual = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, reading.AccountingMonth, setting.PeriodicityMonths).HasValue,
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,
@@ -9762,6 +9890,8 @@ public sealed partial class FinanceService(
             {
                 continue;
             }
+            var feeStatus = await ResolveAnnualStatusForIncomeAsync(stableIncomeType, MonthPeriod.Normalize(campaign.StartsOn), cancellationToken);
+            if (await IsAnnualYearHeldAsync(feeStatus.Year, cancellationToken)) continue;
             var campaignAccruals = await feeCampaignRepository.GetAccrualsForSettlementAsync(
                 campaignId,
                 cancellationToken);
@@ -9811,12 +9941,14 @@ public sealed partial class FinanceService(
             {
                 accrual = new Accrual
                 {
+                    IsAnnualAccrual = feeStatus.Classification,
                     GarageId = garageId,
                     IncomeTypeId = stableIncomeType.Id,
                     IncomeType = stableIncomeType,
                     FeeCampaignId = option.Campaign.Id,
                     FeeCampaign = option.Campaign,
                     AccountingMonth = month,
+                    AccountingYear = feeStatus.Year,
                     DueDate = dueDates.DueDate,
                     OverdueFromDate = dueDates.OverdueFromDate,
                     Amount = payable,
@@ -9836,6 +9968,8 @@ public sealed partial class FinanceService(
                     allocationKeys.Add(new AccrualPaymentAllocationKey(garageId, accrual.IncomeTypeId));
                     accrual.IncomeTypeId = stableIncomeType.Id;
                     accrual.IncomeType = stableIncomeType;
+                    accrual.IsAnnualAccrual = accrual.AccountingYear.HasValue || accrual.IsAnnualAccrual == true ? true :
+                    await ResolveAnnualClassificationForIncomeAsync(stableIncomeType, accrual.AccountingMonth, cancellationToken);
                     accrualRouteChanged = true;
                 }
                 var accrualChanged = accrual.Amount != desiredAmount ||

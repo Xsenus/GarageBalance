@@ -1007,6 +1007,7 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         {
             Garage = garage,
             IncomeType = incomeType,
+            IsAnnualAccrual = false,
             AccountingMonth = firstMonth.AddMonths(index),
             DueDate = firstMonth.AddMonths(index).AddMonths(1).AddDays(-1),
             OverdueFromDate = firstMonth.AddMonths(index + 1),

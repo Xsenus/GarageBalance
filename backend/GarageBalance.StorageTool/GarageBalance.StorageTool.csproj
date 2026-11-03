@@ -6,6 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="MaintenanceIntegrationFixture" />
     <ProjectReference Include="..\GarageBalance.Api\GarageBalance.Api.csproj" />
+    <EmbeddedResource Include="../../infrastructure/scripts/staging-maintenance-barrier.sh" LogicalName="MaintenancePins.barrier" />
+    <EmbeddedResource Include="../../infrastructure/scripts/vps-apply-release.sh" LogicalName="MaintenancePins.deploy" />
+    <EmbeddedResource Include="../../infrastructure/scripts/run-staging-storage-tool.sh" LogicalName="MaintenancePins.storage" />
+    <EmbeddedResource Include="../../infrastructure/scripts/garagebalance-healthcheck.sh" LogicalName="MaintenancePins.health" />
+    <EmbeddedResource Include="../../infrastructure/deployment/garagebalance-staging.service" LogicalName="MaintenancePins.app-unit" />
+    <EmbeddedResource Include="../../infrastructure/deployment/garagebalance-healthcheck.service" LogicalName="MaintenancePins.health-unit" />
   </ItemGroup>
 </Project>

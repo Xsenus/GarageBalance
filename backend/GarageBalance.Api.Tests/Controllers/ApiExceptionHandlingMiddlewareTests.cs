@@ -11,6 +11,49 @@ namespace GarageBalance.Api.Tests.Controllers;
 
 public sealed class ApiExceptionHandlingMiddlewareTests
 {
+    [Theory]
+    [InlineData("gb_annual_accrual_held", "annual_accrual_generation_held")]
+    [InlineData("gb_annual_guard_invalid", "annual_accrual_guard_needs_review")]
+    [InlineData("gb_annual_guard_ambiguous", "annual_accrual_guard_needs_review")]
+    public async Task InvokeAsync_MapsOnlyNamedAnnualGuardFailures(string constraint, string expectedCode)
+    {
+        var context = CreateHttpContext();
+        var databaseException = new PostgresException("private database text", "ERROR", "ERROR", PostgresErrorCodes.CheckViolation, constraintName: constraint);
+        var middleware = new ApiExceptionHandlingMiddleware(_ => throw new DbUpdateException("write", databaseException), NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+        await middleware.InvokeAsync(context);
+        var problem = await ReadProblemAsync(context);
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        Assert.Equal(expectedCode, problem.GetProperty("code").GetString());
+        Assert.DoesNotContain("private", problem.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_SerializationFailureReturnsConflictWithoutReplayingRequest()
+    {
+        var context = CreateHttpContext();
+        var calls = 0;
+        var middleware = new ApiExceptionHandlingMiddleware(_ =>
+        {
+            calls++;
+            throw new PostgresException("private", "ERROR", "ERROR", PostgresErrorCodes.SerializationFailure);
+        }, NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+        await middleware.InvokeAsync(context);
+        var problem = await ReadProblemAsync(context);
+        Assert.Equal(1, calls);
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        Assert.NotEqual("annual_accrual_concurrency", problem.GetProperty("code").GetString());
+        Assert.DoesNotContain("2026", problem.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task InvokeAsync_DoesNotMaskUnrelatedCheckViolation()
+    {
+        var context = CreateHttpContext();
+        var error = new PostgresException("private", "ERROR", "ERROR", PostgresErrorCodes.CheckViolation, constraintName: "unrelated_constraint");
+        var middleware = new ApiExceptionHandlingMiddleware(_ => throw error, NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+        await middleware.InvokeAsync(context);
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+    }
     [Fact]
     public async Task InvokeAsync_ReturnsInternalErrorProblemForUnhandledException()
     {

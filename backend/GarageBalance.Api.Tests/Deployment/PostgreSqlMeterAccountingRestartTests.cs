@@ -19,6 +19,8 @@ public sealed class PostgreSqlMeterAccountingRestartTests
         var garage = new Garage
         {
             Number = "RESTART",
+            RegisteredOn = October.AddMonths(-1),
+            AccountingStartMonth = October.AddMonths(-1),
             InitialElectricityMeterValue = 9,
             InitialWaterMeterValue = 3,
             InitialMeterReadingMonth = October.AddMonths(-2),
@@ -33,7 +35,8 @@ public sealed class PostgreSqlMeterAccountingRestartTests
             MeterKind = MeterKinds.Electricity,
             SerialNumber = "Без номера",
             InstalledOn = October.AddMonths(-1),
-            InitialValue = 9
+            InitialValue = 9,
+            IsAccountingBaseline = true
         };
         var reading = new MeterReading
         {
@@ -110,6 +113,8 @@ public sealed class PostgreSqlMeterAccountingRestartTests
         Assert.Equal(October.AddMonths(-1), restarted.InitialMeterReadingMonth);
         Assert.Equal(0, restarted.InitialElectricityMeterValue);
         Assert.Equal(October.AddDays(-1), (await context.MeterDevices.SingleAsync(row => row.Id == device.Id)).RemovedOn);
+        Assert.False((await context.MeterDevices.SingleAsync(row => row.Id == device.Id)).IsAccountingBaseline);
+        Assert.True(await context.MeterDevices.AnyAsync(row => row.GarageId == garage.Id && row.MeterKind == MeterKinds.Electricity && row.IsAccountingBaseline && row.InitialValue == 0));
         var auditCount = await context.AuditEvents.CountAsync();
         await Run(database.ConnectionString, true);
         Assert.Equal(auditCount, await context.AuditEvents.CountAsync());

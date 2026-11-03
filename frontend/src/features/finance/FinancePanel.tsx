@@ -1,3 +1,4 @@
+import { AnnualAccrualHoldNotice } from './AnnualAccrualHoldNotice'
 import { Fragment, lazy, Suspense, useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronRight, CircleAlert, CircleHelp, Database, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, Warehouse, X } from 'lucide-react'
@@ -277,6 +278,7 @@ type PaymentsPrototypeGarage = {
 }
 
 type GarageIncomeWorksheetPeriodSummary = {
+  heldAnnualYears: number[]
   openingBalance: number
   openingDebt: number
   unrepresentedOpeningDebt: number
@@ -4164,6 +4166,7 @@ function PaymentsPrototypePanel({
       ))
       setGarageRows(rows)
       setGarageWorksheetSummary({
+        heldAnnualYears: worksheet.heldAnnualYears ?? [],
         openingBalance: worksheet.openingBalance,
         openingDebt: worksheet.openingDebt,
         unrepresentedOpeningDebt: worksheet.unrepresentedOpeningDebt ?? 0,
@@ -5781,6 +5784,7 @@ function PaymentsPrototypePanel({
         </div>
       </div>
       {paymentError ? <FormError>{paymentError}</FormError> : null}
+      {selectedGarage && activeTab === 'income' ? <AnnualAccrualHoldNotice years={garageWorksheetSummary?.heldAnnualYears ?? []} /> : null}
       {activeTab === 'income' && garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
       {selectedGarage && activeTab === 'income' ? (

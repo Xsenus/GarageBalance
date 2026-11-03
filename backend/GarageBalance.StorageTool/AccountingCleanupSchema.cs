@@ -14,9 +14,10 @@ namespace GarageBalance.StorageTool;
 internal static class AccountingCleanupSchema
 {
     public static async Task<AccountingCleanupSource> ReadAsync(GarageBalanceDbContext db,
-        IReadOnlyDictionary<string, string> reviewedLinks, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, string> reviewedLinks, CancellationToken cancellationToken, IReadOnlyCollection<string>? additionalTargets = null)
     {
-        var targets = reviewedLinks.Keys.Select(key => key[(key.IndexOf("->", StringComparison.Ordinal) + 2)..]).Distinct().ToArray();
+        var targets = reviewedLinks.Keys.Select(key => key[(key.IndexOf("->", StringComparison.Ordinal) + 2)..])
+            .Concat(additionalTargets ?? []).Distinct().ToArray();
         if (!db.Database.IsNpgsql())
         {
             var links = db.Model.GetEntityTypes().SelectMany(entity => entity.GetForeignKeys())

@@ -97,8 +97,8 @@ public sealed class PostgreSqlRegularAccrualSnapshotBackfillMigrationTests
 
         await repeatedContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
         repeatedContext.ChangeTracker.Clear();
-        Assert.Null((await repeatedContext.Accruals.SingleAsync(item => item.Id == regularAccrualId)).CalculationDetailsJson);
-        AssertJsonEqual(existingSnapshot, (await repeatedContext.Accruals.SingleAsync(item => item.Id == existingSnapshotAccrualId)).CalculationDetailsJson);
+        Assert.Null(await repeatedContext.Accruals.Where(item => item.Id == regularAccrualId).Select(item => item.CalculationDetailsJson).SingleAsync());
+        AssertJsonEqual(existingSnapshot, await repeatedContext.Accruals.Where(item => item.Id == existingSnapshotAccrualId).Select(item => item.CalculationDetailsJson).SingleAsync());
         await repeatedContext.Database.MigrateAsync();
         repeatedContext.ChangeTracker.Clear();
         Assert.NotNull((await repeatedContext.Accruals.SingleAsync(item => item.Id == regularAccrualId)).CalculationDetailsJson);

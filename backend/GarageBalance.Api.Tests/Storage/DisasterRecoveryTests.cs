@@ -11,6 +11,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Console;
 
 namespace GarageBalance.Api.Tests.Storage;
 
@@ -106,16 +109,20 @@ public sealed class DisasterRecoveryTests : IDisposable
         var applicationService = ServiceDescriptor.Singleton<IHostedService, DatabaseStartupHostedService>();
         var adjacentApplicationService = ServiceDescriptor.Singleton<IHostedService, DatabaseStartupHostedService>();
         var ordinaryService = ServiceDescriptor.Singleton(typeof(DatabaseStartupOptions), typeof(DatabaseStartupOptions));
+        var loggingProvider = ServiceDescriptor.Singleton<ILoggerProvider, SyntheticLoggerProvider>();
         builder.Services.Add(frameworkService);
         builder.Services.Add(applicationService);
         builder.Services.Add(adjacentApplicationService);
         builder.Services.Add(ordinaryService);
+        builder.Services.Add(loggingProvider);
 
         Assert.Equal(enabled, RecoveryDrillSafety.Configure(builder));
         Assert.Contains(frameworkService, builder.Services);
         Assert.Contains(ordinaryService, builder.Services);
         Assert.Equal(!enabled, builder.Services.Contains(applicationService));
         Assert.Equal(!enabled, builder.Services.Contains(adjacentApplicationService));
+        Assert.Equal(!enabled, builder.Services.Contains(loggingProvider));
+        if (enabled) Assert.Contains(builder.Services, descriptor => descriptor.ServiceType == typeof(ILoggerProvider) && descriptor.ImplementationType == typeof(ConsoleLoggerProvider));
     }
 
     [Theory]
@@ -212,6 +219,12 @@ public sealed class DisasterRecoveryTests : IDisposable
             Assert.Equal(3, await DisasterRecoveryCommands.RunAsync([command], configuration, CancellationToken.None));
         }
         Assert.Empty(Directory.EnumerateFileSystemEntries(root));
+    }
+
+    private sealed class SyntheticLoggerProvider : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => NullLogger.Instance;
+        public void Dispose() { }
     }
 
     private string CreateKeyRing(string name = "keys")

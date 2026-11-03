@@ -159,6 +159,7 @@ builder.Services.AddScoped<ICashBankTransferRepository, EfCashBankTransferReposi
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IIncomeFundAssignmentService, IncomeFundAssignmentService>();
 builder.Services.AddScoped<IExpenseFundDisbursementService, ExpenseFundDisbursementService>();
+builder.Services.AddScoped<IAnnualAccrualHoldPolicy, AnnualAccrualHoldPolicy>();
 builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IStaffMemberRepository>(),
     services.GetRequiredService<IGarageRepository>(),
@@ -193,7 +194,8 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<TimeProvider>(),
     services.GetRequiredService<IBusinessDateProvider>(),
     services.GetRequiredService<IGarageTariffAssignmentQuery>(),
-    services.GetRequiredService<IPayoutMutationPolicy>()));
+    services.GetRequiredService<IPayoutMutationPolicy>(),
+    services.GetRequiredService<IAnnualAccrualHoldPolicy>()));
 builder.Services.AddScoped<IRegularAccrualRecalculationService>(services =>
     (IRegularAccrualRecalculationService)services.GetRequiredService<IFinanceService>());
 builder.Services.AddScoped<IGarageMeterBaselineService>(services =>

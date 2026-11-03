@@ -49,6 +49,12 @@ public static class MeterBaselineResolver
     /// <param name="firstActiveReading">Earliest non-canceled reading of the same garage and kind, if any.</param>
     public static MeterDevice? FindBaselineDevice(IReadOnlyList<MeterDevice> devicesAscending, MeterReading? firstActiveReading)
     {
+        var preserved = devicesAscending.SingleOrDefault(device => device.IsAccountingBaseline && !device.IsCanceled);
+        if (preserved is not null)
+        {
+            return preserved;
+        }
+
         if (devicesAscending.Count == 0)
         {
             return null;

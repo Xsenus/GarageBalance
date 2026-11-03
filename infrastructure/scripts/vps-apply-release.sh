@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+barrier_dir=/var/lib/garagebalance-maintenance
+install -d -o root -g garagebalance -m 0750 "$barrier_dir"
+for barrier_name in deploy activity; do
+  barrier_file="$barrier_dir/$barrier_name.lock"
+  [[ ! -L "$barrier_file" ]] || { echo 'Barrier lock is a symlink' >&2; exit 1; }
+  if [[ ! -e "$barrier_file" ]]; then
+    (set -o noclobber; umask 027; : > "$barrier_file")
+    chown root:garagebalance "$barrier_file"
+    chmod 0640 "$barrier_file"
+  fi
+  [[ -f "$barrier_file" && "$(stat -c '%u:%g:%a:%h' "$barrier_file")" == "0:$(id -g garagebalance):640:1" ]] || {
+    echo 'Barrier lock metadata is invalid' >&2; exit 1;
+  }
+done
+# FD 9 survives the existing self-reexec, so no gap is introduced during deploy.
+if [[ ! /proc/$$/fd/9 -ef "$barrier_dir/deploy.lock" ]]; then
+  exec 9<"$barrier_dir/deploy.lock"
+fi
+/usr/bin/flock --shared --nonblock 9 || { echo 'Maintenance in progress' >&2; exit 75; }
+[[ ! -e "$barrier_dir/maintenance-active" && ! -L "$barrier_dir/maintenance-active" ]] || {
+  echo 'Maintenance recovery is required' >&2; exit 75;
+}
+[[ ! -e "$barrier_dir/recovery-required" && ! -L "$barrier_dir/recovery-required" ]] || {
+  echo 'Maintenance recovery is required' >&2; exit 75;
+}
+[[ ! -e "$barrier_dir/participants-resume-required" && ! -L "$barrier_dir/participants-resume-required" ]] || {
+  echo 'Maintenance participant restoration is required' >&2; exit 75;
+}
+
 APP_ROOT="/opt/garagebalance-staging"
 ENV_FILE="/etc/garagebalance-staging.env"
 SERVICE_NAME="garagebalance-staging.service"

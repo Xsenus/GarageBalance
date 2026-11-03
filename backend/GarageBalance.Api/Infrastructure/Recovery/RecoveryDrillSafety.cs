@@ -15,6 +15,10 @@ public static class RecoveryDrillSafety
         }
 
         Validate(builder.Configuration);
+        // The disposable verifier must not require Windows Event Log access.
+        // Its parent drains the console without exposing application messages.
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole();
         // All application hosted services can write or call external systems. None may run in a drill.
         for (var index = builder.Services.Count - 1; index >= 0; index--)
         {

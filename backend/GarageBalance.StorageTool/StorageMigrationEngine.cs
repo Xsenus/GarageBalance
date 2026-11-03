@@ -13,6 +13,9 @@ public sealed record ObjectVerification(string LogicalKey, long Generation, IRea
 public sealed record MigrationReport(int SchemaVersion, string Command, bool DryRun, int ExitCode, DateTimeOffset GeneratedAtUtc,
     string Mode, int RequiredIndependentCopies, int MinimumOffsiteCopies, int DesiredCopies,
     int CatalogObjects, int LocalFiles, IReadOnlyList<string> Blockers, object Details);
+public sealed record CheckpointCompatibility(bool ReadOnly, bool ConfigurationMatches, int Sources, int MatchingLocalSources,
+    int TombstonedSources, int MissingActiveLocalSources, int UncataloguedMissingSources, int ChangedOrInvalidLocalSources,
+    int CatalogMismatches);
 
 public delegate Task<bool> ProcessMigrationJob(string owner, IReadOnlyCollection<StorageTransferJobKind> kinds,
     IReadOnlyCollection<Guid> objectIds, CancellationToken cancellationToken);
@@ -42,11 +45,16 @@ public sealed class StorageMigrationEngine(IStorageCatalog catalog, IStorageProv
         var blockers = new List<string>();
         MigrationCheckpoint? checkpoint = null;
         IReadOnlyList<ObjectVerification> verification = [];
-        var mutating = options.Command is "copy" or "resume" or "delta-sync" or "verify" or "repair";
+        var mutating = options.Command is "copy" or "resume" or "delta-sync" or "verify" or "repair" or "local-recovery-stage";
         object details;
 
         switch (options.Command)
         {
+            case "local-recovery-stage":
+                details = await new LocalReplicaRecoveryStager(providers, configuration, inspector, TimeProvider.System)
+                    .ExecuteAsync(options, manifest, local, token => ReadCatalogAsync(options.PageSize, token),
+                        token => inspector.InspectAsync(Root, configuration.TenantId, Policy, token), cancellationToken);
+                break;
             case "inventory":
                 details = local.Select(file => new { file.FileName, file.SizeBytes, file.Sha256, file.Verified, file.ManifestMissing, file.Error }).ToArray();
                 break;
@@ -75,6 +83,23 @@ public sealed class StorageMigrationEngine(IStorageCatalog catalog, IStorageProv
                     states = manifest.GroupBy(item => item.State.ToString()).ToDictionary(group => group.Key, group => group.Count()),
                     reconciliation = reconciliationGuard is null ? null : await reconciliationGuard.PeekStateAsync(cancellationToken)
                 };
+                break;
+            case "checkpoint-check":
+                if (options.Execute || string.IsNullOrWhiteSpace(options.Checkpoint))
+                    throw new MigrationToolException("Checkpoint inspection requires --checkpoint and never accepts --execute.");
+                await using (var store = new MigrationCheckpointStore(options.Checkpoint))
+                    checkpoint = await store.ReadAsync(cancellationToken);
+                var compatibility = InspectCheckpoint(checkpoint, local, manifest);
+                if (!compatibility.ConfigurationMatches) blockers.Add("checkpoint_configuration_changed");
+                if (compatibility.MissingActiveLocalSources != 0) blockers.Add("checkpoint_missing_active_local_sources");
+                if (compatibility.UncataloguedMissingSources != 0) blockers.Add("checkpoint_uncatalogued_source_missing");
+                if (compatibility.ChangedOrInvalidLocalSources != 0) blockers.Add("checkpoint_source_changed_or_invalid");
+                if (compatibility.CatalogMismatches != 0) blockers.Add("checkpoint_catalog_generation_changed");
+                var freshCatalog = await ReadCatalogAsync(options.PageSize, cancellationToken);
+                var freshInventory = await inspector.InspectAsync(Root, configuration.TenantId, Policy, cancellationToken);
+                if (CatalogFingerprint(manifest) != CatalogFingerprint(freshCatalog) || InventoryFingerprint(local) != InventoryFingerprint(freshInventory))
+                    blockers.Add("inventory_changed_during_checkpoint_check");
+                details = compatibility;
                 break;
             case "copy":
             case "resume":
@@ -170,6 +195,36 @@ public sealed class StorageMigrationEngine(IStorageCatalog catalog, IStorageProv
             item.Replicas.Any(replica => replica.State == StorageReplicaState.Available && replica.Generation == item.Generation)
                 ? new MigrationPlanItem(item.LogicalKey, "resume_remote_source", "local_copy_absent")
                 : new MigrationPlanItem(item.LogicalKey, "blocked", "no_verified_source"))).ToArray();
+    }
+
+    private CheckpointCompatibility InspectCheckpoint(MigrationCheckpoint checkpoint, IReadOnlyList<LocalBackupInventory> local,
+        IReadOnlyList<StorageManifestEntry> manifest)
+    {
+        var inventory = local.ToDictionary(file => file.FileName, StringComparer.Ordinal);
+        var entries = manifest.ToDictionary(item => item.LogicalKey, StringComparer.Ordinal);
+        var matching = 0;
+        var tombstones = 0;
+        var missing = 0;
+        var uncatalogued = 0;
+        var changed = 0;
+        var catalogChanged = 0;
+        foreach (var file in checkpoint.Files)
+        {
+            entries.TryGetValue(file.FileName, out var entry);
+            if (entry is not null && IsTombstone(entry)) { tombstones++; continue; }
+            if (entry is not null && (entry.Generation != file.Manifest.Generation || entry.Sha256 != file.Sha256 || entry.SizeBytes != file.SizeBytes))
+                catalogChanged++;
+            if (!inventory.TryGetValue(file.FileName, out var actual))
+            {
+                if (entry is null) uncatalogued++;
+                else missing++;
+            }
+            else if (!actual.Verified || actual.SizeBytes != file.SizeBytes || actual.Sha256 != file.Sha256 ||
+                !actual.ManifestMissing && actual.Manifest?.Generation != file.Manifest.Generation) changed++;
+            else matching++;
+        }
+        return new(true, checkpoint.ConfigurationFingerprint == ConfigurationFingerprint(), checkpoint.Files.Count,
+            matching, tombstones, missing, uncatalogued, changed, catalogChanged);
     }
 
     private async Task<MigrationCheckpoint> CopyAsync(MigrationCommandOptions options, IReadOnlyList<LocalBackupInventory> local,

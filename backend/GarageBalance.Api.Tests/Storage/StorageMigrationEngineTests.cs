@@ -27,6 +27,13 @@ public sealed class StorageMigrationEngineTests
     [InlineData("showcase_before_20260814-072632.pgdump", true)]
     [InlineData("working_data_analysis_20260904-151333.pgdump", true)]
     [InlineData("working_data_before_20260909-071729.pgdump", true)]
+    [InlineData("garagebalance_20261021-075011_before_garage_history_cleanup.pgdump", true)]
+    [InlineData("garagebalance_20261021-115811_before_meter_history_cleanup.pgdump", true)]
+    [InlineData("garagebalance_20261021-183657_before_fund_balance_cleanup.pgdump", true)]
+    [InlineData("garagebalance_20261021-075011_before_archived_garage_cleanup.pgdump", true)]
+    [InlineData("garagebalance_20261021-194322_before_integrity_audit.pgdump", true)]
+    [InlineData("garagebalance_20261021-194322_before_unreviewed_cleanup.pgdump", false)]
+    [InlineData("garagebalance_20261021-194322_before_integrity_audit.pgdump.extra", false)]
     [InlineData("other_project_20260923.pgdump", false)]
     [InlineData("garagebalance_20260923-181024_untrusted.pgdump", false)]
     public void RecognizesOnlyKnownArchiveNameFormats(string name, bool expected) =>
@@ -41,6 +48,29 @@ public sealed class StorageMigrationEngineTests
         var blocked = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<MigrationPlanItem>>(plan.Details));
         Assert.Equal("blocked", blocked.Action);
         Assert.Equal("invalid_name_or_link", blocked.Reason);
+    }
+
+    [Fact]
+    public async Task RecognizedOperationalArchiveStillRequiresSuccessfulNativeValidation()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var archive = Path.Combine(fixture.Root, "garagebalance_20261021-194322_before_integrity_audit.pgdump");
+        File.WriteAllBytes(archive, [1, 2, 3, 4]);
+        fixture.Commands.ExitCode = 1;
+        var failed = await fixture.Engine.ExecuteAsync(fixture.Command("plan"), default);
+        var invalid = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<MigrationPlanItem>>(failed.Details));
+        Assert.Equal("blocked", invalid.Action);
+        Assert.Equal("invalid_archive", invalid.Reason);
+        fixture.Commands.ExitCode = 0;
+        var passed = await fixture.Engine.ExecuteAsync(fixture.Command("plan"), default);
+        var valid = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<MigrationPlanItem>>(passed.Details));
+        Assert.Equal("register", valid.Action);
+        Assert.Equal("legacy_manifest_backfill", valid.Reason);
+        await fixture.Engine.ExecuteAsync(fixture.Command("copy", true), default);
+        var sidecar = JsonSerializer.Deserialize<DatabaseBackupManifest>(await File.ReadAllTextAsync(archive + ".manifest.json"), MigrationCheckpointStore.JsonOptions);
+        Assert.Equal("manual", sidecar!.Kind);
+        Assert.Equal(64, sidecar.Sha256.Length);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, await File.ReadAllBytesAsync(archive));
     }
 
     [Fact]
@@ -80,6 +110,72 @@ public sealed class StorageMigrationEngineTests
         Assert.Equal(2, await fixture.Db.Context.StorageObjects.CountAsync());
         Assert.True(File.Exists(second + ".manifest.json"));
         Assert.All(fixture.ClaimKinds, kinds => Assert.DoesNotContain(StorageTransferJobKind.Delete, kinds));
+    }
+
+    [Fact]
+    public async Task CheckpointCheckDistinguishesRetainedMissingSourcesFromTombstonesWithoutWriting()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var retained = await fixture.AddFileAsync(1);
+        var deleted = await fixture.AddFileAsync(2);
+        await fixture.Engine.ExecuteAsync(fixture.Command("copy", true), default);
+        await fixture.Catalog.TombstoneAndScheduleDeleteAsync("garagebalance", StorageDataClass.DatabaseBackup,
+            Path.GetFileName(deleted), 12, DateTimeOffset.UtcNow, default);
+        File.Delete(retained);
+        File.Delete(deleted);
+        var originalCheckpoint = await File.ReadAllBytesAsync(fixture.Checkpoint);
+        var objectsBefore = await fixture.Db.Context.StorageObjects.AsNoTracking().Select(item => new { item.Id, item.State, item.UpdatedAtUtc }).ToArrayAsync();
+        var jobsBefore = await fixture.Db.Context.StorageTransferJobs.CountAsync();
+        var report = await fixture.Engine.ExecuteAsync(fixture.Command("checkpoint-check"), default);
+        var detail = Assert.IsType<CheckpointCompatibility>(report.Details);
+        Assert.True(detail.ReadOnly && detail.ConfigurationMatches);
+        Assert.Equal(2, detail.Sources);
+        Assert.Equal(1, detail.TombstonedSources);
+        Assert.Equal(1, detail.MissingActiveLocalSources);
+        Assert.Equal(0, detail.ChangedOrInvalidLocalSources);
+        Assert.Equal(new[] { "checkpoint_missing_active_local_sources" }, report.Blockers);
+        Assert.Equal(10, report.ExitCode);
+        Assert.Equal(originalCheckpoint, await File.ReadAllBytesAsync(fixture.Checkpoint));
+        Assert.Equal(objectsBefore, await fixture.Db.Context.StorageObjects.AsNoTracking().Select(item => new { item.Id, item.State, item.UpdatedAtUtc }).ToArrayAsync());
+        Assert.Equal(jobsBefore, await fixture.Db.Context.StorageTransferJobs.CountAsync());
+    }
+
+    [Fact]
+    public async Task CheckpointCheckReportsConfigurationAndSourceDriftButNeverRepairsThem()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var path = await fixture.AddFileAsync(1);
+        await fixture.Engine.ExecuteAsync(fixture.Command("copy", true), default);
+        await using (var store = new MigrationCheckpointStore(fixture.Checkpoint))
+        {
+            var checkpoint = await store.ReadAsync(default);
+            await store.SaveAsync(checkpoint with { ConfigurationFingerprint = new string('0', 64) }, default);
+        }
+        await File.AppendAllTextAsync(path, "changed");
+        var before = await File.ReadAllBytesAsync(fixture.Checkpoint);
+        var report = await fixture.Engine.ExecuteAsync(fixture.Command("checkpoint-check"), default);
+        var detail = Assert.IsType<CheckpointCompatibility>(report.Details);
+        Assert.False(detail.ConfigurationMatches);
+        Assert.Equal(1, detail.ChangedOrInvalidLocalSources);
+        Assert.Contains("checkpoint_configuration_changed", report.Blockers);
+        Assert.Contains("checkpoint_source_changed_or_invalid", report.Blockers);
+        Assert.Equal(before, await File.ReadAllBytesAsync(fixture.Checkpoint));
+        Assert.EndsWith("changed", await File.ReadAllTextAsync(path), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CompatibleCheckpointPassesAndExecuteOrMissingCheckpointAreRejected()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.AddFileAsync(1);
+        await fixture.Engine.ExecuteAsync(fixture.Command("copy", true), default);
+        var report = await fixture.Engine.ExecuteAsync(fixture.Command("checkpoint-check"), default);
+        Assert.Equal(0, report.ExitCode);
+        Assert.Equal(1, Assert.IsType<CheckpointCompatibility>(report.Details).MatchingLocalSources);
+        Assert.Throws<MigrationToolException>(() => MigrationCommandOptions.Parse(["checkpoint-check"]));
+        Assert.Throws<MigrationToolException>(() => MigrationCommandOptions.Parse(["checkpoint-check", "--checkpoint", fixture.Checkpoint, "--execute"]));
+        await Assert.ThrowsAsync<MigrationToolException>(() => fixture.Engine.ExecuteAsync(fixture.Command("checkpoint-check", true), default));
+        await Assert.ThrowsAsync<MigrationToolException>(() => fixture.Engine.ExecuteAsync(fixture.Command("checkpoint-check") with { Checkpoint = null }, default));
     }
 
     [Fact]

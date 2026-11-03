@@ -74,6 +74,7 @@ public sealed partial class FinanceService
             RemovedOn = item.Id == old.Id ? request.ReplacementDate.AddDays(-1) : item.RemovedOn,
             InitialValue = item.Id == device.Id ? initial : item.InitialValue,
             FinalValue = item.Id == old.Id ? final : item.FinalValue,
+            IsAccountingBaseline = item.IsAccountingBaseline,
             ReplacedDeviceId = item.ReplacedDeviceId,
             ReplacementAccountingMonth = item.ReplacementAccountingMonth
         }).ToDictionary(item => item.Id);

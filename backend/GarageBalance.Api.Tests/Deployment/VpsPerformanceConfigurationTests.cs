@@ -8,6 +8,19 @@ public sealed class VpsPerformanceConfigurationTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     [Fact]
+    public void ClientMaintenanceBlocksApiBeforeProxyWithoutBlockingHealthOrStaticFiles()
+    {
+        var nginx = ReadDeploymentFile("garagebalance-staging.nginx.conf");
+        var marker = "if (-f /run/garagebalance-client-maintenance) { return 503; }";
+        var api = nginx.IndexOf("location /api/ {", StringComparison.Ordinal);
+        var guard = nginx.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(api >= 0 && guard > api);
+        Assert.True(guard < nginx.IndexOf("proxy_pass", api, StringComparison.Ordinal));
+        Assert.Equal(guard, nginx.LastIndexOf(marker, StringComparison.Ordinal));
+        Assert.DoesNotContain(marker, nginx[..api], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NginxConfiguration_BoundsConnectionsAndUsesPersistentUpstream()
     {
         var nginx = ReadDeploymentFile("garagebalance-staging.nginx.conf");
