@@ -18,6 +18,55 @@ public sealed class SelectiveFinancialCleanupTests
     private static readonly AccountingCleanupExecutionIdentity Identity = new(true, true, "synthetic-operator");
 
     [PostgreSqlFact]
+    public async Task PostgreSql_MaskedLateClientBlocksCommitAndRollbackProofForUnprivilegedRole()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var seed = await PreservedMeterBaselineTests.SeedAsync(db);
+        await SeedFinancialHistoryAsync(db, seed);
+        db.ChangeTracker.Clear();
+        await db.Database.OpenConnectionAsync();
+        var role = "gb_cleanup_stats_" + Guid.NewGuid().ToString("N");
+        var quoted = new Npgsql.NpgsqlCommandBuilder().QuoteIdentifier(role);
+        async Task Command(string sql)
+        {
+            await using var command = new Npgsql.NpgsqlCommand(sql, (Npgsql.NpgsqlConnection)db.Database.GetDbConnection());
+            await command.ExecuteNonQueryAsync();
+        }
+        await Command("CREATE ROLE " + quoted + " NOLOGIN");
+        await using var concurrent = new Npgsql.NpgsqlConnection(new Npgsql.NpgsqlConnectionStringBuilder(database.ConnectionString) { Pooling = false }.ConnectionString);
+        try
+        {
+            await Command("GRANT USAGE ON SCHEMA public TO " + quoted);
+            await Command("GRANT ALL ON ALL TABLES IN SCHEMA public TO " + quoted);
+            await Command("GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO " + quoted);
+            await Command("SET ROLE " + quoted);
+            Assert.False(await db.Database.SqlQueryRaw<bool>("SELECT pg_has_role(current_user,'pg_read_all_stats','USAGE') AS \"Value\"").SingleAsync());
+            var writer = new ConnectOnAudit(db, concurrent);
+            var engine = new SelectiveFinancialCleanupEngine(db, new AcceptBackup(), TimeProvider.System, writer);
+            var plan = await engine.PreviewAsync(default, 2026);
+            var error = await Assert.ThrowsAsync<AccountingCleanupException>(() =>
+                engine.ExecuteAsync(plan, plan.Fingerprint, Receipt(plan), Identity, "Synthetic masked late-client check", default));
+            Assert.Equal("cleanup_other_clients_connected", error.Code);
+            Assert.True(writer.Connected);
+            Assert.Equal(1, await db.Database.SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM pg_stat_activity WHERE pid={concurrent.ProcessID} AND backend_type IS NULL").SingleAsync());
+            Assert.Equal("cleanup_other_clients_connected", (await Assert.ThrowsAsync<AccountingCleanupException>(() => engine.VerifyRolledBackAsync(plan, default))).Code);
+            await concurrent.CloseAsync();
+            await engine.VerifyRolledBackAsync(plan, default);
+            Assert.Equal(6, await db.MeterReadings.CountAsync());
+            Assert.False(await db.ApplicationSettings.AnyAsync(s => s.Key == "finance.annual_accrual_hold.2026"));
+            Assert.False(await db.AuditEvents.AnyAsync(e => e.Action == "finance.selective_history_cleared"));
+        }
+        finally
+        {
+            await concurrent.CloseAsync();
+            await Command("RESET ROLE");
+            await Command("DROP OWNED BY " + quoted);
+            await Command("DROP ROLE " + quoted);
+        }
+    }
+
+    [PostgreSqlFact]
     public async Task PostgreSql_NewClientAfterDeletionIsDetectedBeforeCommitAndEverythingRollsBack()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
