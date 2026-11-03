@@ -133,9 +133,12 @@ done
 for mode in health storage; do
   unit="$prefix-$mode.timer"
   units+=("$unit")
+  delay=3600
+  [[ "$mode" == storage ]] && delay=1
   cat > "/run/systemd/system/$unit" <<EOF
 [Timer]
-OnActiveSec=3600
+OnActiveSec=$delay
+AccuracySec=1ms
 Unit=$prefix-$mode.service
 EOF
 done
@@ -231,8 +234,8 @@ PY
   systemctl start "$prefix-api.service"
   run_fixture health
   systemctl start "$prefix-health.timer" "$prefix-storage.timer"
-  systemctl start --no-block "$prefix-storage.service"
   wait_file "$state/sync-inspecting"
+  [[ $(systemctl show "$prefix-storage.timer" --property=SubState --value) == running ]] || { echo 'integrationStorageTimerNotRunning' >&2; exit 1; }
   if [[ "$scenario" == preparing ]]; then
     run_fixture stage preparing
     probe_deploy
