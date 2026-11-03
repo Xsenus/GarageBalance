@@ -389,6 +389,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 InstalledOn = device.InstalledOn,
                 RemovedOn = device.RemovedOn,
                 InitialValue = device.InitialValue,
+                IsAccountingBaseline = device.IsAccountingBaseline,
                 ReplacedDeviceId = device.ReplacedDeviceId
             }).ToListAsync(cancellationToken);
         var firstReadings = await dbContext.MeterReadings.AsNoTracking()
@@ -575,7 +576,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                         SELECT jsonb_agg(jsonb_build_object(
                             'id', device."Id", 'garageId', device."GarageId", 'meterKind', device."MeterKind",
                             'serialNumber', device."SerialNumber", 'installedOn', device."InstalledOn", 'removedOn', device."RemovedOn",
-                            'initialValue', device."InitialValue", 'replacedDeviceId', device."ReplacedDeviceId"
+                            'initialValue', device."InitialValue", 'replacedDeviceId', device."ReplacedDeviceId",
+                            'isAccountingBaseline', device."IsAccountingBaseline"
                         ) ORDER BY device."InstalledOn", device."Id")
                         FROM meter_devices AS device
                         WHERE device."GarageId" = paged_garage."GarageId" AND device."MeterKind" = {{meterKind}} AND device."IsCanceled" = FALSE

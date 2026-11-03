@@ -4,7 +4,7 @@ After=garagebalance-staging.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/garagebalance-healthcheck
+ExecStart=/usr/local/bin/garagebalance-maintenance-barrier health
 User=root
 Group=root
 NoNewPrivileges=true

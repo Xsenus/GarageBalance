@@ -28,6 +28,9 @@ public sealed class PostgreSqlGarageInitialMeterReadingMigrationTests
         setting.Tariff!.CalculationBase = TariffCalculationBases.MeterWater;
         setting.Tariff.Rate = 50m;
         setting.Tariff.EffectiveFrom = month.AddMonths(-1);
+        // This registration-month test uses one flat fixture rate. Seeded historical
+        // tariff versions must not override it when the computer moves into a new month.
+        await context.ChargeServiceTariffVersions.Where(version => version.ChargeServiceSettingId == setting.Id).ExecuteDeleteAsync();
         await context.SaveChangesAsync();
         var garage = await DictionaryServiceTestFactory.Create(context, month.AddDays(20))
             .CreateGarageAsync(new UpsertGarageRequest("BUSINESS-BASELINE", 1, 1, null, 0, 10, null, null), null, CancellationToken.None);

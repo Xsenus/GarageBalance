@@ -65,7 +65,7 @@ public sealed class StagingCloudBackupDeploymentTests
         Assert.Contains("chmod 640 -- \"$file\"", script, StringComparison.Ordinal);
         Assert.Contains("diagnose)", script, StringComparison.Ordinal);
         Assert.Contains("journalctl -u \"garagebalance-storage-tool@$2.service\" -n 2000", script, StringComparison.Ordinal);
-        Assert.Contains("ExecStart=/usr/local/bin/garagebalance-storage-tool-run %i", script, StringComparison.Ordinal);
+        Assert.Contains("ExecStart=/usr/local/bin/garagebalance-maintenance-barrier storage %i", script, StringComparison.Ordinal);
         Assert.Contains("OnCalendar=hourly", script, StringComparison.Ordinal);
         Assert.Contains("Unit=garagebalance-storage-tool@delta-sync.service", script, StringComparison.Ordinal);
         Assert.Contains("systemctl enable --now garagebalance-storage-sync.timer", script, StringComparison.Ordinal);

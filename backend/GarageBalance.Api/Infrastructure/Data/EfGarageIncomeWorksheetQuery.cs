@@ -66,6 +66,41 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IsMeterReplacement = false,
                 HasAccountingRestart = false
             });
+        var annualHoldsQuery = dbContext.ApplicationSettings.AsNoTracking()
+            .Where(setting => setting.BooleanValue && setting.Key.StartsWith(AnnualAccrualHoldPolicy.KeyPrefix))
+            .Select(setting => new
+            {
+                Category = 10,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                IncomeTypeId = (Guid?)null,
+                IncomeTypeName = (string?)null,
+                IncomeTypeCode = (string?)setting.Key,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
+                FeeCampaignId = (Guid?)null,
+                AccrualId = (Guid?)null,
+                AccountingYear = (int?)null,
+                Amount = 0m,
+                PaymentAccountingMonth = (DateOnly?)null,
+                PaymentIncomeTypeId = (Guid?)null,
+                MeterReadingId = (Guid?)null,
+                MeterReadingVersion = (Guid?)null,
+                MeterKind = (string?)null,
+                ReadingDate = (DateOnly?)null,
+                CurrentValue = (decimal?)null,
+                Consumption = (decimal?)null,
+                Comment = (string?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
+                UpdatedAtUtc = (DateTimeOffset?)null,
+                CreditAccrualId = (Guid?)null,
+                IsMeterReplacement = false,
+                HasAccountingRestart = false
+            });
         var previousAccrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < monthFrom)
             .GroupBy(_ => 1)
@@ -545,6 +580,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Concat(annualAccrualQuery)
             .Concat(allocationQuery)
             .Concat(advanceQuery)
+            .Concat(annualHoldsQuery)
             .ToListAsync(cancellationToken);
         var accrualRows = rows.Where(row => row.Category == AccrualBucketCategory).ToList();
         var accrualBuckets = accrualRows
@@ -666,6 +702,10 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     group.Key.FeeCampaignId,
                     group.Key.IrregularPaymentId))
                 .Where(row => row.Reason.Length > 0)
-                .ToList());
+                .ToList(),
+            rows.Where(row => row.Category == 10)
+                .Select(row => int.TryParse(row.IncomeTypeCode![AnnualAccrualHoldPolicy.KeyPrefix.Length..], out var year) ? year : 0)
+                .Where(year => year >= monthFrom.Year && year <= monthTo.Year)
+                .Order().ToArray());
     }
 }

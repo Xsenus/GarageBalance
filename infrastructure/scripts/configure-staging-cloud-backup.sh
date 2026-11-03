@@ -202,7 +202,7 @@ case "${1:-}" in
       "WorkingDirectory=$APP_ROOT/storage-tool" \
       "EnvironmentFile=$ENV_FILE" \
       "EnvironmentFile=$CLOUD_ENV" \
-      'ExecStart=/usr/local/bin/garagebalance-storage-tool-run %i' \
+      'ExecStart=/usr/local/bin/garagebalance-maintenance-barrier storage %i' \
       'TimeoutStartSec=4h' \
       'UMask=0077' \
       'NoNewPrivileges=true' \
@@ -293,7 +293,7 @@ case "${1:-}" in
   run)
     [[ "$#" == 2 ]] || exit 64
     case "$2" in
-      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status|backup-layout|backup-layout-prune) ;;
+      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status|checkpoint-check|backup-layout|backup-layout-prune) ;;
       *) echo 'unsupported migration command' >&2; exit 64 ;;
     esac
     [[ -f "$CLOUD_ENV" && -f "$TOOL_UNIT" ]] || exit 1
@@ -307,7 +307,7 @@ case "${1:-}" in
   diagnose)
     [[ "$#" == 2 ]] || exit 64
     case "$2" in
-      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status|backup-layout|backup-layout-prune) ;;
+      inventory|plan|copy|resume|delta-sync|verify|cutover-check|status|checkpoint-check|backup-layout|backup-layout-prune) ;;
       *) exit 64 ;;
     esac
     journalctl -u "garagebalance-storage-tool@$2.service" -n 2000 -o cat --no-pager | cut -c 1-4000

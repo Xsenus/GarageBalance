@@ -518,6 +518,7 @@ export type AccrualCalculationDetailsDto = {
 }
 
 export type GarageIncomeWorksheetDto = {
+  heldAnnualYears?: number[]
   garageId: string
   garageNumber: string
   ownerName: string | null
@@ -667,6 +668,7 @@ export type GarageAnnualPaymentItemDto = {
 }
 
 export type GarageAnnualPaymentPreviewDto = {
+  generationHeld?: boolean
   accountingYear: number
   items: Array<{
     incomeTypeId: string
@@ -680,6 +682,7 @@ export type GarageAnnualPaymentPreviewDto = {
 }
 
 export type GarageAnnualPaymentsDto = {
+  generationHeld?: boolean
   garageId: string
   garageNumber: string
   ownerName: string | null

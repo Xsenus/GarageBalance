@@ -46,7 +46,8 @@ public sealed class PostgreSqlPeopleCountHistoryTests
         var periods = await context.GaragePeopleCountPeriods.OrderBy(period => period.PeopleCount).ToArrayAsync();
         Assert.Equal([0, 2], periods.Select(period => period.PeopleCount));
         Assert.All(periods, period => Assert.Equal(DateOnly.MinValue, period.EffectiveFrom));
-        var preserved = await context.Accruals.SingleAsync(item => item.Id == accrual.Id);
+        var preserved = await context.Accruals.Where(item => item.Id == accrual.Id)
+            .Select(item => new { item.Amount, item.CalculationDetailsJson }).SingleAsync();
         Assert.Equal(250m, preserved.Amount);
         Assert.Equal(snapshotBeforeMigration, preserved.CalculationDetailsJson);
         Assert.Equal(auditIdsBeforeMigration, await context.AuditEvents.OrderBy(item => item.Id).Select(item => item.Id).ToArrayAsync());

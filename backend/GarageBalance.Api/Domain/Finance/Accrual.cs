@@ -18,6 +18,8 @@ public sealed class Accrual
     public Tariff? Tariff { get; set; }
     public DateOnly AccountingMonth { get; set; }
     public int? AccountingYear { get; set; }
+    // Null denotes historical data whose annual classification is not established.
+    public bool? IsAnnualAccrual { get; set; }
     public DateOnly DueDate { get; set; }
     public DateOnly OverdueFromDate { get; set; }
     public bool DueDateNeedsReview { get; set; }

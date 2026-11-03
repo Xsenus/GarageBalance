@@ -69,7 +69,7 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
         IReadOnlyList<AuditChangeDiff> changes)
     {
         var metadata = new Dictionary<string, string?>(StringComparer.Ordinal);
-        AddMetadata(metadata, request.Metadata);
+        AddMetadata(metadata, request.Metadata, request.Action);
         AddMetadata(metadata, "reason", request.Reason);
         AddMetadata(metadata, "entityDisplayName", request.EntityDisplayName);
         AddMetadata(metadata, "relatedGarageId", request.RelatedGarageId);
@@ -104,7 +104,7 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
             : string.Join("; ", changes.Select(change => $"{change.FieldName}: {FormatDisplayValue(valueSelector(change))}"));
     }
 
-    private static void AddMetadata(Dictionary<string, string?> metadata, IReadOnlyDictionary<string, object?>? source)
+    private static void AddMetadata(Dictionary<string, string?> metadata, IReadOnlyDictionary<string, object?>? source, string action)
     {
         if (source is null)
         {
@@ -113,6 +113,14 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
 
         foreach (var (key, value) in source)
         {
+            // These two values are exact, server-produced SHA-256 digests in the
+            // cleanup audit. Do not mistake digit runs in them for personal data.
+            if (action == "finance.selective_history_cleared" && (key is "planHash" or "backupSha256") &&
+                value is string digest && digest.Length == 64 && digest.All(Uri.IsHexDigit))
+            {
+                metadata[key] = digest;
+                continue;
+            }
             AddMetadata(metadata, key, value);
         }
     }

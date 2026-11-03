@@ -9,6 +9,8 @@ internal static class PostgreSqlLegacyModelCompatibility
     private static readonly ConcurrentDictionary<string, string[]> AddedColumnRemovals = new(StringComparer.Ordinal);
     private static readonly (string Add, string Remove)[] CurrentModelColumnStatements =
     [
+        ("ALTER TABLE IF EXISTS accruals ADD COLUMN IF NOT EXISTS \"IsAnnualAccrual\" boolean NULL", "ALTER TABLE IF EXISTS accruals DROP COLUMN IF EXISTS \"IsAnnualAccrual\""),
+        ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"IsAccountingBaseline\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"IsAccountingBaseline\""),
         ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"CanceledAtUtc\" timestamp with time zone NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"CanceledAtUtc\""),
         ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"CancellationReason\" character varying(500) NULL", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"CancellationReason\""),
         ("ALTER TABLE IF EXISTS meter_devices ADD COLUMN IF NOT EXISTS \"HasReplacementSnapshot\" boolean NOT NULL DEFAULT FALSE", "ALTER TABLE IF EXISTS meter_devices DROP COLUMN IF EXISTS \"HasReplacementSnapshot\""),
@@ -78,10 +80,10 @@ internal static class PostgreSqlLegacyModelCompatibility
             """);
 
     public static Task AddGarageInitialMeterMonthAsync(GarageBalanceDbContext context) =>
-        context.Database.ExecuteSqlRawAsync("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"InitialMeterReadingMonth\" date NULL, ADD COLUMN IF NOT EXISTS \"RegisteredOn\" date NULL, ADD COLUMN IF NOT EXISTS \"AccountingStartMonth\" date NULL");
+        context.Database.ExecuteSqlRawAsync("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"InitialMeterReadingMonth\" date NULL, ADD COLUMN IF NOT EXISTS \"RegisteredOn\" date NULL, ADD COLUMN IF NOT EXISTS \"AccountingStartMonth\" date NULL; ALTER TABLE IF EXISTS accruals ADD COLUMN IF NOT EXISTS \"IsAnnualAccrual\" boolean NULL");
 
     public static Task RemoveGarageInitialMeterMonthAsync(GarageBalanceDbContext context) =>
-        context.Database.ExecuteSqlRawAsync("ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"InitialMeterReadingMonth\", DROP COLUMN IF EXISTS \"RegisteredOn\", DROP COLUMN IF EXISTS \"AccountingStartMonth\"");
+        context.Database.ExecuteSqlRawAsync("ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"InitialMeterReadingMonth\", DROP COLUMN IF EXISTS \"RegisteredOn\", DROP COLUMN IF EXISTS \"AccountingStartMonth\"; ALTER TABLE IF EXISTS accruals DROP COLUMN IF EXISTS \"IsAnnualAccrual\"");
 
     public static Task RemoveFinancialOperationVersionAsync(GarageBalanceDbContext context) =>
         context.Database.ExecuteSqlRawAsync(

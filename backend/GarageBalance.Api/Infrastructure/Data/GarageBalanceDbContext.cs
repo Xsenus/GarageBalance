@@ -925,6 +925,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(device => device.SerialNumber).HasMaxLength(100).IsRequired();
             entity.Property(device => device.InitialValue).HasPrecision(18, 3);
             entity.Property(device => device.FinalValue).HasPrecision(18, 3);
+            entity.Property(device => device.IsAccountingBaseline).HasDefaultValue(false);
+            entity.HasIndex(device => new { device.GarageId, device.MeterKind }, "IX_meter_devices_accounting_baseline")
+                .IsUnique().HasFilter("\"IsAccountingBaseline\" = true AND \"IsCanceled\" = false");
             entity.Property(device => device.PreviousReadingSnapshotJson).HasColumnType("jsonb");
             entity.Property(device => device.ReplacementReason).HasMaxLength(500);
             entity.Property(device => device.CancellationReason).HasMaxLength(500);

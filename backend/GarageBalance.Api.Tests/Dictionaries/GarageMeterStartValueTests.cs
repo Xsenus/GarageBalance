@@ -549,7 +549,7 @@ public sealed class GarageMeterStartValueTests
 
     private static async Task<(Garage Garage, IncomeType Income)> SeedReplacedElectricityMeterAsync(GarageBalanceDbContext context)
     {
-        var garage = new Garage { Number = "2", InitialElectricityMeterValue = 0m, InitialMeterReadingMonth = new DateOnly(2026, 9, 1) };
+        var garage = new Garage { Number = "2", RegisteredOn = October, InitialElectricityMeterValue = 0m, InitialMeterReadingMonth = new DateOnly(2026, 9, 1) };
         var income = new IncomeType { Name = "Счётчик со стартовым значением", Code = "electricity_start" };
         var tariff = new Tariff { Name = "Тариф со стартовым значением", CalculationBase = TariffCalculationBases.MeterElectricity, Rate = 10m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         context.AddRange(garage, income, tariff);

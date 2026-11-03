@@ -24,7 +24,8 @@ public sealed record GarageIncomeWorksheetData(
     IReadOnlyList<GarageIncomeWorksheetAllocationData> Allocations,
     IReadOnlyList<GarageIncomeWorksheetAdvanceData> Advances,
     IReadOnlyList<GarageIncomeWorksheetCalculationData> Calculations = null!,
-    IReadOnlyList<GarageIncomeWorksheetReasonData> Reasons = null!);
+    IReadOnlyList<GarageIncomeWorksheetReasonData> Reasons = null!,
+    IReadOnlyList<int>? HeldAnnualYears = null);
 
 public sealed record GarageIncomeWorksheetBucketData(
     DateOnly AccountingMonth,

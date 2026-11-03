@@ -77,15 +77,18 @@ BEGIN
         "Version" = gen_random_uuid(), "UpdatedAtUtc" = now() WHERE NOT "IsArchived";
 
     -- These are logical accounting boundaries, not claims of a physical replacement.
+    -- An explicitly requested accounting restart supersedes a previously pinned opening.
+    UPDATE meter_devices SET "IsAccountingBaseline" = false,
+        "Version" = gen_random_uuid(), "UpdatedAtUtc" = now() WHERE "IsAccountingBaseline";
     UPDATE meter_devices SET "RemovedOn" = start_month - 1,
         "FinalValue" = COALESCE((SELECT r."CurrentValue" FROM meter_readings r
             WHERE r."MeterDeviceId" = meter_devices."Id" AND r."AccountingMonth" < start_month
             ORDER BY r."ReadingDate" DESC LIMIT 1), "InitialValue"),
         "Version" = gen_random_uuid(), "UpdatedAtUtc" = now() WHERE "RemovedOn" IS NULL;
     INSERT INTO meter_devices ("Id", "GarageId", "MeterKind", "SerialNumber", "InstalledOn", "InitialValue",
-        "Version", "CreatedAtUtc", "UpdatedAtUtc")
+        "Version", "CreatedAtUtc", "UpdatedAtUtc", "IsAccountingBaseline")
     SELECT gen_random_uuid(), g."Id", k.kind, 'Начало учёта ' || to_char(start_month, 'DD.MM.YYYY'),
-        start_month, 0, gen_random_uuid(), now(), now()
+        start_month, 0, gen_random_uuid(), now(), now(), true
     FROM garages g CROSS JOIN (
         SELECT 'electricity' AS kind UNION SELECT 'water'
         UNION SELECT "MeterKind" FROM charge_service_settings WHERE NOT "IsArchived" AND "IsMetered"

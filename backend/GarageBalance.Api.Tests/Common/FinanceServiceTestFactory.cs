@@ -54,7 +54,8 @@ internal static class FinanceServiceTestFactory
             timeProvider ?? TimeProvider.System,
             businessDate.HasValue ? new TestBusinessDateProvider(businessDate.Value) : TestBusinessDateProvider.From(timeProvider),
             new EfGarageTariffAssignmentQuery(dbContext),
-            payoutMutationPolicy);
+            payoutMutationPolicy,
+            new AnnualAccrualHoldPolicy(new EfApplicationSettingRepository(dbContext)));
 
     private sealed class EnabledHistoricalMeterReadingCorrectionPolicy : IHistoricalMeterReadingCorrectionPolicy
     {

@@ -1265,6 +1265,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<Guid?>("IrregularPaymentId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool?>("IsAnnualAccrual")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsCanceled")
                         .HasColumnType("boolean");
 
@@ -1876,6 +1879,11 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<DateOnly>("InstalledOn")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IsAccountingBaseline")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsCanceled")
                         .HasColumnType("boolean");
 
@@ -1928,6 +1936,10 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.HasIndex("GarageId", "MeterKind", "SerialNumber")
                         .IsUnique()
                         .HasFilter("\"IsCanceled\" = false");
+
+                    b.HasIndex(new[] { "GarageId", "MeterKind" }, "IX_meter_devices_accounting_baseline")
+                        .IsUnique()
+                        .HasFilter("\"IsAccountingBaseline\" = true AND \"IsCanceled\" = false");
 
                     b.ToTable("meter_devices", (string)null);
                 });

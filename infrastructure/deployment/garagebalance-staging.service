@@ -8,7 +8,7 @@ StartLimitBurst=5
 [Service]
 Type=simple
 WorkingDirectory=/opt/garagebalance-staging/api
-ExecStart=/opt/garagebalance-staging/api/GarageBalance.Api
+ExecStart=/usr/local/bin/garagebalance-maintenance-barrier app
 Restart=on-failure
 RestartSec=5s
 KillSignal=SIGINT

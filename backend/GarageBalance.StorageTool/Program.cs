@@ -30,8 +30,10 @@ namespace GarageBalance.StorageTool
             {
                 Console.WriteLine("""
 GarageBalance.StorageTool commands:
-  inventory | plan | diff | status | report | cutover-check | rollback-check
+  inventory | plan | diff | status | report | checkpoint-check | cutover-check | rollback-check
   copy | verify | delta-sync | resume | repair [--execute]
+  local-recovery-stage [--execute --checkpoint <new-private-json-path>]
+    Downloads missing active local archives into a separate private directory; no catalog or working-root writes.
   resume-reconciliation --execute --reason <operator-explanation>
   recovery-canary | recovery-publish | recovery-fetch | restore-drill [--execute]
   backup-layout | backup-layout-prune [--execute --checkpoint <private-json-path>]
@@ -43,6 +45,18 @@ GarageBalance.StorageTool commands:
   archived-garages-purge [--execute ...same as archived-garages-cleanup]
   meter-history-plan --output <private-json-path>
   meter-history-cleanup [--execute ...same as archived-garages-cleanup]
+  selective-financial-plan --output <private-json-path>
+  selective-financial-stage --execute --output <private-json-path> --annual-hold-year 2026
+    --expected-database garagebalance_staging --service garagebalance-staging.service --reason <explanation>
+    Captures the plan after drain and leaves the application offline; does not delete any rows.
+  selective-financial-cleanup [--execute ...same as archived-garages-cleanup]
+  selective-financial-recover --execute --plan <private-json-path> --confirm <fingerprint>
+    --expected-database garagebalance_staging --service garagebalance-staging.service
+  selective-financial-abort-preparation --execute --operation-id <recorded-guid>
+    --expected-database garagebalance_staging --service garagebalance-staging.service
+    Only durable preparing state is eligible; there is no financial SQL callback.
+    Preserves starts/master data/device history. Application MUST REMAIN OFFLINE after execution
+    until the operator separately approves the accrual restart period. No automatic restart.
   archived-fund-balance-plan --output <private-json-path>
   archived-fund-balance-repair [--execute ...same as archived-garages-cleanup]
 Options: --checkpoint <private-json-path> --page-size N --max-jobs N --output <private-json-path>
@@ -126,7 +140,7 @@ See docs/storage-migration-cli.md for migration gates and docs/disaster-recovery
             catch (Exception)
             {
                 // Provider/DB/process exception text may contain credentials or private locators.
-                Console.Error.WriteLine("Storage operation failed. Check protected operator logs and retry the saved checkpoint; no source cleanup was performed.");
+                Console.Error.WriteLine("Storage operation outcome is unavailable. Inspect protected operator state before retrying; do not assume rollback.");
                 return 6;
             }
         }

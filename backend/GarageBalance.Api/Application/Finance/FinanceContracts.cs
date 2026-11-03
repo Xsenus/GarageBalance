@@ -103,7 +103,8 @@ public sealed record GarageAnnualPaymentPreviewItemDto(
 
 public sealed record GarageAnnualPaymentPreviewDto(
     int AccountingYear,
-    IReadOnlyList<GarageAnnualPaymentPreviewItemDto> Items);
+    IReadOnlyList<GarageAnnualPaymentPreviewItemDto> Items,
+    bool GenerationHeld = false);
 
 public sealed record GarageAnnualPaymentsDto(
     Guid GarageId,
@@ -113,7 +114,8 @@ public sealed record GarageAnnualPaymentsDto(
     decimal AccruedTotal,
     decimal PaidTotal,
     decimal OutstandingTotal,
-    IReadOnlyList<GarageAnnualPaymentItemDto> Items);
+    IReadOnlyList<GarageAnnualPaymentItemDto> Items,
+    bool GenerationHeld = false);
 
 public sealed record CreateFullGaragePaymentLineRequest(
     Guid? IncomeTypeId,
@@ -756,7 +758,8 @@ public sealed record GarageIncomeWorksheetDto(
     decimal DebtTotal,
     decimal ClosingBalance,
     decimal ClosingDebt,
-    IReadOnlyList<GarageIncomeWorksheetRowDto> Rows);
+    IReadOnlyList<GarageIncomeWorksheetRowDto> Rows,
+    IReadOnlyList<int>? HeldAnnualYears = null);
 
 public sealed record CreateGarageDebtPaymentRequest(
     Guid GarageId,

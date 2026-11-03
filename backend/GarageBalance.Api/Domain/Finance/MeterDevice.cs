@@ -13,6 +13,9 @@ public sealed class MeterDevice
     public DateOnly? RemovedOn { get; set; }
     public decimal InitialValue { get; set; }
     public decimal? FinalValue { get; set; }
+    // Explicit accounting opening retained independently of operational reading history.
+    // This does not make the device current or change its physical installation period.
+    public bool IsAccountingBaseline { get; set; }
     public Guid? ReplacedDeviceId { get; set; }
     public DateOnly? ReplacementAccountingMonth { get; set; }
     public Guid? ReplacementReadingId { get; set; }

@@ -102,6 +102,7 @@ jobs:
           tar -czf artifacts/operations.tar.gz \
             infrastructure/deployment \
             infrastructure/scripts/garagebalance-healthcheck.sh \
+            infrastructure/scripts/staging-maintenance-barrier.sh \
             infrastructure/scripts/garagebalance-performance-check.sh \
             infrastructure/scripts/prepare-staging-showcase.sh \
             infrastructure/scripts/reset-staging-working-data.sh \

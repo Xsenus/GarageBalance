@@ -681,6 +681,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
                 var dueDates = AccrualDueDates.ForGarage(AccountingMonth, code, setting, registeredOn);
                 result.Add(new Accrual
                 {
+                    IsAnnualAccrual = AnnualAccrualPolicy.IsAnnual(setting.PeriodicityMonths, code),
                     Id = DeterministicGuid($"accrual-{garage.Number}-{code}"),
                     GarageId = garage.Id,
                     IncomeTypeId = setting.IncomeTypeId!.Value,
@@ -752,6 +753,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var garage = garages[8];
         var accrual = new Accrual
         {
+            IsAnnualAccrual = false,
             Id = DeterministicGuid("overdue-accrual"),
             GarageId = garage.Id,
             IncomeTypeId = water.Id,
@@ -859,6 +861,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
 
         var accruals = participantGarages.Select((garage, index) => new Accrual
         {
+            IsAnnualAccrual = false,
             Id = DeterministicGuid($"campaign-accrual-{garage.Number}"),
             GarageId = garage.Id,
             IncomeTypeId = income.Id,
@@ -874,6 +877,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         }).ToArray();
         var selectedAccruals = selectedGarages.Select(garage => new Accrual
         {
+            IsAnnualAccrual = false,
             Id = DeterministicGuid($"selected-campaign-accrual-{garage.Number}"),
             GarageId = garage.Id,
             IncomeTypeId = income.Id,
@@ -974,6 +978,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var income = await context.IncomeTypes.SingleAsync(item => item.Code == "other_payments", cancellationToken);
         var accrual = new Accrual
         {
+            IsAnnualAccrual = false,
             Id = DeterministicGuid("irregular-accrual"),
             GarageId = garages[2].Id,
             IncomeTypeId = income.Id,

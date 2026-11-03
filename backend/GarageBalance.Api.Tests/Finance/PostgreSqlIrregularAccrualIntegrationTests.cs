@@ -53,6 +53,8 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
         var downgradeError = await Assert.ThrowsAsync<PostgresException>(() =>
             context.Database.MigrateAsync("20260908135423_PreserveGeneratedFinancialComments"));
         Assert.Equal(PostgresErrorCodes.UniqueViolation, downgradeError.SqlState);
+        // EF can have reverted newer migrations before an older downgrade fails.
+        await context.Database.MigrateAsync();
         Assert.Equal(4, await context.Accruals.CountAsync(item => item.GarageId == garage.Id));
 
         var duplicateRegular = CreateAccrual(month.AddMonths(1), AccrualSources.Regular, 300m);

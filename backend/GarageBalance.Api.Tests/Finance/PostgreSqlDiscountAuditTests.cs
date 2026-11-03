@@ -20,6 +20,7 @@ public sealed class PostgreSqlDiscountAuditTests
         {
             Garage = garage,
             IncomeType = penalty,
+            IsAnnualAccrual = false,
             Source = "manual",
             Amount = amount,
             AccountingMonth = new(2026, 7, 1),

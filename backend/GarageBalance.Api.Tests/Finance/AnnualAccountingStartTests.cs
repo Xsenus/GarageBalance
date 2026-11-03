@@ -306,7 +306,7 @@ public sealed class AnnualAccountingStartTests
         if (year > 2026) Assert.Empty(annual.Value!.Items);
     }
 
-    private static async Task<(Garage Garage, ChargeServiceSetting Setting)> SeedAsync(GarageBalanceDbContext context, DateOnly start)
+    internal static async Task<(Garage Garage, ChargeServiceSetting Setting)> SeedAsync(GarageBalanceDbContext context, DateOnly start)
     {
         foreach (var setting in context.ChargeServiceSettings) setting.IsArchived = true;
         var garage = new Garage { Number = "synthetic-annual-start", RegisteredOn = October.AddDays(12), AccountingStartMonth = start, PeopleCount = 1, FloorCount = 1 };

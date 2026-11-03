@@ -22,5 +22,8 @@ case "$1" in
   inventory|plan|cutover-check|status)
     exec "$tool" "$1"
     ;;
+  checkpoint-check)
+    exec "$tool" checkpoint-check --checkpoint "$checkpoint"
+    ;;
   *) echo 'Unsupported storage operation' >&2; exit 64 ;;
 esac
