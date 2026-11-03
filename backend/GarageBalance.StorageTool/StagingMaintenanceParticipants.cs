@@ -56,7 +56,8 @@ public sealed class StagingMaintenanceParticipants(
             !lines.Contains($"FragmentPath=/etc/systemd/system/{timer}", StringComparer.Ordinal))
             throw new InvalidOperationException("maintenance_participant_state_unknown");
         if (lines.Contains("ActiveState=active", StringComparer.Ordinal) &&
-            (lines.Contains("SubState=waiting", StringComparer.Ordinal) || lines.Contains("SubState=elapsed", StringComparer.Ordinal))) return true;
+            (lines.Contains("SubState=waiting", StringComparer.Ordinal) || lines.Contains("SubState=elapsed", StringComparer.Ordinal) ||
+             lines.Contains("SubState=running", StringComparer.Ordinal))) return true;
         if (lines.Contains("ActiveState=inactive", StringComparer.Ordinal) && lines.Contains("SubState=dead", StringComparer.Ordinal)) return false;
         throw new InvalidOperationException("maintenance_participant_state_unknown");
     }

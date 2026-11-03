@@ -9,6 +9,27 @@ public sealed class StagingMaintenanceParticipantsTests
     private const string Resume = "garagebalance-storage-tool@resume.service";
 
     [Theory]
+    [InlineData("waiting")]
+    [InlineData("elapsed")]
+    [InlineData("running")]
+    public async Task ActiveTimersRemainRecordedAcrossCaptureDrainAndRestore(string substate)
+    {
+        var systemd = new FakeSystemd { ActiveTimerSubstate = substate };
+        systemd.Jobs.Add(Delta);
+        var participants = new StagingMaintenanceParticipants(systemd.Run);
+        var recorded = await participants.CaptureAsync(default);
+        Assert.True(recorded.HealthTimerWasActive && recorded.StorageTimerWasActive);
+        Assert.Equal(new[] { Delta }, recorded.ActiveStorageUnits);
+        await participants.StopAndDrainAsync(default);
+        await participants.VerifyDrainedAsync(default);
+        Assert.Empty(systemd.Jobs);
+        Assert.All(systemd.Timers.Values, active => Assert.False(active));
+        await participants.RestoreAsync(recorded, default);
+        Assert.All(systemd.Timers.Values, active => Assert.True(active));
+        Assert.Equal(new[] { Delta }, systemd.Jobs);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -161,6 +182,7 @@ public sealed class StagingMaintenanceParticipantsTests
         public string? FailingCommand { get; init; }
         public string? Listing { get; init; }
         public string? TimerOutput { get; init; }
+        public string ActiveTimerSubstate { get; init; } = "waiting";
         public bool KeepJobsRunning { get; init; }
         public bool IgnoreTimerStarts { get; init; }
 
@@ -172,7 +194,7 @@ public sealed class StagingMaintenanceParticipantsTests
             if (args[0] == "show")
             {
                 var active = Timers[args[1]];
-                return Task.FromResult((0, TimerOutput ?? $"LoadState=loaded\nActiveState={(active ? "active" : "inactive")}\nSubState={(active ? "waiting" : "dead")}\nFragmentPath=/etc/systemd/system/{args[1]}\n"));
+                return Task.FromResult((0, TimerOutput ?? $"LoadState=loaded\nActiveState={(active ? "active" : "inactive")}\nSubState={(active ? ActiveTimerSubstate : "dead")}\nFragmentPath=/etc/systemd/system/{args[1]}\n"));
             }
             if (args[0] == "list-units")
                 return Task.FromResult((0, Listing ?? string.Join('\n', Jobs.Select(unit => unit + " loaded active running Job"))));
