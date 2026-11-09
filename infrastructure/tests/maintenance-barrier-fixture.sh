@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Synthetic systemd fixture only: no production units, network or database.
 set -Eeuo pipefail
-[[ $(id -u) == 0 ]] || { echo 'requires root' >&2; exit 1; }
+[[ $(uname -s) == Linux && -d /run/systemd/system && $(id -u) == 0 ]] || { echo 'requires Linux, running systemd and root' >&2; exit 1; }
 [[ $# == 2 && "$1" =~ ^[a-f0-9]{64}$ && "$2" =~ ^[a-f0-9]{64}$ ]] || { echo 'requires reviewed fixture and helper hashes' >&2; exit 64; }
 source_dir=$(cd -- "$(dirname -- "$0")/../scripts" && pwd -P)
 source_helper="$source_dir/staging-maintenance-barrier.sh"
@@ -30,6 +30,7 @@ cleanup() {
     fi
   done
   if (( failed != 0 )); then printf 'fixtureDirectoryRetained=%s\n' "$dir" >&2; exit 1; fi
+  if [[ -d "$dir/maintenance-active" && ! -L "$dir/maintenance-active" ]]; then rmdir -- "$dir/maintenance-active" || exit 1; fi
   rm -f -- "$dir/deploy.lock" "$dir/activity.lock" "$dir/maintenance-active" \
     "$dir/recovery-required" "$dir/participants-resume-required" "$dir/observed" "$dir/helper" "$dir/helper-source" "$dir/mock"
   if ! rmdir -- "$dir"; then printf 'fixtureDirectoryCleanupFailed=%s\n' "$dir" >&2; failed=1; fi
@@ -37,6 +38,8 @@ cleanup() {
   exit "$original"
 }
 trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 
 # Use one verified private copy so the source cannot change between review and sed.
 cp -- "$source_helper" "$dir/helper-source"
@@ -104,6 +107,24 @@ run_case health 75
 run_case deploy 75 synthetic-release
 rm -f -- "$dir/maintenance-active"
 
+# Annual release cannot infer success from a malformed or incomplete marker.
+# Every shape, including a dangling symlink, blocks every participant without
+# starting its payload. The real annual commit/recovery matrix is separate in
+# fixtures/maintenance-integration (this shell fixture has no database).
+for marker_shape in incomplete dangling-symlink directory; do
+  case "$marker_shape" in
+    incomplete) printf 'incomplete-annual-release\n' > "$dir/maintenance-active" ;;
+    dangling-symlink) ln -s -- "$dir/does-not-exist" "$dir/maintenance-active" ;;
+    directory) mkdir -- "$dir/maintenance-active" ;;
+  esac
+  run_case app 75
+  run_case storage 75 delta-sync
+  run_case health 75
+  run_case deploy 75 synthetic-annual-release
+  if [[ "$marker_shape" == directory ]]; then rmdir -- "$dir/maintenance-active";
+  else rm -f -- "$dir/maintenance-active"; fi
+done
+
 touch "$dir/recovery-required"
 run_case app 0
 run_case storage 75 delta-sync
@@ -144,4 +165,4 @@ done
 flock --exclusive --nonblock 8 || { echo 'FAIL: killed owner retained gate' >&2; exit 1; }
 flock --unlock 8
 run_case app 75
-echo 'PASS: two gates, marker/receipt participants and killed owner'
+echo 'PASS: participant gates, malformed markers and killed owner (no annual SQL qualification)'
