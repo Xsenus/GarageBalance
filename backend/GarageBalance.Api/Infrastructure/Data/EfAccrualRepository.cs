@@ -495,6 +495,115 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
     public Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         TrackedAggregate().SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 
+    public Task<Guid?> GetGarageIdAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking().Where(accrual => accrual.Id == id)
+            .Select(accrual => (Guid?)accrual.GarageId).SingleOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<RegularAccrualCancellation>> GetManualRegularCancellationsAsync(
+        Guid? garageId,
+        Guid? incomeTypeId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken)
+    {
+        if (!garageId.HasValue && !incomeTypeId.HasValue)
+            throw new ArgumentException("A garage or income type is required for cancellation lookup.");
+
+        var query = dbContext.Accruals.AsNoTracking().Where(accrual =>
+            accrual.IsCanceled && accrual.Source == AccrualSources.Regular &&
+            accrual.Basis == null && accrual.IrregularPaymentId == null && accrual.FeeCampaignId == null &&
+            ((accrual.AccountingMonth >= monthFrom && accrual.AccountingMonth <= monthTo) ||
+             ((accrual.AccountingYear ?? (accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year : (int?)null)) >= monthFrom.Year &&
+              (accrual.AccountingYear ?? (accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year : (int?)null)) <= monthTo.Year)));
+        if (garageId.HasValue) query = query.Where(accrual => accrual.GarageId == garageId.Value);
+        if (incomeTypeId.HasValue) query = query.Where(accrual => accrual.IncomeTypeId == incomeTypeId.Value);
+
+        if (IsSqliteProvider())
+        {
+            // SQLite cannot sort DateTimeOffset in the lifecycle subquery. Only the
+            // scoped test-provider candidates are materialized before that ordering.
+            var candidates = await query.Select(accrual => new
+            {
+                accrual.Id,
+                accrual.GarageId,
+                accrual.IncomeTypeId,
+                accrual.AccountingMonth,
+                AccountingYear = accrual.AccountingYear ?? (accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year : (int?)null)
+            }).ToListAsync(cancellationToken);
+            if (candidates.Count == 0) return [];
+            var entityIds = candidates.Select(accrual => accrual.Id.ToString()).ToArray();
+            var manuallyCanceledIds = await GetManuallyCanceledIdsAsync(entityIds, cancellationToken);
+            return candidates.Where(accrual => manuallyCanceledIds.Contains(accrual.Id.ToString()))
+                .Select(accrual => new RegularAccrualCancellation(accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.AccountingYear))
+                .Distinct().ToArray();
+        }
+
+        // Preserve existing manual cancellations as well as new ones, without
+        // treating automatic zero/tariff corrections as permanent user decisions.
+        var lifecycleEvents = RegularAccrualLifecycleEvents();
+        return await query.Where(accrual => lifecycleEvents
+                .Where(audit => audit.EntityId == accrual.Id.ToString())
+                .OrderByDescending(audit => audit.CreatedAtUtc).ThenByDescending(audit => audit.Id)
+                .Select(audit => audit.Action).FirstOrDefault() == RegularAccrualRecalculationAuditActions.ManuallyCanceled)
+            .Select(accrual => new RegularAccrualCancellation(accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth,
+                accrual.AccountingYear ?? (accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year : (int?)null)))
+            .Distinct().ToListAsync(cancellationToken);
+    }
+
+    public async Task<RegularAccrualGenerationState> GetRegularGenerationStateAsync(
+        Guid incomeTypeId, DateOnly accountingMonth, int? accountingYear, CancellationToken cancellationToken)
+    {
+        var query = dbContext.Accruals.AsNoTracking().Where(accrual =>
+            accrual.IncomeTypeId == incomeTypeId && accrual.Source == AccrualSources.Regular &&
+            (!accrual.IsCanceled || accrual.Basis == null && accrual.IrregularPaymentId == null && accrual.FeeCampaignId == null));
+        if (accountingYear.HasValue)
+        {
+            var year = accountingYear.Value;
+            query = query.Where(accrual => !accrual.IsCanceled
+                ? accrual.AccountingYear == year || !accrual.AccountingYear.HasValue && accrual.AccountingMonth.Year == year
+                : accrual.AccountingMonth == accountingMonth ||
+                  (accrual.AccountingYear ?? (accrual.IsAnnualAccrual == true ? accrual.AccountingMonth.Year : (int?)null)) == year);
+        }
+        else query = query.Where(accrual => accrual.AccountingMonth == accountingMonth);
+
+        if (!IsSqliteProvider())
+        {
+            var lifecycleEvents = RegularAccrualLifecycleEvents();
+            query = query.Where(accrual => !accrual.IsCanceled || lifecycleEvents
+                .Where(audit => audit.EntityId == accrual.Id.ToString())
+                .OrderByDescending(audit => audit.CreatedAtUtc).ThenByDescending(audit => audit.Id)
+                .Select(audit => audit.Action).FirstOrDefault() == RegularAccrualRecalculationAuditActions.ManuallyCanceled);
+        }
+        var rows = await query.Select(accrual => new { accrual.Id, accrual.GarageId, accrual.IsCanceled }).ToListAsync(cancellationToken);
+        var canceledRows = rows.Where(row => row.IsCanceled).ToArray();
+        if (IsSqliteProvider() && canceledRows.Length > 0)
+        {
+            var manuallyCanceledIds = await GetManuallyCanceledIdsAsync(canceledRows.Select(row => row.Id.ToString()).ToArray(), cancellationToken);
+            canceledRows = canceledRows.Where(row => manuallyCanceledIds.Contains(row.Id.ToString())).ToArray();
+        }
+        return new RegularAccrualGenerationState(
+            rows.Where(row => !row.IsCanceled).Select(row => row.GarageId).ToHashSet(),
+            canceledRows.Select(row => row.GarageId).ToHashSet());
+    }
+
+    private async Task<IReadOnlySet<string>> GetManuallyCanceledIdsAsync(string[] entityIds, CancellationToken cancellationToken)
+    {
+        var events = await RegularAccrualLifecycleEvents()
+            .Where(audit => audit.EntityId != null && entityIds.Contains(audit.EntityId))
+            .ToListAsync(cancellationToken);
+        return events.GroupBy(audit => audit.EntityId)
+            .Where(group => group.OrderByDescending(audit => audit.CreatedAtUtc).ThenByDescending(audit => audit.Id)
+                .First().Action == RegularAccrualRecalculationAuditActions.ManuallyCanceled)
+            .Select(group => group.Key!).ToHashSet();
+    }
+
+    private IQueryable<GarageBalance.Api.Domain.Audit.AuditEvent> RegularAccrualLifecycleEvents() =>
+        dbContext.AuditEvents.AsNoTracking().Where(audit => audit.EntityType == "accrual" &&
+            (audit.Action == RegularAccrualRecalculationAuditActions.CanceledWithoutTariff ||
+             audit.Action == RegularAccrualRecalculationAuditActions.SafelyRecalculated ||
+             audit.Action == RegularAccrualRecalculationAuditActions.ManuallyCanceled ||
+             audit.Action == RegularAccrualRecalculationAuditActions.ManuallyRestored));
+
     public Task<Guid?> GetFeeCampaignIdAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.Accruals.AsNoTracking()
             .Where(accrual => accrual.Id == id)

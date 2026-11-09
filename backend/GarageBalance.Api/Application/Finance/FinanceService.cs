@@ -1013,9 +1013,17 @@ public sealed partial class FinanceService(
                 new DateOnly(year, 1, 1),
                 new DateOnly(year, 12, 1),
                 cancellationToken))
-            .Where(item => item.AccountingYear == year && item.Basis is null && !item.FeeCampaignId.HasValue && !item.IrregularPaymentId.HasValue)
+            // Match batch generation's historical guard: an existing unclassified
+            // obligation in this year must not acquire a second annual charge.
+            .Where(item => (item.AccountingYear == year || !item.AccountingYear.HasValue && item.AccountingMonth.Year == year) &&
+                item.Basis is null && !item.FeeCampaignId.HasValue && !item.IrregularPaymentId.HasValue)
             .GroupBy(item => item.IncomeTypeId)
             .ToDictionary(group => group.Key, group => group.First());
+        var manualCancellations = await accrualRepository.GetManualRegularCancellationsAsync(
+            garage.Id, null, new DateOnly(year, 1, 1), new DateOnly(year, 12, 1), cancellationToken);
+        var canceledMonths = manualCancellations.Select(item => (item.AccountingMonth, item.IncomeTypeId)).ToHashSet();
+        var canceledYears = manualCancellations.Where(item => item.AccountingYear == year)
+            .Select(item => item.IncomeTypeId).ToHashSet();
         var meterConnections = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
             .ToDictionary(connection => connection.MeterKind);
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
@@ -1029,6 +1037,11 @@ public sealed partial class FinanceService(
             var accrualMonth = definition.AccountingMonth < GetGarageAccrualStartMonth(garage)
                 ? GetGarageAccrualStartMonth(garage)
                 : definition.AccountingMonth;
+            if (canceledYears.Contains(definition.IncomeType.Id) ||
+                canceledMonths.Contains((accrualMonth, definition.IncomeType.Id)))
+            {
+                continue;
+            }
             var segments = ApplyGarageTariffPeriods(accrualMonth, definition.Setting, definition.Tariff,
                 BuildRegularAccrualSegments(accrualMonth, definition.Setting, definition.Tariff), individualPeriodsByService[definition.Setting.Id]);
             var meteredBase = segments.Select(segment => segment.CalculationBase)
@@ -1183,7 +1196,9 @@ public sealed partial class FinanceService(
                 $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
-        var calculationMonthFrom = monthFrom;
+        // Annual charges can belong to an earlier month in the selected year.
+        // Catch them up without generating earlier monthly obligations.
+        var calculationMonthFrom = new DateOnly(monthFrom.Year, 1, 1);
 
         await using var garageWorksheetLock =
             await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(
@@ -1215,16 +1230,26 @@ public sealed partial class FinanceService(
             .Append(MeterKinds.Electricity)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var existingRegularIncomeTypeIds = await accrualRepository.GetActiveRegularIncomeTypeIdsAsync(
+        // The outer garage worksheet lock is also acquired by every rebuild lock.
+        // These rows are stable while deriving per-income-type keys; reuse the read
+        // instead of querying the same active income-type IDs separately.
+        var annualIncomeTypeIds = settings.Where(setting =>
+                AnnualAccrualPolicy.ResolveAccountingYear(setting.IncomeType?.Code, monthFrom, setting.PeriodicityMonths).HasValue)
+            .Select(setting => setting.IncomeTypeId!.Value).ToHashSet();
+        var existingAccruals = (await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
             garage.Id,
-            monthFrom,
+            calculationMonthFrom,
             monthTo,
-            cancellationToken);
+            cancellationToken))
+            .Where(accrual => accrual.AccountingMonth >= monthFrom || accrual.AccountingYear.HasValue ||
+                annualIncomeTypeIds.Contains(accrual.IncomeTypeId))
+            .ToArray();
+
         var allocationKeys = settings
             .Where(setting => incomeTypes.ContainsKey(setting.IncomeTypeId!.Value))
             .Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value))
-            .Concat(existingRegularIncomeTypeIds.Select(incomeTypeId =>
-                new AccrualPaymentAllocationKey(garage.Id, incomeTypeId)))
+            .Concat(existingAccruals.Select(accrual =>
+                new AccrualPaymentAllocationKey(garage.Id, accrual.IncomeTypeId)))
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
@@ -1241,20 +1266,16 @@ public sealed partial class FinanceService(
         var meterConnections = meterData.Connections
             .ToDictionary(connection => connection.MeterKind);
 
-        // Read the mutable accrual set only after taking the same per-garage locks used by
-        // batch generation. Otherwise both workflows can observe a missing accrual and the
-        // second insert fails on the active-accrual uniqueness constraint.
-        var existingAccruals = await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
-            garage.Id,
-            monthFrom,
-            monthTo,
-            cancellationToken);
-
         var paidAccrualIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
             existingAccruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
         IReadOnlyList<GaragePeopleCountPeriod>? peopleCountPeriods = null;
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
+        var manualCancellations = await accrualRepository.GetManualRegularCancellationsAsync(
+            garage.Id, null, calculationMonthFrom, monthTo, cancellationToken);
+        var canceledMonths = manualCancellations.Select(item => (item.AccountingMonth, item.IncomeTypeId)).ToHashSet();
+        var canceledYears = manualCancellations.Where(item => item.AccountingYear.HasValue)
+            .Select(item => (item.AccountingYear!.Value, item.IncomeTypeId)).ToHashSet();
         var calculationIssues = new Dictionary<(DateOnly Month, Guid IncomeTypeId), string>();
         var unknownHistoryHeldYears = new Dictionary<int, bool>();
         foreach (var historicalAnnualAccrual in existingAccruals.Where(accrual =>
@@ -1346,6 +1367,7 @@ public sealed partial class FinanceService(
             {
                 if (!setting.IncomeTypeId.HasValue ||
                     !incomeTypes.TryGetValue(setting.IncomeTypeId.Value, out var incomeType) ||
+                    (month < monthFrom && !AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month, setting.PeriodicityMonths).HasValue) ||
                     !IsChargeServiceDueForGarageMonth(
                         setting,
                         incomeType.Code,
@@ -1371,6 +1393,11 @@ public sealed partial class FinanceService(
                     ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
                       accrualsByMonth.GetValueOrDefault((month, incomeType.Id))
                     : accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
+                if (existing is null && (canceledMonths.Contains((month, incomeType.Id)) ||
+                    accountingYear.HasValue && canceledYears.Contains((accountingYear.Value, incomeType.Id))))
+                {
+                    continue;
+                }
                 if (existing is not null && !existing.IsAnnualAccrual.HasValue && !existing.AccountingYear.HasValue)
                 {
                     var historicalYear = existing.AccountingMonth.Year;
@@ -1418,7 +1445,7 @@ public sealed partial class FinanceService(
                 if (segments.Any(segment => segment.CalculationBase == TariffCalculationBases.People))
                 {
                     peopleCountPeriods ??= await garageRepository.GetPeopleCountPeriodsAsync(
-                        [garage.Id], monthFrom, monthTo.AddMonths(1).AddDays(-1), cancellationToken);
+                        [garage.Id], calculationMonthFrom, monthTo.AddMonths(1).AddDays(-1), cancellationToken);
                 }
                 var calculation = RegularAccrualCalculator.Calculate(garage, month, meterReading, segments, peopleCountPeriods,
                     meterKind is null ? null : meterConnections.GetValueOrDefault(meterKind));
@@ -1606,7 +1633,7 @@ public sealed partial class FinanceService(
             .Where(item => !item.Row.FeeCampaignId.HasValue && !item.Row.IrregularPaymentId.HasValue)
             .GroupBy(item => (item.Row.AccountingMonth, item.Row.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First().Index);
-        for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
+        for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
         {
             foreach (var setting in settings)
             {
@@ -4809,6 +4836,10 @@ public sealed partial class FinanceService(
         await using var feeCampaignLock = feeCampaignId.HasValue
             ? await feeCampaignRepository.AcquirePaymentLockAsync(feeCampaignId.Value, cancellationToken)
             : null;
+        var garageId = await accrualRepository.GetGarageIdAsync(accrualId, cancellationToken);
+        await using var garageLock = garageId.HasValue
+            ? await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(garageId.Value, cancellationToken)
+            : null;
         var accrual = await accrualRepository.FindForUpdateAsync(accrualId, cancellationToken);
         if (accrual is null)
         {
@@ -4847,6 +4878,10 @@ public sealed partial class FinanceService(
         var feeCampaignId = await accrualRepository.GetFeeCampaignIdAsync(accrualId, cancellationToken);
         await using var feeCampaignLock = feeCampaignId.HasValue
             ? await feeCampaignRepository.AcquirePaymentLockAsync(feeCampaignId.Value, cancellationToken)
+            : null;
+        var garageId = await accrualRepository.GetGarageIdAsync(accrualId, cancellationToken);
+        await using var garageLock = garageId.HasValue
+            ? await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(garageId.Value, cancellationToken)
             : null;
         var accrual = await accrualRepository.FindForUpdateAsync(accrualId, cancellationToken);
         if (accrual is null)
@@ -5636,16 +5671,9 @@ public sealed partial class FinanceService(
 
         // Refresh after the per-garage locks. A worksheet may have completed while this
         // batch was waiting and created one of the same rows.
-        IReadOnlySet<Guid> existingGarageIds = accountingYear.HasValue
-            ? await accrualRepository.GetActiveAnnualRegularGarageIdsAsync(
-                incomeType.Id,
-                accountingYear.Value,
-                cancellationToken)
-            : await accrualRepository.GetActiveGarageIdsAsync(
-                incomeType.Id,
-                month,
-                AccrualSources.Regular,
-                cancellationToken);
+        var generationState = await accrualRepository.GetRegularGenerationStateAsync(
+            incomeType.Id, month, accountingYear, cancellationToken);
+        var existingGarageIds = generationState.ExistingGarageIds;
         if (garages.Length > 0 && garages.All(garage => existingGarageIds.Contains(garage.Id)))
         {
             var periodLabel = accountingYear.HasValue ? $"за {accountingYear.Value} год" : $"за {month:MM.yyyy}";
@@ -5653,13 +5681,14 @@ public sealed partial class FinanceService(
                 "regular_accruals_empty",
                 $"Регулярные начисления {periodLabel} уже сформированы для всех выбранных гаражей ({garages.Length}).");
         }
+        var canceledGarageIds = generationState.CanceledGarageIds;
         var pendingGarageIds = garages
             .Where(garage =>
                 (accountingYear.HasValue
                     ? GetGarageAccrualStartMonth(garage).Year <= accountingYear.Value &&
                       (!garage.AccountingStartMonth.HasValue || GetGarageAccrualStartMonth(garage) <= (month > GetCurrentAccountingMonth() ? month : GetCurrentAccountingMonth()))
                     : GetGarageAccrualStartMonth(garage) <= month) &&
-                !existingGarageIds.Contains(garage.Id))
+                !existingGarageIds.Contains(garage.Id) && !canceledGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
             .ToArray();
         var individualPeriods = await LoadIndividualTariffPeriodsAsync(pendingGarageIds, matchingSetting, month, cancellationToken);
@@ -5706,6 +5735,11 @@ public sealed partial class FinanceService(
                 continue;
             }
 
+            if (canceledGarageIds.Contains(garage.Id))
+            {
+                skipped.Add($"Гараж {garage.Number}: начисление отменено вручную; восстановить его можно только из истории начислений.");
+                continue;
+            }
             meterReadings.TryGetValue(garage.Id, out var meterReading);
             var garageSegments = ApplyGarageTariffPeriods(month, matchingSetting, tariff, calculationSegments, individualPeriods[garage.Id]);
             var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, garageSegments,
@@ -6062,13 +6096,16 @@ public sealed partial class FinanceService(
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             [new AccrualPaymentAllocationKey(Guid.Empty, incomeTypeId)],
             cancellationToken);
-        var accruals = await accrualRepository.GetActiveRegularForRecalculationAsync(
-            incomeTypeId,
-            month,
-            cancellationToken);
+        // Read only lock keys before waiting. Loading tracked rows here would allow
+        // a later automatic cancellation audit to overwrite a concurrent manual decision.
+        var candidateGarageIds = await accrualRepository.GetActiveGarageIdsAsync(
+            incomeTypeId, month, AccrualSources.Regular, cancellationToken);
         await using var garageLocks = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            accruals.Select(accrual => new AccrualPaymentAllocationKey(accrual.GarageId, incomeTypeId)).Distinct().ToArray(),
+            candidateGarageIds.Select(garageId => new AccrualPaymentAllocationKey(garageId, incomeTypeId)).ToArray(),
             cancellationToken);
+        var accruals = (await accrualRepository.GetActiveRegularForRecalculationAsync(
+            incomeTypeId, month, cancellationToken))
+            .Where(accrual => candidateGarageIds.Contains(accrual.GarageId) && !accrual.IsCanceled).ToArray();
         var paidIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
             accruals.Select(accrual => accrual.Id).ToArray(),
             cancellationToken);
@@ -8852,6 +8889,11 @@ public sealed partial class FinanceService(
             return createdKeys;
         }
 
+        var manualCancellations = await accrualRepository.GetManualRegularCancellationsAsync(
+            garage.Id, null, reading.AccountingMonth, reading.AccountingMonth, cancellationToken);
+        var canceledMonths = manualCancellations.Select(item => (item.AccountingMonth, item.IncomeTypeId)).ToHashSet();
+        var canceledYears = manualCancellations.Where(item => item.AccountingYear.HasValue)
+            .Select(item => (item.AccountingYear!.Value, item.IncomeTypeId)).ToHashSet();
         var processedIncomeTypeIds = new HashSet<Guid>();
         var meterConnection = (await meterReadingRepository.GetConnectionsAsync(garage.Id, cancellationToken))
             .FirstOrDefault(connection => connection.MeterKind == reading.MeterKind);
@@ -8859,7 +8901,8 @@ public sealed partial class FinanceService(
         foreach (var setting in settings)
         {
             var incomeType = setting.IncomeType;
-            if (await IsAnnualYearHeldAsync(AnnualAccrualPolicy.ResolveAccountingYear(incomeType?.Code, reading.AccountingMonth, setting.PeriodicityMonths), cancellationToken)) continue;
+            var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType?.Code, reading.AccountingMonth, setting.PeriodicityMonths);
+            if (await IsAnnualYearHeldAsync(accountingYear, cancellationToken)) continue;
             var tariff = SelectTariffForMonth(setting, reading.AccountingMonth);
             if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue || !setting.AppliesToGarage(garage.Id))
             {
@@ -8871,12 +8914,18 @@ public sealed partial class FinanceService(
                 continue;
             }
 
+            if (canceledMonths.Contains((reading.AccountingMonth, incomeType.Id)) ||
+                accountingYear.HasValue && canceledYears.Contains((accountingYear.Value, incomeType.Id)))
+            {
+                continue;
+            }
+
             if (await accrualRepository.ActiveDuplicateExistsAsync(
                 ignoredId: null,
                 garage.Id,
                 incomeType.Id,
                 reading.AccountingMonth,
-                accountingYear: null,
+                accountingYear,
                 AccrualSources.Regular,
                 cancellationToken))
             {
@@ -8905,7 +8954,8 @@ public sealed partial class FinanceService(
             var dueDates = AccrualDueDates.ForGarage(reading.AccountingMonth, incomeType.Code, setting, GetGarageAccrualStartDate(garage));
             var accrual = new Accrual
             {
-                IsAnnualAccrual = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, reading.AccountingMonth, setting.PeriodicityMonths).HasValue,
+                IsAnnualAccrual = accountingYear.HasValue,
+                AccountingYear = accountingYear,
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,

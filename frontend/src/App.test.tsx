@@ -11669,6 +11669,8 @@ describe('App', () => {
   it('opens garage receipts from the fitted context menu for the current month', async () => {
     const user = userEvent.setup()
     const currentMonth = getTestCurrentMonthInputValue()
+    let resolveSettings!: (value: Awaited<ReturnType<ApplicationSettingsClient['getPaymentDisplaySettings']>>) => void
+    const pendingSettings = new Promise<Awaited<ReturnType<ApplicationSettingsClient['getPaymentDisplaySettings']>>>((resolve) => { resolveSettings = resolve })
     const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
       garageId: 'garage-1',
       garageNumber: '12',
@@ -11696,18 +11698,7 @@ describe('App', () => {
       importClient={createImportClient()}
       reportClient={createReportClient()}
       releaseClient={createReleaseClient()}
-      settingsClient={createSettingsClient({
-        getPaymentDisplaySettings: async () => ({
-          showAllGarageOperationsByDefault: false,
-          version: 'payment-version',
-          showPeriodicityColumn: false,
-          showAccrualMonthColumn: false,
-          tariffTableVersion: 'tariff-version',
-          showFundName: false,
-          showGarageDebtPeriodByDefault: false,
-          garageDebtPeriodVersion: 'garage-debt-period-version',
-        }),
-      })}
+      settingsClient={createSettingsClient({ getPaymentDisplaySettings: () => pendingSettings })}
       userClient={createUserClient()}
     />)
 
@@ -11723,6 +11714,12 @@ describe('App', () => {
     await user.click(within(menu).getByRole('menuitem', { name: 'Перейти в поступления' }))
 
     const payments = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    expect(within(payments).queryByLabelText('Выбранный гараж')).not.toBeInTheDocument()
+    expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
+    await act(async () => {
+      resolveSettings({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version', showFundName: false, showGarageDebtPeriodByDefault: false, garageDebtPeriodVersion: 'garage-debt-period-version' })
+      await pendingSettings
+    })
     expect(await within(payments).findByLabelText('Выбранный гараж')).toHaveTextContent('№12')
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-1', {
       monthFrom: `${currentMonth}-01`,
@@ -11986,6 +11983,103 @@ describe('App', () => {
     expect(within(reopenedPrototype).queryByLabelText('Выбранный гараж')).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByRole('table', { name: 'Поступления гаража 1' })).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
+  })
+
+  it.each([undefined, true, false])('opens the garage debt period with setting %s and preserves an explicit current-month choice', async (debtPeriodSetting) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-debt-default', number: '775', accountingStartMonth: '2026-10-01' })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string, params: { monthFrom: string; monthTo: string }) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: garage.number,
+      ...params,
+      rows: [{ accountingMonth: params.monthFrom, incomeTypeId: 'trash', incomeTypeName: 'Мусор', incomeTypeCode: 'trash', meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 125, incomeAmount: 0, debt: 125 }],
+    }))
+    const settingsClient = createSettingsClient({
+      getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, showGarageDebtPeriodByDefault: debtPeriodSetting }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({
+      getFinancialReportPeriod: async () => ({ monthFrom: '2026-10-01', monthTo: '2026-11-01', defaultMonthFrom: '2026-10-01', defaultMonthTo: '2026-11-01' }),
+      getGarageIncomeWorksheet,
+    })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
+    await waitFor(() => expect(search).toBeEnabled())
+    await user.type(search, garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*775/ }))
+
+    const expectedStart = debtPeriodSetting === false ? '2026-11-01' : '2026-10-01'
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id, { monthFrom: expectedStart, monthTo: '2026-11-01' }, expect.any(AbortSignal)))
+    expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue(debtPeriodSetting === false ? '11.2026' : '10.2026')
+    expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений по' })).toHaveValue('11.2026')
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 775' })).toHaveTextContent('125.00')
+  })
+
+  it.each([true, false])('waits for delayed debt-period settings before manual garage selection (%s)', async (enabled) => {
+    const user = userEvent.setup()
+    let resolveSettings!: (value: Awaited<ReturnType<ApplicationSettingsClient['getPaymentDisplaySettings']>>) => void
+    const pendingSettings = new Promise<Awaited<ReturnType<ApplicationSettingsClient['getPaymentDisplaySettings']>>>((resolve) => { resolveSettings = resolve })
+    const garage = createGarage({ id: 'garage-delayed-settings', number: '776' })
+    const getFinancialReportPeriod = vi.fn(async () => ({ monthFrom: '2026-10-01', monthTo: '2026-11-01', defaultMonthFrom: '2026-10-01', defaultMonthTo: '2026-11-01' }))
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({ garageId: garage.id, garageNumber: garage.number, rows: [] }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: () => pendingSettings })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
+    expect(search).toBeEnabled()
+    await user.type(search, garage.number)
+    const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*776/ })
+    expect(garageOption).toBeDisabled()
+    await user.keyboard('{Enter}')
+    await user.click(garageOption)
+    expect(search).toHaveValue(garage.number)
+    expect(search).toHaveAttribute('aria-expanded', 'true')
+    expect(getFinancialReportPeriod).not.toHaveBeenCalled()
+    expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveSettings({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, showGarageDebtPeriodByDefault: enabled })
+      await pendingSettings
+    })
+    await waitFor(() => expect(garageOption).toBeEnabled())
+    expect(search).toHaveValue(garage.number)
+    if (enabled) {
+      await user.click(search)
+      await user.keyboard('{Enter}')
+    } else {
+      await user.click(garageOption)
+    }
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id, { monthFrom: enabled ? '2026-10-01' : '2026-11-01', monthTo: '2026-11-01' }, expect.any(AbortSignal)))
+    expect(getFinancialReportPeriod).toHaveBeenCalledTimes(1)
+    expect(search).toHaveValue('')
+  })
+
+  it('keeps garage debt visible and manual selection available after display settings fail', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-failed-settings', number: '777' })
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({ garageId: garage.id, garageNumber: garage.number, rows: [] }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({
+      getFinancialReportPeriod: async () => ({ monthFrom: '2026-10-01', monthTo: '2026-11-01', defaultMonthFrom: '2026-10-01', defaultMonthTo: '2026-11-01' }),
+      getGarageIncomeWorksheet,
+    })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => { throw new Error('Настройки временно недоступны') } })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Настройки временно недоступны')
+    const search = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
+    await waitFor(() => expect(search).toBeEnabled())
+    await user.type(search, garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*777/ }))
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id, { monthFrom: '2026-10-01', monthTo: '2026-11-01' }, expect.any(AbortSignal)))
+    expect(within(prototype).getByRole('alert')).toHaveTextContent('Настройки временно недоступны')
   })
 
   it('loads selected garage income worksheet from finance backend', async () => {
@@ -18081,6 +18175,28 @@ describe('App', () => {
     expect(changeCalled).toBe(false)
   })
 
+  it.each([undefined, true, false])('preserves the debt-period display setting %s on load and save', async (enabled) => {
+    const user = userEvent.setup()
+    const displaySettings = { showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, showGarageDebtPeriodByDefault: enabled }
+    const updatePaymentDisplaySettings = vi.fn(async () => displaySettings)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => displaySettings, updatePaymentDisplaySettings })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
+    const displayPanel = within(settings).getByRole('region', { name: 'Отображение таблиц' })
+    const toggle = within(displayPanel).getByRole('checkbox', { name: 'При открытии гаража показывать месяцы с первого долга' })
+    await waitFor(() => expect(toggle).toBeEnabled())
+    expect(toggle).toHaveProperty('checked', enabled ?? true)
+    expect(within(displayPanel).getByLabelText('Справка: Начальный период поступлений')).toHaveAccessibleDescription('По умолчанию открывается период с первого неоплаченного начисления по текущий месяц. Отключите настройку, чтобы открывать только текущий месяц.')
+    await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
+    await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', expect.objectContaining({ showGarageDebtPeriodByDefault: enabled ?? true })))
+    expect(await within(displayPanel).findByText('Отображение сохранено.')).toBeInTheDocument()
+    expect(toggle).toHaveProperty('checked', enabled ?? true)
+  })
+
   it('saves the default payment overview mode from display settings', async () => {
     const user = userEvent.setup()
     const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string; showFundName: boolean; accrualReasonDisplayMode: string; accrualReasonDisplayVersion: string; showGarageDebtPeriodByDefault: boolean; garageDebtPeriodVersion: string }) => request)
@@ -18115,7 +18231,7 @@ describe('App', () => {
       ['Редактирование выплат', /исправлять выплаты поставщикам и сотрудникам/i],
       ['Удаление выплат', /Удаление выполняется как сторно/i],
       ['Показывать общую ведомость платежей', /открывает «Платежи» общей ведомостью/i],
-      ['Начальный период поступлений', /По умолчанию открывается только текущий месяц/i],
+      ['Начальный период поступлений', /По умолчанию открывается период с первого неоплаченного начисления по текущий месяц/i],
       ['Причины начислений', /строки платежей с пояснением «Причина»/i],
       ['Изменение показаний за другие месяцы', /Пустую ячейку можно заполнить всегда/i],
       ['Периодичность', /частоту начисления услуги/i],

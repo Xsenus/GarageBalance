@@ -613,7 +613,7 @@ export function FinancePanel({
   const [financePreviewReloadRevision, setFinancePreviewReloadRevision] = useState(0)
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
-  const [showGarageDebtPeriodByDefault, setShowGarageDebtPeriodByDefault] = useState(false)
+  const [showGarageDebtPeriodByDefault, setShowGarageDebtPeriodByDefault] = useState(true)
   const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
   const [payoutEditEnabled, setPayoutEditEnabled] = useState(true)
   const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
@@ -892,7 +892,7 @@ export function FinancePanel({
       .then((settings) => {
         if (!ignore) {
           setShowAllGarageOperations(settings.showAllGarageOperationsByDefault)
-          setShowGarageDebtPeriodByDefault(Boolean(settings.showGarageDebtPeriodByDefault))
+          setShowGarageDebtPeriodByDefault(settings.showGarageDebtPeriodByDefault ?? true)
           setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
           return settingsClient.getPayoutMutationSettings(auth.accessToken, controller.signal)
         }
@@ -2460,6 +2460,7 @@ export function FinancePanel({
         onCancelGarageAccrual={(record) => openCancelFinanceDialog('accruals', record)}
         refreshRevision={paymentsPrototypeRefreshRevision}
         initialTarget={initialTarget}
+        paymentDisplaySettingsLoaded={paymentDisplaySettingsLoaded}
         showGarageDebtPeriodByDefault={showGarageDebtPeriodByDefault}
       />
 
@@ -3585,6 +3586,7 @@ function PaymentsPrototypePanel({
   onCancelGarageAccrual,
   refreshRevision,
   initialTarget,
+  paymentDisplaySettingsLoaded,
   showGarageDebtPeriodByDefault,
 }: {
   auth: AuthResponse
@@ -3610,6 +3612,7 @@ function PaymentsPrototypePanel({
   onCancelGarageAccrual: (record: AccrualDto) => void
   refreshRevision: number
   initialTarget?: PaymentOpenTarget | null
+  paymentDisplaySettingsLoaded: boolean
   showGarageDebtPeriodByDefault: boolean
 }) {
   const [actionCommentsRequired] = useActionCommentSettings()
@@ -4711,6 +4714,7 @@ function PaymentsPrototypePanel({
   }
 
   function activateGarage(garage: PaymentsPrototypeGarage) {
+    if (!paymentDisplaySettingsLoaded) return
     const currentMonth = getCurrentMonthInputValue()
     selectedGarageIdRef.current = garage.id
     selectedGaragePreference(auth.user.id, { id: garage.id, number: garage.number })
@@ -4888,7 +4892,7 @@ function PaymentsPrototypePanel({
   }
 
   function selectFirstGarageResult() {
-    if (garageSearchResults.length > 0) {
+    if (paymentDisplaySettingsLoaded && garageSearchResults.length > 0) {
       activateGarage(garageSearchResults[0])
       setGarageSearch('')
       setGarageSearchOpen(false)
@@ -5756,6 +5760,7 @@ function PaymentsPrototypePanel({
                   role="option"
                   aria-label={`Открыть карточку: Гараж ${garage.number} ${garage.ownerName}`}
                   aria-selected={selectedGarageId === garage.id}
+                  disabled={!paymentDisplaySettingsLoaded}
                   onClick={() => {
                     activateGarage(garage)
                     setGarageSearch('')

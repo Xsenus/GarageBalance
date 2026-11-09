@@ -131,7 +131,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
-  const [showGarageDebtPeriodByDefault, setShowGarageDebtPeriodByDefault] = useState(false)
+  const [showGarageDebtPeriodByDefault, setShowGarageDebtPeriodByDefault] = useState(true)
   const [accrualReasonDisplayMode, setAccrualReasonDisplayMode] = useState<AccrualReasonDisplayMode>('penalties_only')
   const [payoutEditEnabled, setPayoutEditEnabled] = useState(true)
   const [payoutDeleteEnabled, setPayoutDeleteEnabled] = useState(false)
@@ -273,7 +273,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .then(([settings, meterReadingSettings, payoutSettings]) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
-          setShowGarageDebtPeriodByDefault(Boolean(settings.showGarageDebtPeriodByDefault))
+          setShowGarageDebtPeriodByDefault(settings.showGarageDebtPeriodByDefault ?? true)
           setGarageDebtPeriodVersion(settings.garageDebtPeriodVersion ?? null)
           setAccrualReasonDisplayMode(normalizeAccrualReasonDisplayMode(settings.accrualReasonDisplayMode))
           setAccrualReasonDisplayVersion(settings.accrualReasonDisplayVersion ?? null)
@@ -441,7 +441,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         garageDebtPeriodVersion: garageDebtPeriodVersion ?? '',
       })
       setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
-      setShowGarageDebtPeriodByDefault(Boolean(settings.showGarageDebtPeriodByDefault))
+      setShowGarageDebtPeriodByDefault(settings.showGarageDebtPeriodByDefault ?? true)
       setGarageDebtPeriodVersion(settings.garageDebtPeriodVersion ?? null)
       setPaymentDisplaySettingsVersion(settings.version)
       setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
@@ -1280,7 +1280,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <SettingsDisplaySwitch
             title="Начальный период поступлений"
             label="При открытии гаража показывать месяцы с первого долга"
-            help="По умолчанию открывается только текущий месяц. Включите настройку, чтобы сразу видеть период с первого неоплаченного начисления по текущий месяц."
+            help="По умолчанию открывается период с первого неоплаченного начисления по текущий месяц. Отключите настройку, чтобы открывать только текущий месяц."
             checked={showGarageDebtPeriodByDefault}
             disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
             onChange={(checked) => { setShowGarageDebtPeriodByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
