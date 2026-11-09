@@ -8391,7 +8391,7 @@ public sealed partial class FinanceServiceTests
         Assert.Equal("Новый Владелец", worksheet.Value!.OwnerName);
         Assert.Contains(worksheet.Value.Rows, row => row.AnnualAccrualId == originalAccrualId);
 
-        var nextYearGeneration = await FinanceServiceTestFactory.Create(database.Context, businessDate: new DateOnly(2027, 1, 1)).GenerateRegularAccrualsAsync(
+        var nextYearGeneration = await financeService.GenerateRegularAccrualsAsync(
             new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2027, 1, 1), "Новый учетный год"),
             null,
             CancellationToken.None);

@@ -5686,7 +5686,11 @@ public sealed partial class FinanceService(
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
         var currentMonth = GetCurrentAccountingMonth();
-        if (throughMonth.HasValue && throughMonth.Value < currentMonth) currentMonth = throughMonth.Value;
+        // Explicit batch requests retain their future-period contract. Catalog catch-up
+        // is capped separately at both its requested month and the business month.
+        var lastAllowedAnnualMonth = throughMonth.HasValue
+            ? (throughMonth.Value < currentMonth ? throughMonth.Value : currentMonth)
+            : (month > currentMonth ? month : currentMonth);
         var pendingGarages = new List<Garage>();
         foreach (var garage in garages)
         {
@@ -5695,7 +5699,7 @@ public sealed partial class FinanceService(
                 ? AnnualAccrualPolicy.ResolveAccountingMonth(month, start)
                 : month;
             if ((!accountingYear.HasValue && start > month) ||
-                (accountingYear.HasValue && (start.Year > accountingYear.Value || effectiveMonth > currentMonth)))
+                (accountingYear.HasValue && (start.Year > accountingYear.Value || effectiveMonth > lastAllowedAnnualMonth)))
             {
                 skipped.Add(garage.AccountingStartMonth.HasValue
                     ? $"Гараж {garage.Number}: учёт начинается с {start:MM.yyyy}; для выбранного периода начисление ещё не возникает."

@@ -151,6 +151,35 @@ public sealed class AnnualBatchEffectiveMonthTests
     }
 
     [Theory]
+    [InlineData(2026, 12, false)]
+    [InlineData(2026, 12, true)]
+    [InlineData(2027, 1, false)]
+    [InlineData(2027, 1, true)]
+    public async Task ExplicitFutureAnnualBatchWorksWhileCatalogStaysWithinBusinessMonth(int year, int month, bool explicitStart)
+    {
+        await using var db = await SqliteTestDatabase.CreateAsync();
+        var futureMonth = new DateOnly(year, month, 1);
+        var (garage, setting) = await AnnualAccountingStartTests.SeedAsync(db.Context, futureMonth);
+        if (!explicitStart) { garage.AccountingStartMonth = null; garage.RegisteredOn = futureMonth; }
+        await db.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(db.Context, businessDate: November);
+        foreach (var catalogMonth in new[] { November, futureMonth })
+        {
+            var catalog = await service.GenerateRegularCatalogAccrualsAsync(new(catalogMonth, null), null, default);
+            Assert.False(catalog.Succeeded);
+            Assert.Empty(await db.Context.Accruals.ToArrayAsync());
+        }
+
+        var direct = await service.GenerateRegularAccrualsAsync(
+            new(setting.IncomeTypeId!.Value, setting.TariffId!.Value, futureMonth, null), null, default);
+        Assert.True(direct.Succeeded, direct.ErrorMessage);
+        var row = Assert.Single(await db.Context.Accruals.ToArrayAsync());
+        Assert.Equal(futureMonth, row.AccountingMonth);
+        Assert.Equal(year, row.AccountingYear);
+        Assert.Equal(1200m, row.Amount);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
