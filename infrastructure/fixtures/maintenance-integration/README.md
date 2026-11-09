@@ -49,7 +49,9 @@ dotnet publish "$fixture_dir/MaintenanceIntegrationFixture.csproj" \
   --output "$RUNNER_TEMP/maintenance-publish"
 
 package="/opt/gb-maint-integration-package.$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
-sudo install -d -m 0700 "$package" "$package/scripts"
+sudo mkdir -m 0700 -- "$package" # Exclusive: fail if this directory already exists.
+printf 'MAINTENANCE_PACKAGE=%s\n' "$package" >> "$GITHUB_ENV"
+sudo mkdir -m 0700 -- "$package/scripts"
 sudo cp -a "$RUNNER_TEMP/maintenance-publish" "$package/publish"
 sudo cp "$fixture_dir/run-integration-fixture.sh" \
   "$fixture_dir/annual-release-cases.sh" \
@@ -58,7 +60,7 @@ sudo cp infrastructure/scripts/staging-maintenance-barrier.sh \
   infrastructure/scripts/garagebalance-healthcheck.sh \
   infrastructure/scripts/vps-apply-release.sh "$package/scripts/"
 sudo chown -R root:root "$package"
-sudo bash -c 'cd "$1"; find publish scripts -type f -print0 | sort -z | xargs -0 sha256sum > evidence.sha256;
+sudo bash -c 'set -Eeuo pipefail; cd "$1"; find publish scripts -type f -print0 | sort -z | xargs -0 sha256sum > evidence.sha256;
   sha256sum run-integration-fixture.sh annual-release-cases.sh cleanup-integration-fixture.sh >> evidence.sha256' bash "$package"
 expected=$(sudo sha256sum "$package/evidence.sha256" | cut -d' ' -f1)
 # Persist these two non-secret values for the CI always() cleanup step.
@@ -76,15 +78,23 @@ fixture registry. It refuses unknown identities, symbolic-link roots and unexpec
 unit names.
 
 ```bash
-if [[ -n ${MAINTENANCE_PACKAGE:-} && -n ${MAINTENANCE_EVIDENCE:-} ]]; then
-  sudo bash "$MAINTENANCE_PACKAGE/cleanup-integration-fixture.sh" \
-    "$MAINTENANCE_PACKAGE" "$MAINTENANCE_EVIDENCE"
-  # Remove the reviewed package only after cleanup succeeded and identity is checked.
+if [[ -n ${MAINTENANCE_PACKAGE:-} ]]; then
   [[ "$MAINTENANCE_PACKAGE" =~ ^/opt/gb-maint-integration-package[.][a-f0-9]{8}$ ]]
   [[ $(sudo realpath -e "$MAINTENANCE_PACKAGE") == "$MAINTENANCE_PACKAGE" ]]
+  [[ $(sudo stat -c '%u:%g:%a' "$MAINTENANCE_PACKAGE") == 0:0:700 ]]
+  if [[ -n ${MAINTENANCE_EVIDENCE:-} ]]; then
+    sudo bash "$MAINTENANCE_PACKAGE/cleanup-integration-fixture.sh" \
+      "$MAINTENANCE_PACKAGE" "$MAINTENANCE_EVIDENCE"
+  else
+    # Packaging failed, so the subsequent execution step never ran.
+    # Do not execute an unverified partially copied cleanup script.
+    echo 'Removing owned incomplete fixture package; execution never started.'
+  fi
   sudo rm -rf --one-file-system -- "$MAINTENANCE_PACKAGE"
 fi
 ```
+
+The CI workflow also executes `maintenance-barrier-fixture.sh` with exact fixture/helper SHA-256 arguments to exercise malformed and stale participant markers; a syntax check alone is not that test.
 
 The default two-argument invocation retains the existing `selective-cleanup` suite.
 The two suites are not substitutes for each other. `maintenance-barrier-fixture.sh`

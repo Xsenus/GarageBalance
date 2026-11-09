@@ -57,12 +57,24 @@ GarageBalance.StorageTool commands:
     Only durable preparing state is eligible; there is no financial SQL callback.
     Preserves starts/master data/device history. Application MUST REMAIN OFFLINE after execution
     until the operator separately approves the accrual restart period. No automatic restart.
+  annual-accrual-impact-plan --annual-hold-year <year> --expected-database <exact-name> --output <private-json-path>
+    Read-only snapshot of new annual obligations, exclusions and uncertain cases; no charge generation.
+  annual-accrual-release-plan --annual-hold-year <year> --expected-database <exact-name> --output <private-json-path>
+    Binds the exact policy and complete financial forecast for operator review.
+  annual-accrual-release --execute --plan <private-json-path> --confirm <fingerprint>
+    --backup-receipt <private-json-path> --expected-database garagebalance_staging
+    --service garagebalance-staging.service --reason <operator-explanation>
+    Requires qualified exclusive maintenance; does not generate financial rows.
+  annual-accrual-release-recover --execute --plan <private-json-path> --confirm <fingerprint>
+    --expected-database garagebalance_staging --service garagebalance-staging.service
+    Inspects a recorded outcome without repeating release; unknown outcomes remain offline.
   archived-fund-balance-plan --output <private-json-path>
   archived-fund-balance-repair [--execute ...same as archived-garages-cleanup]
 Options: --checkpoint <private-json-path> --page-size N --max-jobs N --output <private-json-path>
-Mutating commands are dry-run by default. copy creates a checkpoint; resume continues it;
+Migration writes are dry-run by default; maintenance writes require --execute. copy creates a checkpoint; resume continues it;
 delta-sync extends it with new files. Only backup-layout-prune removes old cloud paths after verification.
-No command changes live configuration. Keep recovery manifests current before layout pruning.
+Storage commands do not change live configuration. Annual release changes only the reviewed annual hold and its guard epoch.
+Keep recovery manifests current before layout pruning.
 See docs/storage-migration-cli.md for migration gates and docs/disaster-recovery.md for recovery commands.
 """);
                 return 0;

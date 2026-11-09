@@ -5914,7 +5914,8 @@ public sealed partial class FinanceService(
                 new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, tariff.Id, scheduledMonth, comment),
                 actorUserId,
                 cancellationToken,
-                throughMonth: month);
+                // Cap only catch-up. An explicitly requested scheduled period may be in the future.
+                throughMonth: scheduledMonth < month ? month : null);
             if (!serviceResult.Succeeded)
             {
                 skippedServices.Add($"{setting.Name}: {serviceResult.ErrorMessage}");

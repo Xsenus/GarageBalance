@@ -186,6 +186,102 @@ jobs:
           git show --format= --check HEAD
           find infrastructure -name '*.sh' -print0 | xargs -0 -r -n 1 bash -n
 
+  maintenance:
+    name: Isolated maintenance protocol (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    needs:
+      - backend
+      - quality
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [selective-cleanup, annual-release]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify isolated Linux prerequisites
+        run: |
+          test "$(ps -p 1 -o comm=)" = systemd
+          command -v systemd-run
+          command -v python3
+          command -v flock
+          id postgres
+          test -x /usr/lib/postgresql/16/bin/initdb
+          test -x /usr/lib/postgresql/16/bin/pg_ctl
+          test -x /usr/lib/postgresql/16/bin/pg_dump
+          test -x /usr/lib/postgresql/16/bin/pg_restore
+
+      - name: Verify participant marker rejection
+        if: matrix.suite == 'annual-release'
+        run: |
+          fixture=infrastructure/tests/maintenance-barrier-fixture.sh
+          helper=infrastructure/scripts/staging-maintenance-barrier.sh
+          sudo timeout --signal=TERM --kill-after=60s 5m bash "$fixture" \
+            "$(sha256sum "$fixture" | cut -d' ' -f1)" "$(sha256sum "$helper" | cut -d' ' -f1)"
+
+      - name: Publish isolated maintenance fixture
+        run: |
+          dotnet publish infrastructure/fixtures/maintenance-integration/MaintenanceIntegrationFixture.csproj \
+            --configuration Release --runtime linux-x64 --self-contained true \
+            -p:DefineConstants=MAINTENANCE_FIXTURE --output "$RUNNER_TEMP/maintenance-publish"
+
+      - name: Package reviewed fixture and record cleanup identity
+        run: |
+          set -Eeuo pipefail
+          fixture_dir=infrastructure/fixtures/maintenance-integration
+          package="/opt/gb-maint-integration-package.$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+          sudo mkdir -m 0700 -- "$package"
+          # The directory must be new. Record it before any package copy/hash can fail.
+          printf 'MAINTENANCE_PACKAGE=%s\n' "$package" >> "$GITHUB_ENV"
+          sudo mkdir -m 0700 -- "$package/scripts"
+          sudo cp -a "$RUNNER_TEMP/maintenance-publish" "$package/publish"
+          sudo cp "$fixture_dir/run-integration-fixture.sh" \
+            "$fixture_dir/annual-release-cases.sh" \
+            "$fixture_dir/cleanup-integration-fixture.sh" "$package/"
+          sudo cp infrastructure/scripts/staging-maintenance-barrier.sh \
+            infrastructure/scripts/garagebalance-healthcheck.sh \
+            infrastructure/scripts/vps-apply-release.sh "$package/scripts/"
+          sudo chown -R root:root "$package"
+          sudo bash -c 'set -Eeuo pipefail; cd "$1"; find publish scripts -type f -print0 | sort -z | xargs -0 sha256sum > evidence.sha256;
+            sha256sum run-integration-fixture.sh annual-release-cases.sh cleanup-integration-fixture.sh >> evidence.sha256' bash "$package"
+          expected=$(sudo sha256sum "$package/evidence.sha256" | cut -d' ' -f1)
+          printf 'MAINTENANCE_PACKAGE=%s\nMAINTENANCE_EVIDENCE=%s\n' "$package" "$expected" >> "$GITHUB_ENV"
+
+      - name: Exercise real PostgreSQL and systemd protocol
+        env:
+          MAINTENANCE_SUITE: ${{ matrix.suite }}
+        run: |
+          sudo env GB_FIXTURE_PG_BIN=/usr/lib/postgresql/16/bin \
+            timeout --signal=TERM --kill-after=90s 25m \
+            bash "$MAINTENANCE_PACKAGE/run-integration-fixture.sh" \
+            "$MAINTENANCE_PACKAGE" "$MAINTENANCE_EVIDENCE" "$MAINTENANCE_SUITE"
+
+      - name: Verify stopped fixture and remove owned artifacts
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          if [[ -n ${MAINTENANCE_PACKAGE:-} ]]; then
+            [[ "$MAINTENANCE_PACKAGE" =~ ^/opt/gb-maint-integration-package[.][a-f0-9]{8}$ ]]
+            [[ $(sudo realpath -e "$MAINTENANCE_PACKAGE") == "$MAINTENANCE_PACKAGE" ]]
+            [[ $(sudo stat -c '%u:%g:%a' "$MAINTENANCE_PACKAGE") == 0:0:700 ]]
+            if [[ -n ${MAINTENANCE_EVIDENCE:-} ]]; then
+              sudo bash "$MAINTENANCE_PACKAGE/cleanup-integration-fixture.sh" \
+                "$MAINTENANCE_PACKAGE" "$MAINTENANCE_EVIDENCE"
+            else
+              # Packaging did not complete, so the execution step could not start.
+              # Do not execute an unverified or partially copied cleanup script.
+              echo 'Removing owned incomplete fixture package; execution never started.'
+            fi
+            sudo rm -rf --one-file-system -- "$MAINTENANCE_PACKAGE"
+          fi
+
   docker:
     name: Docker build and isolated startup
     needs:
