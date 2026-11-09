@@ -269,14 +269,14 @@ public sealed class ApplicationSettingsServiceTests
     }
 
     [Fact]
-    public async Task GetPaymentDisplaySettings_ReturnsFalseWhenSettingIsMissing()
+    public async Task GetPaymentDisplaySettings_DefaultsToDebtPeriodWithoutOverviewWhenSettingsAreMissing()
     {
         var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
 
         var result = await service.GetPaymentDisplaySettingsAsync(CancellationToken.None);
 
         Assert.False(result.ShowAllGarageOperationsByDefault);
-        Assert.False(result.ShowGarageDebtPeriodByDefault);
+        Assert.True(result.ShowGarageDebtPeriodByDefault);
         Assert.Equal(AccrualReasonDisplayModes.PenaltiesOnly, result.AccrualReasonDisplayMode);
         Assert.NotEqual(Guid.Empty, result.Version);
         Assert.NotEqual(Guid.Empty, result.AccrualReasonDisplayVersion);
@@ -405,12 +405,19 @@ public sealed class ApplicationSettingsServiceTests
     public async Task UpdatePaymentDisplaySettings_PersistsGarageDebtPeriodAndWritesAuditEvent()
     {
         var actorUserId = Guid.NewGuid();
-        var repository = new FakeRepository();
+        var repository = new FakeRepository
+        {
+            Setting = new ApplicationSetting
+            {
+                Key = ApplicationSettingsService.ShowGarageDebtPeriodKey,
+                BooleanValue = false
+            }
+        };
         var auditWriter = new CaptureAuditWriter();
         var service = CreateService(repository, auditWriter);
 
         var result = await service.UpdatePaymentDisplaySettingsAsync(
-            new UpdatePaymentDisplaySettingsRequest(false, ShowGarageDebtPeriodByDefault: true),
+            new UpdatePaymentDisplaySettingsRequest(false, ShowGarageDebtPeriodByDefault: true, GarageDebtPeriodVersion: repository.Setting.Version),
             actorUserId,
             CancellationToken.None);
 
@@ -422,6 +429,97 @@ public sealed class ApplicationSettingsServiceTests
         Assert.Equal("application_setting.garage_debt_period_updated", audit.Action);
         Assert.Equal(false, audit.OldValues!["showGarageDebtPeriodByDefault"]);
         Assert.Equal(true, audit.NewValues!["showGarageDebtPeriodByDefault"]);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_PersistsExplicitCurrentMonthAgainstDefaultDebtPeriod()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(false, ShowGarageDebtPeriodByDefault: false),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.False(result.ShowGarageDebtPeriodByDefault);
+        Assert.Equal(ApplicationSettingsService.ShowGarageDebtPeriodKey, repository.Setting!.Key);
+        Assert.False(repository.Setting.BooleanValue);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        Assert.Equal(1, repository.SaveChangesCount);
+        Assert.False((await service.GetPaymentDisplaySettingsAsync(CancellationToken.None)).ShowGarageDebtPeriodByDefault);
+        var audit = Assert.Single(auditWriter.Requests);
+        Assert.Equal("application_setting.garage_debt_period_updated", audit.Action);
+        Assert.Equal(true, audit.OldValues!["showGarageDebtPeriodByDefault"]);
+        Assert.Equal(false, audit.NewValues!["showGarageDebtPeriodByDefault"]);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PaymentDisplaySettings_PreservesExplicitDebtPeriodWithoutRewriting(bool enabled)
+    {
+        var repository = new FakeRepository
+        {
+            Setting = new ApplicationSetting
+            {
+                Key = ApplicationSettingsService.ShowGarageDebtPeriodKey,
+                BooleanValue = enabled
+            }
+        };
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var current = await service.GetPaymentDisplaySettingsAsync(CancellationToken.None);
+        var unchanged = await service.UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(false, ShowGarageDebtPeriodByDefault: enabled, GarageDebtPeriodVersion: current.GarageDebtPeriodVersion),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.Equal(enabled, current.ShowGarageDebtPeriodByDefault);
+        Assert.Equal(enabled, unchanged.ShowGarageDebtPeriodByDefault);
+        Assert.Equal(current.GarageDebtPeriodVersion, unchanged.GarageDebtPeriodVersion);
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_DoesNotPersistUnchangedDefaultDebtPeriod()
+    {
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var result = await CreateService(repository, auditWriter).UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(false), Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result.ShowGarageDebtPeriodByDefault);
+        Assert.Empty(repository.Settings);
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentDisplaySettings_RejectsStaleDebtPeriodVersion()
+    {
+        var repository = new FakeRepository
+        {
+            Setting = new ApplicationSetting
+            {
+                Key = ApplicationSettingsService.ShowGarageDebtPeriodKey,
+                BooleanValue = false
+            }
+        };
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        await Assert.ThrowsAsync<OptimisticConcurrencyException>(() => service.UpdatePaymentDisplaySettingsAsync(
+            new UpdatePaymentDisplaySettingsRequest(false, ShowGarageDebtPeriodByDefault: true, GarageDebtPeriodVersion: Guid.NewGuid()),
+            Guid.NewGuid(), CancellationToken.None));
+
+        Assert.False(repository.Setting.BooleanValue);
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
     }
 
     [Fact]

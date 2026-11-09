@@ -11,7 +11,7 @@ public sealed record PaymentDisplaySettingsDto(
     bool ShowFundName = false,
     string AccrualReasonDisplayMode = AccrualReasonDisplayModes.PenaltiesOnly,
     Guid AccrualReasonDisplayVersion = default,
-    bool ShowGarageDebtPeriodByDefault = false,
+    bool ShowGarageDebtPeriodByDefault = true,
     Guid GarageDebtPeriodVersion = default);
 
 public sealed record UpdatePaymentDisplaySettingsRequest(
@@ -23,7 +23,7 @@ public sealed record UpdatePaymentDisplaySettingsRequest(
     bool ShowFundName = false,
     string AccrualReasonDisplayMode = AccrualReasonDisplayModes.PenaltiesOnly,
     Guid? AccrualReasonDisplayVersion = null,
-    bool ShowGarageDebtPeriodByDefault = false,
+    bool ShowGarageDebtPeriodByDefault = true,
     Guid? GarageDebtPeriodVersion = null);
 
 public static class AccrualReasonDisplayModes

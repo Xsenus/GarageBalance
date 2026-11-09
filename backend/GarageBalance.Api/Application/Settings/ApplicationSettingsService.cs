@@ -37,7 +37,7 @@ public sealed class ApplicationSettingsService(
             setting?.Version ?? Guid.NewGuid(),
             AccrualReasonDisplayMode: CreateAccrualReasonDisplayMode(reasonSetting?.IntegerValue),
             AccrualReasonDisplayVersion: reasonSetting?.Version ?? Guid.NewGuid(),
-            ShowGarageDebtPeriodByDefault: debtPeriodSetting?.BooleanValue ?? false,
+            ShowGarageDebtPeriodByDefault: debtPeriodSetting?.BooleanValue ?? true,
             GarageDebtPeriodVersion: debtPeriodSetting?.Version ?? Guid.NewGuid());
     }
 
@@ -56,7 +56,7 @@ public sealed class ApplicationSettingsService(
         var reasonSetting = await repository.FindForUpdateAsync(AccrualReasonDisplayModeKey, cancellationToken);
         var debtPeriodSetting = await repository.FindForUpdateAsync(ShowGarageDebtPeriodKey, cancellationToken);
         var previousValue = setting?.BooleanValue ?? false;
-        var previousDebtPeriodValue = debtPeriodSetting?.BooleanValue ?? false;
+        var previousDebtPeriodValue = debtPeriodSetting?.BooleanValue ?? true;
         var previousReasonMode = CreateAccrualReasonDisplayMode(reasonSetting?.IntegerValue);
         var nextReasonValue = CreateAccrualReasonDisplayValue(request.AccrualReasonDisplayMode);
         if (setting is not null && request.Version.HasValue)
@@ -78,9 +78,7 @@ public sealed class ApplicationSettingsService(
         var reasonChanged = reasonSetting is null
             ? nextReasonValue != 0
             : reasonSetting.IntegerValue != nextReasonValue;
-        var debtPeriodChanged = debtPeriodSetting is null
-            ? request.ShowGarageDebtPeriodByDefault
-            : debtPeriodSetting.BooleanValue != request.ShowGarageDebtPeriodByDefault;
+        var debtPeriodChanged = previousDebtPeriodValue != request.ShowGarageDebtPeriodByDefault;
 
         if (!paymentChanged && !reasonChanged && !debtPeriodChanged)
         {
@@ -181,7 +179,7 @@ public sealed class ApplicationSettingsService(
             setting?.Version ?? request.Version ?? Guid.NewGuid(),
             AccrualReasonDisplayMode: request.AccrualReasonDisplayMode,
             AccrualReasonDisplayVersion: reasonSetting?.Version ?? request.AccrualReasonDisplayVersion ?? Guid.NewGuid(),
-            ShowGarageDebtPeriodByDefault: debtPeriodSetting?.BooleanValue ?? false,
+            ShowGarageDebtPeriodByDefault: debtPeriodSetting?.BooleanValue ?? true,
             GarageDebtPeriodVersion: debtPeriodSetting?.Version ?? request.GarageDebtPeriodVersion ?? Guid.NewGuid());
     }
 
