@@ -16,12 +16,19 @@ internal static class AnnualAccrualGuardEpoch
     {
         var query = tracked ? db.ApplicationSettings.AsQueryable() : db.ApplicationSettings.AsNoTracking();
         var epoch = await query.SingleOrDefaultAsync(item => item.Key == Key, token) ?? throw Invalid();
-        var map = Parse(epoch.JsonValue);
         var active = await db.ApplicationSettings.AsNoTracking()
             .Where(item => item.BooleanValue && item.Key.StartsWith(AnnualAccrualHoldPolicy.KeyPrefix))
             .Select(item => item.Key).ToListAsync(token);
+        Validate(epoch.JsonValue, active);
+        return epoch;
+    }
+
+    // Shared pure validation lets read-only reports use the already captured snapshot.
+    public static void Validate(string? json, IEnumerable<string> activeKeys)
+    {
+        var map = Parse(json);
         var expected = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in active)
+        foreach (var item in activeKeys)
         {
             var year = item[AnnualAccrualHoldPolicy.KeyPrefix.Length..];
             if (year.Length != 4 || !int.TryParse(year, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) || parsed < 1900)
@@ -29,7 +36,6 @@ internal static class AnnualAccrualGuardEpoch
             expected.Add(year);
         }
         if (!expected.SetEquals(map.Select(item => item.Key))) throw Invalid();
-        return epoch;
     }
 
     public static void SetYear(ApplicationSetting epoch, int year, bool held, DateTimeOffset now)

@@ -45,7 +45,7 @@ public sealed class AnnualAccrualForecastEngine(GarageBalanceDbContext db,
         var yearTo = new DateOnly(year, 12, 31);
         var key = AnnualAccrualHoldPolicy.Key(year);
         var policy = await db.ApplicationSettings.AsNoTracking()
-            .Where(s => s.Key.StartsWith(AnnualAccrualHoldPolicy.KeyPrefix) || s.Key == "finance.annual_accrual_guard_epoch" || s.Key == ApplicationSettingsService.BusinessDateOverrideKey)
+            .Where(s => s.Key.StartsWith(AnnualAccrualHoldPolicy.KeyPrefix) || s.Key == AnnualAccrualGuardEpoch.Key || s.Key == ApplicationSettingsService.BusinessDateOverrideKey)
             .OrderBy(s => s.Key)
             .Select(s => new { s.Key, s.BooleanValue, s.IntegerValue, s.DateValue, s.JsonValue, s.Version }).ToListAsync(token);
         var holdActive = policy.SingleOrDefault(s => s.Key == key)?.BooleanValue == true;
@@ -119,10 +119,15 @@ public sealed class AnnualAccrualForecastEngine(GarageBalanceDbContext db,
             }).ToListAsync(token);
         var annual = services.Where(s => AnnualAccrualPolicy.IsAnnual(s.PeriodicityMonths, s.Code)).ToArray();
         var reasons = new Dictionary<string, int>();
-        if (!ValidEpoch(policy.SingleOrDefault(s => s.Key == "finance.annual_accrual_guard_epoch")?.JsonValue,
-                policy.Where(s => s.BooleanValue && s.Key.StartsWith(AnnualAccrualHoldPolicy.KeyPrefix, StringComparison.Ordinal))
-                    .Select(s => s.Key[AnnualAccrualHoldPolicy.KeyPrefix.Length..]).ToHashSet(StringComparer.Ordinal)))
+        try
+        {
+            AnnualAccrualGuardEpoch.Validate(policy.SingleOrDefault(s => s.Key == AnnualAccrualGuardEpoch.Key)?.JsonValue,
+                policy.Where(s => s.BooleanValue && s.Key.StartsWith(AnnualAccrualHoldPolicy.KeyPrefix, StringComparison.Ordinal)).Select(s => s.Key));
+        }
+        catch (AccountingCleanupException exception) when (exception.Code == "cleanup_annual_guard_invalid")
+        {
             Add(reasons, "annual_guard_state_invalid");
+        }
         if (year > today.Year) Add(reasons, "future_year_not_release_forecast");
         if (year < today.Year) Add(reasons, "historical_year_requires_explicit_catch_up");
         var unsupportedCampaigns = campaigns.Count(c =>
@@ -139,6 +144,29 @@ public sealed class AnnualAccrualForecastEngine(GarageBalanceDbContext db,
         var result = new List<AnnualAccrualServiceForecast>();
         var affectedGarages = new HashSet<Guid>();
         var repository = new EfChargeServiceSettingRepository(db);
+        var settingsByMonth = new Dictionary<DateOnly, IReadOnlyList<ChargeServiceSetting>>();
+        var snapshots = new Dictionary<(Guid Id, DateOnly Month), ChargeServiceSetting?>();
+        async Task<ChargeServiceSetting?> SettingAsync(Guid id, DateOnly month)
+        {
+            if (snapshots.TryGetValue((id, month), out var cached)) return cached;
+            if (!settingsByMonth.TryGetValue(month, out var settings))
+                settingsByMonth[month] = settings = await repository.GetActiveRegularAsync(month, token);
+            var setting = settings.SingleOrDefault(s => s.Id == id);
+            snapshots[(id, month)] = setting;
+            monthlyInputs.Add(new
+            {
+                Id = id,
+                month,
+                Unavailable = setting is null,
+                TariffId = setting?.TariffId,
+                IsMetered = setting?.IsMetered,
+                HasTieredTariff = setting?.HasTieredTariff,
+                Tariff = TariffInput(setting?.Tariff),
+                Versions = setting?.TariffVersions.OrderBy(v => v.EffectiveFrom).ThenBy(v => v.TariffId)
+                    .Select(v => new { v.EffectiveFrom, v.EffectiveTo, v.IsArchived, Tariff = TariffInput(v.Tariff) }).ToArray()
+            });
+            return setting;
+        }
         foreach (var raw in annual)
         {
             token.ThrowIfCancellationRequested();
@@ -149,38 +177,25 @@ public sealed class AnnualAccrualForecastEngine(GarageBalanceDbContext db,
             var amount = 0m;
             var existingCount = 0;
             var existingAmount = 0m;
-            var month = new DateOnly(year, raw.AccrualStartMonth is >= 1 and <= 12 ? raw.AccrualStartMonth.Value : 1, 1);
-            var settings = await repository.GetActiveRegularAsync(month, token);
-            var setting = settings.SingleOrDefault(s => s.Id == raw.Id);
-            if (setting is null)
+            var scheduledMonth = new DateOnly(year, raw.AccrualStartMonth is >= 1 and <= 12 ? raw.AccrualStartMonth.Value : 1, 1);
+            if (await SettingAsync(raw.Id, scheduledMonth) is null)
             {
                 Add(uncertain, "annual_service_snapshot_unavailable", Math.Max(applicable.Length, 1));
-                monthlyInputs.Add(new { raw.Id, month, Unavailable = true });
                 result.Add(new(raw.Id, raw.IncomeTypeId, applicable.Length, 0, 0m, 0, 0m,
                     ToReasons(excluded), ToReasons(uncertain)));
                 continue;
             }
-            monthlyInputs.Add(new
-            {
-                raw.Id,
-                month,
-                setting.TariffId,
-                setting.IsMetered,
-                setting.HasTieredTariff,
-                Tariff = TariffInput(setting.Tariff),
-                Versions = setting.TariffVersions.OrderBy(v => v.EffectiveFrom)
-                    .Select(v => new { v.EffectiveFrom, v.EffectiveTo, v.IsArchived, Tariff = TariffInput(v.Tariff) }).ToArray()
-            });
             var duplicateIncome = raw.IncomeTypeId.HasValue && services.Count(s => s.IncomeTypeId == raw.IncomeTypeId) > 1;
             foreach (var garage in applicable)
             {
                 if (!raw.IncomeTypeId.HasValue || raw.IncomeArchived || raw.PeriodicityMonths is null or < 12 || raw.AccrualStartMonth is null or < 1 or > 12)
                 { Add(uncertain, "annual_service_configuration_invalid"); continue; }
                 if (duplicateIncome) { Add(uncertain, "income_type_has_multiple_regular_services"); continue; }
-                if (month > monthNow) { Add(excluded, "scheduled_after_business_month"); continue; }
+                if (scheduledMonth > monthNow) { Add(excluded, "scheduled_after_business_month"); continue; }
                 var start = GarageAccountingPeriod.ResolveStartMonth(garage.AccountingStartMonth,
                     garage.RegisteredOn ?? businessDate.ToBusinessDate(garage.CreatedAtUtc));
-                if (start.Year > year || garage.AccountingStartMonth.HasValue && start > monthNow)
+                var month = AnnualAccrualPolicy.ResolveAccountingMonth(scheduledMonth, start);
+                if (start.Year > year || month > monthNow)
                 { Add(excluded, "accounting_not_started"); continue; }
                 var related = accruals.Where(a => a.GarageId == garage.Id && a.IncomeTypeId == raw.IncomeTypeId).ToArray();
                 var existing = related.Where(a => !a.IsCanceled &&
@@ -194,12 +209,18 @@ public sealed class AnnualAccrualForecastEngine(GarageBalanceDbContext db,
                     continue;
                 }
                 var canceled = related.Any(a => a.IsCanceled && !a.HasBasis && a.FeeCampaignId == null && a.IrregularPaymentId == null &&
-                    (a.AccountingMonth == month || (a.AccountingYear ?? (a.IsAnnualAccrual == true ? a.AccountingMonth.Year : (int?)null)) == year) &&
+                    (a.AccountingMonth == scheduledMonth || a.AccountingMonth == month ||
+                     (a.AccountingYear ?? (a.IsAnnualAccrual == true ? a.AccountingMonth.Year : (int?)null)) == year) &&
                     lastActions.GetValueOrDefault(a.Id.ToString()) == "finance.accrual_canceled");
                 if (canceled) { Add(excluded, "manually_canceled"); continue; }
-                // The catalogue and per-garage catch-up differ when the first month is shifted.
-                // Do not claim an exact release amount until that difference is resolved.
-                if (start > month) { Add(uncertain, "shifted_first_annual_month"); continue; }
+                // A legacy cancellation outside both known months has no reliable
+                // annual scope. Do not infer a fresh obligation from missing markers.
+                if (related.Any(a => a.IsCanceled && !a.HasBasis && a.FeeCampaignId == null && a.IrregularPaymentId == null &&
+                        a.AccountingYear is null && a.IsAnnualAccrual is null && a.AccountingMonth != scheduledMonth && a.AccountingMonth != month &&
+                        lastActions.GetValueOrDefault(a.Id.ToString()) is null or "finance.accrual_canceled"))
+                { Add(uncertain, "legacy_canceled_annual_scope_unknown"); continue; }
+                var setting = await SettingAsync(raw.Id, month);
+                if (setting is null) { Add(uncertain, "annual_service_snapshot_unavailable"); continue; }
                 if (!setting.AppliesToSelectedGarages && assignments.Any(a => a.GarageId == garage.Id && a.ChargeServiceSettingId == raw.Id &&
                         a.EffectiveFrom <= month.AddMonths(1).AddDays(-1) && (a.EffectiveTo == null || a.EffectiveTo >= month)))
                 { Add(uncertain, "individual_tariff_not_supported"); continue; }
@@ -266,21 +287,6 @@ public sealed class AnnualAccrualForecastEngine(GarageBalanceDbContext db,
         t.ElectricitySecondRate,
         t.ElectricityThirdRate
     };
-    private static bool ValidEpoch(string? json, HashSet<string> expected)
-    {
-        if (json is null) return false;
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
-            var actual = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var entry in document.RootElement.EnumerateObject())
-                if (entry.Name.Length != 4 || entry.Name.Any(c => c is < '0' or > '9') ||
-                    entry.Value.ValueKind != JsonValueKind.True || !actual.Add(entry.Name)) return false;
-            return actual.SetEquals(expected);
-        }
-        catch (JsonException) { return false; }
-    }
     private static void Add(Dictionary<string, int> reasons, string code, int count = 1) => reasons[code] = reasons.GetValueOrDefault(code) + count;
     private static IReadOnlyList<AnnualAccrualForecastReason> ToReasons(Dictionary<string, int> reasons) =>
         reasons.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => new AnnualAccrualForecastReason(p.Key, p.Value)).ToArray();

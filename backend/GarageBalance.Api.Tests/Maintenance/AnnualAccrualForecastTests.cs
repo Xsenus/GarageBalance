@@ -142,8 +142,8 @@ public sealed class AnnualAccrualForecastTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var shifted = await Engine(db).PreviewAsync(2026, default);
-        Assert.False(shifted.IsComplete);
-        Assert.Contains(Assert.Single(shifted.Services).Uncertainties, r => r.Code == "shifted_first_annual_month");
+        Assert.True(shifted.IsComplete);
+        Assert.Equal(1200m, shifted.NewAccrualAmount);
         Assert.NotEqual(report.InputFingerprint, shifted.InputFingerprint);
     }
 
@@ -357,6 +357,211 @@ public sealed class AnnualAccrualForecastTests
         Assert.True(generated.Succeeded, generated.ErrorMessage);
         Assert.Equal(1, generated.Value!.CreatedCount);
         Assert.Equal(forecast.NewAccrualAmount, await db.Accruals.SumAsync(a => a.Amount));
+    }
+
+    [PostgreSqlFact]
+    public async Task ShiftedForecastMatchesCatalogCatchUpAndTracksEffectiveMonthTariffs()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (first, service) = await SeedAsync(db);
+        var october = new DateOnly(2026, 10, 1);
+        first.AccountingStartMonth = october;
+        var registration = Garage("PRIVATE REGISTRATION FALLBACK");
+        registration.AccountingStartMonth = null;
+        registration.RegisteredOn = october;
+        var creation = Garage("PRIVATE CREATION FALLBACK");
+        creation.AccountingStartMonth = null;
+        creation.RegisteredOn = null;
+        creation.CreatedAtUtc = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        var january = Garage("PRIVATE JANUARY");
+        var future = Garage("PRIVATE FUTURE");
+        future.AccountingStartMonth = new(2026, 12, 1);
+        var futureRegistration = Garage("PRIVATE FUTURE REGISTRATION");
+        futureRegistration.AccountingStartMonth = null;
+        futureRegistration.RegisteredOn = new(2026, 12, 1);
+        var futureCreation = Garage("PRIVATE FUTURE CREATION");
+        futureCreation.AccountingStartMonth = null;
+        futureCreation.RegisteredOn = null;
+        futureCreation.CreatedAtUtc = new(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+        var dated = new Tariff { Name = "Synthetic October tariff", CalculationBase = TariffCalculationBases.Fixed, Rate = 1800m, EffectiveFrom = october };
+        db.AddRange(registration, creation, january, future, futureRegistration, futureCreation,
+            new ChargeServiceTariffVersion { ChargeServiceSetting = service, Tariff = service.Tariff!, EffectiveFrom = January, EffectiveTo = october.AddDays(-1) },
+            new ChargeServiceTariffVersion { ChargeServiceSetting = service, Tariff = dated, EffectiveFrom = october });
+        await db.SaveChangesAsync();
+        await HoldAsync(db, true);
+        db.ChangeTracker.Clear();
+        var forecast = await Engine(db).PreviewAsync(2026, default);
+        Assert.True(forecast.IsComplete);
+        Assert.Equal(4, forecast.NewAccrualCount);
+        Assert.Equal(4, forecast.AffectedGarageCount);
+        Assert.Equal(6600m, forecast.NewAccrualAmount);
+        Assert.Contains(Assert.Single(forecast.Services).Exclusions, r => r.Code == "accounting_not_started" && r.Count == 3);
+        Assert.Empty(await db.Accruals.ToArrayAsync());
+        await db.Tariffs.Where(t => t.Id == dated.Id).ExecuteUpdateAsync(s => s.SetProperty(t => t.Rate, 1900m));
+        var changed = await Engine(db).PreviewAsync(2026, default);
+        Assert.Equal(6900m, changed.NewAccrualAmount);
+        Assert.NotEqual(forecast.InputFingerprint, changed.InputFingerprint);
+        await db.Tariffs.Where(t => t.Id == dated.Id).ExecuteUpdateAsync(s => s.SetProperty(t => t.Rate, 1800m));
+        await HoldAsync(db, false);
+        var generated = await FinanceServiceTestFactory.Create(db, businessDate: November)
+            .GenerateRegularCatalogAccrualsAsync(new(new(2026, 11, 1), null), null, default);
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        var rows = await db.Accruals.AsNoTracking().ToArrayAsync();
+        Assert.Equal(forecast.NewAccrualCount, rows.Length);
+        Assert.Equal(forecast.NewAccrualAmount, rows.Sum(a => a.Amount));
+        Assert.Equal(3, rows.Count(a => a.AccountingMonth == october && a.Amount == 1800m));
+        Assert.Equal(January, Assert.Single(rows, a => a.GarageId == january.Id).AccountingMonth);
+    }
+
+    [PostgreSqlFact]
+    public async Task ShiftedFirstTariffAndGapMatchCatalogWithoutInventingJanuaryTerms()
+    {
+        foreach (var scenario in new[] { "direct", "version", "gap" })
+        {
+            await using var database = await PostgreSqlTestDatabase.CreateAsync();
+            await using var db = database.CreateContext();
+            var (garage, service) = await SeedAsync(db);
+            var october = new DateOnly(2026, 10, 1);
+            garage.AccountingStartMonth = october;
+            if (scenario == "gap")
+                db.Add(new ChargeServiceTariffVersion { ChargeServiceSetting = service, Tariff = service.Tariff!, EffectiveFrom = January, EffectiveTo = october.AddDays(-1) });
+            else
+            {
+                service.Tariff!.EffectiveFrom = october;
+                service.Tariff.Rate = 1800m;
+                if (scenario == "version")
+                    db.Add(new ChargeServiceTariffVersion { ChargeServiceSetting = service, Tariff = service.Tariff, EffectiveFrom = october });
+            }
+            await db.SaveChangesAsync();
+            await HoldAsync(db, true);
+            db.ChangeTracker.Clear();
+            var forecast = await Engine(db).PreviewAsync(2026, default);
+            Assert.True(forecast.IsComplete);
+            Assert.Equal(scenario == "gap" ? 0 : 1, forecast.NewAccrualCount);
+            Assert.Equal(scenario == "gap" ? 0m : 1800m, forecast.NewAccrualAmount);
+            if (scenario == "gap") Assert.Contains(Assert.Single(forecast.Services).Exclusions, r => r.Code == "no_effective_tariff");
+            await HoldAsync(db, false);
+            var generated = await FinanceServiceTestFactory.Create(db, businessDate: November)
+                .GenerateRegularCatalogAccrualsAsync(new(new(2026, 11, 1), null), null, default);
+            Assert.Equal(scenario != "gap", generated.Succeeded);
+            var rows = await db.Accruals.AsNoTracking().ToArrayAsync();
+            Assert.Equal(forecast.NewAccrualCount, rows.Length);
+            Assert.Equal(forecast.NewAccrualAmount, rows.Sum(a => a.Amount));
+            Assert.All(rows, a => Assert.Equal(october, a.AccountingMonth));
+        }
+    }
+
+    [PostgreSqlFact]
+    public async Task ShiftedPeopleHistoryUsesActualMonthAndMatchesGenerator()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (garage, service) = await SeedAsync(db);
+        var october = new DateOnly(2026, 10, 1);
+        garage.AccountingStartMonth = october;
+        service.Tariff!.CalculationBase = TariffCalculationBases.People;
+        service.Tariff.Rate = 31m;
+        db.AddRange(
+            new ChargeServiceTariffVersion { ChargeServiceSetting = service, Tariff = service.Tariff, EffectiveFrom = January, EffectiveTo = october.AddDays(-1) },
+            new ChargeServiceTariffVersion { ChargeServiceSetting = service, Tariff = new Tariff { Name = "Synthetic October people", CalculationBase = TariffCalculationBases.People, Rate = 62m, EffectiveFrom = october }, EffectiveFrom = october },
+            new GaragePeopleCountPeriod { GarageId = garage.Id, EffectiveFrom = January, PeopleCount = 1 },
+            new GaragePeopleCountPeriod { GarageId = garage.Id, EffectiveFrom = october, PeopleCount = 2 },
+            new GaragePeopleCountPeriod { GarageId = garage.Id, EffectiveFrom = october.AddDays(15), PeopleCount = 4 });
+        await db.SaveChangesAsync();
+        await HoldAsync(db, true);
+        db.ChangeTracker.Clear();
+        var forecast = await Engine(db).PreviewAsync(2026, default);
+        Assert.True(forecast.IsComplete);
+        Assert.Equal(188m, forecast.NewAccrualAmount);
+        await HoldAsync(db, false);
+        var generated = await FinanceServiceTestFactory.Create(db, businessDate: November)
+            .GenerateRegularCatalogAccrualsAsync(new(new(2026, 11, 1), null), null, default);
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        var row = await db.Accruals.SingleAsync();
+        Assert.Equal(october, row.AccountingMonth);
+        Assert.Equal(forecast.NewAccrualAmount, row.Amount);
+    }
+
+    [PostgreSqlFact]
+    public async Task ShiftedCancellationsPreserveBothMonthsAndUnknownLegacyScopeBlocksRelease()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (garage, service) = await SeedAsync(db);
+        var october = new DateOnly(2026, 10, 1);
+        garage.AccountingStartMonth = october;
+        var unknownIds = new List<Guid>();
+        foreach (var scenario in new[] { "scheduled", "effective", "known_other", "unknown_other", "no_audit_other", "restored_other" })
+        {
+            var canceledGarage = Garage("PRIVATE " + scenario);
+            canceledGarage.AccountingStartMonth = october;
+            var row = Accrual(canceledGarage, service, true);
+            row.AccountingMonth = scenario == "scheduled" ? January : scenario == "effective" ? october : new(2026, 3, 1);
+            if (scenario != "known_other") { row.AccountingYear = null; row.IsAnnualAccrual = null; }
+            db.Add(row);
+            if (scenario != "no_audit_other") db.Add(Event(row, "finance.accrual_canceled", 1));
+            if (scenario == "restored_other") db.Add(Event(row, "finance.accrual_restored", 2));
+            if (scenario is "unknown_other" or "no_audit_other") unknownIds.Add(canceledGarage.Id);
+        }
+        await db.SaveChangesAsync();
+        await HoldAsync(db, true);
+        db.ChangeTracker.Clear();
+        var uncertain = await Engine(db).PreviewAsync(2026, default);
+        Assert.False(uncertain.IsComplete);
+        Assert.Contains(Assert.Single(uncertain.Services).Uncertainties, r => r.Code == "legacy_canceled_annual_scope_unknown" && r.Count == 2);
+        Assert.Contains(Assert.Single(uncertain.Services).Exclusions, r => r.Code == "manually_canceled" && r.Count == 3);
+        Assert.Equal(2, uncertain.NewAccrualCount);
+        Assert.Equal(2400m, uncertain.NewAccrualAmount);
+        // Isolate the supported cohort in this synthetic database for exact parity.
+        await db.Garages.Where(g => unknownIds.Contains(g.Id)).ExecuteUpdateAsync(s => s.SetProperty(g => g.IsArchived, true));
+        var complete = await Engine(db).PreviewAsync(2026, default);
+        Assert.True(complete.IsComplete);
+        await HoldAsync(db, false);
+        var generated = await FinanceServiceTestFactory.Create(db, businessDate: November)
+            .GenerateRegularCatalogAccrualsAsync(new(new(2026, 11, 1), null), null, default);
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        var rows = await db.Accruals.AsNoTracking().Where(a => !a.IsCanceled).ToArrayAsync();
+        Assert.Equal(complete.NewAccrualCount, rows.Length);
+        Assert.Equal(complete.NewAccrualAmount, rows.Sum(a => a.Amount));
+        Assert.All(rows, a => Assert.Equal(october, a.AccountingMonth));
+        Assert.Equal(6, await db.Accruals.CountAsync(a => a.IsCanceled));
+    }
+
+    [PostgreSqlFact]
+    public async Task GuardYearRangeMatchesReleaseValidationWithoutChangingSource()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        await SeedAsync(db);
+        await HoldAsync(db, true);
+        db.ChangeTracker.Clear();
+        Assert.True((await Engine(db).PreviewAsync(2026, default)).IsComplete);
+        Guid? invalidId = null;
+        foreach (var year in new[] { "0000", "1899" })
+        {
+            var hold = invalidId.HasValue
+                ? await db.ApplicationSettings.SingleAsync(s => s.Id == invalidId)
+                : new ApplicationSetting { BooleanValue = true };
+            hold.Key = AnnualAccrualHoldPolicy.KeyPrefix + year;
+            if (!invalidId.HasValue) { db.Add(hold); invalidId = hold.Id; }
+            var epoch = await db.ApplicationSettings.SingleAsync(s => s.Key == "finance.annual_accrual_guard_epoch");
+            epoch.JsonValue = JsonSerializer.Serialize(new Dictionary<string, bool> { ["2026"] = true, [year] = true });
+            // Commit normally with every integrity trigger enabled. PostgreSQL
+            // accepts matching four-digit maps; the release domain also requires >=1900.
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+            var before = await db.ApplicationSettings.AsNoTracking().SingleAsync(s => s.Id == invalidId);
+            var report = await Engine(db).PreviewAsync(2026, default);
+            Assert.False(report.IsComplete);
+            Assert.Contains(report.Uncertainties, r => r.Code == "annual_guard_state_invalid");
+            var after = await db.ApplicationSettings.AsNoTracking().SingleAsync(s => s.Id == invalidId);
+            Assert.Equal(before.Version, after.Version);
+            Assert.Equal(before.Key, after.Key);
+            Assert.True(after.BooleanValue);
+            Assert.Empty(db.ChangeTracker.Entries());
+            Assert.Empty(await db.Accruals.ToArrayAsync());
+        }
     }
 
     private static AnnualAccrualForecastEngine Engine(GarageBalanceDbContext db) => new(db, new TestBusinessDateProvider(November), TimeProvider.System);
