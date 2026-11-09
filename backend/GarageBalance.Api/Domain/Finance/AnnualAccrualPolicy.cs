@@ -34,4 +34,11 @@ public static class AnnualAccrualPolicy
     {
         return accruedAmount > 0m && allocatedAmount >= accruedAmount;
     }
+
+    public static DateOnly ResolveAccountingMonth(DateOnly scheduledMonth, DateOnly garageStartMonth)
+    {
+        var scheduled = new DateOnly(scheduledMonth.Year, scheduledMonth.Month, 1);
+        var start = new DateOnly(garageStartMonth.Year, garageStartMonth.Month, 1);
+        return start > scheduled ? start : scheduled;
+    }
 }
