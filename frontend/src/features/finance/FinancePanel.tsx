@@ -42,6 +42,7 @@ import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePay
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
 import { createGarageIncomeRowsFromWorksheet, formatPaymentPrototypeMonthLabel, getAccrualCalculationSummary, getGarageIncomeCalculationIssue, getGarageIncomeRowTitle, isFeePaymentClosed, mergeSavedGarageAccrual, normalizeGarageDebtAfterForHistory, shouldShowAccrualReason } from './garageIncomeWorksheetRows'
+import { preserveWorksheetCalculationDiagnostics } from './worksheetRefreshDiagnostics'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -4161,7 +4162,8 @@ function PaymentsPrototypePanel({
           ? period.defaultMonthFrom?.slice(0, 7) ?? resolvedMonthTo
           : resolvedMonthTo
         if (`${resolvedMonthFrom}-01` !== worksheetRequest.monthFrom || `${resolvedMonthTo}-01` !== worksheetRequest.monthTo) {
-          worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
+          const calculatedWorksheet = worksheet
+          const refreshedWorksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
             monthFrom: `${resolvedMonthFrom}-01`,
             monthTo: `${resolvedMonthTo}-01`,
             refreshOnly: true,
@@ -4169,6 +4171,7 @@ function PaymentsPrototypePanel({
           if (controller.signal.aborted || !incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
             return
           }
+          worksheet = preserveWorksheetCalculationDiagnostics(calculatedWorksheet, refreshedWorksheet)
         }
       }
 

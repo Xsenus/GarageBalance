@@ -63,6 +63,45 @@ import type { AppReleaseDto, AppReleasePageDto, ReleaseClient } from './services
 import type { ManagedRoleDto, ManagedUserDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
+  it.each([true, false])('preserves calculation diagnostics and missing-meter rows after catch-up period changes, debt preference %s', async (showDebt) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'audit-garage', number: '7799', accountingStartMonth: '2026-10-01' })
+    let caughtUp = false
+    const issue = 'AUDIT unknown historical annual calculation'
+    const annualRow = { accountingMonth: '2026-10-01', incomeTypeId: 'audit-annual', incomeTypeName: 'Audit annual', annualAccrualId: 'annual-id', meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 1200, payableAmount: 1200, incomeAmount: 0, debt: 1200 }
+    const persistedRow = { ...annualRow, accountingMonth: '2026-11-01', incomeTypeId: 'audit-history', incomeTypeName: 'Audit historic', annualAccrualId: 'historic-id' }
+    const missingMeter = { accountingMonth: '2026-11-01', incomeTypeId: 'audit-electricity', incomeTypeName: 'Audit electricity', meterKind: 'electricity', meterValue: null, meterConsumption: null, accrualAmount: 0, payableAmount: 0, incomeAmount: 0, debt: 0, calculationIssue: 'AUDIT reading required' }
+    const getFinancialReportPeriod = vi.fn(async () => ({ monthFrom: caughtUp ? '2026-10-01' : '2026-11-01', monthTo: '2026-11-01', defaultMonthFrom: caughtUp ? '2026-10-01' : '2026-11-01', defaultMonthTo: '2026-11-01' }))
+    const calculateGarageIncomeWorksheet = vi.fn(async () => {
+      caughtUp = true
+      return createGarageIncomeWorksheet({ garageId: garage.id, garageNumber: garage.number, monthFrom: '2026-11-01', monthTo: '2026-11-01',
+        accrualTotal: 2400, incomeTotal: 0, debtTotal: 2400, closingBalance: 2400, closingDebt: 2400,
+        rows: [{ ...annualRow, accountingMonth: '2026-11-01' }, { ...persistedRow, calculationIssue: issue }, missingMeter] })
+    })
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({ garageId: garage.id, garageNumber: garage.number,
+      monthFrom: '2026-10-01', monthTo: '2026-11-01', accrualTotal: 2400, incomeTotal: 0, debtTotal: 2400, closingBalance: 2400, closingDebt: 2400,
+      rows: [annualRow, persistedRow] }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getFinancialReportPeriod, calculateGarageIncomeWorksheet, getGarageIncomeWorksheet })}
+      settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'audit-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'audit-tariff', showFundName: false, showGarageDebtPeriodByDefault: showDebt }) })}
+      importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*7799/ }))
+    await waitFor(() => expect(getFinancialReportPeriod).toHaveBeenCalledTimes(2))
+    const table = within(prototype).getByRole('table', { name: 'Поступления гаража 7799' })
+    await waitFor(() => expect(table).toHaveTextContent('Audit historic'))
+    expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(showDebt ? 1 : 0)
+    if (showDebt) expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id,
+      { monthFrom: '2026-10-01', monthTo: '2026-11-01', refreshOnly: true }, expect.any(AbortSignal))
+    expect.soft(table).toHaveTextContent(issue)
+    expect.soft(table).toHaveTextContent('AUDIT reading required')
+    expect.soft(table).toHaveTextContent('Audit electricity')
+  })
+
   it('keeps explicit audit values and legacy fallbacks in the before and after columns', async () => {
     const user = userEvent.setup()
     const examples = [
