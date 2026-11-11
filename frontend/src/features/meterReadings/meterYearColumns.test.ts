@@ -1,7 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
+import type { MeterReadingYearGarageDto } from '../../services/financeApi'
+import { getMeterBaselineMonth, getMeterReadingStartDate, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys, isBeforeMeterReadingStart } from './meterYearColumns'
 
 describe('visible meter months and the start value month', () => {
+  it.each<{ fields: Partial<MeterReadingYearGarageDto>; date: string | null; before: string | null; first: string }>([
+    { fields: { accountingStartMonth: '2020-01-01', startValueSource: 'device', startValueDate: '2026-10-15', initialReadingMonth: '2026-12-01', initialReadingValue: 0 }, date: '2026-10-15', before: '2026-09', first: '2026-10' },
+    { fields: { accountingStartMonth: '2026-11-01', startValueSource: 'device', startValueDate: '2026-10-15' }, date: '2026-11-01', before: '2026-10', first: '2026-11' },
+    { fields: { connectedOn: '2026-09-10', startValueSource: 'device', startValueDate: '2026-10-15' }, date: '2026-09-10', before: '2026-08', first: '2026-09' },
+    { fields: { connectedOn: '2025-12-10', accountingStartMonth: '2026-01-01' }, date: '2026-01-01', before: '2025-12', first: '2026-01' },
+    { fields: { initialReadingMonth: '2026-09-01', initialReadingValue: 0 }, date: null, before: '2026-09', first: '2026-10' },
+    { fields: { startValueSource: 'device', initialReadingMonth: '2026-09-01', initialReadingValue: 100 }, date: null, before: null, first: '2026-01' },
+    { fields: { initialReadingValue: 0 }, date: null, before: null, first: '2026-01' },
+    { fields: { initialReadingMonth: '2026-09-01', initialReadingValue: null }, date: null, before: null, first: '2026-01' },
+  ])('shares the active start boundary for $fields', ({ fields, date, before, first }) => {
+    const garage = { id: 'test', number: 'TEST', ...fields }
+    expect(getMeterReadingStartDate(garage)).toBe(date)
+    if (before) expect(isBeforeMeterReadingStart(garage, before)).toBe(true)
+    expect(isBeforeMeterReadingStart(garage, first)).toBe(false)
+    expect(getVisibleMeterReadingMonthKeys(first.slice(0, 4), [garage], new Set())).toContain(first.slice(5, 7))
+  })
+
   it('agrees with garage 12 July and garage 20 August accounting starts while retaining physical replacement dates', () => {
     expect(getVisibleMeterReadingMonthKeys('2026', [{ id: '12', number: '12', accountingStartMonth: '2026-07-01', initialReadingMonth: '2026-09-01', initialReadingValue: 100, startValueSource: 'device', startValueDate: '2026-07-01' }], new Set())).toEqual(['06', '07', '08', '09', '10', '11', '12'])
     expect(getMeterBaselineMonth({ id: '12', number: '12', accountingStartMonth: '2026-07-01', startValueSource: 'device', startValueDate: '2026-07-01' })).toBe('2026-06')

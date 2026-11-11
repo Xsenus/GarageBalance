@@ -268,6 +268,7 @@ public sealed partial class FinanceService(
                 reading.Id,
                 reading.GarageId,
                 reading.AccountingMonth,
+                reading.ReadingDate,
                 reading.CurrentValue,
                 reading.Version,
                 reading.MeterDeviceId,
@@ -441,7 +442,11 @@ public sealed partial class FinanceService(
                 garageId,
                 cancellationToken);
 
-        var feeCampaignOptions = await EnsureFeeCampaignAccrualsForWorksheetAsync(garageId, monthFrom, monthTo, cancellationToken);
+        // A post-calculation period refresh must not create or normalize another
+        // obligation, even if a campaign changed between the two requests.
+        var feeCampaignOptions = request.RefreshOnly
+            ? await feeCampaignRepository.GetPaymentOptionsForGarageAsync(garageId, monthFrom, monthTo, cancellationToken)
+            : await EnsureFeeCampaignAccrualsForWorksheetAsync(garageId, monthFrom, monthTo, cancellationToken);
         var worksheetData = await garageIncomeWorksheetQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
         if (worksheetData is null)
         {
@@ -1015,10 +1020,8 @@ public sealed partial class FinanceService(
                 cancellationToken))
             // Match batch generation's historical guard: an existing unclassified
             // obligation in this year must not acquire a second annual charge.
-            .Where(item => (item.AccountingYear == year || !item.AccountingYear.HasValue && item.AccountingMonth.Year == year) &&
-                item.Basis is null && !item.FeeCampaignId.HasValue && !item.IrregularPaymentId.HasValue)
-            .GroupBy(item => item.IncomeTypeId)
-            .ToDictionary(group => group.Key, group => group.First());
+            .Where(item => item.Basis is null && !item.FeeCampaignId.HasValue && !item.IrregularPaymentId.HasValue)
+            .ToLookup(item => item.IncomeTypeId);
         var manualCancellations = await accrualRepository.GetManualRegularCancellationsAsync(
             garage.Id, null, new DateOnly(year, 1, 1), new DateOnly(year, 12, 1), cancellationToken);
         var canceledMonths = manualCancellations.Select(item => (item.AccountingMonth, item.IncomeTypeId)).ToHashSet();
@@ -1029,12 +1032,14 @@ public sealed partial class FinanceService(
         var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
         foreach (var definition in dueDefinitions)
         {
-            if (existingAccruals.ContainsKey(definition.IncomeType.Id) || definition.Tariff is null)
+            var accrualMonth = AnnualAccrualPolicy.ResolveAccountingMonth(definition.AccountingMonth, GetGarageAccrualStartMonth(garage));
+            if (definition.Tariff is null || existingAccruals[definition.IncomeType.Id].Any(item =>
+                item.AccountingMonth == accrualMonth ||
+                AnnualAccrualPolicy.ResolveHistoricalObligationYear(item.AccountingYear, item.IsAnnualAccrual, item.AccountingMonth) == year))
             {
                 continue;
             }
 
-            var accrualMonth = AnnualAccrualPolicy.ResolveAccountingMonth(definition.AccountingMonth, GetGarageAccrualStartMonth(garage));
             if (canceledYears.Contains(definition.IncomeType.Id) ||
                 canceledMonths.Contains((accrualMonth, definition.IncomeType.Id)))
             {
@@ -1176,6 +1181,9 @@ public sealed partial class FinanceService(
         Guid? actorUserId,
         CancellationToken cancellationToken)
     {
+        // RefreshOnly belongs to the GET representation workflow. An explicit
+        // calculation always retains the existing regular/fee calculation contract.
+        request = request with { RefreshOnly = false };
         var defaultMonth = GetCurrentAccountingMonth();
         var monthTo = MonthPeriod.Normalize(request.MonthTo ?? defaultMonth);
         var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? monthTo);
@@ -1276,15 +1284,28 @@ public sealed partial class FinanceService(
             .Select(item => (item.AccountingYear!.Value, item.IncomeTypeId)).ToHashSet();
         var calculationIssues = new Dictionary<(DateOnly Month, Guid IncomeTypeId), string>();
         var unknownHistoryHeldYears = new Dictionary<int, bool>();
+        var conflictingHistoricalAnnualIds = new HashSet<Guid>();
         foreach (var historicalAnnualAccrual in existingAccruals.Where(accrual =>
                      accrual.AccountingMonth < garageAccrualStartMonth &&
-                     accrual.AccountingYear == garageAccrualStartMonth.Year &&
+                     (accrual.AccountingYear.HasValue || accrual.IsAnnualAccrual == true) &&
+                     AnnualAccrualPolicy.ResolveHistoricalObligationYear(accrual.AccountingYear, accrual.IsAnnualAccrual,
+                         accrual.AccountingMonth) == garageAccrualStartMonth.Year &&
                      (!garage.AccountingStartMonth.HasValue || !paidAccrualIds.Contains(accrual.Id)) &&
                      accrual.Basis is null &&
                      !accrual.FeeCampaignId.HasValue &&
                      !accrual.IrregularPaymentId.HasValue))
         {
-            if (await IsAnnualYearHeldAsync(historicalAnnualAccrual.AccountingYear, cancellationToken)) continue;
+            if (await IsAnnualYearHeldAsync(garageAccrualStartMonth.Year, cancellationToken)) continue;
+            if (existingAccruals.Any(other => other.Id != historicalAnnualAccrual.Id &&
+                other.IncomeTypeId == historicalAnnualAccrual.IncomeTypeId && other.AccountingMonth == garageAccrualStartMonth &&
+                other.Basis is null && !other.FeeCampaignId.HasValue && !other.IrregularPaymentId.HasValue))
+            {
+                var issue = $"Годовое начисление осталось в прежнем месяце: в {garageAccrualStartMonth:MM.yyyy} уже есть другое начисление этого вида. Проверьте историю.";
+                calculationIssues[(historicalAnnualAccrual.AccountingMonth, historicalAnnualAccrual.IncomeTypeId)] = issue;
+                calculationIssues[(garageAccrualStartMonth, historicalAnnualAccrual.IncomeTypeId)] = issue;
+                conflictingHistoricalAnnualIds.Add(historicalAnnualAccrual.Id);
+                continue;
+            }
             var previousAccountingMonth = historicalAnnualAccrual.AccountingMonth;
             var setting = settings.FirstOrDefault(item => item.IncomeTypeId == historicalAnnualAccrual.IncomeTypeId);
             var dueDates = AccrualDueDates.ForGarage(
@@ -1311,6 +1332,16 @@ public sealed partial class FinanceService(
                      !accrual.AccountingYear.HasValue &&
                      !paidAccrualIds.Contains(accrual.Id)))
         {
+            if (conflictingHistoricalAnnualIds.Contains(historicalAccrual.Id)) continue;
+            // The current annual schedule cannot prove the formula or month of an
+            // unclassified historical obligation. Preserve it as a yearly guard,
+            // rather than canceling it before creating a replacement at today's tariff.
+            if (historicalAccrual.IsAnnualAccrual != false && annualIncomeTypeIds.Contains(historicalAccrual.IncomeTypeId))
+            {
+                calculationIssues[(historicalAccrual.AccountingMonth, historicalAccrual.IncomeTypeId)] =
+                    "Историческое основание начисления не определено. Запись сохранена; требуется проверка.";
+                continue;
+            }
             if (historicalAccrual.IsAnnualAccrual != false)
             {
                 var historicalYear = historicalAccrual.AccountingMonth.Year;
@@ -1352,11 +1383,17 @@ public sealed partial class FinanceService(
             .ToDictionary(group => group.Key, group => group.First());
         var annualAccruals = activeExistingAccruals
             .Where(accrual =>
-                accrual.AccountingYear.HasValue &&
+                (accrual.AccountingYear.HasValue || accrual.IsAnnualAccrual == true ||
+                 accrual.IsAnnualAccrual is null && annualIncomeTypeIds.Contains(accrual.IncomeTypeId)) &&
                 accrual.Basis is null &&
                 !accrual.IrregularPaymentId.HasValue &&
                 !accrual.FeeCampaignId.HasValue)
-            .GroupBy(accrual => (AccountingYear: accrual.AccountingYear!.Value, accrual.IncomeTypeId))
+            // Prefer explicit annual history so collisions with a legacy row still
+            // reach the existing conflict check instead of hiding the annual record.
+            .OrderByDescending(accrual => accrual.AccountingYear.HasValue)
+            .ThenByDescending(accrual => accrual.IsAnnualAccrual == true)
+            .GroupBy(accrual => (AccountingYear: AnnualAccrualPolicy.ResolveHistoricalObligationYear(
+                accrual.AccountingYear, accrual.IsAnnualAccrual, accrual.AccountingMonth)!.Value, accrual.IncomeTypeId))
             .ToDictionary(group => group.Key, group => group.First());
 
         for (var month = calculationMonthFrom; month <= monthTo; month = month.AddMonths(1))
@@ -1391,6 +1428,7 @@ public sealed partial class FinanceService(
                     ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
                       accrualsByMonth.GetValueOrDefault((month, incomeType.Id))
                     : accrualsByMonth.GetValueOrDefault((month, incomeType.Id));
+                if (existing is not null && conflictingHistoricalAnnualIds.Contains(existing.Id)) continue;
                 if (existing is null && (canceledMonths.Contains((month, incomeType.Id)) ||
                     accountingYear.HasValue && canceledYears.Contains((accountingYear.Value, incomeType.Id))))
                 {
@@ -1421,6 +1459,16 @@ public sealed partial class FinanceService(
                 if (tariff is null)
                 {
                     calculationIssues[(month, incomeType.Id)] = "Не задан тариф на этот месяц. Добавьте соответствующий тарифный период.";
+                    continue;
+                }
+
+                // Protect unknown provenance before any calculation result, including
+                // zero amounts that would otherwise cancel the historical obligation.
+                if (existing is not null && !existing.IsAnnualAccrual.HasValue && !existing.AccountingYear.HasValue &&
+                    (accountingYear.HasValue || existing.TariffId != tariff.Id))
+                {
+                    calculationIssues[(existing.AccountingMonth, incomeType.Id)] =
+                        "Историческое основание начисления не определено. Сохранены прежний тариф и сумма; требуется проверка.";
                     continue;
                 }
 
@@ -1513,14 +1561,6 @@ public sealed partial class FinanceService(
                         existing,
                         $"Для гаража {garage.Number} рассчитано регулярное начисление «{setting.Name}» за {month:MM.yyyy}: {MoneyFormatting.Format(calculation.Amount)}.");
                     changedKeys.Add(new AccrualPaymentAllocationKey(garage.Id, incomeType.Id));
-                    continue;
-                }
-
-                if (!existing.IsAnnualAccrual.HasValue && !existing.AccountingYear.HasValue &&
-                    (accountingYear.HasValue || existing.TariffId != tariff.Id))
-                {
-                    calculationIssues[(existing.AccountingMonth, incomeType.Id)] =
-                        "Историческое основание начисления не определено. Сохранены прежний тариф и сумма; требуется проверка.";
                     continue;
                 }
 
@@ -5739,10 +5779,14 @@ public sealed partial class FinanceService(
                     skipped.Add($"Гараж {garage.Number}: не найден тариф на {accrualMonth:MM.yyyy}.");
                 continue;
             }
-            var canceledGarageIds = (moved
+            var effectiveGenerationState = moved
                 ? await accrualRepository.GetRegularGenerationStateAsync(incomeType.Id, accrualMonth, accountingYear, cancellationToken)
-                : generationState).CanceledGarageIds.Union(generationState.CanceledGarageIds).ToHashSet();
-            var eligible = group.Where(garage => !canceledGarageIds.Contains(garage.Id)).ToArray();
+                : generationState;
+            var canceledGarageIds = effectiveGenerationState.CanceledGarageIds.Union(generationState.CanceledGarageIds).ToHashSet();
+            var eligible = group.Where(garage => !canceledGarageIds.Contains(garage.Id) &&
+                !effectiveGenerationState.ExistingGarageIds.Contains(garage.Id)).ToArray();
+            foreach (var garage in group.Where(garage => effectiveGenerationState.ExistingGarageIds.Contains(garage.Id)))
+                skipped.Add($"Гараж {garage.Number}: регулярное начисление в месяце {accrualMonth:MM.yyyy} уже есть.");
             foreach (var garage in group.Where(garage => canceledGarageIds.Contains(garage.Id)))
                 skipped.Add($"Гараж {garage.Number}: начисление отменено вручную; восстановить его можно только из истории начислений.");
             if (eligible.Length == 0) continue;

@@ -5,6 +5,19 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class AnnualAccrualPolicyTests
 {
     [Theory]
+    [InlineData(null, null, 2026)]
+    [InlineData(null, true, 2026)]
+    [InlineData(null, false, null)]
+    [InlineData(2025, null, 2025)]
+    [InlineData(2025, true, 2025)]
+    [InlineData(2025, false, 2025)]
+    public void HistoricalObligationYearPreservesExplicitYearAndExcludesKnownNonannualHistory(
+        int? year, bool? annual, int? expected)
+    {
+        Assert.Equal(expected, AnnualAccrualPolicy.ResolveHistoricalObligationYear(year, annual, new(2026, 10, 1)));
+    }
+
+    [Theory]
     [InlineData("membership")]
     [InlineData(" TARGET ")]
     [InlineData("Outdoor_Lighting")]

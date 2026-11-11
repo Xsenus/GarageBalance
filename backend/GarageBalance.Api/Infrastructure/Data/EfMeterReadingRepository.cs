@@ -427,6 +427,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading.Id,
                 reading.GarageId,
                 reading.AccountingMonth,
+                reading.ReadingDate,
                 reading.CurrentValue,
                 reading.Version,
                 reading.MeterDeviceId,
@@ -522,6 +523,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 paged_garage."GarageOrdinal",
                 reading."Id" AS "ReadingId",
                 reading."AccountingMonth",
+                reading."ReadingDate",
                 reading."CurrentValue",
                 reading."Version",
                 reading."MeterDeviceId",
@@ -553,6 +555,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 NULL::bigint AS "GarageOrdinal",
                 NULL::uuid AS "ReadingId",
                 NULL::date AS "AccountingMonth",
+                NULL::date AS "ReadingDate",
                 NULL::numeric AS "CurrentValue",
                 NULL::uuid AS "Version",
                 NULL::uuid AS "MeterDeviceId",
@@ -567,7 +570,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             SELECT 3 AS "Category", paged_garage."GarageId", NULL::text AS "GarageNumber",
                 NULL::date AS "InitialReadingMonth", NULL::date AS "AccountingStartMonth", NULL::numeric AS "InitialReadingValue",
                 NULL::date AS "ConnectedOn", NULL::date AS "ClosedOn", FALSE AS "RequiresStartValue", FALSE AS "RequiresConnectionDate",
-                paged_garage."GarageOrdinal", NULL::uuid AS "ReadingId", NULL::date AS "AccountingMonth", NULL::numeric AS "CurrentValue",
+                paged_garage."GarageOrdinal", NULL::uuid AS "ReadingId", NULL::date AS "AccountingMonth", NULL::date AS "ReadingDate", NULL::numeric AS "CurrentValue",
                 NULL::uuid AS "Version", NULL::uuid AS "MeterDeviceId", NULL::text AS "MeterDeviceSerialNumber", FALSE AS "IsMeterReplacement",
                 0::bigint AS "TotalCount",
                 jsonb_build_object(
@@ -616,6 +619,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 row.ReadingId!.Value,
                 row.GarageId!.Value,
                 row.AccountingMonth!.Value,
+                row.ReadingDate!.Value,
                 row.CurrentValue!.Value,
                 row.Version!.Value,
                 row.MeterDeviceId,
@@ -669,6 +673,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         public long? GarageOrdinal { get; set; }
         public Guid? ReadingId { get; set; }
         public DateOnly? AccountingMonth { get; set; }
+        public DateOnly? ReadingDate { get; set; }
         public decimal? CurrentValue { get; set; }
         public Guid? Version { get; set; }
         public Guid? MeterDeviceId { get; set; }

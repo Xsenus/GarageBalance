@@ -35,6 +35,14 @@ public static class AnnualAccrualPolicy
         return accruedAmount > 0m && allocatedAmount >= accruedAmount;
     }
 
+    // A legacy regular obligation can block a second annual charge without being
+    // reclassified or recalculated. Explicit nonannual history remains month-scoped.
+    // Keep the equivalent EF query expressions in EfAccrualRepository in sync.
+    public static int? ResolveHistoricalObligationYear(int? accountingYear, bool? isAnnualAccrual, DateOnly accountingMonth)
+    {
+        return accountingYear ?? (isAnnualAccrual != false ? accountingMonth.Year : null);
+    }
+
     public static DateOnly ResolveAccountingMonth(DateOnly scheduledMonth, DateOnly garageStartMonth)
     {
         var scheduled = new DateOnly(scheduledMonth.Year, scheduledMonth.Month, 1);

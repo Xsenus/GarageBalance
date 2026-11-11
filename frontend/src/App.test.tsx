@@ -9290,6 +9290,7 @@ describe('App', () => {
                 id: 'meter-reading-jan',
                 garageId: 'garage-12',
                 accountingMonth: '2026-01-01',
+                readingDate: '2026-01-01',
                 currentValue: persistedJanuaryValue,
                 version: persistedJanuaryVersion,
               }]),
@@ -9297,6 +9298,7 @@ describe('App', () => {
                 id: 'future-meter-reading',
                 garageId: 'garage-12',
                 accountingMonth: '2026-12-01',
+                readingDate: '2026-12-20',
                 currentValue: 5000,
                 version: 'future-meter-reading-version',
               },
@@ -9737,6 +9739,7 @@ describe('App', () => {
             id: existingReading.id,
             garageId: existingReading.garageId,
             accountingMonth: existingReading.accountingMonth,
+            readingDate: existingReading.readingDate,
             currentValue: existingReading.currentValue,
             version: existingReading.version,
           }],
@@ -12016,6 +12019,150 @@ describe('App', () => {
     expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue(debtPeriodSetting === false ? '11.2026' : '10.2026')
     expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений по' })).toHaveValue('11.2026')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 775' })).toHaveTextContent('125.00')
+  })
+
+  it.each([
+    { canWrite: true, showDebt: true },
+    { canWrite: true, showDebt: false },
+    { canWrite: false, showDebt: true },
+    { canWrite: false, showDebt: false },
+  ])('resolves the first-open annual catch-up period and repeated selection ($canWrite, $showDebt)', async ({ canWrite, showDebt }) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-catch-up-period', number: '778', accountingStartMonth: '2026-10-01' })
+    let caughtUp = false
+    const calls: string[] = []
+    const getFinancialReportPeriod = vi.fn(async () => {
+      calls.push('period')
+      return { monthFrom: caughtUp ? '2026-10-01' : '2026-11-01', monthTo: '2026-11-01', defaultMonthFrom: caughtUp ? '2026-10-01' : '2026-11-01', defaultMonthTo: '2026-11-01' }
+    })
+    const worksheet = (params: { monthFrom: string; monthTo: string }) => createGarageIncomeWorksheet({
+      garageId: garage.id, garageNumber: garage.number, ...params,
+      accrualTotal: caughtUp ? 1200 : 0, closingDebt: caughtUp ? 1200 : 0,
+      rows: caughtUp ? [{ accountingMonth: '2026-10-01', incomeTypeId: 'annual-catch-up', incomeTypeName: 'Годовой сбор', annualAccrualId: 'annual-catch-up-accrual', payableAmount: 1200, meterKind: null, meterValue: null, meterConsumption: null, accrualAmount: 1200, incomeAmount: 0, debt: 1200 }] : [],
+    })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, _garageId: string, params: { monthFrom: string; monthTo: string }) => {
+      calls.push('read')
+      return worksheet(params)
+    })
+    const calculateGarageIncomeWorksheet = vi.fn(async (_token: string, _garageId: string, params: { monthFrom: string; monthTo: string }) => {
+      calls.push('calculate')
+      caughtUp = true
+      return worksheet(params)
+    })
+    render(<App
+      authClient={createAuthClient({ login: async () => canWrite ? createAuthResponse() : createAuthResponse({ user: { permissions: ['dictionaries.read', 'payments.read'] } }) })}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet, calculateGarageIncomeWorksheet })}
+      settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version', showFundName: false, showGarageDebtPeriodByDefault: showDebt }) })}
+      importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()}
+    />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
+    for (let opening = 0; opening < 2; opening += 1) {
+      await user.type(search, garage.number)
+      await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*778/ }))
+      await waitFor(() => expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue(canWrite && showDebt ? '10.2026' : '11.2026'))
+      if (canWrite) {
+        const table = within(prototype).getByRole('table', { name: 'Поступления гаража 778' })
+        await waitFor(() => expect(table.querySelector('.payments-prototype-payable-amount')).toHaveTextContent('1 200.00'))
+        expect(within(table).getByRole('textbox', { name: /Платеж Годовой сбор/ })).toBeEnabled()
+      }
+    }
+    expect(calls).toEqual(canWrite ? (showDebt ? ['period', 'calculate', 'period', 'read', 'period', 'calculate', 'period'] : ['period', 'calculate', 'period', 'period', 'calculate', 'period']) : ['period', 'read', 'period', 'read'])
+    expect(calculateGarageIncomeWorksheet).toHaveBeenCalledTimes(canWrite ? 2 : 0)
+    if (canWrite && showDebt) {
+      expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id, { monthFrom: '2026-10-01', monthTo: '2026-11-01', refreshOnly: true }, expect.any(AbortSignal))
+      const monthFrom = within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })
+      await user.clear(monthFrom)
+      await user.type(monthFrom, '11.2026')
+      await waitFor(() => expect(calculateGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', garage.id, { monthFrom: '2026-11-01', monthTo: '2026-11-01' }, expect.any(AbortSignal)))
+      expect(getFinancialReportPeriod).toHaveBeenCalledTimes(4)
+      expect(monthFrom).toHaveValue('11.2026')
+    }
+  })
+
+  it.each(['period', 'read'] as const)('reports annual catch-up refresh %s failure without showing a stale worksheet', async (failureStage) => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-catch-up-error', number: '779' })
+    let periodCalls = 0
+    const getFinancialReportPeriod = vi.fn(async () => {
+      periodCalls += 1
+      if (periodCalls === 2 && failureStage === 'period') throw new Error('Не удалось обновить период после начисления')
+      return { monthFrom: '2026-10-01', monthTo: '2026-11-01', defaultMonthFrom: periodCalls === 1 ? '2026-11-01' : '2026-10-01', defaultMonthTo: '2026-11-01' }
+    })
+    const calculateGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({ garageId: garage.id, rows: [] }))
+    const getGarageIncomeWorksheet = vi.fn(async () => { throw new Error('Не удалось обновить строки после начисления') })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet, calculateGarageIncomeWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*779/ }))
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent(failureStage === 'period' ? 'Не удалось обновить период после начисления' : 'Не удалось обновить строки после начисления')
+    expect(calculateGarageIncomeWorksheet).toHaveBeenCalledTimes(1)
+    expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(failureStage === 'period' ? 0 : 1)
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 779' })).toHaveTextContent('Начислений и поступлений за выбранный период пока нет.')
+  })
+
+  it.each(['calculate', 'period', 'read'] as const)('ignores stale annual catch-up %s after selecting another garage', async (pendingStage) => {
+    const user = userEvent.setup()
+    const first = createGarage({ id: 'garage-catch-up-first', number: '781' })
+    const second = createGarage({ id: 'garage-catch-up-second', number: '782' })
+    let resolvePending!: () => void
+    const pending = new Promise<void>((resolve) => { resolvePending = resolve })
+    let blocked = false
+    let firstPeriodCount = 0
+    let staleSignal: AbortSignal | undefined
+    const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1], signal?: AbortSignal) => {
+      if (params.garageId === first.id) {
+        firstPeriodCount += 1
+        if (firstPeriodCount === 2 && pendingStage === 'period') {
+          blocked = true
+          staleSignal = signal
+          await pending
+        }
+        return { monthFrom: '2026-10-01', monthTo: '2026-11-01', defaultMonthFrom: firstPeriodCount === 1 ? '2026-11-01' : '2026-10-01', defaultMonthTo: '2026-11-01' }
+      }
+      return { monthFrom: '2026-09-01', monthTo: '2026-11-01', defaultMonthFrom: '2026-09-01', defaultMonthTo: '2026-11-01' }
+    })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string, params: { monthFrom: string; monthTo: string }, signal?: AbortSignal) => {
+      if (garageId === first.id && pendingStage === 'read') {
+        blocked = true
+        staleSignal = signal
+        await pending
+      }
+      return createGarageIncomeWorksheet({ garageId, garageNumber: garageId === first.id ? first.number : second.number, ...params, rows: [] })
+    })
+    const calculateGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string, params: { monthFrom: string; monthTo: string }, signal?: AbortSignal) => {
+      if (garageId === first.id && pendingStage === 'calculate') {
+        blocked = true
+        staleSignal = signal
+        await pending
+      }
+      return createGarageIncomeWorksheet({ garageId, garageNumber: garageId === first.id ? first.number : second.number, ...params, rows: [] })
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [first, second] })} financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet, calculateGarageIncomeWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
+    await user.type(search, first.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*781/ }))
+    await waitFor(() => expect(blocked).toBe(true))
+    await user.type(search, second.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*782/ }))
+    await waitFor(() => expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue('09.2026'))
+    expect(staleSignal?.aborted).toBe(true)
+    const callCount = getFinancialReportPeriod.mock.calls.length + getGarageIncomeWorksheet.mock.calls.length
+    await act(async () => { resolvePending(); await pending })
+    expect(getFinancialReportPeriod.mock.calls.length + getGarageIncomeWorksheet.mock.calls.length).toBe(callCount)
+    expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue('09.2026')
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 782' })).toBeInTheDocument()
   })
 
   it.each([true, false])('waits for delayed debt-period settings before manual garage selection (%s)', async (enabled) => {
@@ -31282,7 +31429,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadingYearPage: async () => ({
       garages: [{ id: meterReading.garageId, number: meterReading.garageNumber }],
-      readings: [{ id: meterReading.id, garageId: meterReading.garageId, accountingMonth: meterReading.accountingMonth, currentValue: meterReading.currentValue, version: meterReading.version }],
+      readings: [{ id: meterReading.id, garageId: meterReading.garageId, accountingMonth: meterReading.accountingMonth, readingDate: meterReading.readingDate, currentValue: meterReading.currentValue, version: meterReading.version }],
       totalCount: 1,
       offset: 0,
       limit: 25,

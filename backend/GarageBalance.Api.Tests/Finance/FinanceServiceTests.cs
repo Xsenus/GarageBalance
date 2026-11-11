@@ -1557,6 +1557,7 @@ public sealed partial class FinanceServiceTests
         var reading = Assert.Single(result.Value.Readings);
         Assert.Equal(secondGarage.Id, reading.GarageId);
         Assert.Equal(new DateOnly(2026, 2, 1), reading.AccountingMonth);
+        Assert.Equal(new DateOnly(2026, 2, 20), reading.ReadingDate);
         Assert.Equal(125m, reading.CurrentValue);
         Assert.NotEqual(Guid.Empty, reading.Version);
         Assert.Equal(replacementDevice.Id, reading.MeterDeviceId);

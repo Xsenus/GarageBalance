@@ -592,6 +592,7 @@ public sealed record MeterReadingYearValueDto(
     Guid Id,
     Guid GarageId,
     DateOnly AccountingMonth,
+    DateOnly ReadingDate,
     decimal CurrentValue,
     Guid Version,
     Guid? MeterDeviceId,
@@ -709,7 +710,8 @@ public sealed record GarageOverdueDebtDto(
 
 public sealed record GarageIncomeWorksheetRequest(
     DateOnly? MonthFrom,
-    DateOnly? MonthTo);
+    DateOnly? MonthTo,
+    bool RefreshOnly = false);
 
 public sealed record GarageIncomeWorksheetRowDto(
     DateOnly AccountingMonth,

@@ -21,7 +21,7 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { GarageMeterReplacementDialog } from './GarageMeterReplacementDialog'
 import { describeMeterReplacement } from '../../shared/meterReplacementDescription'
 import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
-import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
+import { getMeterBaselineMonth, getMeterReadingStartDate, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys, isBeforeMeterReadingStart } from './meterYearColumns'
 const meterReadingMonths = monthNames.map((label, index) => ({
   key: String(index + 1).padStart(2, '0'), label,
 }))
@@ -203,11 +203,10 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   </span>
                 )
               }
-              const baselineMonth = !garage.connectedOn && garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
-              const beforeInitialReading = !!baselineMonth && `${appliedYear}-${month.key}` <= baselineMonth
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
               const outsideCurrentMonth = `${appliedYear}-${month.key}` !== currentMonth
               const hasSavedReading = !!savedReadings[cellKey]?.trim()
+              const beforeInitialReading = !hasSavedReading && isBeforeMeterReadingStart(garage, `${appliedYear}-${month.key}`)
               const connectionStatus = !hasSavedReading ? getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`) : null
               const outsideMonthUnavailable = (futureMonth && !canEditOutsideCurrentMonth) ||
                 (outsideCurrentMonth && hasSavedReading && !historicalCorrectionEnabled)
@@ -273,6 +272,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
   const [savedReadingIds, setSavedReadingIds] = useState<Record<string, string>>({})
   const [savedReadingVersions, setSavedReadingVersions] = useState<Record<string, string>>({})
+  const [savedReadingDates, setSavedReadingDates] = useState<Record<string, string>>({})
   const [savedReadingReplacements, setSavedReadingReplacements] = useState<Record<string, string>>({})
   const [startValueCells, setStartValueCells] = useState<Record<string, boolean>>({})
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
@@ -480,6 +480,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         const nextSavedReadings: Record<string, string> = {}
         const nextSavedReadingIds: Record<string, string> = {}
         const nextSavedReadingVersions: Record<string, string> = {}
+        const nextSavedReadingDates: Record<string, string> = {}
         const nextSavedReadingReplacements: Record<string, string> = {}
         yearPage.readings.forEach((reading) => {
           const monthKey = reading.accountingMonth.slice(5, 7)
@@ -487,6 +488,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           nextSavedReadings[cellKey] = formatMeterReadingInputValue(reading.currentValue)
           nextSavedReadingIds[cellKey] = reading.id
           nextSavedReadingVersions[cellKey] = reading.version
+          if (reading.readingDate) nextSavedReadingDates[cellKey] = reading.readingDate
           if (reading.isMeterReplacement || reading.meterReplacement) {
             nextSavedReadingReplacements[cellKey] = reading.meterReplacement ? describeMeterReplacement(reading.meterReplacement) : reading.meterDeviceSerialNumber?.trim() || 'номер не указан'
           }
@@ -515,6 +517,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         setDraftReadings(nextSavedReadings)
         setSavedReadingIds(nextSavedReadingIds)
         setSavedReadingVersions(nextSavedReadingVersions)
+        setSavedReadingDates(nextSavedReadingDates)
         setSavedReadingReplacements(nextSavedReadingReplacements)
         setStartValueCells(nextStartValueCells)
       } catch (loadError) {
@@ -557,11 +560,22 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     }
 
     const garage = garages.find((item) => item.id === garageId)
+    // Existing history may precede a restart. Only new readings must fit the current period.
+    if (!readingId && (!garage || getMeterReadingConnectionStatus(garage, `${appliedYear}-${monthKey}`) ||
+      isBeforeMeterReadingStart(garage, `${appliedYear}-${monthKey}`))) return
+    const readingDate = readingId ? savedReadingDates[cellKey] : getMeterReadingDateForMonth(
+      appliedYear, monthKey, currentMonth, getLocalDateInputValue(), garage ? getMeterReadingStartDate(garage) : undefined, garage?.closedOn)
+    if (!readingDate) {
+      const message = 'Не удалось определить дату сохранённого показания. Обновите таблицу.'
+      if (showErrorInDialog) setReadingChangeError(message)
+      else setError(message)
+      return
+    }
     const request: CreateMeterReadingRequest = {
       garageId,
       meterKind: meterType,
       accountingMonth: `${appliedYear}-${monthKey}-01`,
-      readingDate: getMeterReadingDateForMonth(appliedYear, monthKey, currentMonth, getLocalDateInputValue(), garage?.connectedOn, garage?.closedOn),
+      readingDate,
       currentValue: parsedValue,
       comment: 'Ввод из годовой таблицы показаний',
       expectedVersion: readingVersion,
@@ -589,6 +603,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: savedValue }))
       setSavedReadingIds((currentIds) => ({ ...currentIds, [cellKey]: savedReading.id }))
       setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
+      setSavedReadingDates((currentDates) => ({ ...currentDates, [cellKey]: savedReading.readingDate }))
       setPendingReadingChange(null)
       setReadingChangeError(null)
       setReloadRevision((revision) => revision + 1)
@@ -602,7 +617,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     } finally {
       setSavingReadingKey(null)
     }
-  }, [appliedYear, auth.accessToken, canWritePayments, currentMonth, financeClient, garages, meterType])
+  }, [appliedYear, auth.accessToken, canWritePayments, currentMonth, financeClient, garages, meterType, savedReadingDates])
 
   const saveStartValue = useCallback(async (cellKey: string, nextValue: string, showErrorInDialog = false) => {
     if (!canEditStartValue || !financeClient.setMeterStartValue) return
@@ -674,7 +689,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     const nextValue = draftReadings[cellKey] ?? ''
     const previousValue = savedReadings[cellKey] ?? ''
 
-    if (!previousValue.trim() && getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`)) return
+    if (!previousValue.trim() && (getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`) ||
+      isBeforeMeterReadingStart(garage, `${appliedYear}-${month.key}`))) return
 
     if (nextValue.trim() === previousValue.trim()) {
       return

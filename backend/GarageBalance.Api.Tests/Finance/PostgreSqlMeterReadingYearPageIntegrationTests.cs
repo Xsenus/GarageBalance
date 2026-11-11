@@ -52,6 +52,7 @@ public sealed class PostgreSqlMeterReadingYearPageIntegrationTests
             [new DateOnly(2045, 1, 1), new DateOnly(2045, 2, 1)],
             page.Readings.Select(reading => reading.AccountingMonth));
         Assert.All(page.Readings, reading => Assert.Equal(secondGarage.Id, reading.GarageId));
+        Assert.Equal([new DateOnly(2045, 1, 20), new DateOnly(2045, 2, 20)], page.Readings.Select(reading => reading.ReadingDate));
         Assert.Equal([110m, 125m], page.Readings.Select(reading => reading.CurrentValue));
         Assert.All(page.Readings, reading => Assert.NotEqual(Guid.Empty, reading.Version));
         AssertSingleCombinedCommand(capture);
@@ -118,6 +119,7 @@ public sealed class PostgreSqlMeterReadingYearPageIntegrationTests
             .GetYearPageAsync(2045, MeterKinds.Electricity, 0, 25, CancellationToken.None);
 
         Assert.Equal(3, page.Readings.Count);
+        Assert.Equal([new DateOnly(2045, 1, 20), new DateOnly(2045, 2, 20), new DateOnly(2045, 3, 20)], page.Readings.Select(reading => reading.ReadingDate));
         Assert.False(page.Readings[0].IsMeterReplacement);
         Assert.Null(page.Readings[0].MeterDeviceSerialNumber);
         Assert.True(page.Readings[1].IsMeterReplacement);

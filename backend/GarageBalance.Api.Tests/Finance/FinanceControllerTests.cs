@@ -505,8 +505,10 @@ public sealed partial class FinanceControllerTests
         Assert.Equal(garageId, service.LastGarageFullPaymentQuoteGarageId);
     }
 
-    [Fact]
-    public async Task GetGarageIncomeWorksheet_PassesGarageAndPeriodToService()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetGarageIncomeWorksheet_PassesGaragePeriodAndRefreshModeToService(bool refreshOnly)
     {
         var garageId = Guid.NewGuid();
         var worksheet = new GarageIncomeWorksheetDto(
@@ -531,39 +533,44 @@ public sealed partial class FinanceControllerTests
         };
         var controller = CreateController(service);
 
-        var result = await controller.GetGarageIncomeWorksheet(garageId, new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), CancellationToken.None);
+        var result = await controller.GetGarageIncomeWorksheet(garageId, new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), CancellationToken.None, refreshOnly);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(worksheet, ok.Value);
         Assert.Equal(garageId, service.LastGarageIncomeWorksheetGarageId);
         Assert.Equal(new DateOnly(2026, 6, 1), service.LastGarageIncomeWorksheetRequest?.MonthFrom);
         Assert.Equal(new DateOnly(2026, 7, 1), service.LastGarageIncomeWorksheetRequest?.MonthTo);
+        Assert.Equal(refreshOnly, service.LastGarageIncomeWorksheetRequest?.RefreshOnly);
     }
 
-    [Fact]
-    public async Task GetGarageIncomeWorksheet_ReturnsNotFoundForMissingGarage()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetGarageIncomeWorksheet_ReturnsNotFoundForMissingGarage(bool refreshOnly)
     {
         var controller = CreateController(new FakeFinanceService
         {
             GarageIncomeWorksheetResult = FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж не найден.")
         });
 
-        var result = await controller.GetGarageIncomeWorksheet(Guid.NewGuid(), new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), CancellationToken.None);
+        var result = await controller.GetGarageIncomeWorksheet(Guid.NewGuid(), new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), CancellationToken.None, refreshOnly);
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(notFound.Value);
         Assert.Equal("garage_not_found", problem.Title);
     }
 
-    [Fact]
-    public async Task GetGarageIncomeWorksheet_ReturnsBadRequestForInvalidPeriod()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetGarageIncomeWorksheet_ReturnsBadRequestForInvalidPeriod(bool refreshOnly)
     {
         var controller = CreateController(new FakeFinanceService
         {
             GarageIncomeWorksheetResult = FinanceResult<GarageIncomeWorksheetDto>.Failure("income_worksheet_period_invalid", "Дата начала формы поступлений не может быть позже даты окончания.")
         });
 
-        var result = await controller.GetGarageIncomeWorksheet(Guid.NewGuid(), new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), CancellationToken.None);
+        var result = await controller.GetGarageIncomeWorksheet(Guid.NewGuid(), new DateOnly(2026, 7, 1), new DateOnly(2026, 6, 1), CancellationToken.None, refreshOnly);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);

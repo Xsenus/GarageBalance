@@ -265,9 +265,10 @@ public sealed class FinanceController(
         Guid garageId,
         [FromQuery] DateOnly? monthFrom,
         [FromQuery] DateOnly? monthTo,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool refreshOnly = false)
     {
-        var result = await financeService.GetGarageIncomeWorksheetAsync(garageId, new GarageIncomeWorksheetRequest(monthFrom, monthTo), cancellationToken);
+        var result = await financeService.GetGarageIncomeWorksheetAsync(garageId, new GarageIncomeWorksheetRequest(monthFrom, monthTo, refreshOnly), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
