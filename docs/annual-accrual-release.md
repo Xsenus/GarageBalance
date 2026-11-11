@@ -12,10 +12,10 @@
 dotnet GarageBalance.StorageTool.dll annual-accrual-impact-plan \
   --annual-hold-year 2026 \
   --expected-database garagebalance_staging \
-  --output /var/lib/garagebalance-staging/private-maintenance/annual-impact-2026.json
+  --output /var/lib/garagebalance-maintenance/annual-release-2026/annual-impact-2026.json
 ```
 
-Выходной файл должен быть новым, абсолютным и private. Существующий файл не перезаписывается. Прогноз использует согласованный read-only снимок PostgreSQL, действительную бизнес-дату и часовой пояс, начало учёта, годовые услуги, тарифные условия и актуальные ручные отмены. Он не вызывает генерацию начислений и не записывает настройки, финансовые строки или аудит.
+Выходной файл должен быть новым, абсолютным и private. Для плана исполнения и backup receipt файл и каждый каталог его абсолютного пути должны принадлежать root и не быть доступны на запись группе или остальным. Используйте отдельный private каталог под root-owned /var/lib/garagebalance-maintenance; не меняйте владельца рабочего каталога приложения ради обхода проверки. Существующий файл не перезаписывается. Прогноз использует согласованный read-only снимок PostgreSQL, действительную бизнес-дату и часовой пояс, начало учёта, годовые услуги, тарифные условия и актуальные ручные отмены. Он не вызывает генерацию начислений и не записывает настройки, финансовые строки или аудит.
 
 Суммы относятся к пропущенным регулярным годовым взносам текущего бизнес-года, для которых месяц начисления уже наступил. Срок оплаты и просрочка проверяются отдельно. Новые суммы означают начисления, а не итоговую задолженность после оплат, зачётов и начальных остатков. Это не оценка всех будущих платежей года: после снятия приостановки будущие сроки будут обрабатываться штатно по действующим тогда условиям.
 
@@ -31,7 +31,7 @@ dotnet GarageBalance.StorageTool.dll annual-accrual-impact-plan \
 dotnet GarageBalance.StorageTool.dll annual-accrual-release-plan \
   --annual-hold-year 2026 \
   --expected-database garagebalance_staging \
-  --output /var/lib/garagebalance-staging/private-maintenance/annual-release-2026.json
+  --output /var/lib/garagebalance-maintenance/annual-release-2026/annual-release-2026.json
 ```
 
 План связывает год, точный источник и схему, содержимое и версии настройки/guard epoch, полный финансовый прогноз, ID операции и fingerprint. Старые планы без нового формата и полного прогноза не годятся. Проверить суммы и охват отдельно; не считать техническую генерацию плана бизнес-подтверждением.
@@ -43,9 +43,9 @@ dotnet GarageBalance.StorageTool.dll annual-accrual-release-plan \
 ```sh
 dotnet GarageBalance.StorageTool.dll annual-accrual-release \
   --execute \
-  --plan /var/lib/garagebalance-staging/private-maintenance/annual-release-2026.json \
+  --plan /var/lib/garagebalance-maintenance/annual-release-2026/annual-release-2026.json \
   --confirm EXACT_FINGERPRINT_FROM_APPROVED_PLAN \
-  --backup-receipt /var/lib/garagebalance-staging/private-maintenance/verified-backup.json \
+  --backup-receipt /var/lib/garagebalance-maintenance/annual-release-2026/verified-backup.json \
   --expected-database garagebalance_staging \
   --service garagebalance-staging.service \
   --reason "Возобновление годовых начислений по проверенным суммам и охвату"
@@ -62,7 +62,7 @@ dotnet GarageBalance.StorageTool.dll annual-accrual-release \
 ```sh
 dotnet GarageBalance.StorageTool.dll annual-accrual-release-recover \
   --execute \
-  --plan /var/lib/garagebalance-staging/private-maintenance/annual-release-2026.json \
+  --plan /var/lib/garagebalance-maintenance/annual-release-2026/annual-release-2026.json \
   --confirm EXACT_FINGERPRINT_FROM_APPROVED_PLAN \
   --expected-database garagebalance_staging \
   --service garagebalance-staging.service
@@ -76,9 +76,9 @@ dotnet GarageBalance.StorageTool.dll annual-accrual-release-recover \
 
 Сверить точный год и один audit результата, сохранность остальных лет, финансовых/справочных строк и ожидаемое состояние участников. Затем сравнить штатные начисления с согласованным прогнозом, проверить отсутствие дублей и сохранение ручных отмен.
 
-Для прежних жалоб гаражей 1 и 13 начать с «Истории изменений»: последний lifecycle event по начислению, флаг отмены, услуга, месяц/год и сумма. Старое событие отмены без проверки последующего восстановления недостаточно. Открытие формы «Поступления» не является строго read-only действием: worksheet может создавать/нормализовать начисления сборов.
+При проверке повторно появившегося начисления начать с «Истории изменений»: последний lifecycle event по начислению, флаг отмены, услуга, месяц/год и сумма. Старое событие отмены без проверки последующего восстановления недостаточно. Открытие формы «Поступления» не является строго read-only действием: worksheet может создавать/нормализовать начисления сборов.
 
-Начальный период: «Настройки → Отображение → Начальный период поступлений → При открытии гаража показывать месяцы с первого долга». Сохранённый ранее false сохраняется до явного изменения и кнопки «Сохранить отображение».
+Начальный период: «Настройки → Отображение → Начальный период поступлений → При открытии гаража показывать месяцы с первого долга». Выбранное значение сохраняется до явного изменения и нажатия кнопки «Сохранить отображение».
 
 ## Доказательства и пределы проверки
 
