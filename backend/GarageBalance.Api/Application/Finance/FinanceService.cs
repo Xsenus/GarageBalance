@@ -268,6 +268,7 @@ public sealed partial class FinanceService(
                 reading.Id,
                 reading.GarageId,
                 reading.AccountingMonth,
+                reading.ReadingDate,
                 reading.CurrentValue,
                 reading.Version,
                 reading.MeterDeviceId,

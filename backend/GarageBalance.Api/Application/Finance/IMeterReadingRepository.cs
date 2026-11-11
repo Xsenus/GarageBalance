@@ -96,6 +96,7 @@ public sealed record MeterReadingYearValueData(
     Guid Id,
     Guid GarageId,
     DateOnly AccountingMonth,
+    DateOnly ReadingDate,
     decimal CurrentValue,
     Guid Version,
     Guid? MeterDeviceId,

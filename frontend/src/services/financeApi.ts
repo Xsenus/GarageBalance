@@ -319,6 +319,7 @@ export type MeterReadingYearValueDto = {
   id: string
   garageId: string
   accountingMonth: string
+  readingDate?: string
   currentValue: number
   version: string
   meterDeviceId?: string | null

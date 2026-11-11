@@ -34,7 +34,11 @@ function fixture({
     page.readings.push(reading)
     return reading
   })
-  const updateMeterReading = vi.fn()
+  const updateMeterReading = vi.fn().mockImplementation(async (_token: string, id: string, request: CreateMeterReadingRequest) => {
+    const reading = page.readings.find((item) => item.id === id)!
+    Object.assign(reading, request, { version: 'updated-v2' })
+    return reading
+  })
   const correctHistoricalMeterReading = vi.fn().mockImplementation(async (_token: string, id: string, request: { currentValue: number }) => {
     const reading = page.readings.find((item) => item.id === id)!
     Object.assign(reading, request, { version: 'corrected-v2' })
@@ -107,7 +111,7 @@ describe('meter reading start boundary in the rendered yearly panel', () => {
     expectNoWrite(context)
   })
 
-  it('saves the first device month on or after its actual installation date', async () => {
+  it('preserves the first device date through create and subsequent historical correction', async () => {
     const user = userEvent.setup()
     const context = fixture()
     await openPanel(context)
@@ -117,6 +121,14 @@ describe('meter reading start boundary in the rendered yearly panel', () => {
     expect(context.createMeterReading).toHaveBeenCalledWith('synthetic-token', expect.objectContaining({ garageId: 'late', meterKind: 'electricity', accountingMonth: '2026-10-01', readingDate: '2026-10-15', currentValue: 5 }))
     expect(context.page.garages[1].startValueDate).toBe('2026-10-15')
     await waitFor(() => expect(context.getMeterReadingYearPage).toHaveBeenCalledTimes(2))
+    const saved = screen.getByLabelText('Гараж LATE, Октябрь, показание')
+    await user.clear(saved)
+    await user.type(saved, '6')
+    await user.tab()
+    const dialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(context.correctHistoricalMeterReading).toHaveBeenCalledWith('synthetic-token', 'created', expect.objectContaining({ currentValue: 6, readingDate: '2026-10-15', expectedVersion: 'created-v1' })))
+    await waitFor(() => expect(context.getMeterReadingYearPage).toHaveBeenCalledTimes(3))
   })
 
   it('preserves an explicit zero baseline and sends its confirmed correction only to the start-value API', async () => {
@@ -139,7 +151,7 @@ describe('meter reading start boundary in the rendered yearly panel', () => {
   it('keeps saved zero history before a restart editable with historical-correction permission', async () => {
     const user = userEvent.setup()
     const context = fixture({ late: { initialReadingMonth: '2026-09-01' } })
-    context.page.readings.push({ id: 'old', garageId: 'late', accountingMonth: '2026-08-01', currentValue: 0, version: 'old-v1' })
+    context.page.readings.push({ id: 'old', garageId: 'late', accountingMonth: '2026-08-01', readingDate: '2026-08-01', currentValue: 0, version: 'old-v1' })
     await openPanel(context)
     const history = screen.getByLabelText('Гараж LATE, Август, показание')
     expect(history).toHaveValue('0')
@@ -164,12 +176,45 @@ describe('meter reading start boundary in the rendered yearly panel', () => {
     expectNoWrite(context)
   })
 
-  it('does not move an existing same-month reading to the later device start date', async () => {
+  it.each([true, false])('preserves the actual saved date rather than the month start or device date, current month %s', async (isCurrentMonth) => {
     const user = userEvent.setup()
     const context = fixture()
-    // The year-page contract has no readingDate. Keep its established historical
-    // correction date instead of inventing the active device's installation date.
-    context.page.readings.push({ id: 'same-month', garageId: 'late', accountingMonth: '2026-10-01', currentValue: 5, version: 'same-v1' })
+    if (isCurrentMonth) context.page.currentAccountingMonth = '2026-10-01'
+    context.page.readings.push({ id: 'same-month', garageId: 'late', accountingMonth: '2026-10-01', readingDate: '2026-10-23', currentValue: 5, version: 'same-v1' })
+    await openPanel(context)
+    const history = screen.getByLabelText('Гараж LATE, Октябрь, показание')
+    await user.clear(history)
+    await user.type(history, '6')
+    await user.tab()
+    const dialog = await screen.findByRole('dialog', { name: isCurrentMonth ? 'Подтвердить показание?' : 'Сохранить показание за другой месяц?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    const save = isCurrentMonth ? context.updateMeterReading : context.correctHistoricalMeterReading
+    await waitFor(() => expect(save).toHaveBeenCalledWith('synthetic-token', 'same-month', expect.objectContaining({ currentValue: 6, readingDate: '2026-10-23', expectedVersion: 'same-v1' })))
+    expect(context.page.garages[1].startValueDate).toBe('2026-10-15')
+    expect(context.createMeterReading).not.toHaveBeenCalled()
+    await waitFor(() => expect(context.getMeterReadingYearPage).toHaveBeenCalledTimes(2))
+  })
+
+  it('keeps a removed-device historical reading on its own date despite a later active connection', async () => {
+    const user = userEvent.setup()
+    const context = fixture({ late: { connectedOn: '2026-11-10', startValueDate: '2026-11-15' } })
+    context.page.readings.push({ id: 'removed-device', garageId: 'late', accountingMonth: '2026-10-01', readingDate: '2026-10-21', currentValue: 5, version: 'removed-v1', meterDeviceId: 'removed', meterDeviceSerialNumber: 'OLD-SYNTHETIC', isMeterReplacement: true })
+    await openPanel(context)
+    const history = screen.getByLabelText('Гараж LATE, Октябрь, показание')
+    expect(history).toBeEnabled()
+    await user.clear(history)
+    await user.type(history, '6')
+    await user.tab()
+    const dialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(context.correctHistoricalMeterReading).toHaveBeenCalledWith('synthetic-token', 'removed-device', expect.objectContaining({ currentValue: 6, readingDate: '2026-10-21', expectedVersion: 'removed-v1' })))
+    await waitFor(() => expect(context.getMeterReadingYearPage).toHaveBeenCalledTimes(2))
+  })
+
+  it('blocks old responses without a saved reading date instead of guessing and allows cancellation', async () => {
+    const user = userEvent.setup()
+    const context = fixture()
+    context.page.readings.push({ id: 'old-response', garageId: 'late', accountingMonth: '2026-10-01', currentValue: 5, version: 'old-v1' })
     await openPanel(context)
     const history = screen.getByLabelText('Гараж LATE, Октябрь, показание')
     await user.clear(history)
@@ -177,10 +222,30 @@ describe('meter reading start boundary in the rendered yearly panel', () => {
     await user.tab()
     const dialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
-    await waitFor(() => expect(context.correctHistoricalMeterReading).toHaveBeenCalledWith('synthetic-token', 'same-month', expect.objectContaining({ currentValue: 6, readingDate: '2026-10-01', expectedVersion: 'same-v1' })))
-    expect(context.page.garages[1].startValueDate).toBe('2026-10-15')
-    expect(context.createMeterReading).not.toHaveBeenCalled()
-    await waitFor(() => expect(context.getMeterReadingYearPage).toHaveBeenCalledTimes(2))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Не удалось определить дату сохранённого показания. Обновите таблицу.')
+    expectNoWrite(context)
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    expect(history).toHaveValue('5')
+  })
+
+  it('keeps the date returned by create when the background table reload fails', async () => {
+    const user = userEvent.setup()
+    const context = fixture()
+    await openPanel(context)
+    context.createMeterReading.mockResolvedValueOnce({ id: 'created', garageId: 'late', accountingMonth: '2026-10-01', readingDate: '2026-10-18', currentValue: 5, version: 'created-v1' })
+    context.getMeterReadingYearPage.mockRejectedValueOnce(new Error('Обновление таблицы не выполнено.'))
+    await user.type(screen.getByLabelText('Гараж LATE, Октябрь, показание'), '5')
+    await user.tab()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Обновление таблицы не выполнено.')
+    const saved = screen.getByLabelText('Гараж LATE, Октябрь, показание')
+    await user.clear(saved)
+    await user.type(saved, '6')
+    await user.tab()
+    context.correctHistoricalMeterReading.mockResolvedValueOnce({ id: 'created', garageId: 'late', accountingMonth: '2026-10-01', readingDate: '2026-10-18', currentValue: 6, version: 'corrected-v2' })
+    const dialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(context.correctHistoricalMeterReading).toHaveBeenCalledWith('synthetic-token', 'created', expect.objectContaining({ readingDate: '2026-10-18', expectedVersion: 'created-v1' })))
+    await waitFor(() => expect(context.getMeterReadingYearPage).toHaveBeenCalledTimes(3))
   })
 
   it('rejects a historical correction without its dedicated permission', async () => {
