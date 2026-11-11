@@ -259,6 +259,21 @@ public sealed class LinuxMaintenanceBarrierHost : IMaintenanceBarrierHost, IDisp
         return Task.CompletedTask;
     }
 
+    // Annual recovery must reinstate the marker before checking the database.
+    // This adopts file identity only, not commit/rollback authority. Receipt
+    // outcome must still be verified under the activity gate before restoration.
+    public void AdoptRecoveryIdentity(MaintenanceRecoveryState expected)
+    {
+        if (!deployHeld) throw new InvalidOperationException("maintenance_deploy_gate_required");
+        var files = ReadRecoveryFiles();
+        var current = MaintenanceRecoveryStateParser.InspectIdentityForAdoption(files.Marker, files.Receipt,
+            files.ParticipantsPermitted, expected, planId, planFingerprint);
+        markerCreated = files.Marker is not null;
+        receiptCreated = files.Receipt is not null;
+        participantEncoding = current.Participants?.Encode();
+        participantsPermitted = current.ParticipantsPermitted;
+    }
+
     // Caller must hold both relevant gates before using the adopted state for writes.
     public void AdoptRecoveryFiles(MaintenanceRecoveryState expected)
     {

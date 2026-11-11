@@ -2,6 +2,24 @@
 # Synthetic database + real API/StorageTool/lifecycle. No working credentials,
 # database, service or storage path is exposed to a fixture process.
 set -Eeuo pipefail
+trap 'failure=$?; printf "integrationError=exit:%s source:%s line:%s scenario:%s\n" "$failure" "${BASH_SOURCE[0]##*/}" "$LINENO" "${scenario:-bootstrap}" >&2' ERR
+
+# BEGIN pure fixture diagnostics
+print_fixture_diagnostics() {
+  local log
+  for log in "$@"; do
+    if [[ -f "$log" && ! -L "$log" ]]; then
+      printf 'integrationDiagnosticLog=%s\n' "${log##*/}" >&2
+      # Keep stdout visible on stderr. Reversing these redirections discards both
+      # streams, hiding the original failure just before verified cleanup.
+      tail -n 60 -- "$log" >&2 || printf 'integrationDiagnosticReadFailed=%s\n' "${log##*/}" >&2
+    else
+      printf 'integrationDiagnosticLogMissing=%s\n' "${log##*/}" >&2
+    fi
+  done
+}
+# END pure fixture diagnostics
+
 [[ $(uname -s) == Linux && $(id -u) == 0 && ( $# == 2 || $# == 3 ) ]] || exit 64
 suite=${3:-selective-cleanup}
 [[ "$suite" == selective-cleanup || "$suite" == annual-release ]] || exit 64
@@ -103,7 +121,7 @@ cleanup() {
   systemctl daemon-reload
   if (( ! success )); then
     printf 'integrationFailed=1 (synthetic diagnostics follow)\n' >&2
-    tail -n 60 "$state/commands.log" "$state/api.log" "$state/api-final-status.txt" 2>/dev/null >&2 || true
+    print_fixture_diagnostics "$state/commands.log" "$state/api.log" "$state/api-final-status.txt" "$state/deploy-probe.log"
     [[ "$original" != 0 ]] || original=1
   fi
   [[ $(realpath -e "$state") == "$state" && $(realpath -e "$barrier") == "$barrier" && $(realpath -e "$data") == "$data" && $(realpath -e "$bin_dir") == "$bin_dir" ]] || exit 1
@@ -224,11 +242,19 @@ for protected_path in /opt/garagebalance-staging /var/lib/garagebalance-staging 
   properties+=("--property=InaccessiblePaths=-$protected_path")
 done
 run_fixture() {
+  local code
   counter=$((counter+1))
   last_cli="$prefix-cli-$counter.service"
   units+=("$last_cli")
-  systemd-run --quiet --wait --unit="${last_cli%.service}" "${properties[@]}" \
-    --property="StandardOutput=append:$state/commands.log" --property="StandardError=append:$state/commands.log" "$fixture" "$@"
+  printf 'integrationCommandStart=%s scenario=%s unit=%s\n' "$*" "${scenario:-bootstrap}" "$last_cli"
+  if systemd-run --quiet --wait --unit="${last_cli%.service}" "${properties[@]}" \
+    --property="StandardOutput=append:$state/commands.log" --property="StandardError=append:$state/commands.log" "$fixture" "$@"; then
+    code=0
+  else
+    code=$?
+  fi
+  printf 'integrationCommandExit=%s status=%s unit=%s\n' "$*" "$code" "$last_cli"
+  return "$code"
 }
 start_fault() {
   counter=$((counter+1))

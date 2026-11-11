@@ -22,8 +22,13 @@ public static class StagingAnnualAccrualReleaseRecovery
             initial = MaintenanceRecoveryStateParser.InspectIdentity(files.Marker, files.Receipt, files.ParticipantsPermitted);
             progress = host.ReadPreparationProgress();
             ValidateIdentity(initial, progress, plan);
+            setRecordedState(initial);
+            host.AdoptRecoveryIdentity(initial);
+            // Once pending evidence is adopted, installing the startup block is a
+            // required safety step even if the caller has just canceled recovery.
+            if (files.Marker is null) await host.CreateDurableMarkerAsync(CancellationToken.None);
         }
-        catch (Exception error) when (error is not OperationCanceledException)
+        catch (Exception error)
         {
             // Absence of any pending state remains an error, not a new operation.
             // For malformed existing evidence, conservatively retain a startup block.
@@ -31,9 +36,6 @@ public static class StagingAnnualAccrualReleaseRecovery
                 await host.PreserveUnresolvedRecoveryMarkerAsync(CancellationToken.None);
             throw;
         }
-        setRecordedState(initial);
-        host.AdoptRecoveryFiles(initial);
-        if (files.Marker is null) await host.CreateDurableMarkerAsync(token);
         await lifecycle.CaptureStateAsync(token);
         await lifecycle.StopAndDrainAsync(token);
         AnnualAccrualReleaseOutcome outcome;

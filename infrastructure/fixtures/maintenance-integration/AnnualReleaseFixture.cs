@@ -36,6 +36,7 @@ internal sealed partial class ProtocolFixture
             case "annual-backup": await BackupAnnualAsync(); break;
             case "annual-execute": await ExecuteAnnualAsync(fault); break;
             case "annual-recover": await RecoverAnnualAsync(); break;
+            case "annual-recover-cancel": await CancelAnnualRecoveryAfterIdentityAsync(); break;
             case "annual-corrupt-outcome":
                 // Synthetic fault only. The constructor binds us to the private Unix socket/database.
                 await using (var db = Context())
@@ -197,6 +198,71 @@ internal sealed partial class ProtocolFixture
         Assert.Equal(callsBefore, File.Exists(AnnualCallsPath) ? await File.ReadAllTextAsync(AnnualCallsPath) : "");
         Assert.Equal(auditsBefore, await db.AuditEvents.CountAsync(e => e.Action == AnnualAction));
         Console.WriteLine("fixtureAnnualRecovery=" + result + ":without_release_callback");
+    }
+
+    private async Task CancelAnnualRecoveryAfterIdentityAsync()
+    {
+        var plan = await ReadAsync<AnnualAccrualHoldReleasePlan>(AnnualPlanPath);
+        var callsBefore = await File.ReadAllTextAsync(AnnualCallsPath);
+        var nativeBefore = await File.ReadAllTextAsync(Path.Combine(root, "native-verify-invocations"));
+        var starts = 0;
+        var lifecycle = new StagingServiceLifecycle((arguments, token) =>
+        {
+            if (arguments[0] == "start") starts++;
+            return SystemctlAsync(arguments, token);
+        }, HealthAsync, allowFailedForRecovery: true, offlineProof: OfflineAsync);
+        MaintenanceRecoveryState? original = null;
+        using var host = Host(plan.PlanId, plan.Fingerprint, lifecycle, () => original!.ServiceWasActive, () => original!.Participants);
+        string? receiptBefore;
+        MaintenancePreparationProgress? progressBefore;
+        await using (var deploy = await host.AcquireDeployGateAsync(default))
+        {
+            var files = host.ReadRecoveryFiles();
+            Assert.Null(files.Marker);
+            Assert.NotNull(files.Receipt);
+            Assert.False(files.ParticipantsPermitted);
+            receiptBefore = files.Receipt;
+            progressBefore = host.ReadPreparationProgress();
+            var state = MaintenanceRecoveryStateParser.InspectIdentity(files.Marker, files.Receipt, files.ParticipantsPermitted);
+            StagingAnnualAccrualReleaseRecovery.ValidateIdentity(state, progressBefore, plan);
+            Assert.Equal("committed", state.ReceiptOutcome);
+        }
+        await using var db = Context();
+        var auditsBefore = await db.AuditEvents.CountAsync(e => e.Action == AnnualAction);
+        Assert.Equal(1, auditsBefore);
+        using var cancellation = new CancellationTokenSource();
+        var recorded = 0;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => StagingAnnualAccrualReleaseRecovery.ResumeAsync(
+            host, lifecycle, db, plan, state =>
+            {
+                original = state;
+                recorded++;
+                Assert.False(state.CommitVerified);
+                Assert.False(state.RollbackVerified);
+                // Cancel after receipt identity is validated, before the real host
+                // reinstalls its marker. No synthetic release callback is involved.
+                cancellation.Cancel();
+            }, cancellation.Token));
+        Assert.Equal(1, recorded);
+        Assert.NotNull(original);
+        Assert.Equal(0, starts);
+        await using (var deploy = await host.AcquireDeployGateAsync(default))
+        {
+            var files = host.ReadRecoveryFiles();
+            Assert.Equal($"{plan.PlanId:D}\n{(original.ServiceWasActive ? "active" : "inactive")}\n{original.Participants!.Encode()}\n", files.Marker);
+            Assert.Equal(receiptBefore, files.Receipt);
+            Assert.False(files.ParticipantsPermitted);
+            Assert.Equal(progressBefore, host.ReadPreparationProgress());
+            var state = MaintenanceRecoveryStateParser.InspectIdentity(files.Marker, files.Receipt, files.ParticipantsPermitted);
+            StagingAnnualAccrualReleaseRecovery.ValidateIdentity(state, progressBefore, plan);
+            Assert.False(state.CommitVerified);
+            Assert.False(state.RollbackVerified);
+        }
+        Assert.Equal(callsBefore, await File.ReadAllTextAsync(AnnualCallsPath));
+        Assert.Equal(nativeBefore, await File.ReadAllTextAsync(Path.Combine(root, "native-verify-invocations")));
+        Assert.Equal(auditsBefore, await db.AuditEvents.CountAsync(e => e.Action == AnnualAction));
+        await AssertAnnualAsync("blocked");
+        Console.WriteLine("fixtureAnnualRecoveryCancellation=valid_marker_retained:no_restart:no_release");
     }
 
     private async Task AssertAnnualAsync(string outcome)

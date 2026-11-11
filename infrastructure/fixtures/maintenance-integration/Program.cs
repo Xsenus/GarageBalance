@@ -22,7 +22,8 @@ try
 catch (Exception error)
 {
     Console.Error.WriteLine("fixtureFailure=" + error.GetType().Name);
-    if (error.Message.StartsWith("fixture_", StringComparison.Ordinal)) Console.Error.WriteLine("fixtureCode=" + error.Message.Split('\n')[0]);
+    var diagnosticCode = error.Message.Split('\n')[0];
+    if (Regex.IsMatch(diagnosticCode, @"\A(?:fixture|maintenance)_[a-z0-9_]+\z")) Console.Error.WriteLine("fixtureCode=" + diagnosticCode);
     if (error is AccountingCleanupException cleanup) Console.Error.WriteLine("fixtureCode=" + cleanup.Code);
     return 1;
 }

@@ -181,6 +181,9 @@ jobs:
       - name: Test staging target identity guard without network
         run: python3 infrastructure/tests/test_staging_target.py
 
+      - name: Test isolated fixture diagnostics without services
+        run: python3 infrastructure/fixtures/maintenance-integration/test-fixture-diagnostics.py
+
       - name: Verify patch whitespace and shell syntax
         run: |
           git show --format= --check HEAD

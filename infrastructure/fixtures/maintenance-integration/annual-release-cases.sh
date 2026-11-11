@@ -125,6 +125,11 @@ for scenario in success before-release before-commit after-commit after-receipt 
       run_fixture annual-assert blocked
     else
       [[ "$scenario" != before-release && "$scenario" != before-commit ]] || outcome=rolled-back
+      if [[ "$scenario" == after-receipt ]]; then
+        run_fixture annual-recover-cancel
+        probe_annual_participants
+        expect_annual_denied
+      fi
       run_fixture annual-recover
       run_fixture annual-assert "$outcome"
     fi

@@ -119,6 +119,9 @@ Assertions verify:
 - Competing participants and retry executions cannot enter the release callback.
 - Read-only recovery classifies committed/rolled-back state without calling release
   or creating an additional audit. Known rollback is not treated as permission to release.
+- Cancellation immediately after receipt-only identity validation retains an exact
+  blocking marker without restarting services or repeating release. Participants
+  remain blocked, and a subsequent uncanceled recovery completes normally.
 - Unknown or corrupt evidence retains the blocking marker, leaves the API offline,
   stops timers and rejects new app/storage/health/deploy starts.
 - Normal completion restores the recorded service and timer participants and removes
@@ -130,6 +133,24 @@ marker was removed is outside this suite's guarantee. The shared app wrapper per
 receipt-only startup; the annual recovery entrypoint installs a blocking marker on
 unresolved evidence, but that does not close a separate start before recovery runs.
 Do not represent this fixture as protection against arbitrary filesystem tampering.
+
+## Pure diagnostic checks
+
+These checks exercise the actual shell diagnostics without root, systemd or SQL:
+
+```sh
+python3 infrastructure/fixtures/maintenance-integration/test-fixture-diagnostics.py
+```
+
+On Windows, select installed Git Bash explicitly instead of an unconfigured WSL
+launcher:
+
+```powershell
+python infrastructure/fixtures/maintenance-integration/test-fixture-diagnostics.py --bash 'C:\Program Files\Git\bin\bash.exe'
+```
+
+The tests verify bounded stderr output, missing logs, original exit status and
+scenario/source/line diagnostics. They do not replace either integration suite.
 
 ## Evidence limits
 
