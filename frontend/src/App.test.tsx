@@ -9174,8 +9174,8 @@ describe('App', () => {
     expect(start).toHaveAttribute('title', expect.stringContaining('на конец 09.2026'))
     expect(within(panel).getByLabelText('Гараж 1, Октябрь, показание')).toHaveValue('53782')
     expect(within(panel).getByLabelText('Гараж 1, Август, показание')).toBeDisabled()
-    // An entered reading before the base month keeps the ordinary cell instead of a start value.
-    expect(within(panel).queryByLabelText('Гараж 2, Сентябрь, стартовое показание')).not.toBeInTheDocument()
+    // Older readings retain their history without hiding the restarted baseline.
+    expect(within(panel).getByLabelText('Гараж 2, Сентябрь, стартовое показание')).toHaveValue('10')
     expect(within(panel).getByLabelText('Гараж 2, Август, показание')).toHaveValue('5')
 
     await user.clear(start)
