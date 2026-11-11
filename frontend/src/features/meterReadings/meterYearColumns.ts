@@ -15,6 +15,23 @@ function getPreviousMonthOfLatest(...months: (string | null | undefined)[]) {
   return latest ? getPreviousMonth(latest) : null
 }
 
+// A connection owns the service period even when the physical device was replaced
+// later. Without a connection, use the actual device/restart date, not stale legacy fields.
+export function getMeterReadingStartDate(garage: MeterReadingYearGarageDto) {
+  const serviceStart = garage.connectedOn || (garage.startValueSource === 'device' ? garage.startValueDate : null)
+  return [garage.accountingStartMonth, serviceStart]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.slice(0, 10)).sort().at(-1) ?? null
+}
+
+export function isBeforeMeterReadingStart(garage: MeterReadingYearGarageDto, month: string) {
+  const startDate = getMeterReadingStartDate(garage)
+  if (startDate) return month < startDate.slice(0, 7)
+  const legacyMonth = garage.initialReadingMonth?.slice(0, 7)
+  return !garage.connectedOn && garage.startValueSource !== 'device' &&
+    garage.initialReadingValue != null && Boolean(legacyMonth && month <= legacyMonth)
+}
+
 // The start value is the reading at the end of the month before the garage's "Учитывать с"
 // month, or before a later service connection or meter accounting restart. That month is
 // shown as an editable column.
@@ -40,13 +57,7 @@ export function getVisibleMeterReadingMonthKeys(
     return garages.some((garage) => {
       if (getMeterBaselineMonth(garage) === month) return true
       if (garage.requiresConnectionDate) return false
-      const starts = [garage.accountingStartMonth?.slice(0, 7), garage.connectedOn?.slice(0, 7)]
-      if (!garage.connectedOn) {
-        if (!garage.accountingStartMonth && garage.startValueSource !== 'device' && garage.initialReadingMonth && garage.initialReadingValue != null && month <= garage.initialReadingMonth.slice(0, 7)) return false
-        if (garage.startValueSource === 'device' && garage.startValueDate) starts.push(garage.startValueDate.slice(0, 7))
-      }
-      const start = starts.filter((value): value is string => Boolean(value)).sort().at(-1)
-      return (!start || month >= start) && (!garage.closedOn || month <= garage.closedOn.slice(0, 7))
+      return !isBeforeMeterReadingStart(garage, month) && (!garage.closedOn || month <= garage.closedOn.slice(0, 7))
     })
   })
 }

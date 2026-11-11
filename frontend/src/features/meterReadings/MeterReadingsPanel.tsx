@@ -21,7 +21,7 @@ import { useActionCommentSettings } from '../../shared/ActionCommentSettings'
 import { GarageMeterReplacementDialog } from './GarageMeterReplacementDialog'
 import { describeMeterReplacement } from '../../shared/meterReplacementDescription'
 import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
-import { getMeterBaselineMonth, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys } from './meterYearColumns'
+import { getMeterBaselineMonth, getMeterReadingStartDate, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys, isBeforeMeterReadingStart } from './meterYearColumns'
 const meterReadingMonths = monthNames.map((label, index) => ({
   key: String(index + 1).padStart(2, '0'), label,
 }))
@@ -203,11 +203,10 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                   </span>
                 )
               }
-              const baselineMonth = !garage.connectedOn && garage.initialReadingValue != null ? garage.initialReadingMonth?.slice(0, 7) : undefined
-              const beforeInitialReading = !!baselineMonth && `${appliedYear}-${month.key}` <= baselineMonth
               const futureMonth = `${appliedYear}-${month.key}` > currentMonth
               const outsideCurrentMonth = `${appliedYear}-${month.key}` !== currentMonth
               const hasSavedReading = !!savedReadings[cellKey]?.trim()
+              const beforeInitialReading = !hasSavedReading && isBeforeMeterReadingStart(garage, `${appliedYear}-${month.key}`)
               const connectionStatus = !hasSavedReading ? getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`) : null
               const outsideMonthUnavailable = (futureMonth && !canEditOutsideCurrentMonth) ||
                 (outsideCurrentMonth && hasSavedReading && !historicalCorrectionEnabled)
@@ -557,11 +556,15 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     }
 
     const garage = garages.find((item) => item.id === garageId)
+    // Existing history may precede a restart. Only new readings must fit the current period.
+    if (!readingId && (!garage || getMeterReadingConnectionStatus(garage, `${appliedYear}-${monthKey}`) ||
+      isBeforeMeterReadingStart(garage, `${appliedYear}-${monthKey}`))) return
     const request: CreateMeterReadingRequest = {
       garageId,
       meterKind: meterType,
       accountingMonth: `${appliedYear}-${monthKey}-01`,
-      readingDate: getMeterReadingDateForMonth(appliedYear, monthKey, currentMonth, getLocalDateInputValue(), garage?.connectedOn, garage?.closedOn),
+      readingDate: getMeterReadingDateForMonth(appliedYear, monthKey, currentMonth, getLocalDateInputValue(),
+        readingId ? garage?.connectedOn : garage ? getMeterReadingStartDate(garage) : undefined, garage?.closedOn),
       currentValue: parsedValue,
       comment: 'Ввод из годовой таблицы показаний',
       expectedVersion: readingVersion,
@@ -674,7 +677,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     const nextValue = draftReadings[cellKey] ?? ''
     const previousValue = savedReadings[cellKey] ?? ''
 
-    if (!previousValue.trim() && getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`)) return
+    if (!previousValue.trim() && (getMeterReadingConnectionStatus(garage, `${appliedYear}-${month.key}`) ||
+      isBeforeMeterReadingStart(garage, `${appliedYear}-${month.key}`))) return
 
     if (nextValue.trim() === previousValue.trim()) {
       return
