@@ -8,6 +8,24 @@ public static class MaintenanceRecoveryStateParser
     public static MaintenanceRecoveryState InspectIdentity(string? marker, string? receipt, bool participantsPermitted = false)
         => InspectCore(marker, receipt, 0, participantsPermitted, verifyOutcome: false);
 
+    // Adopting durable file ownership is not proof of a financial outcome. Keep
+    // both verification flags false until the caller has checked the database.
+    public static MaintenanceRecoveryState InspectIdentityForAdoption(string? marker, string? receipt,
+        bool participantsPermitted, MaintenanceRecoveryState expected, Guid planId, string planFingerprint)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        var current = InspectIdentity(marker, receipt, participantsPermitted);
+        if (expected.CommitVerified || expected.RollbackVerified ||
+            current.PlanId != planId || current.PlanId != expected.PlanId ||
+            current.ServiceWasActive != expected.ServiceWasActive || current.ReceiptPresent != expected.ReceiptPresent ||
+            current.ReceiptFingerprint != expected.ReceiptFingerprint ||
+            current.Participants?.Encode() != expected.Participants?.Encode() ||
+            current.ParticipantsPermitted != expected.ParticipantsPermitted || current.ReceiptOutcome != expected.ReceiptOutcome ||
+            current.ReceiptPresent && current.ReceiptFingerprint != planFingerprint)
+            throw new InvalidOperationException("maintenance_recovery_state_mismatch");
+        return current;
+    }
+
     private static MaintenanceRecoveryState InspectCore(string? marker, string? receipt, int matchingCommittedAuditEvents, bool participantsPermitted, bool verifyOutcome)
     {
         if (matchingCommittedAuditEvents < 0 || matchingCommittedAuditEvents > 1)

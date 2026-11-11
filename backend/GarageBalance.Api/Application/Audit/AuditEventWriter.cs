@@ -113,10 +113,12 @@ public sealed class AuditEventWriter(IAuditEventStore store) : IAuditEventWriter
 
         foreach (var (key, value) in source)
         {
-            // These two values are exact, server-produced SHA-256 digests in the
-            // cleanup audit. Do not mistake digit runs in them for personal data.
-            if (action == "finance.selective_history_cleared" && (key is "planHash" or "backupSha256") &&
-                value is string digest && digest.Length == 64 && digest.All(Uri.IsHexDigit))
+            // Only these server-produced maintenance SHA-256 fields bypass text
+            // masking. All other fields and actions retain personal-data masking.
+            var technicalDigest = action == "finance.selective_history_cleared" && (key is "planHash" or "backupSha256") ||
+                action == "finance.annual_accrual_generation_resumed" && (key is "planHash" or "settingBeforeHash" or
+                    "epochBeforeHash" or "settingAfterHash" or "epochAfterHash" or "forecastInputFingerprint");
+            if (technicalDigest && value is string digest && digest.Length == 64 && digest.All(Uri.IsHexDigit))
             {
                 metadata[key] = digest;
                 continue;

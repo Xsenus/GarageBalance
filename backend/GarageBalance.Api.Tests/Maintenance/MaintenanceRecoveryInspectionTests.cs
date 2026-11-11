@@ -79,4 +79,82 @@ public sealed class MaintenanceRecoveryInspectionTests
         Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryInspection.Inspect(null, Receipt + participant.Encode() + "\noutcome=unknown\n", 0));
         Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryInspection.Inspect(null, Receipt + participant.Encode() + "\noutcome=rolled-back\nextra\n", 0));
     }
+
+    [Theory]
+    [InlineData("committed", false, false)]
+    [InlineData("committed", true, false)]
+    [InlineData("committed", false, true)]
+    [InlineData("rolled-back", false, false)]
+    [InlineData("rolled-back", true, false)]
+    [InlineData("rolled-back", false, true)]
+    public void IdentityAdoptionAcceptsTypedReceiptsWithoutClaimingAnOutcome(string outcome, bool markerPresent, bool participantsPermitted)
+    {
+        var participants = new MaintenanceParticipantState(true, false, ["garagebalance-storage-tool@delta-sync.service"]);
+        var marker = markerPresent ? State + participants.Encode() + "\n" : null;
+        var receipt = Receipt + participants.Encode() + $"\noutcome={outcome}\n";
+        var identity = MaintenanceRecoveryStateParser.InspectIdentity(marker, receipt, participantsPermitted);
+
+        var adopted = MaintenanceRecoveryStateParser.InspectIdentityForAdoption(marker, receipt, participantsPermitted,
+            identity, Id, new string('a', 64));
+
+        Assert.False(adopted.CommitVerified || adopted.RollbackVerified);
+        Assert.Equal(identity with { Participants = adopted.Participants }, adopted);
+        Assert.Equal(participants.Encode(), adopted.Participants!.Encode());
+        Assert.Equal(outcome, adopted.ReceiptOutcome);
+        // A claimed file outcome must still match the independent database proof.
+        Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryStateParser.Inspect(marker, receipt,
+            outcome == "committed" ? 0 : 1, participantsPermitted));
+        var verified = MaintenanceRecoveryStateParser.Inspect(marker, receipt, outcome == "committed" ? 1 : 0, participantsPermitted);
+        Assert.Equal(outcome == "committed", verified.CommitVerified);
+        Assert.Equal(outcome == "rolled-back", verified.RollbackVerified);
+    }
+
+    [Fact]
+    public void IdentityAdoptionAcceptsMarkerOnlyButRejectsChangedOrAlreadyVerifiedEvidence()
+    {
+        var participants = new MaintenanceParticipantState(true, false, []);
+        var marker = State + participants.Encode() + "\n";
+        var identity = MaintenanceRecoveryStateParser.InspectIdentity(marker, null);
+        var adopted = MaintenanceRecoveryStateParser.InspectIdentityForAdoption(marker, null, false, identity, Id, new string('a', 64));
+        Assert.False(adopted.ReceiptPresent || adopted.CommitVerified || adopted.RollbackVerified);
+
+        var receipt = Receipt + participants.Encode() + "\noutcome=committed\n";
+        var receipted = MaintenanceRecoveryStateParser.InspectIdentity(null, receipt);
+        var differentParticipants = new MaintenanceParticipantState(false, false, []);
+        foreach (var invalid in new[] { receipted with { PlanId = Guid.NewGuid() }, receipted with { ServiceWasActive = false },
+            receipted with { ReceiptPresent = false }, receipted with { ReceiptFingerprint = new string('b', 64) },
+            receipted with { Participants = differentParticipants }, receipted with { Participants = null },
+            receipted with { ParticipantsPermitted = true }, receipted with { ReceiptOutcome = "rolled-back" },
+            receipted with { CommitVerified = true }, receipted with { RollbackVerified = true } })
+            Assert.Equal("maintenance_recovery_state_mismatch", Assert.Throws<InvalidOperationException>(() =>
+                MaintenanceRecoveryStateParser.InspectIdentityForAdoption(null, receipt, false, invalid, Id, new string('a', 64))).Message);
+        Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryStateParser.InspectIdentityForAdoption(
+            null, receipt, false, receipted, Guid.NewGuid(), new string('a', 64)));
+        Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryStateParser.InspectIdentityForAdoption(
+            null, receipt, false, receipted, Id, new string('b', 64)));
+        Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryStateParser.InspectIdentityForAdoption(
+            marker, receipt, false, identity, Id, new string('a', 64)));
+        Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryStateParser.InspectIdentityForAdoption(
+            marker, null, false, receipted, Id, new string('a', 64)));
+    }
+
+    [Fact]
+    public void IdentityAdoptionStillRejectsMalformedMissingOrContradictoryFiles()
+    {
+        var participants = new MaintenanceParticipantState(true, true, []);
+        var marker = State + participants.Encode() + "\n";
+        var receipt = Receipt + participants.Encode() + "\noutcome=committed\n";
+        var identity = MaintenanceRecoveryStateParser.InspectIdentity(marker, receipt);
+        foreach (var invalid in new (string? Marker, string? Receipt, bool Permitted)[]
+        {
+            (null, null, false), ("broken", receipt, false), (marker, "broken", false),
+            (marker.Replace("active", "inactive", StringComparison.Ordinal), receipt, false),
+            (marker, receipt.Replace("committed", "unknown", StringComparison.Ordinal), false),
+            (marker, null, true)
+        })
+            Assert.Throws<InvalidOperationException>(() => MaintenanceRecoveryStateParser.InspectIdentityForAdoption(
+                invalid.Marker, invalid.Receipt, invalid.Permitted, identity, Id, new string('a', 64)));
+        Assert.Throws<ArgumentNullException>(() => MaintenanceRecoveryStateParser.InspectIdentityForAdoption(
+            marker, receipt, false, null!, Id, new string('a', 64)));
+    }
 }

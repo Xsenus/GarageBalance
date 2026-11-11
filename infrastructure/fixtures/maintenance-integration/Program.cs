@@ -22,13 +22,14 @@ try
 catch (Exception error)
 {
     Console.Error.WriteLine("fixtureFailure=" + error.GetType().Name);
-    if (error.Message.StartsWith("fixture_", StringComparison.Ordinal)) Console.Error.WriteLine("fixtureCode=" + error.Message.Split('\n')[0]);
+    var diagnosticCode = error.Message.Split('\n')[0];
+    if (Regex.IsMatch(diagnosticCode, @"\A(?:fixture|maintenance)_[a-z0-9_]+\z")) Console.Error.WriteLine("fixtureCode=" + diagnosticCode);
     if (error is AccountingCleanupException cleanup) Console.Error.WriteLine("fixtureCode=" + cleanup.Code);
     return 1;
 }
 
 [SupportedOSPlatform("linux")]
-internal sealed class ProtocolFixture
+internal sealed partial class ProtocolFixture
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string root = Environment.GetEnvironmentVariable("GB_FIXTURE_STATE") ?? "";
@@ -66,6 +67,7 @@ internal sealed class ProtocolFixture
 
     public async Task<int> RunAsync(string command, string? fault)
     {
+        if (command.StartsWith("annual-", StringComparison.Ordinal)) return await RunAnnualAsync(command, fault);
         switch (command)
         {
             case "local-files":
@@ -360,7 +362,9 @@ internal sealed class ProtocolFixture
     private static async Task NativeAsync(string command, string[] arguments)
     {
         if (command is not ("pg_dump" or "pg_restore")) throw new InvalidOperationException("fixture_native_invalid");
-        var result = await AccountingCleanupHostEnvironment.RunAsync("/usr/lib/postgresql/18/bin/" + command, arguments, default);
+        var bin = Environment.GetEnvironmentVariable("GB_FIXTURE_PG_BIN") ?? "/usr/lib/postgresql/18/bin";
+        if (!Regex.IsMatch(bin, @"\A/usr/lib/postgresql/[0-9]+/bin\z")) throw new InvalidOperationException("fixture_pg_bin_invalid");
+        var result = await AccountingCleanupHostEnvironment.RunAsync(bin + "/" + command, arguments, default);
         if (result.ExitCode != 0) throw new InvalidOperationException("fixture_native_failed");
     }
 

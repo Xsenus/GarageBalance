@@ -189,6 +189,16 @@ public sealed class LinuxMaintenanceBarrierHost : IMaintenanceBarrierHost, IDisp
         return value;
     }
 
+    public Task RequireFreshAnnualReleaseAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (!deployHeld) throw new InvalidOperationException("maintenance_deploy_gate_required");
+        var files = ReadRecoveryFiles();
+        if (files.Marker is not null || files.Receipt is not null || ReadPreparationProgress() is not null)
+            throw new InvalidOperationException("maintenance_recovery_required");
+        return Task.CompletedTask;
+    }
+
     public Task SyncPreparedPlanDirectoryAsync(string path, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -231,6 +241,37 @@ public sealed class LinuxMaintenanceBarrierHost : IMaintenanceBarrierHost, IDisp
         var permitted = ReadSmallFile(ParticipantsReceipt);
         if (required is not null && permitted is not null) throw new InvalidOperationException("maintenance_recovery_state_invalid");
         return (ReadSmallFile(Marker), required ?? permitted, permitted is not null);
+    }
+
+    // A corrupt receipt must not leave application starts enabled merely because a
+    // previous owner removed the marker before crashing. This deliberately incomplete
+    // participant snapshot cannot issue authority or permit automatic restoration.
+    // It blocks starts until the protected operator evidence is repaired/reviewed.
+    public Task PreserveUnresolvedRecoveryMarkerAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (!deployHeld) throw new InvalidOperationException("maintenance_deploy_gate_required");
+        if (ReadSmallFile(Marker) is not null) return Task.CompletedTask;
+        using var handle = OpenHandle(openat(Fd(directory), Marker, WriteOnly | Create | Exclusive | NoFollow | CloseOnExec, 0x180));
+        RandomAccess.Write(handle, Encoding.ASCII.GetBytes($"{planId:D}\ninactive\n"), 0);
+        if (fsync(Fd(handle)) != 0 || fsync(Fd(directory)) != 0) throw new InvalidOperationException("maintenance_marker_sync_failed");
+        markerCreated = true;
+        return Task.CompletedTask;
+    }
+
+    // Annual recovery must reinstate the marker before checking the database.
+    // This adopts file identity only, not commit/rollback authority. Receipt
+    // outcome must still be verified under the activity gate before restoration.
+    public void AdoptRecoveryIdentity(MaintenanceRecoveryState expected)
+    {
+        if (!deployHeld) throw new InvalidOperationException("maintenance_deploy_gate_required");
+        var files = ReadRecoveryFiles();
+        var current = MaintenanceRecoveryStateParser.InspectIdentityForAdoption(files.Marker, files.Receipt,
+            files.ParticipantsPermitted, expected, planId, planFingerprint);
+        markerCreated = files.Marker is not null;
+        receiptCreated = files.Receipt is not null;
+        participantEncoding = current.Participants?.Encode();
+        participantsPermitted = current.ParticipantsPermitted;
     }
 
     // Caller must hold both relevant gates before using the adopted state for writes.
@@ -306,13 +347,18 @@ public sealed class LinuxMaintenanceBarrierHost : IMaintenanceBarrierHost, IDisp
         return Task.CompletedTask;
     }
 
-    public Task CompleteRecoveryAsync(CancellationToken cancellationToken)
+    public Task CompleteRecoveryAsync(CancellationToken cancellationToken) => CompleteRecoveryCoreAsync(false, cancellationToken);
+
+    public Task CompleteAnnualReleaseRecoveryAsync(CancellationToken cancellationToken) => CompleteRecoveryCoreAsync(true, cancellationToken);
+
+    private Task CompleteRecoveryCoreAsync(bool annualRelease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!receiptCreated || markerCreated || !participantsPermitted) throw new InvalidOperationException("maintenance_recovery_invalid");
         var progress = ReadPreparationProgress();
-        var preparationOnly = progress is { Phase: "preparing", Fingerprint: null } && planFingerprint.All(c => c == '0') &&
-            MaintenanceRecoveryInspection.Inspect(null, ReadRecoveryFiles().Receipt, 0, participantsPermitted).RollbackVerified;
+        var preparationOnly = progress is { Phase: "preparing", Fingerprint: null } && (planFingerprint.All(c => c == '0') || annualRelease) &&
+            MaintenanceRecoveryInspection.Inspect(null, ReadRecoveryFiles().Receipt, 0, participantsPermitted) is
+            { RollbackVerified: true } rollback && rollback.ReceiptFingerprint == planFingerprint;
         if (progress is not null && progress.Fingerprint != planFingerprint && !preparationOnly) throw new InvalidOperationException("maintenance_progress_plan_mismatch");
         if (progress is not null && unlinkat(Fd(directory), PreparationProgress, 0) != 0)
             throw new InvalidOperationException("maintenance_progress_remove_failed");

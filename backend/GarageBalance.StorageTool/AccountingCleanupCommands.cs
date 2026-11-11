@@ -6,9 +6,12 @@ using System.Security.AccessControl;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using GarageBalance.Api.Application.Maintenance;
+using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace GarageBalance.StorageTool;
@@ -46,10 +49,16 @@ public sealed record AccountingCleanupCommandOptions(bool Execute, string? PlanP
             Value("--local-recovery-plan"), Value("--local-recovery-confirm"));
         var isAbortPreparation = args[0].Equals("selective-financial-abort-preparation", StringComparison.OrdinalIgnoreCase);
         if (values.ContainsKey("--operation-id") && (!isAbortPreparation || result.PreparationOperationId is null)) throw Invalid();
-        if (result.AnnualHoldYear.HasValue && (result.AnnualHoldYear < 1900 || !args[0].Equals("selective-financial-plan", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("selective-financial-stage", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("annual-accrual-release-plan", StringComparison.OrdinalIgnoreCase))) throw Invalid();
+        if (result.AnnualHoldYear.HasValue && (result.AnnualHoldYear < 1900 || !args[0].Equals("selective-financial-plan", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("selective-financial-stage", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("annual-accrual-release-plan", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("annual-accrual-impact-plan", StringComparison.OrdinalIgnoreCase))) throw Invalid();
         if (values.ContainsKey("--max-garages") && !args[0].StartsWith("archived-garages-c", StringComparison.OrdinalIgnoreCase) &&
             !args[0].Equals("archived-garages-plan", StringComparison.OrdinalIgnoreCase)) throw Invalid();
-        var isRecovery = args[0].Equals("selective-financial-recover", StringComparison.OrdinalIgnoreCase);
+        var isRecovery = args[0].Equals("selective-financial-recover", StringComparison.OrdinalIgnoreCase) ||
+            args[0].Equals("annual-accrual-release-recover", StringComparison.OrdinalIgnoreCase);
+        var isAnnualImpact = args[0].Equals("annual-accrual-impact-plan", StringComparison.OrdinalIgnoreCase);
+        var isAnnualPlan = args[0].Equals("annual-accrual-release-plan", StringComparison.OrdinalIgnoreCase);
+        if ((isAnnualImpact || isAnnualPlan) && (result.AnnualHoldYear is null or > 9998 ||
+            string.IsNullOrWhiteSpace(result.ExpectedDatabase))) throw Invalid();
+        if (args[0].Equals("annual-accrual-release", StringComparison.OrdinalIgnoreCase) && !execute) throw Invalid();
         var isStage = args[0].Equals("selective-financial-stage", StringComparison.OrdinalIgnoreCase);
         if (result.LocalRecoveryPlanPath is not null || result.LocalRecoveryFingerprint is not null)
             if (!isStage || !execute || result.LocalRecoveryPlanPath is null || result.LocalRecoveryFingerprint?.Length != 64 ||
@@ -102,8 +111,8 @@ public interface IAccountingCleanupHostEnvironment
 public static class AccountingCleanupCommands
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-    private static readonly string[] PreviewCommands = ["archived-garages-plan", "archived-garages-purge-plan", "meter-history-plan", "archived-fund-balance-plan", "selective-financial-plan", "annual-accrual-release-plan"];
-    private static readonly string[] ExecuteCommands = ["archived-garages-cleanup", "archived-garages-purge", "meter-history-cleanup", "archived-fund-balance-repair", "selective-financial-stage", "selective-financial-cleanup", "selective-financial-recover", "selective-financial-abort-preparation", "annual-accrual-release"];
+    private static readonly string[] PreviewCommands = ["archived-garages-plan", "archived-garages-purge-plan", "meter-history-plan", "archived-fund-balance-plan", "selective-financial-plan", "annual-accrual-release-plan", "annual-accrual-impact-plan"];
+    private static readonly string[] ExecuteCommands = ["archived-garages-cleanup", "archived-garages-purge", "meter-history-cleanup", "archived-fund-balance-repair", "selective-financial-stage", "selective-financial-cleanup", "selective-financial-recover", "selective-financial-abort-preparation", "annual-accrual-release", "annual-accrual-release-recover"];
     public static bool CanHandle(string command) => IsPreview(command) ||
         ExecuteCommands.Contains(command, StringComparer.OrdinalIgnoreCase);
     public static bool IsPreview(string command) => PreviewCommands.Contains(command, StringComparer.OrdinalIgnoreCase);
@@ -271,6 +280,31 @@ public static class AccountingCleanupCommands
         return 0;
     }
 
+    private static async Task<int> RunStagingAnnualAsync(AccountingCleanupCommandOptions options,
+        IConfiguration configuration, bool recover, CancellationToken token)
+    {
+        var connection = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connection) || new NpgsqlConnectionStringBuilder(connection).Database != "garagebalance_staging")
+            throw new AccountingCleanupException("cleanup_database_mismatch", "Wrong database.");
+        var plan = await ReadStagingAsync<AnnualAccrualHoldReleasePlan>(options.PlanPath!, token);
+        AnnualAccrualHoldReleaseEngine.ValidatePlan(plan);
+        if (plan.Fingerprint != options.Fingerprint)
+            throw new AccountingCleanupException("cleanup_plan_invalid", "The exact approved annual release plan is required.");
+        if (recover)
+        {
+            var outcome = await StagingAnnualAccrualReleaseRunner.RecoverAsync(connection, plan, token);
+            Console.WriteLine(JsonSerializer.Serialize(new { plan.PlanId, plan.Year, recoveryOutcome = outcome, repeatedRelease = false }, JsonOptions));
+        }
+        else
+        {
+            var backup = await ReadStagingAsync<AccountingCleanupBackupReceipt>(options.BackupReceiptPath!, token);
+            await StagingAnnualAccrualReleaseRunner.ExecuteAsync(connection, plan, options.Fingerprint!, backup,
+                options.Reason!, CreateBusinessDate(configuration), token);
+            Console.WriteLine(JsonSerializer.Serialize(new { plan.PlanId, plan.Year, released = true, generatedByRelease = 0, resumedAutomationMayCreateAccruals = true }, JsonOptions));
+        }
+        return 0;
+    }
+
     public static async Task<int> RunAsync(string[] args, IConfiguration configuration, CancellationToken cancellationToken,
         IAccountingCleanupHostEnvironment? hostEnvironment = null)
     {
@@ -282,7 +316,7 @@ public static class AccountingCleanupCommands
         {
             var options = AccountingCleanupCommandOptions.Parse(args);
             var normalizedCommand = args[0].ToLowerInvariant();
-            var strictStaging = options.Execute && normalizedCommand is "selective-financial-stage" or "selective-financial-cleanup" or "selective-financial-recover" or "selective-financial-abort-preparation" or "annual-accrual-release";
+            var strictStaging = options.Execute && normalizedCommand is "selective-financial-stage" or "selective-financial-cleanup" or "selective-financial-recover" or "selective-financial-abort-preparation" or "annual-accrual-release" or "annual-accrual-release-recover";
             if (strictStaging && (options.ServiceName != StagingOfflineProof.Service || options.ApplicationPort.HasValue || options.ExpectedDatabase != "garagebalance_staging"))
                 throw new AccountingCleanupException("cleanup_staging_target_invalid", "Укажите точный сервис GarageBalance staging; произвольный порт не допускается.");
             if (strictStaging && normalizedCommand == "selective-financial-cleanup")
@@ -293,6 +327,8 @@ public static class AccountingCleanupCommands
                 return await RunStagingStageAsync(options, configuration, cancellationToken);
             if (strictStaging && normalizedCommand == "selective-financial-recover")
                 return await RunStagingRecoveryAsync(options, configuration, cancellationToken);
+            if (strictStaging && normalizedCommand is "annual-accrual-release" or "annual-accrual-release-recover")
+                return await RunStagingAnnualAsync(options, configuration, normalizedCommand == "annual-accrual-release-recover", cancellationToken);
             IAccountingCleanupHostEnvironment host = hostEnvironment ?? (strictStaging ? new StagingOfflineProof() : new AccountingCleanupHostEnvironment());
             var identity = options.Execute
                 ? await host.GetIdentityAsync(options.ServiceName, options.ApplicationPort, cancellationToken)
@@ -312,31 +348,45 @@ public static class AccountingCleanupCommands
             }
             await using var db = new GarageBalanceDbContext(new DbContextOptionsBuilder<GarageBalanceDbContext>().UseNpgsql(connection).Options);
             var command = normalizedCommand;
-            if (command is "annual-accrual-release-plan" or "annual-accrual-release")
+            if (command == "annual-accrual-impact-plan")
+            {
+                var forecast = await new AnnualAccrualForecastEngine(db, CreateBusinessDate(configuration), TimeProvider.System)
+                    .PreviewAsync(options.AnnualHoldYear!.Value, cancellationToken);
+                await JsonSerializer.SerializeAsync(output!, forecast, JsonOptions, cancellationToken);
+                await output!.FlushAsync(cancellationToken);
+                output.Flush(flushToDisk: true);
+                reportComplete = true;
+                Console.WriteLine(JsonSerializer.Serialize(new
+                {
+                    dryRun = true,
+                    forecast.Year,
+                    forecast.BusinessDate,
+                    forecast.IsComplete,
+                    forecast.AffectedGarageCount,
+                    forecast.NewAccrualCount,
+                    forecast.NewAccrualAmount,
+                    forecast.InputFingerprint,
+                    privateReportWritten = true
+                }, JsonOptions));
+                return forecast.IsComplete ? 0 : 3;
+            }
+            if (command == "annual-accrual-release-plan")
             {
                 var releaseEngine = new AnnualAccrualHoldReleaseEngine(db, new AccountingCleanupBackupVerifier(), TimeProvider.System,
-                    confirmStopped: options.Execute ? async ct => (await host.GetIdentityAsync(options.ServiceName, options.ApplicationPort, ct)).ApplicationStopped : null);
-                object report;
-                if (options.Execute)
+                    businessDate: CreateBusinessDate(configuration));
+                var report = await releaseEngine.PreviewAsync(options.AnnualHoldYear!.Value, cancellationToken);
+                await JsonSerializer.SerializeAsync(output!, report, JsonOptions, cancellationToken);
+                await output!.FlushAsync(cancellationToken);
+                output.Flush(flushToDisk: true);
+                reportComplete = true;
+                Console.WriteLine(JsonSerializer.Serialize(new
                 {
-                    var plan = await ReadAsync<AnnualAccrualHoldReleasePlan>(options.PlanPath!, cancellationToken);
-                    await releaseEngine.ReleaseAsync(plan, options.Fingerprint!, await ReadAsync<AccountingCleanupBackupReceipt>(options.BackupReceiptPath!, cancellationToken), identity, options.Reason!, cancellationToken);
-                    committed = true;
-                    report = new { plan.PlanId, plan.Year, released = true, generatedAccruals = 0 };
-                }
-                else
-                {
-                    if (!options.AnnualHoldYear.HasValue) throw new AccountingCleanupException("cleanup_annual_year_required", "Укажите согласованный год через --annual-hold-year.");
-                    report = await releaseEngine.PreviewAsync(options.AnnualHoldYear.Value, cancellationToken);
-                }
-                if (output is not null)
-                {
-                    await JsonSerializer.SerializeAsync(output, report, report.GetType(), JsonOptions, CancellationToken.None);
-                    await output.FlushAsync(CancellationToken.None);
-                    output.Flush(flushToDisk: true);
-                    reportComplete = true;
-                }
-                Console.WriteLine(JsonSerializer.Serialize(report, report.GetType(), JsonOptions));
+                    dryRun = true,
+                    report.PlanId,
+                    report.Year,
+                    report.Fingerprint,
+                    privateReportWritten = true
+                }, JsonOptions));
                 return 0;
             }
             if (command is "selective-financial-plan" or "selective-financial-cleanup")
@@ -515,19 +565,25 @@ public static class AccountingCleanupCommands
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine("Очистка прервана. Проверьте аудит и новый предпросмотр перед повторным запуском.");
+            Console.Error.WriteLine(IsAnnualReleaseExecution(args.FirstOrDefault())
+                ? "annual_release_interrupted: Проверьте сохранённое состояние через annual-accrual-release-recover с тем же планом; не повторяйте release."
+                : "Очистка прервана. Проверьте аудит и новый предпросмотр перед повторным запуском.");
             return 130;
         }
         catch (AccountingCleanupException error)
         {
             Console.Error.WriteLine($"{error.Code}: {error.Message}");
+            if (IsAnnualReleaseExecution(args.FirstOrDefault()))
+                Console.Error.WriteLine("annual_release_recovery_required_if_started: Если обслуживание уже началось, используйте annual-accrual-release-recover с тем же планом; не повторяйте release и не удаляйте maintenance marker.");
             return 2;
         }
         catch (Exception)
         {
-            Console.Error.WriteLine(committed
-                ? "cleanup_committed_report_failed: Очистка сохранена, но отчёт не записан. Проверьте аудит и новый предпросмотр."
-                : "cleanup_outcome_unavailable: Не удалось получить итог операции. Проверьте аудит и новый предпросмотр; параметры подключения не выводятся.");
+            Console.Error.WriteLine(IsAnnualReleaseExecution(args.FirstOrDefault())
+                ? "annual_release_outcome_unavailable: Исход не подтверждён. Используйте annual-accrual-release-recover с тем же планом; не повторяйте release и не удаляйте maintenance marker."
+                : committed
+                    ? "cleanup_committed_report_failed: Очистка сохранена, но отчёт не записан. Проверьте аудит и новый предпросмотр."
+                    : "cleanup_outcome_unavailable: Не удалось получить итог операции. Проверьте аудит и новый предпросмотр; параметры подключения не выводятся.");
             return committed ? 8 : 6;
         }
         finally
@@ -536,6 +592,14 @@ public static class AccountingCleanupCommands
             if (ownedOutputPath is not null && !reportComplete && !committed) File.Delete(ownedOutputPath);
         }
     }
+
+    private static bool IsAnnualReleaseExecution(string? command) =>
+        string.Equals(command, "annual-accrual-release", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(command, "annual-accrual-release-recover", StringComparison.OrdinalIgnoreCase);
+
+    private static IBusinessDateProvider CreateBusinessDate(IConfiguration configuration) => new BusinessDateProvider(
+        TimeProvider.System, Options.Create(configuration.GetSection(RegularAccrualAutomationOptions.SectionName)
+            .Get<RegularAccrualAutomationOptions>() ?? new RegularAccrualAutomationOptions()));
 
     private static async Task EnsureNoOtherClientsAsync(GarageBalanceDbContext db, CancellationToken cancellationToken)
     {

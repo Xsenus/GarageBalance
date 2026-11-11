@@ -1034,9 +1034,7 @@ public sealed partial class FinanceService(
                 continue;
             }
 
-            var accrualMonth = definition.AccountingMonth < GetGarageAccrualStartMonth(garage)
-                ? GetGarageAccrualStartMonth(garage)
-                : definition.AccountingMonth;
+            var accrualMonth = AnnualAccrualPolicy.ResolveAccountingMonth(definition.AccountingMonth, GetGarageAccrualStartMonth(garage));
             if (canceledYears.Contains(definition.IncomeType.Id) ||
                 canceledMonths.Contains((accrualMonth, definition.IncomeType.Id)))
             {
@@ -5593,7 +5591,11 @@ public sealed partial class FinanceService(
         return FinanceResult<SupplierAccrualDto>.Success(ToDto(accrual));
     }
 
-    public async Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    public Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsAsync(GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken) =>
+        GenerateRegularAccrualsCoreAsync(request, actorUserId, cancellationToken);
+
+    private async Task<FinanceResult<RegularAccrualGenerationResultDto>> GenerateRegularAccrualsCoreAsync(
+        GenerateRegularAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken, DateOnly? throughMonth = null)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
@@ -5606,11 +5608,6 @@ public sealed partial class FinanceService(
         if (tariff is null)
         {
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_found", "Тариф для регулярного начисления не найден.");
-        }
-
-        if (tariff.EffectiveFrom > month.AddMonths(1).AddDays(-1))
-        {
-            return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_effective", "Тариф еще не действует в выбранном месяце.");
         }
 
         var matchingSetting = SelectChargeServiceSettingForDueDates(
@@ -5633,6 +5630,11 @@ public sealed partial class FinanceService(
             incomeType.Code,
             month,
             matchingSetting?.PeriodicityMonths);
+        if ((!accountingYear.HasValue || matchingSetting is null) && tariff.EffectiveFrom > month.AddMonths(1).AddDays(-1))
+        {
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_effective", "Тариф еще не действует в выбранном месяце.");
+        }
+
         if (await IsAnnualYearHeldAsync(accountingYear, cancellationToken))
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure(AnnualHoldErrorCode, AnnualAccrualHoldPolicy.Message(accountingYear!.Value));
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
@@ -5681,109 +5683,125 @@ public sealed partial class FinanceService(
                 "regular_accruals_empty",
                 $"Регулярные начисления {periodLabel} уже сформированы для всех выбранных гаражей ({garages.Length}).");
         }
-        var canceledGarageIds = generationState.CanceledGarageIds;
-        var pendingGarageIds = garages
-            .Where(garage =>
-                (accountingYear.HasValue
-                    ? GetGarageAccrualStartMonth(garage).Year <= accountingYear.Value &&
-                      (!garage.AccountingStartMonth.HasValue || GetGarageAccrualStartMonth(garage) <= (month > GetCurrentAccountingMonth() ? month : GetCurrentAccountingMonth()))
-                    : GetGarageAccrualStartMonth(garage) <= month) &&
-                !existingGarageIds.Contains(garage.Id) && !canceledGarageIds.Contains(garage.Id))
-            .Select(garage => garage.Id)
-            .ToArray();
-        var individualPeriods = await LoadIndividualTariffPeriodsAsync(pendingGarageIds, matchingSetting, month, cancellationToken);
-        var meteredCalculationBase = calculationSegments
-            .Select(segment => segment.CalculationBase)
-            .FirstOrDefault(calculationBase => calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
-        var meterKind = meteredCalculationBase is not null && MeterKinds.IsValid(matchingSetting?.MeterKind)
-            ? matchingSetting!.MeterKind!
-            : meteredCalculationBase switch
-            {
-                TariffCalculationBases.MeterWater => MeterKinds.Water,
-                TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
-                _ => null
-            };
-        var meterData = meterKind is null
-            ? new MeterAccrualPeriodData([], [])
-            : await meterReadingRepository.GetAccrualPeriodDataAsync(pendingGarageIds, [meterKind], month, month, cancellationToken);
-        var meterReadings = meterData.Readings.ToDictionary(reading => reading.GarageId);
-        var meterConnections = meterData.Connections
-            .ToDictionary(connection => connection.GarageId);
-        var peopleCountPeriodsByGarage = (calculationSegments.Any(segment => segment.CalculationBase == TariffCalculationBases.People)
-            ? await garageRepository.GetPeopleCountPeriodsAsync(pendingGarageIds, month, month.AddMonths(1).AddDays(-1), cancellationToken)
-            : []).ToLookup(period => period.GarageId);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
-
+        var currentMonth = GetCurrentAccountingMonth();
+        // Explicit batch requests retain their future-period contract. Catalog catch-up
+        // is capped separately at both its requested month and the business month.
+        var lastAllowedAnnualMonth = throughMonth.HasValue
+            ? (throughMonth.Value < currentMonth ? throughMonth.Value : currentMonth)
+            : (month > currentMonth ? month : currentMonth);
+        var pendingGarages = new List<Garage>();
         foreach (var garage in garages)
         {
-            var garageAccrualStartMonth = GetGarageAccrualStartMonth(garage);
-            if ((!accountingYear.HasValue && garageAccrualStartMonth > month) ||
-                (accountingYear.HasValue && (garageAccrualStartMonth.Year > accountingYear.Value ||
-                    garage.AccountingStartMonth.HasValue && garageAccrualStartMonth > (month > GetCurrentAccountingMonth() ? month : GetCurrentAccountingMonth()))))
+            var start = GetGarageAccrualStartMonth(garage);
+            var effectiveMonth = accountingYear.HasValue
+                ? AnnualAccrualPolicy.ResolveAccountingMonth(month, start)
+                : month;
+            if ((!accountingYear.HasValue && start > month) ||
+                (accountingYear.HasValue && (start.Year > accountingYear.Value || effectiveMonth > lastAllowedAnnualMonth)))
             {
                 skipped.Add(garage.AccountingStartMonth.HasValue
-                    ? $"Гараж {garage.Number}: учёт начинается с {garageAccrualStartMonth:MM.yyyy}; для выбранного периода начисление ещё не возникает."
+                    ? $"Гараж {garage.Number}: учёт начинается с {start:MM.yyyy}; для выбранного периода начисление ещё не возникает."
                     : $"Гараж {garage.Number}: месяц начисления раньше месяца регистрации гаража.");
                 continue;
             }
-
             if (existingGarageIds.Contains(garage.Id))
             {
-                var periodLabel = accountingYear.HasValue ? $" за {accountingYear.Value} год" : null;
-                skipped.Add($"Гараж {garage.Number}: регулярное начисление{periodLabel} уже есть.");
+                skipped.Add($"Гараж {garage.Number}: регулярное начисление уже есть.");
                 continue;
             }
+            pendingGarages.Add(garage);
+        }
 
-            if (canceledGarageIds.Contains(garage.Id))
+        // Each group shares its actual billing month. Ordinary monthly generation keeps
+        // its original query budget; moved annual groups resolve dated terms only once.
+        foreach (var group in pendingGarages.GroupBy(garage => accountingYear.HasValue
+                     ? AnnualAccrualPolicy.ResolveAccountingMonth(month, GetGarageAccrualStartMonth(garage))
+                     : month))
+        {
+            var accrualMonth = group.Key;
+            var moved = accrualMonth != month;
+            var monthSetting = matchingSetting;
+            Tariff? monthTariff = tariff;
+            if (moved && matchingSetting is not null)
             {
+                monthSetting = (await chargeServiceSettingRepository.GetActiveRegularAsync(accrualMonth, cancellationToken))
+                    .FirstOrDefault(setting => setting.Id == matchingSetting.Id);
+                monthTariff = monthSetting is null ? null : SelectTariffForMonth(monthSetting, accrualMonth);
+            }
+            // Dated service queries return snapshots; attach the repository's tracked tariff.
+            if (moved && monthTariff is not null)
+                monthTariff = await tariffRepository.FindActiveAsync(monthTariff.Id, cancellationToken);
+            if (monthTariff is null || monthTariff.EffectiveFrom > accrualMonth.AddMonths(1).AddDays(-1))
+            {
+                foreach (var garage in group)
+                    skipped.Add($"Гараж {garage.Number}: не найден тариф на {accrualMonth:MM.yyyy}.");
+                continue;
+            }
+            var canceledGarageIds = (moved
+                ? await accrualRepository.GetRegularGenerationStateAsync(incomeType.Id, accrualMonth, accountingYear, cancellationToken)
+                : generationState).CanceledGarageIds.Union(generationState.CanceledGarageIds).ToHashSet();
+            var eligible = group.Where(garage => !canceledGarageIds.Contains(garage.Id)).ToArray();
+            foreach (var garage in group.Where(garage => canceledGarageIds.Contains(garage.Id)))
                 skipped.Add($"Гараж {garage.Number}: начисление отменено вручную; восстановить его можно только из истории начислений.");
-                continue;
-            }
-            meterReadings.TryGetValue(garage.Id, out var meterReading);
-            var garageSegments = ApplyGarageTariffPeriods(month, matchingSetting, tariff, calculationSegments, individualPeriods[garage.Id]);
-            var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, garageSegments,
-                peopleCountPeriodsByGarage[garage.Id].ToArray(), meterConnections.GetValueOrDefault(garage.Id));
-            if (!amountResult.Succeeded)
+            if (eligible.Length == 0) continue;
+            var pendingGarageIds = eligible.Select(garage => garage.Id).ToArray();
+            var monthSegments = moved ? BuildRegularAccrualSegments(accrualMonth, monthSetting, monthTariff) : calculationSegments;
+            var individualPeriods = await LoadIndividualTariffPeriodsAsync(pendingGarageIds, monthSetting, accrualMonth, cancellationToken);
+            var meteredCalculationBase = monthSegments.Select(segment => segment.CalculationBase)
+                .FirstOrDefault(value => value is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
+            var meterKind = meteredCalculationBase is not null && MeterKinds.IsValid(monthSetting?.MeterKind)
+                ? monthSetting!.MeterKind!
+                : meteredCalculationBase switch
+                {
+                    TariffCalculationBases.MeterWater => MeterKinds.Water,
+                    TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
+                    _ => null
+                };
+            var meterData = meterKind is null
+                ? new MeterAccrualPeriodData([], [])
+                : await meterReadingRepository.GetAccrualPeriodDataAsync(pendingGarageIds, [meterKind], accrualMonth, accrualMonth, cancellationToken);
+            var meterReadings = meterData.Readings.ToDictionary(reading => reading.GarageId);
+            var meterConnections = meterData.Connections.ToDictionary(connection => connection.GarageId);
+            var peopleCountPeriodsByGarage = (monthSegments.Any(segment => segment.CalculationBase == TariffCalculationBases.People)
+                ? await garageRepository.GetPeopleCountPeriodsAsync(pendingGarageIds, accrualMonth, accrualMonth.AddMonths(1).AddDays(-1), cancellationToken)
+                : []).ToLookup(period => period.GarageId);
+            foreach (var garage in eligible)
             {
-                skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage}");
-                continue;
+                meterReadings.TryGetValue(garage.Id, out var meterReading);
+                var garageSegments = ApplyGarageTariffPeriods(accrualMonth, monthSetting, monthTariff, monthSegments, individualPeriods[garage.Id]);
+                var amountResult = RegularAccrualCalculator.Calculate(garage, accrualMonth, meterReading, garageSegments,
+                    peopleCountPeriodsByGarage[garage.Id].ToArray(), meterConnections.GetValueOrDefault(garage.Id));
+                if (!amountResult.Succeeded || amountResult.Amount <= 0)
+                {
+                    skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage ?? "сумма начисления равна нулю."}");
+                    continue;
+                }
+                var dueDates = AccrualDueDates.ForGarage(accrualMonth, incomeType.Code, monthSetting, GetGarageAccrualStartDate(garage));
+                var accrual = new Accrual
+                {
+                    IsAnnualAccrual = accountingYear.HasValue,
+                    GarageId = garage.Id,
+                    Garage = garage,
+                    IncomeTypeId = incomeType.Id,
+                    IncomeType = incomeType,
+                    TariffId = monthTariff.Id,
+                    Tariff = monthTariff,
+                    AccountingMonth = accrualMonth,
+                    AccountingYear = accountingYear,
+                    DueDate = dueDates.DueDate,
+                    OverdueFromDate = dueDates.OverdueFromDate,
+                    Amount = amountResult.Amount,
+                    RequiresMeterReading = amountResult.Details!.RequiresMeter,
+                    CalculationMeterKind = amountResult.Details.RequiresMeter ? meterKind : null,
+                    CalculationDetailsJson = RegularAccrualCalculator.Serialize(amountResult.Details),
+                    Source = AccrualSources.Regular,
+                    Comment = BuildRegularAccrualComment(monthTariff, request.Comment, garageSegments.Any(segment => segment.Tiers.Count > 0), garageSegments)
+                };
+                accrualRepository.Add(accrual);
+                created.Add(ToDto(accrual));
             }
-
-            var amount = amountResult.Amount;
-            if (amount <= 0)
-            {
-                skipped.Add($"Гараж {garage.Number}: сумма начисления равна нулю.");
-                continue;
-            }
-
-            var accrualMonth = accountingYear.HasValue && garageAccrualStartMonth > month
-                ? garageAccrualStartMonth
-                : month;
-            var dueDates = AccrualDueDates.ForGarage(accrualMonth, incomeType.Code, matchingSetting, GetGarageAccrualStartDate(garage));
-
-            var accrual = new Accrual
-            {
-                IsAnnualAccrual = accountingYear.HasValue,
-                GarageId = garage.Id,
-                Garage = garage,
-                IncomeTypeId = incomeType.Id,
-                IncomeType = incomeType,
-                TariffId = tariff.Id,
-                Tariff = tariff,
-                AccountingMonth = accrualMonth,
-                AccountingYear = accountingYear,
-                DueDate = dueDates.DueDate,
-                OverdueFromDate = dueDates.OverdueFromDate,
-                Amount = amount,
-                RequiresMeterReading = amountResult.Details!.RequiresMeter,
-                CalculationMeterKind = amountResult.Details.RequiresMeter ? meterKind : null,
-                CalculationDetailsJson = RegularAccrualCalculator.Serialize(amountResult.Details),
-                Source = AccrualSources.Regular,
-                Comment = BuildRegularAccrualComment(tariff, request.Comment, useTieredElectricity, garageSegments)
-            };
-            accrualRepository.Add(accrual);
-            created.Add(ToDto(accrual));
         }
 
         if (created.Count == 0)
@@ -5840,10 +5858,27 @@ public sealed partial class FinanceService(
         return FinanceResult<RegularAccrualGenerationResultDto>.Success(result);
     }
 
+    private DateOnly ResolveRegularGenerationMonth(ChargeServiceSetting setting, DateOnly requestedMonth) =>
+        AnnualAccrualPolicy.IsAnnual(setting.PeriodicityMonths, setting.IncomeType?.Code) &&
+        requestedMonth.Year == GetCurrentAccountingMonth().Year && setting.AccrualStartMonth is >= 1 and <= 12
+            ? new DateOnly(requestedMonth.Year, setting.AccrualStartMonth.Value, 1)
+            : requestedMonth;
+
+    private static Tariff? SelectRegularGenerationTariff(ChargeServiceSetting setting, DateOnly scheduledMonth, DateOnly requestedMonth)
+    {
+        var tariff = scheduledMonth == requestedMonth ? SelectTariffForMonth(setting, scheduledMonth) : SelectTariffForPeriodMonth(setting, scheduledMonth);
+        // A first annual charge can move to a later garage start. The batch resolves
+        // the effective month's terms again; this fallback only identifies the service.
+        if (tariff is null && AnnualAccrualPolicy.IsAnnual(setting.PeriodicityMonths, setting.IncomeType?.Code))
+            tariff = setting.Tariff ?? setting.TariffVersions.Where(version => !version.IsArchived && !version.Tariff.IsArchived)
+                .OrderBy(version => version.EffectiveFrom).Select(version => version.Tariff).FirstOrDefault();
+        return tariff;
+    }
+
     public async Task<FinanceResult<RegularCatalogAccrualGenerationResultDto>> GenerateRegularCatalogAccrualsAsync(GenerateRegularCatalogAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var settings = await chargeServiceSettingRepository.GetActiveRegularAsync(month, cancellationToken);
+        var settings = await chargeServiceSettingRepository.GetActiveRegularForPeriodAsync(new DateOnly(month.Year, 1, 1), month, cancellationToken);
         if (settings.Count == 0)
         {
             return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure(
@@ -5855,13 +5890,14 @@ public sealed partial class FinanceService(
         var skippedServices = new List<string>();
         foreach (var setting in settings)
         {
-            if (!IsChargeServiceDueForMonth(setting, month))
+            var scheduledMonth = ResolveRegularGenerationMonth(setting, month);
+            if (scheduledMonth > month || !IsChargeServiceDueForMonth(setting, scheduledMonth))
             {
                 skippedServices.Add($"{setting.Name}: услуга не начисляется в {month:MM.yyyy} по своей периодичности.");
                 continue;
             }
 
-            var tariff = SelectTariffForMonth(setting, month);
+            var tariff = SelectRegularGenerationTariff(setting, scheduledMonth, month);
             if (!setting.IncomeTypeId.HasValue || tariff is null)
             {
                 skippedServices.Add($"{setting.Name}: не указан вид начисления или тариф.");
@@ -5874,10 +5910,12 @@ public sealed partial class FinanceService(
                 continue;
             }
             var comment = BuildRegularCatalogAccrualComment(setting.Name, request.Comment);
-            var serviceResult = await GenerateRegularAccrualsAsync(
-                new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, tariff.Id, month, comment),
+            var serviceResult = await GenerateRegularAccrualsCoreAsync(
+                new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, tariff.Id, scheduledMonth, comment),
                 actorUserId,
-                cancellationToken);
+                cancellationToken,
+                // Cap only catch-up. An explicitly requested scheduled period may be in the future.
+                throughMonth: scheduledMonth < month ? month : null);
             if (!serviceResult.Succeeded)
             {
                 skippedServices.Add($"{setting.Name}: {serviceResult.ErrorMessage}");
@@ -6327,13 +6365,15 @@ public sealed partial class FinanceService(
         CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(businessDate);
-        var regularServices = await chargeServiceSettingRepository.GetActiveRegularAsync(month, cancellationToken);
-        var dueServices = regularServices.Where(setting => IsChargeServiceDueForMonth(setting, month)).ToList();
+        var regularServices = await chargeServiceSettingRepository.GetActiveRegularForPeriodAsync(new DateOnly(month.Year, 1, 1), month, cancellationToken);
+        var dueServices = regularServices.Where(setting => ResolveRegularGenerationMonth(setting, month) <= month &&
+            IsChargeServiceDueForMonth(setting, ResolveRegularGenerationMonth(setting, month))).ToList();
         var held = new List<ChargeServiceSetting>();
         foreach (var setting in dueServices)
             if (await IsAnnualYearHeldAsync(AnnualAccrualPolicy.ResolveAccountingYear(setting.IncomeType?.Code, month, setting.PeriodicityMonths), cancellationToken)) held.Add(setting);
         dueServices = dueServices.Except(held).ToList();
-        var configuredDueServiceCount = dueServices.Count(setting => setting.IncomeTypeId.HasValue && setting.TariffId.HasValue);
+        var configuredDueServiceCount = dueServices.Count(setting => setting.IncomeTypeId.HasValue &&
+            SelectRegularGenerationTariff(setting, ResolveRegularGenerationMonth(setting, month), month) is not null);
         var feeCampaigns = await feeCampaignRepository.GetActiveAccrualCandidatesAsync(
             month,
             MaxAutomaticFeeCampaigns + 1,
@@ -7706,7 +7746,8 @@ public sealed partial class FinanceService(
         CancellationToken cancellationToken)
     {
         var definitions = await GetAnnualServiceDefinitionsAsync(year, cancellationToken);
-        if (garage.AccountingStartMonth is not { } start || start.Year != year ||
+        var start = GetGarageAccrualStartMonth(garage);
+        if (start.Year != year ||
             !definitions.Any(definition => definition.AccountingMonth < start))
         {
             return definitions;
@@ -7723,7 +7764,7 @@ public sealed partial class FinanceService(
             var setting = settingsAtStart.GetValueOrDefault(definition.Setting.Id);
             return definition with
             {
-                AccountingMonth = start,
+                AccountingMonth = AnnualAccrualPolicy.ResolveAccountingMonth(definition.AccountingMonth, start),
                 Setting = setting ?? definition.Setting,
                 Tariff = setting is null ? null : SelectTariffForMonth(setting, start)
             };
