@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState, type CSSProperties } from 'reac
 import { LoaderCircle, PlugZap, RefreshCw, Replace, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
-import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
+import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto, MeterReadingYearValueDto } from '../../services/financeApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { AsyncErrorState, BackgroundRefreshStatus, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { ChangePreviewList } from '../../shared/ChangePreviewList'
@@ -22,6 +22,7 @@ import { GarageMeterReplacementDialog } from './GarageMeterReplacementDialog'
 import { describeMeterReplacement } from '../../shared/meterReplacementDescription'
 import { MeterConnectionBatchDialog } from './MeterConnectionBatchDialog'
 import { getMeterBaselineMonth, getMeterReadingStartDate, getMeterReadingStartDisplay, getVisibleMeterReadingMonthKeys, isBeforeMeterReadingStart } from './meterYearColumns'
+import { getMeterReadingComparisonValue } from './meterReadingComparison'
 const meterReadingMonths = monthNames.map((label, index) => ({
   key: String(index + 1).padStart(2, '0'), label,
 }))
@@ -273,6 +274,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [savedReadingIds, setSavedReadingIds] = useState<Record<string, string>>({})
   const [savedReadingVersions, setSavedReadingVersions] = useState<Record<string, string>>({})
   const [savedReadingDates, setSavedReadingDates] = useState<Record<string, string>>({})
+  const [savedReadingDetails, setSavedReadingDetails] = useState<Record<string, MeterReadingYearValueDto>>({})
   const [savedReadingReplacements, setSavedReadingReplacements] = useState<Record<string, string>>({})
   const [startValueCells, setStartValueCells] = useState<Record<string, boolean>>({})
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
@@ -481,6 +483,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         const nextSavedReadingIds: Record<string, string> = {}
         const nextSavedReadingVersions: Record<string, string> = {}
         const nextSavedReadingDates: Record<string, string> = {}
+        const nextSavedReadingDetails: Record<string, MeterReadingYearValueDto> = {}
         const nextSavedReadingReplacements: Record<string, string> = {}
         yearPage.readings.forEach((reading) => {
           const monthKey = reading.accountingMonth.slice(5, 7)
@@ -488,6 +491,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           nextSavedReadings[cellKey] = formatMeterReadingInputValue(reading.currentValue)
           nextSavedReadingIds[cellKey] = reading.id
           nextSavedReadingVersions[cellKey] = reading.version
+          nextSavedReadingDetails[cellKey] = reading
           if (reading.readingDate) nextSavedReadingDates[cellKey] = reading.readingDate
           if (reading.isMeterReplacement || reading.meterReplacement) {
             nextSavedReadingReplacements[cellKey] = reading.meterReplacement ? describeMeterReplacement(reading.meterReplacement) : reading.meterDeviceSerialNumber?.trim() || 'номер не указан'
@@ -499,9 +503,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           const baselineMonth = getMeterBaselineMonth(garage)
           if (!baselineMonth || baselineMonth.slice(0, 4) !== appliedYear) return
           const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, baselineMonth.slice(5, 7))
-          // An entered reading in or before the base month keeps its own cell.
-          if (meterReadingMonths.some((month) => month.key <= baselineMonth.slice(5, 7) &&
-            nextSavedReadingIds[createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)])) return
+          // Keep actual history in this cell, but older devices must not hide a new baseline.
+          if (nextSavedReadingIds[cellKey]) return
           nextStartValueCells[cellKey] = true
           const startValue = getMeterReadingStartDisplay(garage).value
           if (startValue != null) nextSavedReadings[cellKey] = formatMeterReadingInputValue(startValue)
@@ -518,6 +521,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         setSavedReadingIds(nextSavedReadingIds)
         setSavedReadingVersions(nextSavedReadingVersions)
         setSavedReadingDates(nextSavedReadingDates)
+        setSavedReadingDetails(nextSavedReadingDetails)
         setSavedReadingReplacements(nextSavedReadingReplacements)
         setStartValueCells(nextStartValueCells)
       } catch (loadError) {
@@ -604,6 +608,10 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setSavedReadingIds((currentIds) => ({ ...currentIds, [cellKey]: savedReading.id }))
       setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
       setSavedReadingDates((currentDates) => ({ ...currentDates, [cellKey]: savedReading.readingDate }))
+      setSavedReadingDetails((currentDetails) => ({
+        ...currentDetails,
+        [cellKey]: { ...currentDetails[cellKey], ...savedReading },
+      }))
       setPendingReadingChange(null)
       setReadingChangeError(null)
       setReloadRevision((revision) => revision + 1)
@@ -704,16 +712,11 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     }
 
     const parsedNextValue = parseMeterReadingInputValue(nextValue)
-    let previousChainValue: string | undefined
-    for (let index = Number(month.key) - 1; index >= 1; index -= 1) {
-      const previousMonthKey = String(index).padStart(2, '0')
-      const candidate = savedReadings[createMeterReadingCellKey(appliedYear, meterType, garage.id, previousMonthKey)]
-      if (candidate?.trim()) {
-        previousChainValue = candidate
-        break
-      }
-    }
-    const parsedPreviousChainValue = previousChainValue ? parseMeterReadingInputValue(previousChainValue) : null
+    const currentReadings = Object.entries(savedReadingDetails)
+      .filter(([key]) => key.startsWith(`${appliedYear}:${meterType}:`))
+      .map(([, reading]) => reading)
+    const parsedPreviousChainValue = getMeterReadingComparisonValue(garage, `${appliedYear}-${month.key}`, currentReadings)
+    const previousChainValue = parsedPreviousChainValue === null ? undefined : formatMeterReadingInputValue(parsedPreviousChainValue)
     const suggestsReplacement = parsedNextValue !== null && parsedPreviousChainValue !== null && parsedNextValue < parsedPreviousChainValue
 
     if (previousValue.trim() === '' && !suggestsReplacement) {
@@ -754,7 +757,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       reason: '',
       date: `${accountingMonth}-01`,
     })
-  }, [appliedYear, canEditOutsideCurrentMonth, canWritePayments, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, historicalCorrectionEnabled, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, yearIsValid])
+  }, [appliedYear, canEditOutsideCurrentMonth, canWritePayments, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, historicalCorrectionEnabled, meterType, savedReadingDetails, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, yearIsValid])
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
