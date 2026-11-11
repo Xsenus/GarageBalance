@@ -4121,7 +4121,7 @@ function PaymentsPrototypePanel({
       let resolvedAvailableMonthTo = incomeWorksheetAvailableMonthTo
       if (resolveAvailablePeriod) {
         const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id }, controller.signal)
-        if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+        if (controller.signal.aborted || !incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
           return
         }
 
@@ -4138,11 +4138,38 @@ function PaymentsPrototypePanel({
         monthTo: `${resolvedMonthTo}-01`,
       }
       const recalculated = Boolean(recalculate && canWritePayments && financeClient.calculateGarageIncomeWorksheet)
-      const worksheet = recalculated && financeClient.calculateGarageIncomeWorksheet
+      let worksheet = recalculated && financeClient.calculateGarageIncomeWorksheet
         ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
         : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest, controller.signal)
-      if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+      if (controller.signal.aborted || !incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
         return
+      }
+
+      // Catch-up can create an earlier unpaid annual obligation. Resolve the
+      // default period again after that transaction, then read its full range
+      // in refresh-only mode: no fee creation, recalculation or explicit filter override.
+      if (resolveAvailablePeriod && recalculated) {
+        const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id }, controller.signal)
+        if (controller.signal.aborted || !incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+          return
+        }
+
+        resolvedAvailableMonthFrom = period.monthFrom.slice(0, 7)
+        resolvedAvailableMonthTo = period.monthTo.slice(0, 7)
+        resolvedMonthTo = period.defaultMonthTo?.slice(0, 7) ?? resolvedAvailableMonthTo
+        resolvedMonthFrom = showGarageDebtPeriodByDefault
+          ? period.defaultMonthFrom?.slice(0, 7) ?? resolvedMonthTo
+          : resolvedMonthTo
+        if (`${resolvedMonthFrom}-01` !== worksheetRequest.monthFrom || `${resolvedMonthTo}-01` !== worksheetRequest.monthTo) {
+          worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
+            monthFrom: `${resolvedMonthFrom}-01`,
+            monthTo: `${resolvedMonthTo}-01`,
+            refreshOnly: true,
+          }, controller.signal)
+          if (controller.signal.aborted || !incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+            return
+          }
+        }
       }
 
       // A save response can race with a worksheet request that started just

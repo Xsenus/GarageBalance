@@ -290,6 +290,18 @@ describe('financeApi', () => {
     ])
   })
 
+  it.each([undefined, false, true])('preserves worksheet refresh-only query mode %s', async (refreshOnly) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ rows: [] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await financeApi.getGarageIncomeWorksheet('token', 'garage-refresh', {
+      monthFrom: '2026-10', monthTo: '2026-11', refreshOnly,
+    })
+    const suffix = refreshOnly === undefined ? '' : `&refreshOnly=${refreshOnly}`
+    expect(fetchMock).toHaveBeenCalledWith(`/api/finance/garages/garage-refresh/income-worksheet?monthFrom=2026-10-01&monthTo=2026-11-01${suffix}`, {
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer token' },
+    })
+  })
+
   it('posts regular catalog accrual generation to the catalog endpoint', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       accountingMonth: '2026-06-01',

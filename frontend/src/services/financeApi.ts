@@ -968,7 +968,7 @@ export type FinanceClient = {
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageBalanceHistoryDto>
   getGarageOverdueDebt(accessToken: string, garageId: string, signal?: AbortSignal): Promise<GarageOverdueDebtDto>
   getGarageFullPaymentQuote(accessToken: string, garageId: string, signal?: AbortSignal): Promise<GarageFullPaymentQuoteDto>
-  getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
+  getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string; refreshOnly?: boolean }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }, signal?: AbortSignal): Promise<GarageIncomeWorksheetDto>
   getGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
   calculateGarageAnnualPayments(accessToken: string, garageId: string, year: number, signal?: AbortSignal): Promise<GarageAnnualPaymentsDto>
@@ -1188,6 +1188,7 @@ export const financeApi: FinanceClient = {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/income-worksheet`, {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
+      refreshOnly: params.refreshOnly?.toString(),
     }), { signal })
   },
   getGarageAnnualPayments(accessToken, garageId, year, signal) {
